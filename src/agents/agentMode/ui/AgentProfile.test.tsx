@@ -3,6 +3,7 @@ import { AgentProfile, agentDeleteNotice } from "@/agents/agentMode/ui/AgentProf
 import { CustomAgentStore, type CustomAgent } from "@/agents/CustomAgentStore";
 import { PRESET_FACES_URL } from "@/agents/presetFaces";
 import { setCustomAgentsAccess } from "@/agents/testing/customAgentsAccess";
+import { setCustomAgentsLaunched } from "@/agents/testing/customAgentsLaunched";
 import { createFakeAgentVault, type FakeAgentVault } from "@/agents/testing/fakeAgentVault";
 import { webpBytes } from "@/agents/testing/webpBytes";
 import type { AgentModelChoices } from "@/agents/ui/CreateAgentForm";
@@ -10,7 +11,7 @@ import { useCustomAgents } from "@/agents/ui/useCustomAgents";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { AgentDeleteModal } from "@/agents/ui/AgentDeleteModal";
 import { resetSettings } from "@/settings/model";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import * as obsidian from "obsidian";
 import type { App } from "obsidian";
 import React from "react";
@@ -21,6 +22,7 @@ jest.mock("@/agents/ui/AgentDeleteModal", () => ({
 }));
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/940";
+const LOCKED_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/950";
 
 const setRequestUrlImpl = (
   obsidian as unknown as { __setRequestUrlImpl: (impl: jest.Mock) => void }
@@ -276,6 +278,54 @@ describe("AgentProfile", () => {
       expect(deletedChats.mock.calls.map(([id]) => id)).toEqual(["a.md"]);
       expect(vault.trashedPaths).toEqual([FOLDER]);
     });
+
+    it.each([
+      {
+        device: "a lapsed device",
+        access: "free",
+        banner: "Your Supporter plan ended. Coco can't chat until you renew.",
+        action: "Renew",
+      },
+      {
+        device: "a device that never had a license",
+        access: "keyless",
+        banner: "Coco can't chat until you enter a Supporter license key on this device.",
+        action: "Enter license key",
+      },
+      {
+        device: "a device on a paid plan without custom agents",
+        access: "plus-without-custom-agents",
+        banner: "Coco can't chat until you enter a Supporter license key on this device.",
+        action: "Enter license key",
+      },
+    ] as const)(
+      `shows the locked profile on $device, with its banner, a model that can't change and Delete but no New chat, and still deletes the agent and its chats (${LOCKED_ISSUE})`,
+      async ({ access, banner, action }) => {
+        jest.mocked(AgentDeleteModal).mockClear();
+        deletedChats.mockClear();
+        const { vault } = await setup();
+
+        setCustomAgentsLaunched(true);
+        await act(() => setCustomAgentsAccess(access));
+
+        expect(screen.getByText(banner)).not.toBeNull();
+        expect(screen.getByRole("button", { name: action })).not.toBeNull();
+        expect(screen.queryByRole("button", { name: "New chat with Coco" })).toBeNull();
+        expect(screen.queryByRole("button", { name: "Rename Coco" })).toBeNull();
+        expect(screen.getByTitle("Model · effort").hasAttribute("disabled")).toBe(true);
+        fireEvent.click(screen.getByRole("button", { name: "Delete Coco…" }));
+        await waitFor(() => expect(AgentDeleteModal).toHaveBeenCalledTimes(1));
+        const [, , confirm] = jest.mocked(AgentDeleteModal).mock.calls[0] as unknown as [
+          unknown,
+          unknown,
+          () => void,
+        ];
+        confirm();
+
+        await waitFor(() => expect(vault.trashedPaths).toEqual([FOLDER]));
+        expect(deletedChats.mock.calls.map(([id]) => id)).toEqual(["a.md"]);
+      }
+    );
 
     it(`tells the delete dialog which chat the agent is working in when an @ runs it (https://github.com/Brevilabs/obsidian-copilot-private/issues/945)`, async () => {
       await setup();

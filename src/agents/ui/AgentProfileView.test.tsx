@@ -11,6 +11,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/940";
+const LOCKED_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/950";
 
 const NOW = new Date(2026, 10, 16, 15, 20).getTime();
 
@@ -408,6 +409,56 @@ describe("AgentProfileView", () => {
       fireEvent.click(screen.getByRole("button", { name: "Delete Coco…" }));
 
       expect(onDelete).toHaveBeenCalledTimes(1);
+    });
+
+    it(`shows a locked agent read-only under its banner: a greyed face, plain name and title, both files to open, a greyed Model row, and Delete as the only action (${LOCKED_ISSUE})`, () => {
+      const onUnlock = jest.fn();
+      const { onOpenFile, onDelete } = renderProfile({ locked: { lapsed: true, onUnlock } });
+
+      expect(
+        screen.getByText("Your Supporter plan ended. Coco can't chat until you renew.")
+      ).not.toBeNull();
+      const face = screen.getAllByRole("img", { hidden: true })[0];
+      expect(face.className).toContain("tw-grayscale");
+      expect(face.parentElement?.querySelector(".lucide-lock")).not.toBeNull();
+      expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("Coco");
+      expect(screen.getByText("Keeps the whole vault in view")).not.toBeNull();
+      expect(screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent)).toEqual([
+        "What Coco knows",
+        "Model",
+      ]);
+      expect(screen.getByText("Locked until you renew")).not.toBeNull();
+      expect(screen.getByTitle("Model · effort").hasAttribute("disabled")).toBe(true);
+      expect(
+        screen
+          .getAllByRole("button")
+          .filter((button) => !button.hasAttribute("disabled"))
+          .map((button) => button.textContent)
+      ).toEqual([
+        "Back to chat",
+        "Renew",
+        expect.stringContaining("What Coco handles"),
+        expect.stringContaining("Rules Coco remembers"),
+        "Delete Coco…",
+      ]);
+
+      fireEvent.click(screen.getByRole("button", { name: "Renew" }));
+      fireEvent.click(screen.getByRole("button", { name: /Rules Coco remembers/ }));
+      fireEvent.click(screen.getByRole("button", { name: "Delete Coco…" }));
+
+      expect(onUnlock).toHaveBeenCalledTimes(1);
+      expect(onOpenFile).toHaveBeenCalledWith("copilot/agents/coco/MEMORY.md");
+      expect(onDelete).toHaveBeenCalledTimes(1);
+    });
+
+    it(`says a locked agent's model waits for a Supporter license key on a device without an active one (${LOCKED_ISSUE})`, () => {
+      renderProfile({ locked: { lapsed: false, onUnlock: jest.fn() } });
+
+      expect(
+        screen.getByText("Coco can't chat until you enter a Supporter license key on this device.")
+      ).not.toBeNull();
+      expect(screen.getByText("Locked until you enter a Supporter license key")).not.toBeNull();
+      expect(screen.getByRole("button", { name: "Enter license key" })).not.toBeNull();
     });
   });
 

@@ -3,6 +3,7 @@ import { render } from "@testing-library/react";
 import React from "react";
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/938";
+const LOCKED_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/950";
 
 describe("AgentFace", () => {
   describe("AgentFace()", () => {
@@ -35,6 +36,26 @@ describe("AgentFace", () => {
       const { container } = render(<AgentFace src="face:leo" size="xs" />);
 
       expect(container.querySelector('[data-agent-face-ring="running"]')).toBeNull();
+    });
+
+    it(`greys a locked agent's face and puts a lock on its corner (${LOCKED_ISSUE})`, () => {
+      const { container } = render(
+        <AgentFace src="face:maya" size="l" locked className="tw-mb-1" />
+      );
+
+      const wrapper = container.firstElementChild as HTMLElement;
+      expect(wrapper.className).toContain("tw-mb-1");
+      const face = wrapper.querySelector("img") as HTMLImageElement;
+      expect(face.getAttribute("src")).toBe("face:maya");
+      expect(face.className).toContain("tw-grayscale");
+      expect(wrapper.querySelector(".lucide-lock")).not.toBeNull();
+    });
+
+    it("draws an unlocked face in full colour with no lock", () => {
+      const { container } = render(<AgentFace src="face:maya" size="l" />);
+
+      expect(container.querySelector("img")?.className).not.toContain("tw-grayscale");
+      expect(container.querySelector(".lucide-lock")).toBeNull();
     });
   });
 });

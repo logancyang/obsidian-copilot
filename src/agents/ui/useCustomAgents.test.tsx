@@ -1,5 +1,6 @@
 import type { CustomAgent } from "@/agents/CustomAgentStore";
 import { setCustomAgentsAccess } from "@/agents/testing/customAgentsAccess";
+import { setCustomAgentsLaunched } from "@/agents/testing/customAgentsLaunched";
 import { fakeAgentStore } from "@/agents/ui/testing/fakeAgentStore";
 import { useCustomAgents } from "@/agents/ui/useCustomAgents";
 import { resetSettings } from "@/settings/model";
@@ -8,6 +9,7 @@ import { renderHook } from "@testing-library/react";
 jest.mock("@/entitlement");
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/938";
+const LOCKED_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/950";
 
 function agent(slug: string, name: string, faceSrc = `face:${slug}`): CustomAgent {
   return { slug, name, title: `${name}'s job`, faceSrc } as CustomAgent;
@@ -50,6 +52,19 @@ describe("useCustomAgents", () => {
 
         expect(result.current).toEqual([]);
         expect(Object.isFrozen(result.current)).toBe(true);
+      }
+    );
+
+    it.each(["free", "keyless"] as const)(
+      `lists the store's agents while custom agents are locked for a %s device, so they show locked instead of vanishing (${LOCKED_ISSUE})`,
+      async (access) => {
+        await setCustomAgentsAccess(access);
+        setCustomAgentsLaunched(true);
+        const { store } = fakeAgentStore([COCO, MAYA]);
+
+        const { result } = renderHook(() => useCustomAgents(store));
+
+        expect(result.current).toEqual([COCO, MAYA]);
       }
     );
 

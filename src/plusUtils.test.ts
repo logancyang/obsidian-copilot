@@ -79,6 +79,7 @@ import {
   turnOffPaid,
   subscribeToEntitlementChange,
   useIsSelfHostEligible,
+  hasActivePaidLicense,
   useLicenseState,
   verifyCachedEntitlement,
 } from "@/plusUtils";
@@ -882,6 +883,39 @@ describe("plusUtils", () => {
       expect(mockValidateLicenseKey).toHaveBeenCalled();
       expect(mockSetSettings).not.toHaveBeenCalled();
       expect(mockUpdateSetting).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("hasActivePaidLicense()", () => {
+    it("is true for a verified paid token, whatever features it carries", async () => {
+      await verifySessionClaims({ plan: "plus", tier: "plus" });
+      mockGetSettings.mockReturnValue(tokenBackedSettings({ plusLicenseKey: "key" }));
+
+      expect(hasActivePaidLicense()).toBe(true);
+    });
+
+    it("is false for a lapsed key the server downgraded to a free-tier token", async () => {
+      await verifySessionClaims({ plan: "plus", tier: "free" });
+      mockGetSettings.mockReturnValue(
+        tokenBackedSettings({ plusLicenseKey: "key", isPaidUser: false })
+      );
+
+      expect(hasActivePaidLicense()).toBe(false);
+    });
+
+    it("is false for a revoked key and for a paid flag whose stored expiry has passed", () => {
+      expect(
+        hasActivePaidLicense(buildSettings({ plusLicenseKey: "key", isPaidUser: false }))
+      ).toBe(false);
+      expect(
+        hasActivePaidLicense(
+          buildSettings({
+            plusLicenseKey: "key",
+            isPaidUser: true,
+            entitlementExpiresAt: PAST_EXP_SECONDS * 1000,
+          })
+        )
+      ).toBe(false);
     });
   });
 

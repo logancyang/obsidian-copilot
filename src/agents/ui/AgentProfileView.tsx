@@ -3,6 +3,11 @@ import { agentTitle } from "@/agents/agentTitle";
 import { findAgentNamed, type FaceImage } from "@/agents/customAgentFiles";
 import type { CustomAgent } from "@/agents/CustomAgentStore";
 import { AgentFace } from "@/agents/ui/AgentFace";
+import {
+  type LockedProfile,
+  LockedProfileBanner,
+  lockedUntil,
+} from "@/agents/ui/LockedAgentNotices";
 import { NO_OBSIDIAN_TOOLTIP } from "@/connectors/ui/ConnectorRow";
 import type { PickedFace } from "@/agents/ui/AgentFacePicker";
 import {
@@ -66,6 +71,7 @@ export interface AgentProfileViewProps {
   onChangeFace: (face: FaceImage) => void;
   onChangeModel: (model: ModelSelection) => void;
   onDelete: () => void;
+  locked?: LockedProfile;
 }
 
 const SHOWN_ON_HOVER_OR_FOCUS =
@@ -130,8 +136,12 @@ export function AgentProfileView({
   onChangeFace,
   onChangeModel,
   onDelete,
+  locked,
 }: AgentProfileViewProps): React.ReactElement {
   const { name } = agent;
+  // A lapsed or synced agent keeps its files open and Delete; its face, name, title and model can't change and it can't chat.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/950
+  const readOnly = locked !== undefined;
   const [facePickerOpen, setFacePickerOpen] = useState(false);
   const today = now ?? Date.now();
   const length = agent.instruction.trim().length;
@@ -197,42 +207,48 @@ export function AgentProfileView({
           Back to chat
         </button>
       </div>
+      {locked && <LockedProfileBanner name={name} {...locked} />}
       <div className="tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-gap-3.5 tw-overflow-y-auto tw-p-3.5">
         <div className="tw-group tw-flex tw-min-w-0 tw-flex-col tw-items-center tw-gap-1.5 tw-pb-1 tw-pt-2 tw-text-center">
-          <Popover open={facePickerOpen} onOpenChange={setFacePickerOpen}>
-            <PopoverTrigger asChild>
-              <button
-                type="button"
-                aria-label={`Change ${name}'s face`}
-                className={cn(
-                  "clickable-icon tw-relative tw-mb-1.5 tw-h-auto tw-rounded-full tw-bg-transparent tw-p-0 tw-shadow-none",
-                  NO_OBSIDIAN_TOOLTIP
-                )}
-              >
-                <AgentFace src={agent.faceSrc} size="xxl" selected />
-                <span
+          {readOnly ? (
+            <AgentFace src={agent.faceSrc} size="xxl" locked className="tw-mb-1.5" />
+          ) : (
+            <Popover open={facePickerOpen} onOpenChange={setFacePickerOpen}>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  aria-label={`Change ${name}'s face`}
                   className={cn(
-                    "tw-absolute -tw-bottom-0.5 -tw-right-0.5 tw-flex tw-size-[22px] tw-items-center tw-justify-center tw-rounded-full tw-border tw-border-solid tw-border-border tw-bg-secondary tw-text-muted",
-                    SHOWN_ON_HOVER_OR_FOCUS
+                    "clickable-icon tw-relative tw-mb-1.5 tw-h-auto tw-rounded-full tw-bg-transparent tw-p-0 tw-shadow-none",
+                    NO_OBSIDIAN_TOOLTIP
                   )}
                 >
-                  <Pencil className="tw-size-3" />
-                </span>
-              </button>
-            </PopoverTrigger>
-            <PopoverContent className="tw-w-auto tw-p-2.5">
-              {renderFacePicker((picked) => {
-                setFacePickerOpen(false);
-                onChangeFace(picked.image);
-              })}
-            </PopoverContent>
-          </Popover>
+                  <AgentFace src={agent.faceSrc} size="xxl" selected />
+                  <span
+                    className={cn(
+                      "tw-absolute -tw-bottom-0.5 -tw-right-0.5 tw-flex tw-size-[22px] tw-items-center tw-justify-center tw-rounded-full tw-border tw-border-solid tw-border-border tw-bg-secondary tw-text-muted",
+                      SHOWN_ON_HOVER_OR_FOCUS
+                    )}
+                  >
+                    <Pencil className="tw-size-3" />
+                  </span>
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="tw-w-auto tw-p-2.5">
+                {renderFacePicker((picked) => {
+                  setFacePickerOpen(false);
+                  onChangeFace(picked.image);
+                })}
+              </PopoverContent>
+            </Popover>
+          )}
           <div role="heading" aria-level={2} className="tw-flex tw-w-full tw-justify-center">
             <InlineEdit
               label={`Rename ${name}`}
               text={name}
               value={name}
               onSave={rename}
+              locked={readOnly}
               textClassName="tw-text-lg tw-font-semibold tw-text-normal"
             />
           </div>
@@ -242,23 +258,26 @@ export function AgentProfileView({
             value={agent.title}
             placeholder="One line under the name"
             onSave={retitle}
+            locked={readOnly}
             textClassName="tw-text-ui-small tw-text-muted"
           />
           {meta.length > 0 && (
             <div className="tw-text-ui-smaller tw-text-faint">{meta.join(" · ")}</div>
           )}
         </div>
-        <button
-          type="button"
-          onClick={onNewChat}
-          className={cn(
-            BLOCK_BUTTON_CLASS,
-            "tw-border-border tw-text-normal hover:tw-bg-modifier-hover"
-          )}
-        >
-          <MessageSquarePlus className="tw-size-4 tw-shrink-0" />
-          <span className="tw-truncate">New chat with {name}</span>
-        </button>
+        {!readOnly && (
+          <button
+            type="button"
+            onClick={onNewChat}
+            className={cn(
+              BLOCK_BUTTON_CLASS,
+              "tw-border-border tw-text-normal hover:tw-bg-modifier-hover"
+            )}
+          >
+            <MessageSquarePlus className="tw-size-4 tw-shrink-0" />
+            <span className="tw-truncate">New chat with {name}</span>
+          </button>
+        )}
         <SectionLabel>What {name} knows</SectionLabel>
         <div className="tw-flex tw-flex-col tw-gap-2">
           <FileRow
@@ -283,16 +302,19 @@ export function AgentProfileView({
           </FileRow>
         </div>
         <SectionLabel>Model</SectionLabel>
-        <div className={ROW_CLASS}>
+        <div className={cn(ROW_CLASS, readOnly && "tw-opacity-60")}>
           <span className="tw-flex tw-min-w-0 tw-flex-1 tw-flex-col">
             <span className="tw-text-sm tw-font-semibold tw-text-normal">Model</span>
-            <span className="tw-text-ui-smaller tw-text-muted">New chats and @-mentions</span>
+            <span className="tw-text-ui-smaller tw-text-muted">
+              {locked ? lockedUntil(locked.lapsed) : "New chats and @-mentions"}
+            </span>
           </span>
           <AgentModelField
             models={models}
             value={agent.model ?? models.initial}
             onChange={onChangeModel}
             container={null}
+            disabled={readOnly}
             className="tw-h-7 tw-w-auto tw-min-w-0 tw-shrink tw-px-2 tw-text-ui-small"
           />
         </div>
@@ -365,12 +387,21 @@ interface InlineEditProps {
   value: string;
   placeholder?: string;
   textClassName: string;
+  locked: boolean;
   onSave: (next: string) => Promise<string | null>;
 }
 
 // Name and title change in place: Enter or a click elsewhere saves, Esc cancels.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/940
-function InlineEdit({ label, text, value, placeholder, textClassName, onSave }: InlineEditProps) {
+function InlineEdit({
+  label,
+  text,
+  value,
+  placeholder,
+  textClassName,
+  locked,
+  onSave,
+}: InlineEditProps) {
   const [draft, setDraft] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const saving = useRef(false);
@@ -394,6 +425,7 @@ function InlineEdit({ label, text, value, placeholder, textClassName, onSave }: 
     setDraft(null);
   };
 
+  if (locked) return <span className={cn("tw-min-w-0 tw-break-words", textClassName)}>{text}</span>;
   if (draft === null) {
     return (
       <button

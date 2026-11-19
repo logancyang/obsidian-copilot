@@ -74,7 +74,14 @@ export function useAgentHomeSelection(
   // A new chat whose agent's folder is deleted before its first message goes back to Copilot.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/588
   useEffect(() => {
-    if (gate !== "full" || !isLanding) return;
+    if (!isLanding) return;
+    // A new chat that started on an agent before the license check locked custom agents, as at the first launch after a plan lapses, goes back to Copilot.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/950
+    if (gate === "locked" && agentSlug !== null) {
+      void select(null);
+      return;
+    }
+    if (gate !== "full") return;
     const isListed = (slug: string | null) => slug === null || agents.some((a) => a.slug === slug);
     if (!isListed(agentSlug)) {
       const dropped = `${chatInputId}\n${agentSlug}`;

@@ -106,6 +106,7 @@ export class CustomAgentStore {
 
   async createAgent({ face, instruction, ...profile }: NewCustomAgent): Promise<string> {
     const faceBytes = face && (await encodeFace(face));
+    assertNotLocked();
     const conflict = findAgentNameConflict(this.agents, this.folderNames(), profile.name);
     if (conflict) throw new Error(conflict);
     const slug = deriveAgentSlug(profile.name);
@@ -127,6 +128,7 @@ export class CustomAgentStore {
   }
 
   async updateAgent(slug: string, { model, ...text }: Partial<CustomAgentProfile>): Promise<void> {
+    assertNotLocked();
     const file = this.app.vault.getAbstractFileByPath(this.pathsFor(slug).instructionsPath);
     if (!(file instanceof TFile)) throw new Error(`No custom agent at ${slug}.`);
     await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
@@ -138,6 +140,7 @@ export class CustomAgentStore {
 
   async saveFace(slug: string, face: FaceImage): Promise<void> {
     const bytes = await encodeFace(face);
+    assertNotLocked();
     const { facePath } = this.pathsFor(slug);
     const existing = this.app.vault.getAbstractFileByPath(facePath);
     if (existing instanceof TFile) await this.app.vault.modifyBinary(existing, bytes);
@@ -249,13 +252,20 @@ export class CustomAgentStore {
   }
 }
 
+// A lapsed or synced vault shows its agents without a license, and only Delete may change their files.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/950
+function assertNotLocked(): void {
+  if (getCustomAgentsGate() === "locked") throw new Error("Custom agents are locked.");
+}
+
 export function customAgentsFolderPath(): string {
   return normalizePath(`${getEffectiveCopilotFolder()}/${AGENTS_SUBFOLDER}`);
 }
 
 export function runCustomAgentStoreWhileEnabled(store: CustomAgentStore): () => void {
   const sync = (): void => {
-    if (getCustomAgentsGate() === "full") void store.start();
+    const gate = getCustomAgentsGate();
+    if (gate === "full" || gate === "locked") void store.start();
     else store.stop();
   };
   sync();

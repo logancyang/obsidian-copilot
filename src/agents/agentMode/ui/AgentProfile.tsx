@@ -7,15 +7,18 @@ import type { HiddenAgentChats } from "@/agents/agentMode/hiddenAgentChats";
 import { openAgentFile } from "@/agents/agentMode/memorySaveCards";
 import { useAgentProfileFacts } from "@/agents/agentMode/ui/useAgentProfileFacts";
 import type { CustomAgent, CustomAgentStore } from "@/agents/CustomAgentStore";
+import { isLicenseLapsed, useCustomAgentsGate } from "@/agents/customAgentsGate";
 import { findUsedPresetIds, readAgentFaces } from "@/agents/presetFaces";
 import { AgentDeleteModal } from "@/agents/ui/AgentDeleteModal";
 import { AgentFacePicker, type PickedFace } from "@/agents/ui/AgentFacePicker";
 import { AgentProfileView, countOf } from "@/agents/ui/AgentProfileView";
+import { unlockCustomAgents } from "@/agents/ui/LockedAgentNotices";
 import type { AgentModelChoices } from "@/agents/ui/CreateAgentForm";
 import { useCustomAgents } from "@/agents/ui/useCustomAgents";
 import { usePresetFaces } from "@/agents/ui/usePresetFaces";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { logError } from "@/logger";
+import { useSettingsValue } from "@/settings/model";
 import { Notice, type App } from "obsidian";
 import React, { useEffect, useState } from "react";
 
@@ -61,6 +64,8 @@ export function AgentProfile({
 }: AgentProfileProps) {
   const facts = useAgentProfileFacts(app, manager, agent);
   const agents = useCustomAgents(store);
+  const locked = useCustomAgentsGate() === "locked";
+  const lapsed = isLicenseLapsed(useSettingsValue());
   const [models] = useState(getModels);
   const { slug, name } = agent;
   const failed = (change: string) => (error: unknown) => {
@@ -120,6 +125,11 @@ export function AgentProfile({
         void confirmDelete().catch((error: unknown) =>
           logError(`[Custom agents] Could not list ${slug}'s chats`, error)
         )
+      }
+      locked={
+        locked
+          ? { lapsed, onUnlock: (ownerWindow) => unlockCustomAgents(app, lapsed, ownerWindow) }
+          : undefined
       }
     />
   );

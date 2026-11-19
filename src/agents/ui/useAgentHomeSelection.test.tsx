@@ -1,5 +1,6 @@
 import type { CustomAgent, CustomAgentStore } from "@/agents/CustomAgentStore";
 import { setCustomAgentsAccess } from "@/agents/testing/customAgentsAccess";
+import { setCustomAgentsLaunched } from "@/agents/testing/customAgentsLaunched";
 import { fakeAgentStore } from "@/agents/ui/testing/fakeAgentStore";
 import {
   agentComposerHint,
@@ -15,6 +16,7 @@ jest.mock("@/entitlement");
 jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError: jest.fn() }));
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/588";
+const LOCKED_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/950";
 
 function agent(slug: string, name: string): CustomAgent {
   return { slug, name, title: `${name}'s job`, faceSrc: `face:${slug}` } as CustomAgent;
@@ -52,7 +54,9 @@ describe("useAgentHomeSelection", () => {
     await setCustomAgentsAccess("team");
   });
 
-  afterEach(() => jest.clearAllMocks());
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
 
   describe("useAgentHomeSelection()", () => {
     it("lists the agents and selects Copilot on a new chat when the last chat started was a Copilot chat", () => {
@@ -126,6 +130,19 @@ describe("useAgentHomeSelection", () => {
 
       expect(jest.mocked(switchAgent).mock.calls).toEqual([[null]]);
       expect(result.current.selected).toBeNull();
+    });
+
+    it(`moves a new chat on an agent back to Copilot once the license check locks custom agents (${LOCKED_ISSUE})`, async () => {
+      rememberLastAgent("maya");
+      const { store } = fakeAgentStore([COCO, MAYA]);
+      const { rerender, switchAgent } = renderSelection(store);
+      expect(switchAgent).toHaveBeenLastCalledWith(MAYA);
+
+      setCustomAgentsLaunched(true);
+      await act(() => setCustomAgentsAccess("free"));
+      rerender({ current: { ...NEW_CHAT, agentSlug: "maya" } });
+
+      expect(switchAgent).toHaveBeenLastCalledWith(null);
     });
 
     it("switches the new chat to a picked agent and shows it as selected right away", () => {

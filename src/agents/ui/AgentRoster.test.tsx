@@ -1,4 +1,9 @@
-import { AgentRoster, NewAgentButton, type RosterAgent } from "@/agents/ui/AgentRoster";
+import {
+  AgentRoster,
+  type LockedRoster,
+  NewAgentButton,
+  type RosterAgent,
+} from "@/agents/ui/AgentRoster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import React from "react";
@@ -6,6 +11,7 @@ import React from "react";
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/588";
 const CREATE_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/939";
 const LOCKED_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/582";
+const LAPSED_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/950";
 
 function agent(name: string, title = `${name}'s job`): RosterAgent {
   return {
@@ -29,6 +35,7 @@ interface RenderOptions {
   width?: number;
   newAgentButton?: React.ReactNode;
   onOpenProfile?: (slug: string) => void;
+  locked?: LockedRoster;
 }
 
 function renderRoster({
@@ -37,6 +44,7 @@ function renderRoster({
   width = 424,
   newAgentButton,
   onOpenProfile,
+  locked,
 }: RenderOptions = {}) {
   jest.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(width);
   const onSelect = jest.fn();
@@ -49,6 +57,7 @@ function renderRoster({
         emptyHero={<h2>What are you working on?</h2>}
         newAgentButton={newAgentButton}
         onOpenProfile={onOpenProfile}
+        locked={locked}
       />
     </TooltipProvider>
   );
@@ -218,6 +227,49 @@ describe("AgentRoster", () => {
       fireEvent.click(items[1]);
 
       expect(onSelect).toHaveBeenCalledWith("kai");
+    });
+
+    it(`shows every agent greyed with a lock while locked, keeps Copilot selected, says why under the row, and opens a clicked agent's locked profile instead of picking it (${LAPSED_ISSUE})`, () => {
+      const onOpenLocked = jest.fn();
+      const { onSelect } = renderRoster({
+        selectedSlug: "maya",
+        locked: { onOpen: onOpenLocked, note: "Your Supporter plan ended." },
+      });
+
+      expect(rowNames()).toEqual([
+        "Copilot",
+        "Coco · Supporter preview",
+        "Maya · Supporter preview",
+        "Leo · Supporter preview",
+      ]);
+      const maya = screen.getByRole("button", { name: "Maya · Supporter preview" });
+      expect(maya.querySelector("img")?.className).toContain("tw-grayscale");
+      expect(maya.querySelector(".lucide-lock")).not.toBeNull();
+      expect(screen.getByRole("button", { name: "Copilot", pressed: true })).not.toBeNull();
+      expect(screen.getByText("Your Supporter plan ended.")).not.toBeNull();
+      expect(screen.queryByText("No agent, no memory")).toBeNull();
+
+      fireEvent.click(maya);
+
+      expect(onOpenLocked).toHaveBeenCalledWith("maya");
+      expect(onSelect).not.toHaveBeenCalled();
+    });
+
+    it(`opens the locked profile of an agent picked from the More menu, which marks each agent locked (${LAPSED_ISSUE})`, () => {
+      const onOpenLocked = jest.fn();
+      const { onSelect } = renderRoster({
+        agents: FIVE,
+        width: 300,
+        locked: { onOpen: onOpenLocked, note: null },
+      });
+
+      openMoreMenu(2);
+      const items = screen.getAllByRole("menuitem");
+      expect(items.map((item) => within(item).queryByLabelText("Locked"))).not.toContain(null);
+      fireEvent.click(items[1]);
+
+      expect(onOpenLocked).toHaveBeenCalledWith("kai");
+      expect(onSelect).not.toHaveBeenCalled();
     });
   });
 

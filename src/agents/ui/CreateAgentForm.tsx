@@ -333,6 +333,7 @@ interface AgentModelFieldProps {
   value: ModelSelection | null;
   onChange: (model: ModelSelection) => void;
   container: HTMLElement | null;
+  disabled?: boolean;
   className?: string;
 }
 
@@ -341,6 +342,7 @@ export function AgentModelField({
   value,
   onChange,
   container,
+  disabled,
   className,
 }: AgentModelFieldProps) {
   const entry = value && models.models.find((candidate) => candidate.name === value.baseModelId);
@@ -356,6 +358,7 @@ export function AgentModelField({
       override={{
         models: models.models,
         value: key,
+        disabled,
         effortOptionsByModelKey: models.effortOptionsByModelKey,
         effort:
           value && effortOptions.length > 0
