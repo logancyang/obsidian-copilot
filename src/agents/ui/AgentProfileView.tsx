@@ -74,8 +74,10 @@ export interface AgentProfileViewProps {
   locked?: LockedProfile;
 }
 
-const SHOWN_ON_HOVER_OR_FOCUS =
-  "tw-opacity-0 group-focus-within:tw-opacity-100 group-hover:tw-opacity-100";
+// A pencil follows the pointer over the head, or keyboard focus on its own control; focus a click leaves in the head
+// would otherwise keep all three showing. https://github.com/Brevilabs/obsidian-copilot-private/issues/940
+const SHOWN_ON_HOVER_OR_KEYBOARD_FOCUS =
+  "tw-opacity-0 group-hover:tw-opacity-100 [:focus-visible>&]:tw-opacity-100";
 
 const BLOCK_BUTTON_CLASS =
   "clickable-icon tw-h-9 tw-w-full tw-gap-1.5 tw-rounded-md tw-border tw-border-solid tw-bg-transparent tw-text-sm tw-font-medium tw-shadow-none";
@@ -227,7 +229,7 @@ export function AgentProfileView({
                   <span
                     className={cn(
                       "tw-absolute -tw-bottom-0.5 -tw-right-0.5 tw-flex tw-size-[22px] tw-items-center tw-justify-center tw-rounded-full tw-border tw-border-solid tw-border-border tw-bg-secondary tw-text-muted",
-                      SHOWN_ON_HOVER_OR_FOCUS
+                      SHOWN_ON_HOVER_OR_KEYBOARD_FOCUS
                     )}
                   >
                     <Pencil className="tw-size-3" />
@@ -406,12 +408,15 @@ function InlineEdit({
   const [error, setError] = useState<string | null>(null);
   const saving = useRef(false);
   const refocus = useRef(false);
+  const startedByKeyboard = useRef(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (draft !== null || !refocus.current) return;
     refocus.current = false;
-    buttonRef.current?.focus();
+    // Focus handed back after a click-started edit must not look like keyboard focus, or its pencil stays without the
+    // pointer. https://github.com/Brevilabs/obsidian-copilot-private/issues/940
+    buttonRef.current?.focus({ focusVisible: startedByKeyboard.current } as FocusOptions);
   }, [draft]);
 
   const commit = async (fromKeyboard: boolean) => {
@@ -432,14 +437,17 @@ function InlineEdit({
         ref={buttonRef}
         type="button"
         aria-label={label}
-        onClick={() => setDraft(value)}
+        onClick={(event) => {
+          startedByKeyboard.current = event.detail === 0;
+          setDraft(value);
+        }}
         className={cn(
           "clickable-icon tw-h-auto tw-max-w-full tw-gap-1 tw-whitespace-normal tw-bg-transparent tw-p-0 tw-shadow-none",
           NO_OBSIDIAN_TOOLTIP
         )}
       >
         <span className={cn("tw-min-w-0 tw-break-words", textClassName)}>{text}</span>
-        <span className={cn("tw-flex tw-shrink-0 tw-text-faint", SHOWN_ON_HOVER_OR_FOCUS)}>
+        <span className={cn("tw-flex tw-shrink-0 tw-text-faint", SHOWN_ON_HOVER_OR_KEYBOARD_FOCUS)}>
           <Pencil className="tw-size-3" />
         </span>
       </button>

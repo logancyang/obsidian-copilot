@@ -129,8 +129,13 @@ export const NewAgentWithNoMemory: StoryObj<StoryProps> = {
   },
 };
 
-export const EditIconsOnHoverOrFocus: StoryObj<StoryProps> = {
-  args: { setup: (page) => page.querySelector<HTMLElement>('[aria-label="Rename Coco"]')?.focus() },
+export const EditIconOnKeyboardFocus: StoryObj<StoryProps> = {
+  args: {
+    setup: (page) =>
+      page
+        .querySelector<HTMLElement>('[aria-label="Rename Coco"]')
+        ?.focus({ focusVisible: true } as FocusOptions),
+  },
 };
 
 export const Renaming: StoryObj<StoryProps> = {
