@@ -103,6 +103,12 @@ interface HiddenChat {
   session: Promise<AgentSession>;
   started: AgentSession | null;
   run: HiddenRun | null;
+  continuedAt: Map<string, number>;
+}
+
+export interface AskedAgentChat {
+  session: AgentSession;
+  continuedAt: ReadonlyMap<string, number>;
 }
 
 const PROGRESS_TEXT_CHARS = 1500;
@@ -236,6 +242,15 @@ export class HiddenAgentChats {
     );
   }
 
+  // The user watches an asked agent's chat from the run that asked it; a run whose chat is gone, as after a restart, or never opened has nothing to show.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/948
+  askedChat(parent: AgentSession, run: AgentMention): AskedAgentChat | null {
+    const hidden = this.chats.get(chatKey(parent, run.agent));
+    const session = hidden?.started;
+    if (!hidden || !session || session.getBackendSessionId() !== run.chat?.sessionId) return null;
+    return { session, continuedAt: hidden.continuedAt };
+  }
+
   // The user never sees an asked agent's chat, so its request shows as a card in the chat that asked, from that agent, and the answer goes straight back.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/946
   answerPermission(request: PermissionPrompt): Promise<PermissionDecision> | null {
@@ -338,6 +353,7 @@ export class HiddenAgentChats {
       from,
       started: null,
       run: null,
+      continuedAt: new Map(),
       session: this.startSession(parent, agent, store, (event) => {
         const run = hidden.run;
         // A chat carried on from before replays its history as it opens, which is not this run's work.
@@ -440,6 +456,7 @@ export class HiddenAgentChats {
       if (run.stopped) return { reply: "", files: [] };
       const { userMessageId, turn } = session.sendPrompt(hiddenJobText(hidden, message));
       run.since = userMessageId;
+      hidden.continuedAt.set(userMessageId, run.startedAt);
       turn.then(
         () => {
           if (!run.sawTurn) run.finish({ error: new Error(`${hidden.agent.name} didn't start.`) });
@@ -695,6 +712,15 @@ function describeProgress({ agent: { name }, run, started }: HiddenChat): string
       : `${name} hasn't written anything yet.`,
     ...(steps.length > 0 ? [`${name}'s latest steps:\n${steps.join("\n")}`] : []),
   ].join("\n\n");
+}
+
+const ASKED_MESSAGE = /<(message|answer) from="[^"]*">\n([\s\S]*)\n<\/\1>$/;
+
+// The asked agent's chat shows what the asking agent sent in its own words, without the framing that tells the agent where it came from.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/948
+export function readAskedMessage(text: string): { answer: boolean; text: string } | null {
+  const match = ASKED_MESSAGE.exec(text.trimEnd());
+  return match ? { answer: match[1] === "answer", text: match[2] } : null;
 }
 
 function hiddenJobText({ from }: HiddenChat, message: string): string {

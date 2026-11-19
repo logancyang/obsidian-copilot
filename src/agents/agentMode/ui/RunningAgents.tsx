@@ -1,6 +1,10 @@
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { AgentChatMessage } from "@/agentMode/session/types";
-import { StopTaskButton, type RunningRunsSlot } from "@/agentMode/ui/RunningTasksIndicator";
+import {
+  RunningRow,
+  StopTaskButton,
+  type RunningRunsSlot,
+} from "@/agentMode/ui/RunningTasksIndicator";
 import type { AgentMention } from "@/agents/agentMentions";
 import { formatRunTime, runningAgentsLine } from "@/agents/agentMentionStatus";
 import type { HiddenAgentChats } from "@/agents/agentMode/hiddenAgentChats";
@@ -9,6 +13,7 @@ import type { CustomAgent } from "@/agents/CustomAgentStore";
 import type { CustomAgentsGate } from "@/agents/customAgentsGate";
 import { AgentFace } from "@/agents/ui/AgentFace";
 import { cn } from "@/lib/utils";
+import { Bot } from "lucide-react";
 import React, { useRef } from "react";
 
 const MAX_FACES = 3;
@@ -22,21 +27,29 @@ export interface RunningAgent {
 interface RunningAgentsSlotInput {
   runs: readonly RunningAgent[];
   taskCount: number;
+  onOpen: (mention: AgentMention) => void;
   onStop?: (mention: AgentMention) => void;
 }
 
 export function runningAgentsSlot({
   runs,
   taskCount,
+  onOpen,
   onStop,
 }: RunningAgentsSlotInput): RunningRunsSlot | undefined {
   if (runs.length === 0) return undefined;
   return {
     label: <RunningAgentsLabel runs={runs} taskCount={taskCount} />,
-    rows: () =>
+    rows: (close) =>
       runs.map((run) => (
         <li key={run.mention.id} className="tw-flex tw-items-start tw-gap-1">
-          <RunningAgentRow run={run} />
+          <RunningAgentRow
+            run={run}
+            onOpen={() => {
+              close();
+              onOpen(run.mention);
+            }}
+          />
           {onStop && (
             <StopTaskButton
               taskId={run.mention.id}
@@ -55,6 +68,7 @@ interface ChatRunningAgentsInput {
   hiddenChats: HiddenAgentChats | undefined;
   agents: readonly CustomAgent[];
   taskCount: number;
+  onOpen: (mention: AgentMention) => void;
   gate: CustomAgentsGate;
 }
 
@@ -66,6 +80,7 @@ export function chatRunningAgents({
   hiddenChats,
   agents,
   taskCount,
+  onOpen,
   gate,
 }: ChatRunningAgentsInput): RunningRunsSlot | undefined {
   const runs = messages
@@ -80,7 +95,7 @@ export function chatRunningAgents({
     gate === "full" && chat && hiddenChats
       ? (mention: AgentMention) => void hiddenChats.stop(chat, mention.agent, { fromList: true })
       : undefined;
-  return runningAgentsSlot({ runs, taskCount, onStop });
+  return runningAgentsSlot({ runs, taskCount, onOpen, onStop });
 }
 
 const RunningAgentsLabel: React.FC<{ runs: readonly RunningAgent[]; taskCount: number }> = ({
@@ -93,7 +108,12 @@ const RunningAgentsLabel: React.FC<{ runs: readonly RunningAgent[]; taskCount: n
   );
   const ref = useRef<HTMLSpanElement>(null);
   const now = useTickingNow(line.clockFrom !== undefined, ref);
-  const faces = runs.filter((run) => run.faceSrc).slice(0, MAX_FACES);
+  const faces = [
+    ...runs.filter((run) => run.mention.status !== "working"),
+    ...runs.filter((run) => run.mention.status === "working"),
+  ]
+    .filter((run) => run.faceSrc)
+    .slice(0, MAX_FACES);
   return (
     <span
       ref={ref}
@@ -124,29 +144,42 @@ const RunningAgentsLabel: React.FC<{ runs: readonly RunningAgent[]; taskCount: n
   );
 };
 
-const RunningAgentRow: React.FC<{ run: RunningAgent }> = ({ run }) => {
+const RunningAgentRow: React.FC<{ run: RunningAgent; onOpen: () => void }> = ({ run, onOpen }) => {
   const { mention, message, faceSrc } = run;
   const working = mention.status === "working";
   const ref = useRef<HTMLSpanElement>(null);
   const now = useTickingNow(working, ref);
   return (
-    <div className="tw-flex tw-min-w-0 tw-flex-1 tw-items-center tw-gap-1.5 tw-px-2 tw-py-1.5 tw-text-sm">
-      {faceSrc && <AgentFace src={faceSrc} size="xs" />}
-      <span className="tw-shrink-0 tw-font-medium tw-text-normal">{mention.name}</span>
-      <span className="tw-min-w-0 tw-flex-1 tw-truncate tw-text-muted">{message}</span>
-      <span
-        ref={ref}
-        className={cn(
-          "tw-shrink-0 tw-text-xs tw-tabular-nums",
-          working ? "tw-text-muted" : "tw-text-warning"
-        )}
-      >
-        {working
-          ? formatRunTime(now - mention.startedAt)
-          : mention.status === "permission"
-            ? "Needs your OK"
-            : "Waiting for you"}
-      </span>
-    </div>
+    <RunningRow
+      icon={
+        faceSrc ? (
+          <AgentFace src={faceSrc} size="xs" />
+        ) : (
+          <Bot className="tw-size-3.5 tw-shrink-0 tw-text-normal" />
+        )
+      }
+      label={
+        <>
+          <span className="tw-font-medium">{mention.name}</span>{" "}
+          <span className="tw-text-muted">{message}</span>
+        </>
+      }
+      trailing={
+        <span
+          ref={ref}
+          className={cn(
+            "tw-shrink-0 tw-text-xs tw-tabular-nums",
+            working ? "tw-text-muted" : "tw-text-warning"
+          )}
+        >
+          {working
+            ? formatRunTime(now - mention.startedAt)
+            : mention.status === "permission"
+              ? "Needs your OK"
+              : "Waiting for you"}
+        </span>
+      }
+      onOpen={onOpen}
+    />
   );
 };

@@ -35,6 +35,16 @@ describe("chatAgents", () => {
       expect(result.current).toEqual({ agents: THREE_AGENTS, self: "coco" });
     });
 
+    it("carries how the chat opens an asked agent's work, for View under each @ message (https://github.com/Brevilabs/obsidian-copilot-private/issues/948)", async () => {
+      await setCustomAgentsAccess("team");
+      const { store } = fakeAgentStore(THREE_AGENTS);
+      const openRun = jest.fn();
+
+      const { result } = renderHook(() => useChatAgentsValue(store, "coco", openRun));
+
+      expect(result.current.openRun).toBe(openRun);
+    });
+
     it(`carries no agents without a license that includes custom agents, so the chat shows none of them (${ISSUE})`, async () => {
       await setCustomAgentsAccess("plus-without-custom-agents");
       const { store } = fakeAgentStore(THREE_AGENTS);

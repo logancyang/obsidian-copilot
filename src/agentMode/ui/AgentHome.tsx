@@ -55,6 +55,7 @@ import { pickRandomGreeting } from "@/agentMode/ui/landingGreetings";
 import { findBackendForModel, listBackendDescriptors } from "@/agentMode/backends/registry";
 import { buildAgentModelChoices } from "@/agentMode/ui/agentModelPickerHelpers";
 import { AgentProfile } from "@/agents/agentMode/ui/AgentProfile";
+import { ChatAskedAgentView } from "@/agents/agentMode/ui/AskedAgentView";
 import { chatRunningAgents } from "@/agents/agentMode/ui/RunningAgents";
 import { isLicenseLapsed, useCustomAgentsGate } from "@/agents/customAgentsGate";
 import type { CustomAgent } from "@/agents/CustomAgentStore";
@@ -168,10 +169,22 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     openedTask?.sessionId === sessionId
       ? tasks.find((task) => task.toolCallId === openedTask.toolCallId)
       : undefined;
-  const markTaskViewClosedByUser = useComposerFocusAfterTaskView(detailTask !== undefined);
+  const [openedRun, setOpenedRun] = useState<{ sessionId: string; runId: string } | null>(null);
+  const handleOpenRun = useCallback(
+    (runId: string) => setOpenedRun({ sessionId, runId }),
+    [sessionId]
+  );
+  const detailRun =
+    openedRun?.sessionId === sessionId
+      ? messages.flatMap((m) => m.agentMentions ?? []).find((run) => run.id === openedRun.runId)
+      : undefined;
+  const markTaskViewClosedByUser = useComposerFocusAfterTaskView(
+    detailTask !== undefined || detailRun !== undefined
+  );
   const handleCloseTask = useCallback(() => {
     markTaskViewClosedByUser();
     setOpenedTask(null);
+    setOpenedRun(null);
   }, [markTaskViewClosedByUser]);
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
@@ -439,7 +452,11 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     switchLandingAgent
   );
   const recentChats = useAgentRecentChats(chatHistoryItems, agentHome.agents, agentHome.selected);
-  const chatAgents = useChatAgentsValue(plugin.customAgents, agentHome.selected?.slug ?? null);
+  const chatAgents = useChatAgentsValue(
+    plugin.customAgents,
+    agentHome.selected?.slug ?? null,
+    handleOpenRun
+  );
   const customAgentsGate = useCustomAgentsGate();
   const lapsed = isLicenseLapsed(settings);
   const { focusInput } = useChatInput();
@@ -831,6 +848,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     hiddenChats: plugin.hiddenAgentChats,
     agents: chatAgents.agents,
     taskCount: runningTasks(tasks).length,
+    onOpen: (run) => handleOpenRun(run.id),
     gate: customAgentsGate,
   });
   const getActiveChatBookmarkState = useCallback(
@@ -1019,12 +1037,21 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                           pendingToolPermissions.length > 0 || pendingAskUserQuestions.length > 0
                         }
                       />
+                    ) : detailRun ? (
+                      <ChatAskedAgentView
+                        run={detailRun}
+                        chat={activeSession}
+                        hiddenChats={plugin.hiddenAgentChats}
+                        agents={chatAgents.agents}
+                        app={app}
+                        onBack={handleCloseTask}
+                      />
                     ) : null}
                     {/* The chat stays laid out, invisible, under a task's view: hiding it with display none collapses its scroller, which then jumps to the end on Back. https://github.com/Brevilabs/obsidian-copilot-private/issues/749 */}
                     <div
                       className={cn(
                         "tw-flex tw-min-h-0 tw-flex-1 tw-flex-col",
-                        detailTask && "tw-invisible tw-absolute tw-inset-0"
+                        (detailTask || detailRun) && "tw-invisible tw-absolute tw-inset-0"
                       )}
                     >
                       <ChatAgentsContext.Provider value={chatAgents}>

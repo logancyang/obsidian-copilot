@@ -69,13 +69,14 @@ describe("RunningAgents", () => {
   afterEach(() => jest.useRealTimers());
 
   describe("runningAgentsSlot()", () => {
+    const onOpen = jest.fn();
     it(`gives nothing to draw when no asked agent runs (${ISSUE})`, () => {
-      expect(runningAgentsSlot({ runs: [], taskCount: 1 })).toBeUndefined();
+      expect(runningAgentsSlot({ runs: [], taskCount: 1, onOpen })).toBeUndefined();
     });
 
     it(`says the one working agent is working with a clock that counts, and lists it with what it was asked (${ISSUE})`, () => {
       jest.useFakeTimers({ now: NOW });
-      renderLine(runningAgentsSlot({ runs: [asked()], taskCount: 0 }));
+      renderLine(runningAgentsSlot({ runs: [asked()], taskCount: 0, onOpen }));
 
       const line = screen.getByRole("button", { name: /Leo is working/ });
       expect(line.textContent).toBe("Leo is working · 3:12");
@@ -83,34 +84,40 @@ describe("RunningAgents", () => {
       expect(line.textContent).toBe("Leo is working · 3:14");
 
       const row = screen.getByText("Reconcile October").closest("li")!;
-      expect(row.textContent).toBe("LeoReconcile October3:14");
+      expect(row.textContent).toBe("Leo Reconcile October3:14");
     });
 
-    it(`puts the waiting agent first in orange, and its row says it waits instead of a clock (${ISSUE})`, () => {
+    it(`puts the waiting agent first in orange, face and words, and its row says it waits instead of a clock (${ISSUE})`, () => {
       renderLine(
         runningAgentsSlot({
           runs: [
-            asked({ id: "run-maya", agent: "maya", name: "Maya" }),
-            asked({ status: "question" }),
+            { ...asked({ id: "run-maya", agent: "maya", name: "Maya" }), faceSrc: "face:maya" },
+            { ...asked({ status: "question" }), faceSrc: "face:leo" },
           ],
           taskCount: 0,
+          onOpen,
         })
       );
 
       const line = screen.getByRole("button", { name: "Leo is waiting for you · Maya is working" });
       expect(line.querySelector(".tw-text-warning")).not.toBeNull();
+      expect(
+        Array.from(line.querySelectorAll("img")).map((face) => face.getAttribute("src"))
+      ).toEqual(["face:leo", "face:maya"]);
       expect(screen.getByText("Waiting for you").classList.contains("tw-text-warning")).toBe(true);
     });
 
     it(`says a row waits on the user's OK when the agent asked for permission (${ISSUE})`, () => {
-      renderLine(runningAgentsSlot({ runs: [asked({ status: "permission" })], taskCount: 0 }));
+      renderLine(
+        runningAgentsSlot({ runs: [asked({ status: "permission" })], taskCount: 0, onOpen })
+      );
 
       expect(screen.getByRole("button", { name: "Leo needs your OK" })).toBeTruthy();
       expect(screen.getByText("Needs your OK")).toBeTruthy();
     });
 
     it(`counts the chat's own tasks after the agents and lists their rows below the agents (${ISSUE})`, () => {
-      renderLine(runningAgentsSlot({ runs: [asked()], taskCount: 1 }), [makeTask()]);
+      renderLine(runningAgentsSlot({ runs: [asked()], taskCount: 1, onOpen }), [makeTask()]);
 
       expect(screen.getByRole("button", { name: "Leo is working · 1 task" })).toBeTruthy();
       const rows = Array.from(document.querySelectorAll("li")).map((li) => li.textContent);
@@ -118,13 +125,23 @@ describe("RunningAgents", () => {
       expect(rows[1]).toContain("Count words in Welcome");
     });
 
+    it(`opens the agent's view from its row and closes the list (${ISSUE})`, () => {
+      const open = jest.fn();
+      renderLine(runningAgentsSlot({ runs: [asked()], taskCount: 0, onOpen: open }));
+
+      fireEvent.click(screen.getByText("Reconcile October"));
+
+      expect(open).toHaveBeenCalledWith(run());
+      expect(screen.queryByText("Reconcile October")).toBeNull();
+    });
+
     it(`offers a stop for each agent only when stopping is allowed, and stops that agent's run (${ISSUE})`, () => {
       const onStop = jest.fn();
-      const { unmount } = renderLine(runningAgentsSlot({ runs: [asked()], taskCount: 0 }));
+      const { unmount } = renderLine(runningAgentsSlot({ runs: [asked()], taskCount: 0, onOpen }));
       expect(screen.queryByRole("button", { name: "Stop Leo" })).toBeNull();
       unmount();
 
-      renderLine(runningAgentsSlot({ runs: [asked()], taskCount: 0, onStop }));
+      renderLine(runningAgentsSlot({ runs: [asked()], taskCount: 0, onOpen, onStop }));
       fireEvent.click(screen.getByRole("button", { name: "Stop Leo" }));
 
       expect(onStop).toHaveBeenCalledWith(run());
@@ -150,6 +167,7 @@ describe("RunningAgents", () => {
         hiddenChats: chats,
         agents: store.getAgents(),
         taskCount: 0,
+        onOpen: () => {},
         gate,
       });
       return (
