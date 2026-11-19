@@ -6,7 +6,7 @@ import {
 } from "@/agents/ui/AgentRoster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import React from "react";
+import React, { useState } from "react";
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/588";
 const CREATE_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/939";
@@ -27,7 +27,9 @@ const COCO = agent("Coco", "Keeps the whole vault in view");
 const MAYA = agent("Maya", "Product critic. Pushes back on plans");
 const LEO = agent("Leo", "Keeps the company books");
 const FIVE = [COCO, MAYA, LEO, agent("Nora"), agent("Kai")];
-const TWELVE = [...FIVE, ...["Ada", "Bo", "Cy", "Di", "Ed", "Fay", "Gus"].map((n) => agent(n))];
+const SIX = [...FIVE, agent("Ada")];
+const TWELVE = [...SIX, ...["Bo", "Cy", "Di", "Ed", "Fay", "Gus"].map((n) => agent(n))];
+const NEW_BUTTON = <button type="button">New</button>;
 
 interface RenderOptions {
   agents?: readonly RosterAgent[];
@@ -64,6 +66,26 @@ function renderRoster({
   return { onSelect, unmount };
 }
 
+function StatefulRoster({ agents }: { agents: readonly RosterAgent[] }) {
+  const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
+  return (
+    <TooltipProvider>
+      <AgentRoster
+        agents={agents}
+        selectedSlug={selectedSlug}
+        onSelect={setSelectedSlug}
+        emptyHero={null}
+      />
+    </TooltipProvider>
+  );
+}
+
+function pickedAgent() {
+  const block = screen.getByRole("group").previousElementSibling as HTMLElement;
+  const nameElement = block.children[1] as HTMLElement;
+  return { name: nameElement.textContent, nameElement, block, text: block.textContent };
+}
+
 function rowNames(): string[] {
   return within(screen.getByRole("group", { name: "Who do you want to talk to?" }))
     .getAllByRole("button")
@@ -95,11 +117,12 @@ describe("AgentRoster", () => {
       expect(rowNames()).toEqual(["Copilot", "Coco", "Maya", "Leo"]);
     });
 
-    it(`marks the selected agent with an accent ring on its 54px face and shows its title under the row (${ISSUE})`, () => {
+    it(`marks the selected agent in the row with a 2px accent ring on its 42px face (${ISSUE})`, () => {
       renderRoster({ selectedSlug: "maya" });
 
       const maya = screen.getByRole("button", { name: "Maya", pressed: true });
-      expect(maya.querySelector("img")?.className).toContain("tw-size-[54px]");
+      expect(maya.querySelector("img")?.className).toContain("tw-size-[42px]");
+      expect(maya.querySelector("img")?.className).toContain("tw-outline-2");
       expect(maya.querySelector("img")?.className).toContain(
         "tw-outline-[color:var(--interactive-accent)]"
       );
@@ -107,17 +130,91 @@ describe("AgentRoster", () => {
         screen.getByRole("button", { name: "Coco", pressed: false }).querySelector("img")?.className
       ).not.toContain("tw-outline");
       expect(screen.getByRole("button", { name: "Copilot", pressed: false })).not.toBeNull();
-      expect(screen.getByText("Product critic. Pushes back on plans")).not.toBeNull();
     });
 
-    it(`rings Copilot's face in the accent color and says it has no agent and no memory when Copilot is selected (${ISSUE})`, () => {
-      renderRoster({ selectedSlug: null });
+    it(`shows the selected agent above the row with its 88px face, its name and its title (${ISSUE})`, () => {
+      renderRoster({ selectedSlug: "maya" });
+
+      const picked = pickedAgent();
+      expect(picked.name).toBe("Maya");
+      const face = picked.block.querySelector("img");
+      expect(face?.getAttribute("src")).toBe(MAYA.faceSrc);
+      expect(face?.className).toContain("tw-size-[88px]");
+      expect(face?.className).not.toContain("tw-outline");
+      expect(picked.text).toContain("Product critic. Pushes back on plans");
+      expect(
+        picked.block.compareDocumentPosition(screen.getByRole("group")) &
+          Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+    });
+
+    it(`names the picked agent to a screen reader once, as the pressed face in the row, while the name above the row stays visual (${ISSUE})`, () => {
+      renderRoster({ selectedSlug: "maya", onOpenProfile: jest.fn() });
+
+      expect(screen.queryByRole("heading", { name: "Maya" })).toBeNull();
+      expect(pickedAgent().nameElement.getAttribute("aria-hidden")).toBe("true");
+      expect(screen.getByText("Product critic. Pushes back on plans")).not.toBeNull();
+      expect(screen.getByRole("button", { name: "Profile" })).not.toBeNull();
+      expect(screen.getByRole("button", { name: "Maya", pressed: true })).not.toBeNull();
+    });
+
+    it(`rings Copilot's face in the row and shows Copilot above it, named Copilot and titled as a classic agent that starts fresh every chat (${ISSUE})`, () => {
+      renderRoster({ selectedSlug: null, onOpenProfile: jest.fn() });
 
       const copilot = screen.getByRole("button", { name: "Copilot", pressed: true });
       expect(copilot.firstElementChild?.className).toContain(
         "tw-outline-[color:var(--interactive-accent)]"
       );
-      expect(screen.getByText("No agent, no memory")).not.toBeNull();
+      const picked = pickedAgent();
+      expect(picked.name).toBe("Copilot");
+      expect(picked.block.querySelector("img")).toBeNull();
+      expect(picked.block.querySelector("svg")).not.toBeNull();
+      expect(picked.text).toContain("Classic agent. Starts fresh every chat.");
+      expect(screen.queryByRole("button", { name: "Profile" })).toBeNull();
+    });
+
+    it(`shrinks the picked agent's face, and Copilot's, to 64px in a window up to 640px tall so the row and chat input stay in view (${ISSUE})`, () => {
+      const { unmount } = renderRoster({ selectedSlug: "maya" });
+      expect(pickedAgent().block.querySelector("img")?.className).toContain(
+        "[@media(max-height:640px)]:tw-size-16"
+      );
+      unmount();
+
+      renderRoster({ selectedSlug: null });
+      expect(pickedAgent().block.firstElementChild?.className).toContain(
+        "[@media(max-height:640px)]:tw-size-16"
+      );
+    });
+
+    it(`shows each newly picked agent above the row, whether picked in the row or from the More menu (${ISSUE})`, () => {
+      jest.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(260);
+      render(<StatefulRoster agents={FIVE} />);
+      expect(pickedAgent().name).toBe("Copilot");
+
+      fireEvent.click(screen.getByRole("button", { name: "Coco" }));
+      expect(pickedAgent().name).toBe("Coco");
+      expect(pickedAgent().text).toContain("Keeps the whole vault in view");
+
+      openMoreMenu(2);
+      fireEvent.click(screen.getByRole("menuitem", { name: /Kai/ }));
+      expect(pickedAgent().name).toBe("Kai");
+      expect(pickedAgent().text).toContain("Kai's job");
+
+      fireEvent.click(screen.getByRole("button", { name: "Copilot" }));
+      expect(pickedAgent().name).toBe("Copilot");
+    });
+
+    it(`cuts a long name above the row to one line and its long title to two lines (${ISSUE})`, () => {
+      const long = agent(
+        "Nora · Family & School and everything after school",
+        "Family calendar and school logistics, from pickups to permission slips and the winter break rota"
+      );
+      renderRoster({ agents: [long], selectedSlug: long.slug });
+
+      const { name, nameElement } = pickedAgent();
+      expect(name).toBe(long.name);
+      expect(nameElement.className).toContain("tw-truncate");
+      expect(screen.getByText(long.title).className).toContain("tw-line-clamp-2");
     });
 
     it("selects an agent or Copilot when its face is clicked", () => {
@@ -153,7 +250,7 @@ describe("AgentRoster", () => {
 
       expect(screen.getByRole("heading", { name: "What are you working on?" })).not.toBeNull();
       expect(screen.queryByRole("group")).toBeNull();
-      expect(screen.queryByText("No agent, no memory")).toBeNull();
+      expect(screen.queryByText("Classic agent. Starts fresh every chat.")).toBeNull();
     });
 
     it(`keeps the hero it is given above a row of Copilot and the new-agent button while there are no agents yet (${CREATE_ISSUE})`, () => {
@@ -166,13 +263,14 @@ describe("AgentRoster", () => {
           .map((button) => button.textContent)
       ).toEqual(["Copilot", "New"]);
       expect(screen.getByRole("button", { name: "Copilot", pressed: true })).not.toBeNull();
-      expect(screen.queryByText("No agent, no memory")).toBeNull();
+      expect(screen.queryByText("Classic agent. Starts fresh every chat.")).toBeNull();
     });
 
-    it(`links the selected agent's profile only when the home can open one (${ISSUE})`, () => {
+    it(`links the selected agent's profile beside its title above the row, only when the home can open one (${ISSUE})`, () => {
       const onOpenProfile = jest.fn();
       renderRoster({ selectedSlug: "coco", onOpenProfile });
 
+      expect(pickedAgent().text).toBe("CocoKeeps the whole vault in view·Profile");
       fireEvent.click(screen.getByRole("button", { name: "Profile" }));
 
       expect(onOpenProfile).toHaveBeenCalledWith("coco");
@@ -187,67 +285,83 @@ describe("AgentRoster", () => {
       expect(screen.queryByRole("button", { name: "Profile" })).toBeNull();
     });
 
-    it("fits Copilot, four agents and the new-agent button in one row of a 440px sidebar", () => {
-      renderRoster({
-        agents: FIVE.slice(0, 4),
-        newAgentButton: <button type="button">New</button>,
-      });
+    it(`fits Copilot, six agents and the new-agent button in one row of a 440px sidebar (${ISSUE})`, () => {
+      renderRoster({ agents: SIX, newAgentButton: NEW_BUTTON });
+
+      expect(rowNames()).toEqual(["Copilot", "Coco", "Maya", "Leo", "Nora", "Kai", "Ada", "New"]);
+    });
+
+    it(`fits Copilot, four agents and the new-agent button in one row of a 340px sidebar (${ISSUE})`, () => {
+      renderRoster({ agents: FIVE.slice(0, 4), width: 300, newAgentButton: NEW_BUTTON });
 
       expect(rowNames()).toEqual(["Copilot", "Coco", "Maya", "Leo", "Nora", "New"]);
     });
 
-    it(`fits Copilot, three agents and the new-agent button in one row of a 340px sidebar (${ISSUE})`, () => {
-      renderRoster({ width: 300, newAgentButton: <button type="button">New</button> });
+    it(`fits Copilot, three agents and the new-agent button in one row of a 300px sidebar (${ISSUE})`, () => {
+      renderRoster({ width: 260, newAgentButton: NEW_BUTTON });
 
       expect(rowNames()).toEqual(["Copilot", "Coco", "Maya", "Leo", "New"]);
     });
 
-    it(`moves the agents that do not fit into a +N More menu, keeping Copilot and the new-agent button in the row (${ISSUE})`, () => {
-      renderRoster({ agents: TWELVE, newAgentButton: <button type="button">New</button> });
+    it(`moves the agents that do not fit a 440px sidebar into a +N More menu, keeping Copilot and the new-agent button in the row (${ISSUE})`, () => {
+      renderRoster({ agents: TWELVE, newAgentButton: NEW_BUTTON });
 
-      expect(rowNames()).toEqual(["Copilot", "Coco", "Maya", "Leo", "Show 9 more agents", "New"]);
+      expect(rowNames()).toEqual([
+        "Copilot",
+        "Coco",
+        "Maya",
+        "Leo",
+        "Nora",
+        "Kai",
+        "Show 7 more agents",
+        "New",
+      ]);
+    });
+
+    it(`moves the agents that do not fit a 340px sidebar into a +N More menu (${ISSUE})`, () => {
+      renderRoster({ agents: SIX, width: 300, newAgentButton: NEW_BUTTON });
+
+      expect(rowNames()).toEqual(["Copilot", "Coco", "Maya", "Leo", "Show 3 more agents", "New"]);
     });
 
     it(`keeps the selected agent in the row when it would otherwise be in the menu (${ISSUE})`, () => {
       renderRoster({ agents: TWELVE, selectedSlug: "gus" });
 
-      expect(rowNames()).toEqual(["Copilot", "Coco", "Maya", "Leo", "Gus", "Show 8 more agents"]);
+      expect(rowNames()).toEqual([
+        "Copilot",
+        "Coco",
+        "Maya",
+        "Leo",
+        "Nora",
+        "Kai",
+        "Gus",
+        "Show 6 more agents",
+      ]);
       expect(screen.getByRole("button", { name: "Gus", pressed: true })).not.toBeNull();
     });
 
-    it("moves agents into the menu in a narrow sidebar", () => {
-      renderRoster({ agents: FIVE, width: 260 });
+    it(`keeps Copilot, two agents with the selected one, the More menu and the new-agent button in the row of a 300px sidebar (${ISSUE})`, () => {
+      renderRoster({ agents: TWELVE, selectedSlug: "gus", width: 260, newAgentButton: NEW_BUTTON });
 
-      expect(rowNames()).toEqual(["Copilot", "Coco", "Maya", "Show 3 more agents"]);
-    });
-
-    it(`keeps Copilot, the selected agent, the More menu and the new-agent button in the row of a 300px sidebar (${ISSUE})`, () => {
-      renderRoster({
-        agents: TWELVE,
-        selectedSlug: "gus",
-        width: 260,
-        newAgentButton: <button type="button">New</button>,
-      });
-
-      expect(rowNames()).toEqual(["Copilot", "Gus", "Show 11 more agents", "New"]);
+      expect(rowNames()).toEqual(["Copilot", "Coco", "Gus", "Show 10 more agents", "New"]);
     });
 
     it("selects an agent picked from the More menu, which lists each agent's name and title", () => {
-      const { onSelect } = renderRoster({ agents: FIVE, width: 260 });
+      const { onSelect } = renderRoster({ agents: SIX, width: 260 });
 
       openMoreMenu(3);
       const items = screen.getAllByRole("menuitem");
       expect(items.map((item) => item.textContent)).toEqual([
-        "LeoKeeps the company books",
         "NoraNora's job",
         "KaiKai's job",
+        "AdaAda's job",
       ]);
-      fireEvent.click(items[2]);
+      fireEvent.click(items[1]);
 
       expect(onSelect).toHaveBeenCalledWith("kai");
     });
 
-    it(`shows every agent greyed with a lock while locked, keeps Copilot selected, says why under the row, and opens a clicked agent's locked profile instead of picking it (${LAPSED_ISSUE})`, () => {
+    it(`shows every agent greyed with a lock while locked, keeps Copilot selected and shown above the row, says why under the row, and opens a clicked agent's locked profile instead of picking it (${LAPSED_ISSUE})`, () => {
       const onOpenLocked = jest.fn();
       const { onSelect } = renderRoster({
         selectedSlug: "maya",
@@ -265,7 +379,7 @@ describe("AgentRoster", () => {
       expect(maya.querySelector(".lucide-lock")).not.toBeNull();
       expect(screen.getByRole("button", { name: "Copilot", pressed: true })).not.toBeNull();
       expect(screen.getByText("Your Supporter plan ended.")).not.toBeNull();
-      expect(screen.queryByText("No agent, no memory")).toBeNull();
+      expect(pickedAgent().name).toBe("Copilot");
 
       fireEvent.click(maya);
 
@@ -276,7 +390,7 @@ describe("AgentRoster", () => {
     it(`opens the locked profile of an agent picked from the More menu, which marks each agent locked (${LAPSED_ISSUE})`, () => {
       const onOpenLocked = jest.fn();
       const { onSelect } = renderRoster({
-        agents: FIVE,
+        agents: SIX,
         width: 260,
         locked: { onOpen: onOpenLocked, note: null },
       });
@@ -284,7 +398,7 @@ describe("AgentRoster", () => {
       openMoreMenu(3);
       const items = screen.getAllByRole("menuitem");
       expect(items.map((item) => within(item).queryByLabelText("Locked"))).not.toContain(null);
-      fireEvent.click(items[2]);
+      fireEvent.click(items[1]);
 
       expect(onOpenLocked).toHaveBeenCalledWith("kai");
       expect(onSelect).not.toHaveBeenCalled();

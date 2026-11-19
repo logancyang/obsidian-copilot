@@ -9,13 +9,18 @@ const FACE_SIZE_CLASS: Record<AgentFaceSize, string> = {
   s: "tw-size-5",
   m: "tw-size-7",
   l: "tw-size-9",
-  roster: "tw-size-[54px]",
+  roster: "tw-size-[42px]",
   xl: "tw-size-16",
   xxl: "tw-size-[88px]",
 };
 
 export const SELECTED_FACE_CLASS =
   "tw-outline tw-outline-[3px] tw-outline-offset-2 tw-outline-[color:var(--interactive-accent)]";
+
+// The row's smaller faces sit 8px apart, so their ring is thinner to stay clear of the next face.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/588
+export const ROSTER_SELECTED_FACE_CLASS =
+  "tw-outline tw-outline-2 tw-outline-offset-2 tw-outline-[color:var(--interactive-accent)]";
 
 export const LOCKED_FACE_CLASS = "tw-opacity-50 tw-grayscale";
 
@@ -53,7 +58,7 @@ export function AgentFace({
       className={cn(
         "tw-shrink-0 tw-rounded-full tw-bg-primary tw-object-cover",
         FACE_SIZE_CLASS[size],
-        selected && SELECTED_FACE_CLASS,
+        selected && (size === "roster" ? ROSTER_SELECTED_FACE_CLASS : SELECTED_FACE_CLASS),
         locked && LOCKED_FACE_CLASS,
         !wrapped && className
       )}

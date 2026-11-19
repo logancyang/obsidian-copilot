@@ -32,6 +32,15 @@ const meta = {
 } satisfies Meta<AgentRosterProps>;
 export default meta;
 
+const LONGER_NAMED_AGENT = { ...LONG_NAMED_AGENT, name: "Nora · Family, School & Weekends" };
+const UNTITLED_AGENT = {
+  ...COCO,
+  slug: "pip",
+  name: "Pip",
+  title: "",
+  instruction: "Sorts the inbox folder into projects every morning. Asks before moving a note.",
+};
+
 const render = (args: Partial<AgentRosterProps>) => (
   <TooltipProvider>
     <AgentRoster {...(args as AgentRosterProps)} />
@@ -45,14 +54,27 @@ export const NoAgents: StoryObj<AgentRosterProps> = {
 
 export const ThreeAgentsCopilotSelected: StoryObj<AgentRosterProps> = { render };
 
-export const AgentSelectedWithTitleLine: StoryObj<AgentRosterProps> = {
+export const AgentPickedWithTitle: StoryObj<AgentRosterProps> = {
   render,
-  args: { selectedSlug: "coco" },
+  args: { selectedSlug: "coco", onOpenProfile: () => {} },
 };
 
-export const FiveAgentsFillTheRow: StoryObj<AgentRosterProps> = {
+export const AgentPickedWithoutTitle: StoryObj<AgentRosterProps> = {
   render,
-  args: { agents: FIVE_AGENTS, selectedSlug: "kai" },
+  args: {
+    agents: [...THREE_AGENTS, UNTITLED_AGENT],
+    selectedSlug: UNTITLED_AGENT.slug,
+    onOpenProfile: () => {},
+  },
+};
+
+export const SixAgentsFillTheRow: StoryObj<AgentRosterProps> = {
+  render,
+  args: {
+    agents: TWELVE_AGENTS.slice(0, 6),
+    selectedSlug: "kai",
+    newAgentButton: <NewAgentButton onClick={() => {}} />,
+  },
 };
 
 export const TwelveAgentsSelectedStaysInRow: StoryObj<AgentRosterProps> = {
@@ -72,7 +94,11 @@ export const AgentFromMoreMenuSelectedBesideNewAgentButton: StoryObj<AgentRoster
 
 export const LongNameAndTitle: StoryObj<AgentRosterProps> = {
   render,
-  args: { agents: [COCO, MAYA, LEO, LONG_NAMED_AGENT], selectedSlug: LONG_NAMED_AGENT.slug },
+  args: {
+    agents: [COCO, MAYA, LEO, LONGER_NAMED_AGENT],
+    selectedSlug: LONGER_NAMED_AGENT.slug,
+    onOpenProfile: () => {},
+  },
 };
 
 export const ProfileLinkAndNewAgentSlots: StoryObj<AgentRosterProps> = {

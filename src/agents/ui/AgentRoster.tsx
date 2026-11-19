@@ -4,7 +4,7 @@ import {
   AgentFace,
   LOCKED_FACE_CLASS,
   LockBadge,
-  SELECTED_FACE_CLASS,
+  ROSTER_SELECTED_FACE_CLASS,
 } from "@/agents/ui/AgentFace";
 import { CopilotBrandIcon } from "@/components/ui/CopilotBrandIcon";
 import {
@@ -36,11 +36,18 @@ export interface LockedRoster {
   note: React.ReactNode;
 }
 
-const CELL_PX = 54;
-const GAP_PX = 6;
+const CELL_PX = 46;
+const GAP_PX = 4;
+
+const COPILOT_NAME = "Copilot";
+const COPILOT_TITLE = "Classic agent. Starts fresh every chat.";
 
 const CIRCLE_CLASS =
-  "tw-flex tw-size-[54px] tw-shrink-0 tw-items-center tw-justify-center tw-rounded-full tw-border tw-border-solid tw-border-border tw-bg-primary";
+  "tw-flex tw-shrink-0 tw-items-center tw-justify-center tw-rounded-full tw-border tw-border-solid tw-border-border tw-bg-primary";
+const ROW_CIRCLE_CLASS = cn(CIRCLE_CLASS, "tw-size-[42px]");
+// In a window up to 640px tall the picked face shrinks so the row and the chat input stay in view, even on a project home.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/588
+const SHORT_WINDOW_PICKED_FACE_CLASS = "[@media(max-height:640px)]:tw-size-16";
 
 export function AgentRoster({
   agents,
@@ -93,33 +100,65 @@ export function AgentRoster({
       >
         Who do you want to talk to?
       </div>
+      <PickedAgent agent={selected} onOpenProfile={onOpenProfile} />
       {row}
-      {locked ? (
+      {locked && (
         <div className="tw-mt-2 tw-max-w-80 tw-text-balance tw-text-center tw-text-ui-small tw-text-muted">
           {locked.note}
         </div>
-      ) : (
-        <div className="tw-mt-2 tw-flex tw-h-5 tw-min-w-0 tw-max-w-full tw-items-center tw-justify-center tw-gap-1.5 tw-text-ui-small tw-text-muted">
-          <span className="tw-min-w-0 tw-truncate">
-            {selected ? agentTitle(selected) : "No agent, no memory"}
-          </span>
-          {selected && onOpenProfile && (
-            <>
-              <span aria-hidden="true" className="tw-text-faint">
-                ·
-              </span>
-              <button
-                type="button"
-                onClick={() => onOpenProfile(selected.slug)}
-                className="clickable-icon tw-h-auto tw-shrink-0 tw-gap-px tw-bg-transparent tw-p-0 tw-text-ui-small tw-text-muted tw-underline tw-decoration-[color:var(--text-faint)] tw-underline-offset-2 tw-shadow-none"
-              >
-                Profile
-                <ChevronRight className="tw-size-3" />
-              </button>
-            </>
-          )}
-        </div>
       )}
+    </div>
+  );
+}
+
+interface PickedAgentProps {
+  agent: RosterAgent | null;
+  onOpenProfile?: (slug: string) => void;
+}
+
+function PickedAgent({ agent, onOpenProfile }: PickedAgentProps) {
+  const title = agent ? agentTitle(agent) : COPILOT_TITLE;
+  return (
+    <div className="tw-mt-4 tw-flex tw-w-full tw-min-w-0 tw-flex-col tw-items-center tw-text-center">
+      {agent ? (
+        <AgentFace src={agent.faceSrc} size="xxl" className={SHORT_WINDOW_PICKED_FACE_CLASS} />
+      ) : (
+        <span
+          className={cn(
+            CIRCLE_CLASS,
+            "tw-size-[88px] tw-text-normal",
+            SHORT_WINDOW_PICKED_FACE_CLASS
+          )}
+        >
+          <CopilotBrandIcon className="tw-size-11 [@media(max-height:640px)]:tw-size-8" />
+        </span>
+      )}
+      {/* The pressed face in the row already names the picked agent, so a screen reader hears it once.
+          https://github.com/Brevilabs/obsidian-copilot-private/issues/588 */}
+      <div
+        aria-hidden="true"
+        className="tw-mt-2 tw-max-w-full tw-truncate tw-text-xl tw-font-semibold tw-text-normal"
+      >
+        {agent?.name ?? COPILOT_NAME}
+      </div>
+      <div className="tw-flex tw-min-w-0 tw-max-w-full tw-items-center tw-justify-center tw-gap-1.5 tw-text-ui-small tw-text-muted">
+        <span className="tw-line-clamp-2 tw-min-w-0">{title}</span>
+        {agent && onOpenProfile && (
+          <>
+            <span aria-hidden="true" className="tw-text-faint">
+              ·
+            </span>
+            <button
+              type="button"
+              onClick={() => onOpenProfile(agent.slug)}
+              className="clickable-icon tw-h-auto tw-shrink-0 tw-gap-px tw-bg-transparent tw-p-0 tw-text-ui-small tw-text-muted tw-underline tw-decoration-[color:var(--text-faint)] tw-underline-offset-2 tw-shadow-none"
+            >
+              Profile
+              <ChevronRight className="tw-size-3" />
+            </button>
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -172,11 +211,17 @@ function FaceRow({
       ref={rowRef}
       role="group"
       aria-labelledby={labelledBy}
-      className="tw-mt-3 tw-flex tw-w-full tw-justify-center tw-gap-1.5"
+      className="tw-mt-3 tw-flex tw-w-full tw-justify-center tw-gap-1"
     >
-      <RosterCell label="Copilot" selected={!selected} onClick={() => onSelect(null)}>
-        <span className={cn(CIRCLE_CLASS, "tw-text-normal", !selected && SELECTED_FACE_CLASS)}>
-          <CopilotBrandIcon className="tw-size-7" />
+      <RosterCell label={COPILOT_NAME} selected={!selected} onClick={() => onSelect(null)}>
+        <span
+          className={cn(
+            ROW_CIRCLE_CLASS,
+            "tw-text-normal",
+            !selected && ROSTER_SELECTED_FACE_CLASS
+          )}
+        >
+          <CopilotBrandIcon className="tw-size-6" />
         </span>
       </RosterCell>
       {visibleIndices.map((index) => (
@@ -213,7 +258,7 @@ const RosterCell = React.forwardRef<HTMLButtonElement, RosterCellProps>(
       aria-pressed={selected}
       {...props}
       className={cn(
-        "clickable-icon tw-flex tw-h-auto tw-w-[54px] tw-shrink-0 tw-flex-col tw-items-center tw-gap-1 tw-rounded-md tw-bg-transparent tw-px-0 tw-pb-0.5 tw-pt-1 tw-opacity-100 tw-shadow-none",
+        "clickable-icon tw-flex tw-h-auto tw-w-[46px] tw-shrink-0 tw-flex-col tw-items-center tw-gap-1 tw-rounded-md tw-bg-transparent tw-px-0 tw-pb-0.5 tw-pt-1 tw-opacity-100 tw-shadow-none",
         className
       )}
     >
@@ -271,7 +316,7 @@ function MoreAgentsMenu({ agents, locked, onSelect }: MoreAgentsMenuProps) {
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <RosterCell label="More" aria-label={`Show ${agents.length} more agents`}>
-          <span className={cn(CIRCLE_CLASS, "tw-text-ui-small tw-font-semibold tw-text-muted")}>
+          <span className={cn(ROW_CIRCLE_CLASS, "tw-text-ui-small tw-font-semibold tw-text-muted")}>
             +{agents.length}
           </span>
         </RosterCell>
@@ -317,14 +362,14 @@ export function NewAgentButton({
     >
       <span
         className={cn(
-          CIRCLE_CLASS,
+          ROW_CIRCLE_CLASS,
           "tw-relative tw-border-[1.5px] tw-border-dashed tw-bg-transparent",
           emphasized
             ? "tw-border-[color:var(--text-muted)] tw-text-normal"
             : "tw-border-border tw-text-muted"
         )}
       >
-        <Plus className="tw-size-6" />
+        <Plus className="tw-size-5" />
         {locked && <LockBadge />}
       </span>
     </RosterCell>
