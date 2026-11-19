@@ -15,8 +15,8 @@ export interface AgentRecentChats {
 const NO_CHATS = Object.freeze([]) as unknown as ChatHistoryItem[];
 
 function faceIcon(src: string): ChatIcon {
-  return function AgentFaceIcon({ className }) {
-    return <AgentFace src={src} size="xs" className={className} />;
+  return function AgentFaceIcon() {
+    return <AgentFace src={src} size="xs" />;
   };
 }
 
@@ -30,18 +30,22 @@ function NoChatsWithAgent({ agent }: { agent: CustomAgent }) {
   );
 }
 
-export function useAgentRecentChats(
-  items: ChatHistoryItem[],
-  agents: readonly CustomAgent[],
-  selected: CustomAgent | null
-): AgentRecentChats {
-  const getIcon = useMemo(() => {
+export function useAgentChatIcon(agents: readonly CustomAgent[]): AgentRecentChats["getIcon"] {
+  return useMemo(() => {
     // With no agents listed (custom agents unavailable, or none made yet), Recent chats looks as it does without custom agents.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/588
     if (agents.length === 0) return undefined;
     const icons = new Map(agents.map((agent) => [agent.slug, faceIcon(agent.faceSrc)]));
     return (item: ChatHistoryItem) => (item.agent ? icons.get(item.agent) : undefined);
   }, [agents]);
+}
+
+export function useAgentRecentChats(
+  items: ChatHistoryItem[],
+  agents: readonly CustomAgent[],
+  selected: CustomAgent | null
+): AgentRecentChats {
+  const getIcon = useAgentChatIcon(agents);
 
   return useMemo(() => {
     // Picking an agent's face narrows Recent chats to that agent's chats; Copilot lists every chat.

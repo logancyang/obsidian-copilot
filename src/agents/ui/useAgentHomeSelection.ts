@@ -1,10 +1,11 @@
 import type { CustomAgent, CustomAgentStore } from "@/agents/CustomAgentStore";
 import { useCustomAgentsGate } from "@/agents/customAgentsGate";
+import { useCustomAgents } from "@/agents/ui/useCustomAgents";
 import { logError } from "@/logger";
 import { err2String } from "@/errorFormat";
 import { getSettings, setSettings, useSettingsValue } from "@/settings/model";
 import { Notice } from "obsidian";
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export interface AgentHomeChat {
   sessionId: string;
@@ -19,9 +20,6 @@ export interface AgentHomeSelection {
   select: (slug: string | null) => Promise<void>;
   switching: boolean;
 }
-
-const NO_AGENTS: readonly CustomAgent[] = Object.freeze([]);
-const NO_STORE = { subscribe: () => () => {}, getAgents: () => NO_AGENTS };
 
 export function agentComposerHint(agent: CustomAgent | null): string | undefined {
   return agent ? `Ask ${agent.name} anything • @ to add context • / for commands` : undefined;
@@ -38,9 +36,7 @@ export function useAgentHomeSelection(
   switchAgent: (agent: CustomAgent | null) => Promise<void>
 ): AgentHomeSelection {
   const gate = useCustomAgentsGate();
-  const source = store ?? NO_STORE;
-  const listed = useSyncExternalStore(source.subscribe, source.getAgents);
-  const agents = gate === "full" ? listed : NO_AGENTS;
+  const agents = useCustomAgents(store);
   const lastAgent = useSettingsValue().agentMode.lastCustomAgent ?? null;
   const [pending, setPending] = useState<{ chatInputId: string; slug: string | null } | null>(null);
   const chosenChatInputIds = useRef(new Set<string>());
@@ -98,7 +94,9 @@ export function useAgentHomeSelection(
     if (previous?.sessionId === sessionId && previous.isLanding) rememberLastAgent(agentSlug);
   }, [gate, sessionId, isLanding, agentSlug]);
 
-  const shownSlug = pending?.chatInputId === chatInputId ? pending.slug : agentSlug;
+  // A message sent while a picked agent's chat is still starting stays on the chat that received it, so the bar names that chat's agent.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/938
+  const shownSlug = isLanding && pending?.chatInputId === chatInputId ? pending.slug : agentSlug;
   const selected = agents.find((agent) => agent.slug === shownSlug) ?? null;
   return { agents, selected, select, switching: pending?.chatInputId === chatInputId };
 }

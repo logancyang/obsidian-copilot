@@ -50,8 +50,11 @@ export interface SortHandle {
   listeners: DraggableSyntheticListeners;
 }
 
+type ChatIcon = React.ComponentType<{ className?: string }>;
+
 interface SessionsSidebarRowProps {
   item: ChatHistoryItem;
+  getIcon?: (item: ChatHistoryItem) => ChatIcon | undefined;
   status: SessionStatus;
   active: boolean;
   isSessionOpen: boolean;
@@ -98,6 +101,7 @@ export const SessionStatusIcon: React.FC<{ status: SessionStatus; isSessionOpen?
 
 export const SessionsSidebarRow: React.FC<SessionsSidebarRowProps> = ({
   item,
+  getIcon,
   status,
   active,
   isSessionOpen,
@@ -111,7 +115,7 @@ export const SessionsSidebarRow: React.FC<SessionsSidebarRowProps> = ({
   const pinned = isPinned(item);
   const selected = selection?.isSelected(item.id) ?? false;
   const needsAttention = status === "waiting" || status === "unread";
-  const BackendIcon = chatBackendIcon(item);
+  const ChatIcon = getIcon?.(item) ?? chatBackendIcon(item);
   return (
     <div
       className={cn(
@@ -153,7 +157,7 @@ export const SessionsSidebarRow: React.FC<SessionsSidebarRowProps> = ({
           )}
         >
           <span aria-hidden="true" className="tw-flex tw-shrink-0">
-            <BackendIcon className="tw-size-3.5" />
+            <ChatIcon className="tw-size-3.5" />
           </span>
           {/* A chat that needs the user reads like unread mail, a bright bold title, while every other chat but the
               current one dims. https://github.com/Brevilabs/obsidian-copilot-private/issues/890 */}

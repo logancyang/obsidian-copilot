@@ -149,6 +149,37 @@ describe("SessionsSidebarRow", () => {
       expect(row.querySelector("svg")!.getAttribute("class")).toContain("lucide-message-circle");
     });
 
+    it("shows the face the list gives an agent chat in place of its backend logo for https://github.com/Brevilabs/obsidian-copilot-private/issues/938", () => {
+      const Face = ({ className }: { className?: string }) => (
+        <img src="face:coco" alt="" className={className} />
+      );
+      renderRow({
+        item: sidebarChat("chats/plan.md", "Plan the fall launch", 5, {
+          backendId: "codex",
+          agent: "coco",
+        }),
+        getIcon: (item) => (item.agent === "coco" ? Face : undefined),
+      });
+
+      const row = screen.getByRole("button", { name: "Plan the fall launch" });
+      expect(row.querySelector("img")?.getAttribute("src")).toBe("face:coco");
+      expect(row.querySelector("img")?.className).toBe("tw-size-3.5");
+      expect(row.querySelectorAll("svg")).toHaveLength(0);
+    });
+
+    it("keeps the backend logo when the list gives the chat no face for https://github.com/Brevilabs/obsidian-copilot-private/issues/938", () => {
+      renderRow({
+        item: sidebarChat("chats/plan.md", "Plan the fall launch", 5, { backendId: "codex" }),
+        getIcon: () => undefined,
+      });
+
+      const row = screen.getByRole("button", { name: "Plan the fall launch" });
+      expect(row.querySelector("img")).toBeNull();
+      expect(row.querySelector("svg")!.getAttribute("class")).not.toContain(
+        "lucide-message-circle"
+      );
+    });
+
     it("dims a seen chat that is not the current one to the group-label color for https://github.com/Brevilabs/obsidian-copilot-private/issues/890", () => {
       renderRow({ isSessionOpen: true });
 

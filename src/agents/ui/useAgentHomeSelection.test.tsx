@@ -1,5 +1,6 @@
 import type { CustomAgent, CustomAgentStore } from "@/agents/CustomAgentStore";
 import { setCustomAgentsAccess } from "@/agents/testing/customAgentsAccess";
+import { fakeAgentStore } from "@/agents/ui/testing/fakeAgentStore";
 import {
   agentComposerHint,
   useAgentHomeSelection,
@@ -21,24 +22,6 @@ function agent(slug: string, name: string): CustomAgent {
 
 const COCO = agent("coco", "Coco");
 const MAYA = agent("maya", "Maya");
-
-function fakeStore(initial: readonly CustomAgent[]) {
-  let agents = initial;
-  const listeners = new Set<() => void>();
-  const store = {
-    subscribe: (listener: () => void) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-    getAgents: () => agents,
-  } as unknown as CustomAgentStore;
-  const publish = (next: readonly CustomAgent[]) =>
-    act(() => {
-      agents = next;
-      listeners.forEach((listener) => listener());
-    });
-  return { store, publish };
-}
 
 const NEW_CHAT: AgentHomeChat = {
   sessionId: "session-1",
@@ -73,7 +56,7 @@ describe("useAgentHomeSelection", () => {
 
   describe("useAgentHomeSelection()", () => {
     it("lists the agents and selects Copilot on a new chat when the last chat started was a Copilot chat", () => {
-      const { store } = fakeStore([COCO, MAYA]);
+      const { store } = fakeAgentStore([COCO, MAYA]);
       const { result, switchAgent } = renderSelection(store);
 
       expect(result.current.agents).toEqual([COCO, MAYA]);
@@ -83,7 +66,7 @@ describe("useAgentHomeSelection", () => {
 
     it(`selects the agent of the last chat started and switches the new chat to it (${ISSUE})`, () => {
       rememberLastAgent("maya");
-      const { store } = fakeStore([COCO, MAYA]);
+      const { store } = fakeAgentStore([COCO, MAYA]);
       const { result, switchAgent } = renderSelection(store);
 
       expect(switchAgent).toHaveBeenCalledWith(MAYA);
@@ -92,7 +75,7 @@ describe("useAgentHomeSelection", () => {
 
     it(`keeps Copilot when the agent of the last chat started no longer exists (${ISSUE})`, () => {
       rememberLastAgent("gone");
-      const { store } = fakeStore([COCO]);
+      const { store } = fakeAgentStore([COCO]);
       const { result, switchAgent } = renderSelection(store);
 
       expect(result.current.selected).toBeNull();
@@ -101,7 +84,7 @@ describe("useAgentHomeSelection", () => {
 
     it(`keeps the agent a new chat was started with, as by the start-a-chat command, over the last chat's agent (${ISSUE})`, () => {
       rememberLastAgent("maya");
-      const { store } = fakeStore([COCO, MAYA]);
+      const { store } = fakeAgentStore([COCO, MAYA]);
       const { result, switchAgent } = renderSelection(store, { ...NEW_CHAT, agentSlug: "coco" });
 
       expect(switchAgent).not.toHaveBeenCalled();
@@ -110,7 +93,7 @@ describe("useAgentHomeSelection", () => {
 
     it(`switches to the last chat's agent once the agents load after the home opened (${ISSUE})`, () => {
       rememberLastAgent("maya");
-      const { store, publish } = fakeStore([]);
+      const { store, publish } = fakeAgentStore([]);
       const { result, switchAgent } = renderSelection(store);
       expect(switchAgent).not.toHaveBeenCalled();
 
@@ -122,7 +105,7 @@ describe("useAgentHomeSelection", () => {
 
     it(`keeps the user's pick on that new chat when the agents change later (${ISSUE})`, () => {
       rememberLastAgent("maya");
-      const { store, publish } = fakeStore([COCO, MAYA]);
+      const { store, publish } = fakeAgentStore([COCO, MAYA]);
       const { result, switchAgent } = renderSelection(store);
 
       act(() => void result.current.select(null));
@@ -134,7 +117,7 @@ describe("useAgentHomeSelection", () => {
 
     it(`moves a new chat back to Copilot once when its agent's folder is deleted before the first message (${ISSUE})`, () => {
       rememberLastAgent("maya");
-      const { store, publish } = fakeStore([COCO, MAYA]);
+      const { store, publish } = fakeAgentStore([COCO, MAYA]);
       const { result, switchAgent } = renderSelection(store, { ...NEW_CHAT, agentSlug: "maya" });
       expect(switchAgent).not.toHaveBeenCalled();
 
@@ -146,7 +129,7 @@ describe("useAgentHomeSelection", () => {
     });
 
     it("switches the new chat to a picked agent and shows it as selected right away", () => {
-      const { store } = fakeStore([COCO, MAYA]);
+      const { store } = fakeAgentStore([COCO, MAYA]);
       const { result, switchAgent } = renderSelection(store);
 
       act(() => void result.current.select("coco"));
@@ -156,7 +139,7 @@ describe("useAgentHomeSelection", () => {
     });
 
     it("shows the chat's own agent once the switch has landed", async () => {
-      const { store } = fakeStore([COCO, MAYA]);
+      const { store } = fakeAgentStore([COCO, MAYA]);
       const { result, rerender } = renderSelection(store, NEW_CHAT, () => Promise.resolve());
 
       await act(() => result.current.select("coco"));
@@ -166,7 +149,7 @@ describe("useAgentHomeSelection", () => {
     });
 
     it(`reports the new chat as switching from the pick until the picked agent's chat has started, so a message sent meanwhile waits for that agent (${ISSUE})`, async () => {
-      const { store } = fakeStore([COCO, MAYA]);
+      const { store } = fakeAgentStore([COCO, MAYA]);
       let started!: () => void;
       const switchAgent = jest.fn(() => new Promise<void>((resolve) => (started = resolve)));
       const { result } = renderSelection(store, NEW_CHAT, switchAgent);
@@ -186,7 +169,7 @@ describe("useAgentHomeSelection", () => {
     });
 
     it(`moves the new chat to Copilot and says why when the picked agent's chat cannot start (${ISSUE})`, async () => {
-      const { store } = fakeStore([COCO, MAYA]);
+      const { store } = fakeAgentStore([COCO, MAYA]);
       const switchAgent = jest.fn((agent: CustomAgent | null) =>
         agent
           ? Promise.reject(new Error("Codex needs an update to run custom agents."))
@@ -205,7 +188,7 @@ describe("useAgentHomeSelection", () => {
     });
 
     it(`keeps a later pick when an earlier pick's chat fails to start (${ISSUE})`, async () => {
-      const { store } = fakeStore([COCO, MAYA]);
+      const { store } = fakeAgentStore([COCO, MAYA]);
       let failCoco!: (error: Error) => void;
       const switchAgent = jest.fn((agent: CustomAgent | null) =>
         agent === COCO ? new Promise<void>((_, reject) => (failCoco = reject)) : Promise.resolve()
@@ -228,7 +211,7 @@ describe("useAgentHomeSelection", () => {
     });
 
     it("says why when a chat cannot start on Copilot either, without trying again", async () => {
-      const { store } = fakeStore([COCO]);
+      const { store } = fakeAgentStore([COCO]);
       const failing = jest.fn(() => Promise.reject(new Error("Codex isn't set up.")));
       const { result } = renderSelection(store, { ...NEW_CHAT, agentSlug: "coco" }, failing);
 
@@ -242,7 +225,7 @@ describe("useAgentHomeSelection", () => {
     });
 
     it(`remembers the chat's agent when its first message starts the chat (${ISSUE})`, () => {
-      const { store } = fakeStore([COCO, MAYA]);
+      const { store } = fakeAgentStore([COCO, MAYA]);
       const coco = { ...NEW_CHAT, agentSlug: "coco" };
       const { rerender } = renderSelection(store, coco);
 
@@ -253,7 +236,7 @@ describe("useAgentHomeSelection", () => {
 
     it("remembers Copilot when a Copilot chat is started", () => {
       rememberLastAgent("gone");
-      const { store } = fakeStore([COCO]);
+      const { store } = fakeAgentStore([COCO]);
       const { rerender } = renderSelection(store);
 
       rerender({ current: { ...NEW_CHAT, isLanding: false } });
@@ -262,7 +245,7 @@ describe("useAgentHomeSelection", () => {
     });
 
     it("remembers nothing when the home opens a saved chat", () => {
-      const { store } = fakeStore([COCO, MAYA]);
+      const { store } = fakeAgentStore([COCO, MAYA]);
       const { rerender } = renderSelection(store);
 
       rerender({
@@ -278,7 +261,7 @@ describe("useAgentHomeSelection", () => {
     });
 
     it("selects the agent of a chat already under way", () => {
-      const { store } = fakeStore([COCO, MAYA]);
+      const { store } = fakeAgentStore([COCO, MAYA]);
       const { result, switchAgent } = renderSelection(store, {
         ...NEW_CHAT,
         agentSlug: "coco",
@@ -289,12 +272,35 @@ describe("useAgentHomeSelection", () => {
       expect(switchAgent).not.toHaveBeenCalled();
     });
 
+    it("shows the chat's own agent, not a pick still starting, once a message sent on the new chat has started it, for https://github.com/Brevilabs/obsidian-copilot-private/issues/938", () => {
+      const { store } = fakeAgentStore([COCO, MAYA]);
+      const { result, rerender } = renderSelection(store);
+      act(() => void result.current.select("maya"));
+      expect(result.current.selected).toBe(MAYA);
+
+      rerender({ current: { ...NEW_CHAT, isLanding: false } });
+
+      expect(result.current.selected).toBeNull();
+    });
+
+    it("shows no agent, and leaves the chat as it is, for a chat under way whose agent's folder is gone, for https://github.com/Brevilabs/obsidian-copilot-private/issues/938", () => {
+      const { store } = fakeAgentStore([MAYA]);
+      const { result, switchAgent } = renderSelection(store, {
+        ...NEW_CHAT,
+        agentSlug: "coco",
+        isLanding: false,
+      });
+
+      expect(result.current.selected).toBeNull();
+      expect(switchAgent).not.toHaveBeenCalled();
+    });
+
     it.each(["free", "plus-without-custom-agents", "unverified"] as const)(
       `lists no agents, switches nothing and remembers nothing while the license is %s (${ISSUE})`,
       async (access) => {
         await setCustomAgentsAccess(access);
         rememberLastAgent("maya");
-        const { store } = fakeStore([COCO, MAYA]);
+        const { store } = fakeAgentStore([COCO, MAYA]);
         const { result, rerender, switchAgent } = renderSelection(store, {
           ...NEW_CHAT,
           agentSlug: "coco",

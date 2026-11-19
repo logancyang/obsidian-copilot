@@ -54,6 +54,7 @@ import { useSessionBackendDescriptor } from "@/agentMode/ui/useBackendDescriptor
 import { pickRandomGreeting } from "@/agentMode/ui/landingGreetings";
 import { findBackendForModel } from "@/agentMode/backends/registry";
 import type { CustomAgent } from "@/agents/CustomAgentStore";
+import { AgentIdentityBar } from "@/agents/ui/AgentIdentityBar";
 import { AgentRoster } from "@/agents/ui/AgentRoster";
 import { agentComposerHint, useAgentHomeSelection } from "@/agents/ui/useAgentHomeSelection";
 import { useAgentRecentChats } from "@/agents/ui/useAgentRecentChats";
@@ -791,7 +792,14 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
           />
         </div>
       </div>
-      <AgentTabStrip manager={manager} onOpenSidebar={handleOpenSessionsSidebar} />
+      <AgentTabStrip
+        manager={manager}
+        onOpenSidebar={handleOpenSessionsSidebar}
+        agents={agentHome.agents}
+      />
+      {/* A new chat's row of faces already shows who it is with; the bar takes over once the chat has a message.
+          https://github.com/Brevilabs/obsidian-copilot-private/issues/938 */}
+      {!isLanding && agentHome.selected && <AgentIdentityBar agent={agentHome.selected} />}
       {createAnchor && (
         <CreateProjectPanel
           anchorEl={createAnchor}

@@ -54,6 +54,7 @@ import React, { useCallback, useId, useMemo, useRef, useState } from "react";
 
 interface SessionsSidebarPanelProps {
   items: readonly ChatHistoryItem[];
+  getIcon?: React.ComponentProps<typeof SessionsSidebarRow>["getIcon"];
   projects: readonly ProjectConfig[];
   expandedProjectIds: ReadonlySet<string>;
   projectOrder: ReadonlySet<string>;
@@ -242,6 +243,7 @@ const ShowMoreButton: React.FC<{ onClick: () => void }> = ({ onClick }) => (
 
 export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
   items,
+  getIcon,
   projects,
   expandedProjectIds,
   projectOrder,
@@ -362,6 +364,7 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
       key={item.id}
       sortHandle={sortHandle}
       item={item}
+      getIcon={getIcon}
       status={statusOf(item)}
       active={activeChatIds.has(item.id)}
       isSessionOpen={openChatIds.has(item.id)}

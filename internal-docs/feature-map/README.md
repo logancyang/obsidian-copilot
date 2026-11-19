@@ -28,6 +28,7 @@ The feature file a change touches defines its coverage set. Also drive every jou
 ## Chats
 
 - [chat-tabs](chat-tabs.md): tabs across the top of Agent Chat, one per open chat.
+- [agent-identity-bar](agent-identity-bar.md): the custom agent's face, name, and title at the top of its chat.
 - [copilot-navigator](copilot-navigator.md): the sidebar listing chats and projects.
 - [chat-rows](chat-rows.md): one chat in a list, wherever chats are listed.
 - [chat-controls](chat-controls.md): the bar above the chat input: New chat, Chat history, Usage, More actions.
