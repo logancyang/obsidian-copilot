@@ -216,16 +216,22 @@ export const ProjectLanding: StoryObj<AgentLandingStackProps> = {
   render: (args) => <LandingCanvas args={args} project />,
 };
 
+export const WithoutShelf: StoryObj<AgentLandingStackProps> = {
+  render: (args) => <LandingStackCanvas args={args} shelf={null} />,
+};
+
 const noop = async () => {};
 
 function AgentHomeCanvas({
   agents,
   initialSlug,
   project = false,
+  customAgentsAvailable = true,
 }: {
   agents: readonly CustomAgent[];
   initialSlug: string | null;
   project?: boolean;
+  customAgentsAvailable?: boolean;
 }) {
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [selectedSlug, setSelectedSlug] = useState(initialSlug);
@@ -272,23 +278,28 @@ function AgentHomeCanvas({
                 selectedSlug={selected?.slug ?? null}
                 onSelect={setSelectedSlug}
                 emptyHero={
-                  <span className="tw-text-3xl tw-font-[330] tw-text-normal">
+                  <div className="tw-text-center tw-text-3xl tw-font-[330] tw-text-normal">
                     What are you working on?
-                  </span>
+                  </div>
                 }
                 newAgentButton={
-                  <NewAgentButton emphasized={agents.length === 0} onClick={() => {}} />
+                  customAgentsAvailable && (
+                    <NewAgentButton emphasized={agents.length === 0} onClick={() => {}} />
+                  )
                 }
               />
             }
             composer={
               <>
-                <div className="tw-truncate tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-primary tw-p-4 tw-text-ui-small tw-text-muted">
-                  {selected
-                    ? `Ask ${selected.name} anything • @ to add context • / for commands`
-                    : "Ask anything • @ to add context • / for commands"}
+                <div className="tw-flex tw-min-h-28 tw-flex-col tw-justify-between tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-primary tw-p-3 tw-text-ui-small tw-text-muted">
+                  <div className="tw-truncate">
+                    {selected
+                      ? `Ask ${selected.name} anything • @ to add context • / for commands`
+                      : "Ask anything • @ to add context • / for commands"}
+                  </div>
+                  <div className="tw-truncate">Default (recommended) · high</div>
                 </div>
-                {agents.length === 0 && !project && !bannerDismissed && (
+                {customAgentsAvailable && agents.length === 0 && !project && !bannerDismissed && (
                   <FirstAgentBannerView
                     faces={FIVE_AGENTS.slice(0, 3).map((agent) => agent.faceSrc)}
                     onCreate={() => {}}
@@ -328,6 +339,10 @@ export const AgentHomeAgentWithoutChats: StoryObj<AgentLandingStackProps> = {
 
 export const AgentHomeFirstAgentBanner: StoryObj<AgentLandingStackProps> = {
   render: () => <AgentHomeCanvas agents={[]} initialSlug={null} />,
+};
+
+export const AgentHomeWithoutCustomAgents: StoryObj<AgentLandingStackProps> = {
+  render: () => <AgentHomeCanvas agents={[]} initialSlug={null} customAgentsAvailable={false} />,
 };
 
 export const ProjectHomeAgentSelected: StoryObj<AgentLandingStackProps> = {
