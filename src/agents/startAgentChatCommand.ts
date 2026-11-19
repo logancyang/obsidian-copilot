@@ -9,7 +9,7 @@ export const START_AGENT_CHAT_COMMAND_ID = "start-chat-with-agent";
 
 type RemovableCommands = Plugin & { removeCommand(id: string): void };
 
-// The command exists only while custom agents are fully available, so a build without the team license shows nothing new, not even in Hotkeys.
+// The command exists only while custom agents are fully available, so a license without them can't start an agent chat from the palette or a hotkey.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/937
 export function registerStartAgentChatCommand(
   plugin: Plugin,

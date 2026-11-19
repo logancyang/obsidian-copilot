@@ -44,5 +44,5 @@ One chat in a list: the Navigator, Recent chats on the start screen, or the chat
 ## Gotchas
 
 - A row's `Shut down` also closes the chat's [tab](chat-tabs.md), if it has one.
-- Faces need a license that includes custom agents (a team license until launch); without one every row shows the logo.
+- A row shows its agent's face with every license, and with none; a chat whose agent's folder is gone shows the logo.
 - A Shift-click range covers only rows on screen: chats in a folded group, a collapsed project, or behind `Show more` are skipped. Changing the search text, a plain click, or Esc clears the selection. `Chat history` has no multi-select.

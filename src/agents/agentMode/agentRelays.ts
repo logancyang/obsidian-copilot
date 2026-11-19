@@ -4,17 +4,14 @@ import { ASK_AGENT_TOOL_NAME } from "@/agents/agentMentionPrompt";
 import { restoreAgentMentions, type AgentMention } from "@/agents/agentMentions";
 import { agentToolCall } from "@/agents/agentMode/agentToolCalls";
 import { readAgentReply, type AgentReply, type AgentReplyMarker } from "@/agents/agentReply";
-import { useCustomAgentsGate } from "@/agents/customAgentsGate";
 import type { RunRef } from "@/agents/ui/chatAgents";
 import { USER_SENDER } from "@/constants";
-import { useMemo } from "react";
 
 export interface RelayRun {
   relay: AgentReply;
   run: AgentMention | undefined;
 }
 
-const NO_RELAYS: ReadonlyMap<string, RelayRun> = new Map();
 const parsed = new WeakMap<AgentChatMessage, AgentReply | null>();
 
 function relayOf(message: AgentChatMessage): AgentReply | null {
@@ -100,12 +97,4 @@ export function restoreRelayedRuns(
     if (run) runs.set(at, [...(runs.get(at) ?? at.agentMentions ?? []), run]);
   }
   for (const [at, mentions] of runs) chat.setAgentMentions(at.id, mentions);
-}
-
-export function useRelayRuns(messages: readonly AgentChatMessage[]): ReadonlyMap<string, RelayRun> {
-  const gate = useCustomAgentsGate();
-  // A lapsed license still shows relayed replies as replies, never as the instructions the chat's agent received.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/950
-  const shows = gate === "full" || gate === "locked";
-  return useMemo(() => (shows ? relayRuns(messages) : NO_RELAYS), [shows, messages]);
 }

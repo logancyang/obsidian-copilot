@@ -5,7 +5,6 @@ import {
   START_AGENT_CHAT_COMMAND_ID,
 } from "@/agents/startAgentChatCommand";
 import { setCustomAgentsAccess, verifyStoredToken } from "@/agents/testing/customAgentsAccess";
-import { setCustomAgentsLaunched } from "@/agents/testing/customAgentsLaunched";
 import { AgentPickerModal } from "@/agents/ui/AgentPickerModal";
 import { logError } from "@/logger";
 import { Notice, type Command, type Plugin } from "obsidian";
@@ -64,23 +63,16 @@ describe("startAgentChatCommand", () => {
       expect(startChat).toHaveBeenCalledWith(COCO);
     });
 
-    it.each([
-      ["hidden", false],
-      ["locked", true],
-    ])(
-      "adds no command while custom agents are %s (https://github.com/Brevilabs/obsidian-copilot-private/issues/937)",
-      async (_gate, launched) => {
-        await setCustomAgentsAccess("free");
-        setCustomAgentsLaunched(launched);
-        const { plugin, commands } = buildPlugin();
+    it("adds no command while custom agents are locked (https://github.com/Brevilabs/obsidian-copilot-private/issues/937)", async () => {
+      await setCustomAgentsAccess("free");
+      const { plugin, commands } = buildPlugin();
 
-        const dispose = registerStartAgentChatCommand(plugin, store, jest.fn());
-        dispose();
+      const dispose = registerStartAgentChatCommand(plugin, store, jest.fn());
+      dispose();
 
-        expect(plugin.addCommand).not.toHaveBeenCalled();
-        expect(commands.size).toBe(0);
-      }
-    );
+      expect(plugin.addCommand).not.toHaveBeenCalled();
+      expect(commands.size).toBe(0);
+    });
 
     it("removes the command when the license loses custom agents and adds it back when they return", async () => {
       await setCustomAgentsAccess("team");

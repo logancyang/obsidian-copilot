@@ -1036,6 +1036,19 @@ describe("AgentChatMessages", () => {
         expect(screen.getByRole("button", { name: `Open ${memoryPath}` })).toBeTruthy();
       });
 
+      it("draws a relay as a card while a stored license is still being verified, so a restart never shows the message the current agent received (https://github.com/Brevilabs/obsidian-copilot-private/issues/951)", async () => {
+        await setCustomAgentsAccess("unverified");
+
+        const { container } = render(
+          <AppContext.Provider value={{} as App}>
+            <AgentChatMessages {...messagesProps([relayMessage], false)} />
+          </AppContext.Provider>
+        );
+
+        expect(container.textContent).toContain("Message fromMaya");
+        expect(container.textContent).not.toContain("BIGGEST RISK");
+      });
+
       it("draws nothing under the message that asked, whatever its agent's run says (https://github.com/Brevilabs/obsidian-copilot-private/issues/967)", async () => {
         await setCustomAgentsAccess("team");
         const asked = assistantMessage("asked", 0, {
@@ -1054,17 +1067,6 @@ describe("AgentChatMessages", () => {
 
         expect(container.textContent).not.toContain("Maya is working");
         expect(screen.queryByRole("link")).toBeNull();
-      });
-
-      it("shows a relayed reply as the message it is while custom agents are hidden", async () => {
-        await setCustomAgentsAccess("free");
-
-        renderMessages([relayMessage], false);
-
-        expect(screen.queryByText("Message from")).toBeNull();
-        expect(mockSingleMessageRender).toHaveBeenCalledWith(
-          expect.objectContaining({ message: relayed })
-        );
       });
     });
 
@@ -1126,22 +1128,6 @@ describe("AgentChatMessages", () => {
 
         expect(screen.getByRole("button", { name: "notes/plan.md" })).toBeTruthy();
         expect(screen.queryByRole("button", { name: MEMORY })).toBeNull();
-      });
-
-      it("shows a reply with saves as ordinary content while custom agents are hidden", async () => {
-        await setCustomAgentsAccess("free");
-
-        renderMessages(
-          [
-            assistantMessage("note", 1, { message: "Got it.", memorySaves }),
-            assistantMessage("live", 2, { parts: [saveEdit], memorySaves }),
-          ],
-          false
-        );
-
-        expect(screen.getByText("Got it.")).toBeTruthy();
-        expect(screen.queryByText("Coco remembered")).toBeNull();
-        expect(screen.queryByTestId("agent-trail-memory-anchor")).toBeNull();
       });
     });
   });

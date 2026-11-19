@@ -257,15 +257,14 @@ describe("SessionsSidebar", () => {
       expect(rowFaces()[0]).toBe("face:coco?v=2");
     });
 
-    it("keeps the backend icon on every row while the license does not carry custom agents for https://github.com/Brevilabs/obsidian-copilot-private/issues/938", async () => {
+    it("keeps the agent's face on an agent chat's row while the license does not carry custom agents, so a lapsed vault's chats stay recognizable, for https://github.com/Brevilabs/obsidian-copilot-private/issues/950", async () => {
       await setCustomAgentsAccess("plus-without-custom-agents");
       const manager = new FakeManager();
       manager.items = agentChats();
 
       renderSidebar(manager, undefined, fakeAgentStore([COCO]).store);
 
-      await waitFor(() => expect(rowTitles()).toHaveLength(3));
-      expect(rowFaces()).toEqual([null, null, null]);
+      await waitFor(() => expect(rowFaces()).toEqual(["face:coco", null, null]));
     });
 
     it("lists the saved chats the manager reports, newest first, once history loads for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {

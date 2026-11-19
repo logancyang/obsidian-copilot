@@ -15,7 +15,7 @@ A bar at the top of a chat with a custom agent: the agent's face, its name, and 
 
 ## How to get to it
 
-Choose an agent's face on the [start screen](agent-home.md) and send a message, or open an agent's chat from Recent chats or the Navigator. It needs a license that includes custom agents (a team license until launch).
+Choose an agent's face on the [start screen](agent-home.md) and send a message (this needs a license that includes custom agents), or open an agent's chat from Recent chats or the Navigator.
 
 ## Driving it
 
@@ -31,4 +31,4 @@ Choose an agent's face on the [start screen](agent-home.md) and send a message, 
 ## Gotchas
 
 - The bar shows once the chat has a message. Before that, the start screen's row of faces shows who the chat is with.
-- Without a license that includes custom agents, chats look as they do without custom agents: no bar, no profile, and the [chat tabs](chat-tabs.md) and [chat rows](chat-rows.md) show the agent logo.
+- Without a license that includes custom agents, an agent's chat still shows the bar, and the bar opens the agent's locked [profile](agent-profile.md).

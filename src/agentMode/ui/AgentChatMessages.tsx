@@ -11,10 +11,9 @@ import { toolUseLabel } from "@/agentMode/session/copilotToolCalls";
 import { useAgentTasks } from "@/agentMode/ui/AgentTasksContext";
 import { permissionRequesterName } from "@/agentMode/ui/taskDisplay";
 import { openTurnDiff } from "@/agentMode/ui/TurnDiffView";
-import { MemorySaveLines } from "@/agents/agentMode/memorySaveCards";
-import { useMemorySaveTrail } from "@/agents/agentMode/useMemorySaveTrail";
+import { MemorySaveLines, memorySaveTrail } from "@/agents/agentMode/memorySaveCards";
 import { AgentReplyMessage } from "@/agents/agentMode/ui/AgentReplyMessage";
-import { useRelayRuns } from "@/agents/agentMode/agentRelays";
+import { relayRuns } from "@/agents/agentMode/agentRelays";
 import type { AgentReply } from "@/agents/agentReply";
 import type { AgentMention } from "@/agents/agentMentions";
 import { AskedAgentRequester } from "@/agents/agentMode/ui/AskedAgentRequester";
@@ -40,6 +39,7 @@ import type {
 } from "@/agentMode/session/types";
 import type { ChatMessage } from "@/types/message";
 import { logError } from "@/logger";
+import { getVaultBase } from "@/utils/vaultPath";
 import { App } from "obsidian";
 import React, { memo, useCallback, useMemo, useRef } from "react";
 
@@ -143,7 +143,7 @@ const AgentMessageRow = memo(function AgentMessageRow({
       <AgentTurnDurationIndicator status="running" startedAtMs={runningTurnStartedAtMs} />
     ) : null;
   const isStreamingPlaceholder = isAssistant && isStreaming && !hasParts && !message.message;
-  const memorySaves = useMemorySaveTrail(message, app);
+  const memorySaves = useMemo(() => memorySaveTrail(message, getVaultBase(app)), [message, app]);
   // A save line has no Undo, so the turn's changed files leave out the MEMORY.md its lines show.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/942
   const fileChanges = memorySaves
@@ -314,7 +314,7 @@ const AgentChatMessages = memo(
 
     const latestAssistant = useMemo(() => lastAssistant(visible), [visible]);
     const dayLabels = useDayLabels(visible);
-    const relays = useRelayRuns(visible);
+    const relays = useMemo(() => relayRuns(visible), [visible]);
     // A second click before the new chat opens would open it twice.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/908
     const continuing = useRef(false);

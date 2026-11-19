@@ -10,6 +10,7 @@ import React from "react";
 jest.mock("@/entitlement");
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/940";
+const LOCKED_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/950";
 
 function agent(slug: string, name: string): CustomAgent {
   return { slug, name, title: "", instruction: "", faceSrc: `face:${slug}` } as CustomAgent;
@@ -101,27 +102,23 @@ describe("AgentProfileCover", () => {
       expect(result.current.agent).toBeNull();
     });
 
-    it(`goes back when the license stops carrying custom agents while a profile is open (${ISSUE})`, async () => {
+    it(`stays open when the license stops carrying custom agents, so the profile shows locked (${LOCKED_ISSUE})`, async () => {
       await setCustomAgentsAccess("team");
       const { result } = renderHook(() => useRoute("chat-1"));
       act(() => result.current.open("coco"));
-      expect(result.current.agent).toBe(COCO);
 
       await act(() => verifyStoredToken(false));
 
-      expect(result.current.agent).toBeNull();
+      expect(result.current.agent).toBe(COCO);
     });
 
-    it.each(["free", "plus-without-custom-agents", "unverified"] as const)(
-      `opens no profile for a %s license (${ISSUE})`,
-      async (access) => {
-        await setCustomAgentsAccess(access);
-        const { result } = renderHook(() => useRoute("chat-1"));
+    it(`opens no profile while the stored license token awaits verification (${ISSUE})`, async () => {
+      await setCustomAgentsAccess("unverified");
+      const { result } = renderHook(() => useRoute("chat-1"));
 
-        act(() => result.current.open("coco"));
+      act(() => result.current.open("coco"));
 
-        expect(result.current.agent).toBeNull();
-      }
-    );
+      expect(result.current.agent).toBeNull();
+    });
   });
 });

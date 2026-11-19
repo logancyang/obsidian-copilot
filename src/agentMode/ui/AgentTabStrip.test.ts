@@ -1,7 +1,6 @@
 import type { AgentChatMessage } from "@/agentMode/session/types";
 import { AgentTabStrip } from "@/agentMode/ui/AgentTabStrip";
 import type { CustomAgent } from "@/agents/CustomAgentStore";
-import type { CustomAgentsGate } from "@/agents/customAgentsGate";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SESSIONS_SIDEBAR_VIEWTYPE } from "@/constants";
@@ -27,7 +26,6 @@ function renderStrip(
     onOpenSidebar = jest.fn(),
     agents = undefined as readonly CustomAgent[] | undefined,
     onTabClick = undefined as (() => void) | undefined,
-    gate = undefined as CustomAgentsGate | undefined,
   } = {}
 ) {
   return render(
@@ -42,7 +40,6 @@ function renderStrip(
           onOpenSidebar,
           agents,
           onTabClick,
-          gate,
         })
       )
     )
@@ -126,7 +123,7 @@ function dotOf(element: HTMLElement): string | null {
   const className = element.querySelector("span[aria-hidden].tw-rounded-full")?.className ?? "";
   return (
     className
-      .match(/--color-(orange|green)|tw-bg-(red|interactive-accent)/)
+      .match(/--color-(orange|green)|tw-bg-(red)/)
       ?.slice(1)
       .find(Boolean) ?? null
   );
@@ -158,6 +155,7 @@ describe("AgentTabStrip", () => {
         getLabel: () => label,
         getStatus: () => "idle",
         getNeedsAttention: () => false,
+        store: { getDisplayMessages: () => [] },
       }));
       const manager = {
         subscribe: () => () => {},
@@ -399,7 +397,7 @@ describe("AgentTabStrip", () => {
           },
           { label: "Release notes", needsAttention: true },
         ]),
-        { agents: [COCO, LEO], gate: "full" }
+        { agents: [COCO, LEO] }
       );
 
       expect(dotOf(screen.getByRole("tab", { name: /School pickup/ }))).toBeNull();
@@ -415,8 +413,7 @@ describe("AgentTabStrip", () => {
           { label: "Launch plan" },
           { label: "October books", needsAttention: true, messages: LEO_WAITS },
           { label: "Release notes", needsAttention: true },
-        ]),
-        { gate: "locked" }
+        ])
       );
 
       expect(dotOf(screen.getByRole("button", { name: "Show 2 more chats" }))).toBe("orange");
@@ -429,7 +426,7 @@ describe("AgentTabStrip", () => {
         { label: "October books" },
         { label: "Release notes" },
       ]);
-      renderStrip(manager, { gate: "full" });
+      renderStrip(manager);
       const permission: AgentChatMessage[] = [
         {
           ...LEO_WAITS[0],
@@ -449,20 +446,6 @@ describe("AgentTabStrip", () => {
       expect(dotOf(screen.getByRole("tab", { name: /School pickup/ }))).toBeNull();
       expect(dotOf(screen.getByRole("tab", { name: /October books/ }))).toBe("orange");
       expect(dotOf(screen.getByRole("button", { name: "Show 1 more chat" }))).toBe("orange");
-    });
-
-    it(`keeps the accent dot for a chat that wants the user and no dot on "…" while custom agents are off (${DOTS_ISSUE})`, () => {
-      jest.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(400);
-      renderStrip(
-        makeManagerWithChats([
-          { label: "School pickup", needsAttention: true },
-          { label: "Launch plan" },
-          { label: "Release notes", needsAttention: true },
-        ])
-      );
-
-      expect(dotOf(screen.getByRole("tab", { name: /School pickup/ }))).toBe("interactive-accent");
-      expect(dotOf(screen.getByRole("button", { name: "Show 1 more chat" }))).toBeNull();
     });
   });
 });

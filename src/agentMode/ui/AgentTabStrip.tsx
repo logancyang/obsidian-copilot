@@ -1,7 +1,6 @@
 import { backendRegistry } from "@/agentMode/backends/registry";
 import { overflowDot, tabDot, type TabDot } from "@/agents/agentMode/tabDot";
 import type { CustomAgent } from "@/agents/CustomAgentStore";
-import type { CustomAgentsGate } from "@/agents/customAgentsGate";
 import { AgentFace } from "@/agents/ui/AgentFace";
 import { TruncatedText } from "@/components/TruncatedText";
 import { computeVisibleTabIndices } from "@/components/ui/tabOverflow";
@@ -29,7 +28,6 @@ interface Props {
   onOpenSidebar: () => void;
   agents?: readonly CustomAgent[];
   onTabClick?: () => void;
-  gate?: CustomAgentsGate;
 }
 
 const NO_AGENTS: readonly CustomAgent[] = Object.freeze([]);
@@ -40,33 +38,27 @@ const PLUS_BUTTON_PX = 28 + TAB_GAP_PX;
 const OVERFLOW_BUTTON_PX = 28;
 
 const DOT_CLASS: Record<TabDot, string> = {
-  attention: "tw-bg-interactive-accent",
   waiting: "tw-bg-[var(--color-orange)]",
   done: "tw-bg-[var(--color-green)]",
   error: "tw-bg-red",
 };
 
-function useSessionDisplay(
-  session: AgentSession,
-  agents: readonly CustomAgent[],
-  gate: CustomAgentsGate,
-  active: boolean
-) {
+function useSessionDisplay(session: AgentSession, agents: readonly CustomAgent[], active: boolean) {
   const [, setTick] = React.useState(0);
-  const dot = tabDot(session, gate, active);
+  const dot = tabDot(session, active);
   const dotRef = React.useRef(dot);
   dotRef.current = dot;
   React.useEffect(
     () =>
       session.subscribe({
         onMessagesChanged: () => {
-          if (tabDot(session, gate, active) !== dotRef.current) setTick((v) => v + 1);
+          if (tabDot(session, active) !== dotRef.current) setTick((v) => v + 1);
         },
         onStatusChanged: () => setTick((v) => v + 1),
         onLabelChanged: () => setTick((v) => v + 1),
         onNeedsAttentionChanged: () => setTick((v) => v + 1),
       }),
-    [session, gate, active]
+    [session, active]
   );
   const label = session.getLabel();
   const descriptor = backendRegistry[session.backendId] as BackendDescriptor | undefined;
@@ -80,21 +72,18 @@ function useSessionDisplay(
   };
 }
 
-function overflowDotOf(sessions: readonly AgentSession[], gate: CustomAgentsGate) {
-  return overflowDot(
-    sessions.map((session) => tabDot(session, gate)),
-    gate
-  );
+function overflowDotOf(sessions: readonly AgentSession[]) {
+  return overflowDot(sessions.map((session) => tabDot(session)));
 }
 
-function useOverflowDot(sessions: readonly AgentSession[], gate: CustomAgentsGate) {
+function useOverflowDot(sessions: readonly AgentSession[]) {
   const [, setTick] = React.useState(0);
-  const dot = overflowDotOf(sessions, gate);
+  const dot = overflowDotOf(sessions);
   const dotRef = React.useRef(dot);
   dotRef.current = dot;
   React.useEffect(() => {
     const check = () => {
-      if (overflowDotOf(sessions, gate) !== dotRef.current) setTick((v) => v + 1);
+      if (overflowDotOf(sessions) !== dotRef.current) setTick((v) => v + 1);
     };
     const unsubscribes = sessions.map((session) =>
       session.subscribe({
@@ -104,7 +93,7 @@ function useOverflowDot(sessions: readonly AgentSession[], gate: CustomAgentsGat
       })
     );
     return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
-  }, [sessions, gate]);
+  }, [sessions]);
   return dot;
 }
 
@@ -113,7 +102,6 @@ export const AgentTabStrip: React.FC<Props> = ({
   onOpenSidebar,
   agents = NO_AGENTS,
   onTabClick,
-  gate = "hidden",
 }) => {
   const isHidden = useSessionsSidebarOpen(useApp());
   const [, setTick] = React.useState(0);
@@ -200,7 +188,6 @@ export const AgentTabStrip: React.FC<Props> = ({
               key={session.internalId}
               session={session}
               agents={agents}
-              gate={gate}
               isActive={session.internalId === activeId}
               isRenaming={renamingId === session.internalId}
               onActivate={() => {
@@ -221,7 +208,6 @@ export const AgentTabStrip: React.FC<Props> = ({
           <OverflowMenu
             sessions={overflowSessions}
             agents={agents}
-            gate={gate}
             activeId={activeId}
             onActivate={(id) => manager.setActiveSession(id)}
             onClose={handleClose}
@@ -250,7 +236,6 @@ export const AgentTabStrip: React.FC<Props> = ({
 interface TabProps {
   session: AgentSession;
   agents: readonly CustomAgent[];
-  gate: CustomAgentsGate;
   isActive: boolean;
   isRenaming: boolean;
   onActivate: () => void;
@@ -263,7 +248,6 @@ interface TabProps {
 const SessionTab: React.FC<TabProps> = ({
   session,
   agents,
-  gate,
   isActive,
   isRenaming,
   onActivate,
@@ -275,7 +259,6 @@ const SessionTab: React.FC<TabProps> = ({
   const { status, label, dot, descriptor, faceSrc, displayLabel } = useSessionDisplay(
     session,
     agents,
-    gate,
     isActive
   );
 
@@ -463,7 +446,6 @@ const BrandIcon: React.FC<BrandIconProps> = ({
 interface OverflowMenuProps {
   sessions: AgentSession[];
   agents: readonly CustomAgent[];
-  gate: CustomAgentsGate;
   activeId: string | null;
   onActivate: (id: string) => void;
   onClose: (id: string) => void;
@@ -472,13 +454,12 @@ interface OverflowMenuProps {
 const OverflowMenu: React.FC<OverflowMenuProps> = ({
   sessions,
   agents,
-  gate,
   activeId,
   onActivate,
   onClose,
 }) => {
   const [open, setOpen] = React.useState(false);
-  const dot = useOverflowDot(sessions, gate);
+  const dot = useOverflowDot(sessions);
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
@@ -506,7 +487,6 @@ const OverflowMenu: React.FC<OverflowMenuProps> = ({
             key={session.internalId}
             session={session}
             agents={agents}
-            gate={gate}
             isActive={session.internalId === activeId}
             onActivate={() => {
               onActivate(session.internalId);
@@ -523,7 +503,6 @@ const OverflowMenu: React.FC<OverflowMenuProps> = ({
 interface OverflowRowProps {
   session: AgentSession;
   agents: readonly CustomAgent[];
-  gate: CustomAgentsGate;
   isActive: boolean;
   onActivate: () => void;
   onClose: () => void;
@@ -532,7 +511,6 @@ interface OverflowRowProps {
 const OverflowRow: React.FC<OverflowRowProps> = ({
   session,
   agents,
-  gate,
   isActive,
   onActivate,
   onClose,
@@ -540,7 +518,6 @@ const OverflowRow: React.FC<OverflowRowProps> = ({
   const { status, dot, descriptor, faceSrc, displayLabel } = useSessionDisplay(
     session,
     agents,
-    gate,
     isActive
   );
 

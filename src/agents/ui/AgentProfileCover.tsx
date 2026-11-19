@@ -17,7 +17,7 @@ export function useAgentProfileRoute(
     route?.chatInputId === chatInputId
       ? (agents.find((candidate) => candidate.slug === route.slug) ?? null)
       : null;
-  // A profile goes back by itself once its chat is no longer shown or its agent is gone, as when the folder is deleted on disk or the license loses custom agents.
+  // A profile goes back by itself once its chat is no longer shown or its agent is gone, as when the folder is deleted on disk.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/940
   if (route && !agent) setRoute(null);
   const open = useCallback((slug: string) => setRoute({ chatInputId, slug }), [chatInputId]);

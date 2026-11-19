@@ -31,7 +31,7 @@ Run the `Open Copilot Navigator` command, or choose `Open Copilot Navigator` at 
 - Folder: click a project row or press Enter on it. Its home opens. Choose the row's `Show/Hide chats in <project>` chevron, or focus it and press Enter or Space: the chats expand or collapse and the shown chat does not change.
 - New chat in a project: hover a folder and choose `New chat in <project>`. Agent Chat shows a new chat inside that project.
 - Project name: open a chat outside every project. Each project name is dimmed; open a chat in one project and its name brightens.
-- Agent faces: with a license that includes custom agents (a team license until launch), open the Navigator with chats from custom agents and Copilot. Agent chats show their agent's face, Copilot chats their logo; the running spinner and the unread bell stay at the right end.
+- Agent faces: open the Navigator with chats from custom agents and Copilot. Agent chats show their agent's face, Copilot chats their logo; the running spinner and the unread bell stay at the right end.
 - Archived: choose `Sidebar options` → View archived. Archived chats are listed; Unarchive returns one to Recents.
 - Close: close the Navigator. The chat tabs return, one per chat still showing `Running`.
 
