@@ -432,19 +432,24 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const customAgentsGate = useCustomAgentsGate();
   const { focusInput } = useChatInput();
   const selectAgent = agentHome.select;
+  const getAgentModelChoices = useCallback(
+    () =>
+      buildAgentModelChoices({
+        manager,
+        descriptors: listBackendDescriptors(),
+        settings: getSettings(),
+      }),
+    [manager]
+  );
   const openCreateAgentDialog = useCallback(() => {
     const store = plugin.customAgents;
     if (!store) return;
     new CreateAgentModal(app, {
       store,
-      models: buildAgentModelChoices({
-        manager,
-        descriptors: listBackendDescriptors(),
-        settings: getSettings(),
-      }),
+      models: getAgentModelChoices(),
       onCreated: (slug) => void selectAgent(slug).then(focusInput),
     }).open();
-  }, [app, plugin, manager, selectAgent, focusInput]);
+  }, [app, plugin, getAgentModelChoices, selectAgent, focusInput]);
   const newAgentButton =
     customAgentsGate === "full" && plugin.customAgents ? (
       <NewAgentButton emphasized={agentHome.agents.length === 0} onClick={openCreateAgentDialog} />
@@ -879,11 +884,14 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
           )
         }
         profile={
-          profile.agent && (
+          profile.agent &&
+          plugin.customAgents && (
             <AgentProfile
               agent={profile.agent}
               app={app}
               manager={manager}
+              store={plugin.customAgents}
+              getModels={getAgentModelChoices}
               onBack={leaveProfile}
               onNewChat={startChatFromProfile}
             />

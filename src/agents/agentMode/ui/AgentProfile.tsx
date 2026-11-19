@@ -1,22 +1,44 @@
 import { openAgentFile } from "@/agents/agentMode/memorySaveCards";
 import { useAgentProfileFacts } from "@/agents/agentMode/ui/useAgentProfileFacts";
-import type { CustomAgent } from "@/agents/CustomAgentStore";
+import type { CustomAgent, CustomAgentStore } from "@/agents/CustomAgentStore";
+import { findUsedPresetIds, readAgentFaces } from "@/agents/presetFaces";
+import { AgentFacePicker, type PickedFace } from "@/agents/ui/AgentFacePicker";
 import { AgentProfileView } from "@/agents/ui/AgentProfileView";
+import type { AgentModelChoices } from "@/agents/ui/CreateAgentForm";
+import { useCustomAgents } from "@/agents/ui/useCustomAgents";
+import { usePresetFaces } from "@/agents/ui/usePresetFaces";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { logError } from "@/logger";
-import type { App } from "obsidian";
-import React from "react";
+import { Notice, type App } from "obsidian";
+import React, { useEffect, useState } from "react";
 
 export interface AgentProfileProps {
   agent: CustomAgent;
   app: App;
   manager: AgentSessionManager;
+  store: CustomAgentStore;
+  getModels: () => AgentModelChoices;
   onBack: () => void;
   onNewChat: (agent: CustomAgent) => void;
 }
 
-export function AgentProfile({ agent, app, manager, onBack, onNewChat }: AgentProfileProps) {
+export function AgentProfile({
+  agent,
+  app,
+  manager,
+  store,
+  getModels,
+  onBack,
+  onNewChat,
+}: AgentProfileProps) {
   const facts = useAgentProfileFacts(app, manager, agent);
+  const agents = useCustomAgents(store);
+  const [models] = useState(getModels);
+  const { slug, name } = agent;
+  const failed = (change: string) => (error: unknown) => {
+    logError(`[Custom agents] Changing ${slug}'s ${change} failed`, error);
+    new Notice(`Couldn't change ${name}'s ${change}.`);
+  };
   return (
     <AgentProfileView
       agent={agent}
@@ -28,6 +50,42 @@ export function AgentProfile({ agent, app, manager, onBack, onNewChat }: AgentPr
           logError(`[Custom agents] Could not open ${path}`, error)
         )
       }
+      otherAgents={agents}
+      models={models}
+      renderFacePicker={(onPick) => (
+        <ProfileFacePicker app={app} store={store} agent={agent} onPick={onPick} />
+      )}
+      onRename={(next) => store.updateAgent(slug, { name: next })}
+      onRetitle={(title) => store.updateAgent(slug, { title })}
+      onChangeFace={(face) => void store.saveFace(slug, face).catch(failed("face"))}
+      onChangeModel={(model) => void store.updateAgent(slug, { model }).catch(failed("model"))}
     />
   );
+}
+
+interface ProfileFacePickerProps {
+  app: App;
+  store: CustomAgentStore;
+  agent: CustomAgent;
+  onPick: (face: PickedFace) => void;
+}
+
+// Mounted only while the picker is open, so the preset faces download from the CDN only then.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/940
+function ProfileFacePicker({ app, store, agent, onPick }: ProfileFacePickerProps) {
+  const presets = usePresetFaces(app.vault, store);
+  const [ownFace, setOwnFace] = useState<ArrayBuffer | null>(null);
+  useEffect(() => {
+    let mounted = true;
+    readAgentFaces(app.vault, [agent]).then(
+      ([bytes]) => mounted && setOwnFace(bytes ?? null),
+      (error: unknown) => logError(`[Custom agents] Could not read ${agent.facePath}`, error)
+    );
+    return () => {
+      mounted = false;
+    };
+  }, [app, agent]);
+  const [selectedPresetId] =
+    presets.status === "ready" && ownFace ? findUsedPresetIds(presets.faces, [ownFace]) : [];
+  return <AgentFacePicker presets={presets} selectedPresetId={selectedPresetId} onPick={onPick} />;
 }

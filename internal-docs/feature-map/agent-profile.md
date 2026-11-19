@@ -1,11 +1,16 @@
 # Agent profile
 
-A custom agent's page in the sidebar: its face, name, and title, how many chats it has had, the two files that make it, and a way to start a new chat with it.
+A custom agent's page in the sidebar: its face, name, and title, how many chats it has had, the two files that make it, its model, and a way to start a new chat with it.
 
 ## Sub-features
 
 - profile-page: the profile covers the current chat inside its tab, under the [chat tabs](chat-tabs.md), with `Back to chat` at the top. `Back to chat`, Esc, or clicking the chat's tab returns to the same chat, or the same new chat page, with its draft and scroll as they were. Switching to another tab leaves the profile.
 - profile-head: the agent's face, name, and title, with how many chats it has had and since when, such as "23 chats · since Oct 3". An agent with no title shows the first sentence of its instructions.
+- profile-edit-icons: hovering the face, name, and title, or moving the keyboard onto them, shows a pencil on each.
+- profile-rename: choosing the name turns it into a box: Enter or a click elsewhere saves, Esc cancels, and "Enter to save · Esc to cancel" shows under it. A name already on the team, in any case, shows "Maya is already on your team. Pick another name." and is not saved. The new name shows on the start screen, the tab, and the identity bar, also for chats from before; the agent's folder keeps its name.
+- profile-title: choosing the title edits it the same way. An empty title shows the first sentence of the instructions in its place.
+- profile-face: choosing the face opens `Pick a face`, the same grid as the [create agent dialog](create-agent-dialog.md), with the agent's own face chosen. Choosing a preset or `Upload image` changes the face at once.
+- profile-model: `Model`, "New chats and @-mentions", picks the model and effort the agent's new chats start on. Open chats keep their model.
 - profile-instruction: "What <name> handles" opens the agent's instructions file in a new tab of the main editor area, and reads who writes it and when it last changed, such as "Instruction · you write this · edited Nov 2" ("written today" for an instruction not edited since the day it was made). Past 4,000 characters it reads "Instruction · 4,620 characters · longer than <name> follows well" in orange.
 - profile-memory: "Rules <name> remembers" opens the agent's memory file in a new tab of the main editor area, and reads how many rules it holds and when it last changed, such as "Memory · Coco adds to this · 9 rules · today 14:31". It follows the file as the agent saves rules.
 - profile-memory-empty: an agent that has saved no rule yet reads "Nothing yet. <name> adds a rule when you correct it or ask it to remember something." and has no `Open`.
@@ -23,6 +28,11 @@ It needs a license that includes custom agents (a team license until launch).
 
 - Page: type a draft in an agent's chat, scroll up, and click the identity bar. The profile covers the chat. Choose `Back to chat`: the same chat shows, at the same scroll position, with the draft. Open the profile again and press Esc, then once more and click the chat's tab: the chat shows again each time.
 - Head: open the profile of an agent with chats. The face, name, title, and "<n> chats · since <date>" show.
+- Edit icons: hover the head of the profile. Pencils show on the face, name, and title; move away and they go. Press Tab from `Back to chat`: they show again.
+- Rename: choose the name, type a new one, and press Enter. The profile, the start screen, the tab, and the identity bar show the new name; the agent's folder name on disk is unchanged. Type another agent's name in lowercase: the red note names that agent and nothing is saved. Press Esc: the old name returns and the profile stays open.
+- Title: choose the title, clear it, and press Enter. The first sentence of the instructions shows in its place.
+- Face: choose the face and pick a preset. The face changes on the profile, the tab, and the identity bar. Choose it again and `Upload image`: the photo becomes the face, cut to a 256 by 256 square.
+- Model: open `Model` and pick another model. Choose `New chat with <name>`: the new chat starts on that model; a chat that was already open keeps its model.
 - Instruction: choose "What <name> handles". The agent's instructions file opens in a new tab of the main editor area and the profile stays in the sidebar. Paste more than 4,000 characters into that file: the row's line turns orange and names the length.
 - Memory: choose "Rules <name> remembers". The agent's memory file opens. Add a rule to it: the count and the time on the row change.
 - Memory empty: open the profile of an agent that has saved nothing. The row says nothing is saved yet and offers no `Open`.
@@ -32,4 +42,5 @@ It needs a license that includes custom agents (a team license until launch).
 ## Gotchas
 
 - An edit to the instructions file reaches chats that start after it; open chats keep the instructions they started with.
+- The preset faces download from the Brevilabs CDN only when the face picker opens.
 - The profile belongs to the tab it was opened in: switching tabs and coming back shows the chat, not the profile.

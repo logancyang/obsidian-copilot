@@ -243,7 +243,7 @@ export function CreateAgentForm({
 
       <div className="tw-flex tw-flex-col tw-gap-1.5">
         <div className="tw-text-ui-small tw-font-semibold tw-text-normal">Model</div>
-        <ModelField models={models} value={model} onChange={setModel} container={rootEl} />
+        <AgentModelField models={models} value={model} onChange={setModel} container={rootEl} />
       </div>
 
       {createError && <FieldError>{createError}</FieldError>}
@@ -300,7 +300,7 @@ function Field({ id, label, children }: FieldProps) {
   );
 }
 
-function FieldError({ children }: { children: React.ReactNode }) {
+export function FieldError({ children }: { children: React.ReactNode }) {
   return (
     <div
       role="alert"
@@ -312,21 +312,31 @@ function FieldError({ children }: { children: React.ReactNode }) {
   );
 }
 
-interface ModelFieldProps {
+interface AgentModelFieldProps {
   models: AgentModelChoices;
   value: ModelSelection | null;
   onChange: (model: ModelSelection) => void;
   container: HTMLElement | null;
+  className?: string;
 }
 
-function ModelField({ models, value, onChange, container }: ModelFieldProps) {
+export function AgentModelField({
+  models,
+  value,
+  onChange,
+  container,
+  className,
+}: AgentModelFieldProps) {
   const entry = value && models.models.find((candidate) => candidate.name === value.baseModelId);
   const key = entry ? getModelKeyFromModel(entry) : "";
   const effortOptions = models.effortOptionsByModelKey[key] ?? [];
   return (
     <ModelEffortPicker
       container={container}
-      className="tw-h-9 tw-w-full tw-justify-between tw-rounded-md tw-border tw-border-solid tw-border-border tw-px-3 tw-text-sm tw-text-normal"
+      className={cn(
+        "tw-h-9 tw-w-full tw-justify-between tw-rounded-md tw-border tw-border-solid tw-border-border tw-px-3 tw-text-sm tw-text-normal",
+        className
+      )}
       override={{
         models: models.models,
         value: key,

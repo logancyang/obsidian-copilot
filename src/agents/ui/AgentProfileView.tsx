@@ -1,10 +1,30 @@
+import type { ModelSelection } from "@/agentMode";
 import { agentTitle } from "@/agents/agentTitle";
+import { findAgentNamed, type FaceImage } from "@/agents/customAgentFiles";
 import type { CustomAgent } from "@/agents/CustomAgentStore";
 import { AgentFace } from "@/agents/ui/AgentFace";
-import { INSTRUCTION_SOFT_LIMIT } from "@/agents/ui/CreateAgentForm";
+import { NO_OBSIDIAN_TOOLTIP } from "@/connectors/ui/ConnectorRow";
+import type { PickedFace } from "@/agents/ui/AgentFacePicker";
+import {
+  AgentModelField,
+  FieldError,
+  INSTRUCTION_SOFT_LIMIT,
+  type AgentModelChoices,
+} from "@/agents/ui/CreateAgentForm";
+import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, Brain, ChevronRight, FileText, MessageSquarePlus } from "lucide-react";
-import React from "react";
+import { logError } from "@/logger";
+import {
+  ArrowLeft,
+  Brain,
+  Check,
+  ChevronRight,
+  FileText,
+  MessageSquarePlus,
+  Pencil,
+} from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
 
 export interface AgentMemoryFacts {
   rules: number;
@@ -20,7 +40,14 @@ export interface AgentProfileFacts {
 
 export type ProfileAgent = Pick<
   CustomAgent,
-  "slug" | "name" | "title" | "instruction" | "faceSrc" | "instructionsPath" | "memoryPath"
+  | "slug"
+  | "name"
+  | "title"
+  | "instruction"
+  | "model"
+  | "faceSrc"
+  | "instructionsPath"
+  | "memoryPath"
 >;
 
 export interface AgentProfileViewProps {
@@ -30,7 +57,17 @@ export interface AgentProfileViewProps {
   onBack: () => void;
   onNewChat: () => void;
   onOpenFile: (path: string) => void;
+  otherAgents: readonly Pick<CustomAgent, "slug" | "name">[];
+  models: AgentModelChoices;
+  renderFacePicker: (onPick: (face: PickedFace) => void) => React.ReactNode;
+  onRename: (name: string) => Promise<void>;
+  onRetitle: (title: string) => Promise<void>;
+  onChangeFace: (face: FaceImage) => void;
+  onChangeModel: (model: ModelSelection) => void;
 }
+
+const SHOWN_ON_HOVER_OR_FOCUS =
+  "tw-opacity-0 group-focus-within:tw-opacity-100 group-hover:tw-opacity-100";
 
 const BLOCK_BUTTON_CLASS =
   "clickable-icon tw-h-9 tw-w-full tw-gap-1.5 tw-rounded-md tw-border tw-border-solid tw-bg-transparent tw-text-sm tw-font-medium tw-shadow-none";
@@ -83,8 +120,16 @@ export function AgentProfileView({
   onBack,
   onNewChat,
   onOpenFile,
+  otherAgents,
+  models,
+  renderFacePicker,
+  onRename,
+  onRetitle,
+  onChangeFace,
+  onChangeModel,
 }: AgentProfileViewProps): React.ReactElement {
   const { name } = agent;
+  const [facePickerOpen, setFacePickerOpen] = useState(false);
   const today = now ?? Date.now();
   const length = agent.instruction.trim().length;
   const instructionTooLong = length > INSTRUCTION_SOFT_LIMIT;
@@ -101,10 +146,36 @@ export function AgentProfileView({
         .filter(Boolean)
         .join(" · ");
 
+  const save = async (write: () => Promise<void>): Promise<string | null> => {
+    try {
+      await write();
+      return null;
+    } catch (error) {
+      // A hand-broken instructions.md refuses property writes; the raw YAML error means nothing to the user.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/940
+      logError("[Custom agents] Saving the profile failed", error);
+      return `Couldn't save. Fix the properties at the top of ${name}'s instructions.md first.`;
+    }
+  };
+  const rename = async (next: string): Promise<string | null> => {
+    const trimmed = next.trim();
+    if (!trimmed || trimmed === name) return null;
+    const others = otherAgents.filter((other) => other.slug !== agent.slug);
+    const taken = findAgentNamed(others, trimmed);
+    if (taken) return `${taken.name} is already on your team. Pick another name.`;
+    return save(() => onRename(trimmed));
+  };
+  const retitle = async (next: string): Promise<string | null> => {
+    const trimmed = next.trim();
+    return trimmed === agent.title ? null : save(() => onRetitle(trimmed));
+  };
+
   return (
     <div
       className="tw-flex tw-size-full tw-flex-col tw-bg-primary"
       onKeyDown={(event) => {
+        // An open picker or a name being edited takes Esc first; only an Esc nothing used leaves the profile.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/940
         if (event.key !== "Escape" || event.defaultPrevented) return;
         // Obsidian's own Esc handling would otherwise take the focus Back hands to the chat input.
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/940
@@ -124,18 +195,52 @@ export function AgentProfileView({
         </button>
       </div>
       <div className="tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-gap-3.5 tw-overflow-y-auto tw-p-3.5">
-        <div className="tw-flex tw-min-w-0 tw-flex-col tw-items-center tw-gap-1.5 tw-pb-1 tw-pt-2 tw-text-center">
-          <AgentFace src={agent.faceSrc} size="xxl" selected />
-          <div
-            role="heading"
-            aria-level={2}
-            className="tw-mt-1.5 tw-max-w-full tw-break-words tw-text-lg tw-font-semibold tw-text-normal"
-          >
-            {name}
+        <div className="tw-group tw-flex tw-min-w-0 tw-flex-col tw-items-center tw-gap-1.5 tw-pb-1 tw-pt-2 tw-text-center">
+          <Popover open={facePickerOpen} onOpenChange={setFacePickerOpen}>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                aria-label={`Change ${name}'s face`}
+                className={cn(
+                  "clickable-icon tw-relative tw-mb-1.5 tw-h-auto tw-rounded-full tw-bg-transparent tw-p-0 tw-shadow-none",
+                  NO_OBSIDIAN_TOOLTIP
+                )}
+              >
+                <AgentFace src={agent.faceSrc} size="xxl" selected />
+                <span
+                  className={cn(
+                    "tw-absolute -tw-bottom-0.5 -tw-right-0.5 tw-flex tw-size-[22px] tw-items-center tw-justify-center tw-rounded-full tw-border tw-border-solid tw-border-border tw-bg-secondary tw-text-muted",
+                    SHOWN_ON_HOVER_OR_FOCUS
+                  )}
+                >
+                  <Pencil className="tw-size-3" />
+                </span>
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="tw-w-auto tw-p-2.5">
+              {renderFacePicker((picked) => {
+                setFacePickerOpen(false);
+                onChangeFace(picked.image);
+              })}
+            </PopoverContent>
+          </Popover>
+          <div role="heading" aria-level={2} className="tw-flex tw-w-full tw-justify-center">
+            <InlineEdit
+              label={`Rename ${name}`}
+              text={name}
+              value={name}
+              onSave={rename}
+              textClassName="tw-text-lg tw-font-semibold tw-text-normal"
+            />
           </div>
-          <div className="tw-max-w-full tw-break-words tw-text-ui-small tw-text-muted">
-            {agentTitle(agent)}
-          </div>
+          <InlineEdit
+            label={`Change ${name}'s title`}
+            text={agentTitle(agent)}
+            value={agent.title}
+            placeholder="One line under the name"
+            onSave={retitle}
+            textClassName="tw-text-ui-small tw-text-muted"
+          />
           {meta.length > 0 && (
             <div className="tw-text-ui-smaller tw-text-faint">{meta.join(" · ")}</div>
           )}
@@ -173,6 +278,20 @@ export function AgentProfileView({
               ? `Memory · ${name} adds to this · ${plural(facts.memory.rules, "rule")} · ${formatChange(facts.memory.changedAt, today)}`
               : `Nothing yet. ${name} adds a rule when you correct it or ask it to remember something.`}
           </FileRow>
+        </div>
+        <SectionLabel>Model</SectionLabel>
+        <div className={ROW_CLASS}>
+          <span className="tw-flex tw-min-w-0 tw-flex-1 tw-flex-col">
+            <span className="tw-text-sm tw-font-semibold tw-text-normal">Model</span>
+            <span className="tw-text-ui-smaller tw-text-muted">New chats and @-mentions</span>
+          </span>
+          <AgentModelField
+            models={models}
+            value={agent.model ?? models.initial}
+            onChange={onChangeModel}
+            container={null}
+            className="tw-h-7 tw-w-auto tw-min-w-0 tw-shrink tw-px-2 tw-text-ui-small"
+          />
         </div>
       </div>
     </div>
@@ -222,5 +341,97 @@ function FileRow({ icon: Icon, title, onOpen, children }: FileRowProps) {
       <span className="tw-shrink-0 tw-text-ui-smaller tw-text-muted">Open</span>
       <ChevronRight className="tw-size-3.5 tw-shrink-0 tw-text-muted" />
     </button>
+  );
+}
+
+interface InlineEditProps {
+  label: string;
+  text: string;
+  value: string;
+  placeholder?: string;
+  textClassName: string;
+  onSave: (next: string) => Promise<string | null>;
+}
+
+// Name and title change in place: Enter or a click elsewhere saves, Esc cancels.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/940
+function InlineEdit({ label, text, value, placeholder, textClassName, onSave }: InlineEditProps) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const saving = useRef(false);
+  const refocus = useRef(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (draft !== null || !refocus.current) return;
+    refocus.current = false;
+    buttonRef.current?.focus();
+  }, [draft]);
+
+  const commit = async (fromKeyboard: boolean) => {
+    if (draft === null || saving.current) return;
+    saving.current = true;
+    const failure = await onSave(draft);
+    saving.current = false;
+    setError(failure);
+    if (failure) return;
+    refocus.current = fromKeyboard;
+    setDraft(null);
+  };
+
+  if (draft === null) {
+    return (
+      <button
+        ref={buttonRef}
+        type="button"
+        aria-label={label}
+        onClick={() => setDraft(value)}
+        className={cn(
+          "clickable-icon tw-h-auto tw-max-w-full tw-gap-1 tw-whitespace-normal tw-bg-transparent tw-p-0 tw-shadow-none",
+          NO_OBSIDIAN_TOOLTIP
+        )}
+      >
+        <span className={cn("tw-min-w-0 tw-break-words", textClassName)}>{text}</span>
+        <span className={cn("tw-flex tw-shrink-0 tw-text-faint", SHOWN_ON_HOVER_OR_FOCUS)}>
+          <Pencil className="tw-size-3" />
+        </span>
+      </button>
+    );
+  }
+  return (
+    <div className="tw-flex tw-w-full tw-flex-col tw-items-center tw-gap-1">
+      <div className="tw-flex tw-w-full tw-max-w-60 tw-items-center tw-gap-1.5">
+        <Input
+          autoFocus
+          aria-label={label}
+          aria-invalid={!!error}
+          value={draft}
+          placeholder={placeholder}
+          className={cn(
+            "tw-min-w-0 tw-flex-1 tw-border-interactive-accent tw-text-center",
+            textClassName
+          )}
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={() => void commit(false)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              void commit(true);
+            } else if (event.key === "Escape") {
+              event.preventDefault();
+              refocus.current = true;
+              setError(null);
+              setDraft(null);
+            }
+          }}
+        />
+        <Check aria-hidden="true" className="tw-size-3.5 tw-shrink-0 tw-text-muted" />
+      </div>
+      {error ? (
+        <FieldError>{error}</FieldError>
+      ) : (
+        <div className="tw-text-ui-smaller tw-text-faint">Enter to save · Esc to cancel</div>
+      )}
+    </div>
   );
 }
