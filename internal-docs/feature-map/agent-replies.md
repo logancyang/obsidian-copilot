@@ -15,7 +15,6 @@ How a reply appears in a conversation: streaming text, reasoning, tool and activ
 - reply-subagents: a subagent's card shows its type and task, such as `general-purpose · Count lines in notes.md`, with a spinner while it runs and a check when it is done. With Claude, open it to see its prompt, its steps, and its result, then `Back to chat`; with other agents it expands in place, with its `Prompt`.
 - reply-tasks: a background command shows as a card with a spinner, then a check; open it to see the command and its output, then `Back to chat`.
 - reply-task-follow-up: when a background task or subagent finishes, the agent replies again on its own.
-- reply-multi-agent: a message that mentions other agents shows `Agent answers` from each, then a summary.
 - reply-compaction: `Compacting conversation…`, then `Context compacted` with the token count before and after; when the context fills up, `Context is full, compacting…`, then `Context compacted automatically`.
 - reply-files-changed: a turn that edited notes ends with its [turn diffs](turn-diffs.md).
 - reply-actions: `Copy` and `Insert / Replace at cursor` under a finished reply.
@@ -38,7 +37,6 @@ Send a message from the [chat input](chat-input.md). The reply shows below the m
 - Subagent: ask Claude to start a subagent that reads a note. A card such as `general-purpose · Get first sentence of <note>` shows a spinner, then a check. Open it: the subagent's prompt, its steps, and its answer show. `Back to chat` returns to the conversation.
 - Background task: ask Claude to run `ping -c 15 127.0.0.1` as a background command. Its card shows a spinner and the chat controls show `1 task running`. Open it: `Background command`, the command, and its output show.
 - Follow-up: wait for the subagent or background command to finish. The agent posts a new reply about the result without a new message.
-- Multi-agent: with multi-agent access, mention another agent with `@` → Agents and send. `Agent answers` lists each agent's answer, then a summary.
 - Compaction: send `/compact`. `Compacting conversation…` shows, then `Context compacted · 41k → 12k tokens` (the numbers vary).
 - Files changed: ask the agent to edit a note. The reply ends with the changed file and its added and removed lines.
 - Copy: choose `Copy` under a finished reply. The reply's text is on the clipboard.

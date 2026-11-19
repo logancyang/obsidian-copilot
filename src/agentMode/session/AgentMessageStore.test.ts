@@ -1,6 +1,5 @@
 import { AI_SENDER, USER_SENDER } from "@/constants";
 import { AgentMessagePart, TurnFileChange } from "@/agentMode/session/types";
-import { serializeFanoutComposite, type FanoutTurn } from "@/agentMode/session/fanout/fanoutTypes";
 import { formatDateTime } from "@/utils";
 import { AgentMessageStore } from "./AgentMessageStore";
 
@@ -32,14 +31,6 @@ describe("AgentMessageStore", () => {
     trigger: "manual",
     startedAtMs: 1_000,
     ...overrides,
-  });
-
-  const liveTurn = (summaryText = "the summary"): FanoutTurn => ({
-    answers: {
-      opencode: { backendId: "opencode", status: "done", text: "opencode answer" },
-      codex: { backendId: "codex", status: "done", text: "codex answer" },
-    },
-    summary: { status: "done", text: summaryText },
   });
 
   const change = (path: string): TurnFileChange => ({
@@ -639,27 +630,26 @@ describe("AgentMessageStore", () => {
       expect(store.getDisplayMessages()[0].timestamp).toEqual(sent);
     });
 
-    it("rebuilds fanout from an assistant composite but not a user or plain body", () => {
+    it("loads a reply saved as a multi-agent answer as ordinary text, keeping its headings and markers (https://github.com/Brevilabs/obsidian-copilot-private/issues/935)", () => {
       const store = new AgentMessageStore();
-      const body = serializeFanoutComposite(liveTurn("loaded summary"), (x) => x.toUpperCase());
+      const body = [
+        "<!--copilot:multi-agent v=1-->",
+        "<!--copilot:summary-->",
+        "### Summary",
+        "Both agents say Paris.",
+        '<!--copilot:agent id="claude" name="Claude" status="done"-->',
+        "### Claude",
+        "Paris.",
+        "<!--copilot:multi-agent-end-->",
+      ].join("\n");
       store.loadMessages([
-        { id: "u1", sender: USER_SENDER, message: body, timestamp: null, isVisible: true },
         { id: "a1", sender: AI_SENDER, message: body, timestamp: null, isVisible: true },
-        {
-          id: "a2",
-          sender: AI_SENDER,
-          message: "just a normal reply",
-          timestamp: null,
-          isVisible: true,
-        },
       ]);
-      const display = store.getDisplayMessages();
-      const assistant = display.find((m) => m.id === "a1");
-      expect(assistant?.message).toBe(body);
-      expect(assistant?.fanout?.summary.text).toBe("loaded summary");
-      expect(Object.keys(assistant?.fanout?.answers ?? {})).toEqual(["opencode", "codex"]);
-      expect(display.find((m) => m.id === "a2")?.fanout).toBeUndefined();
-      expect(display.find((m) => m.id === "u1")?.fanout).toBeUndefined();
+
+      const [reply] = store.getDisplayMessages();
+
+      expect(reply.message).toBe(body);
+      expect(reply).not.toHaveProperty("fanout");
     });
 
     it("keeps the tools list a reply restored from its note", () => {
@@ -967,31 +957,6 @@ describe("AgentMessageStore", () => {
       store.truncateAfterMessageId(a);
       expect(store.getDisplayMessages().map((m) => m.id)).toEqual([a]);
       expect(store.getMessage(c)).toBeUndefined();
-    });
-  });
-
-  describe("setFanout()", () => {
-    it("surfaces a fresh snapshot each tick so React state updates do not bail", () => {
-      const store = new AgentMessageStore();
-      const id = store.addMessage(placeholder());
-      expect(store.getDisplayMessages().find((m) => m.id === id)?.fanout).toBeUndefined();
-
-      const turn = liveTurn();
-      expect(store.setFanout(id, turn)).toBe(true);
-      const after = store.getDisplayMessages().find((m) => m.id === id)?.fanout;
-      expect(after?.summary.text).toBe("the summary");
-      expect(after).not.toBe(turn);
-      expect(after?.answers).not.toBe(turn.answers);
-
-      store.setFanout(id, liveTurn("updated summary"));
-      const second = store.getDisplayMessages().find((m) => m.id === id)?.fanout;
-      expect(second).not.toBe(after);
-      expect(second?.summary.text).toBe("updated summary");
-    });
-
-    it("returns false for an unknown message", () => {
-      const store = new AgentMessageStore();
-      expect(store.setFanout("nope", liveTurn())).toBe(false);
     });
   });
 

@@ -10,7 +10,7 @@ This guide explains the practical difference between the plans, who supplies eac
 | ------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | **Free**      | You already have model access or want a local setup         | Agent Chat, Projects, Quick Ask, Copilot Commands, BYOK, local models, and custom Skills                                            |
 | **Lite**      | You want Copilot-hosted models without configuring API keys | Hosted models with plan allowances and optional credits                                                                             |
-| **Plus**      | You want Copilot's complete hosted research workflow        | Higher hosted allowance, multi-agent answers, premium web and document tools, capture Skills, and OpenArtifacts publishing          |
+| **Plus**      | You want Copilot's complete hosted research workflow        | Higher hosted allowance, premium web and document tools, capture Skills, and OpenArtifacts publishing                               |
 | **Supporter** | You want a long-term local-first setup and early access     | Lifetime Self-Host Mode and Miyo, two years of Plus, preview access, and ongoing credit-purchase benefits shown on the pricing page |
 
 Existing Believer customers keep their original benefits. The plugin may show **Lifetime** for a Believer or Supporter license because both grant the same long-term self-host entitlement inside Copilot.
@@ -38,7 +38,6 @@ Lite is a good fit when you want managed model access but do not need Copilot's 
 
 Lite does not include:
 
-- Multi-agent answers
 - Premium web search and PDF processing
 - Copilot's hosted YouTube and X capture Skills
 - OpenArtifacts publishing
@@ -50,7 +49,6 @@ Your own BYOK, Claude, Codex, local model, Commands, Projects, Quick Ask, and cu
 
 Plus includes everything in Lite with a higher hosted-model allowance. It also unlocks the full Copilot service layer:
 
-- **Multi-agent answers** that ask installed agents in parallel and have the current agent summarize their findings.
 - **Premium web and PDF tools** for research and document understanding.
 - Built-in **YouTube and X capture Skills**.
 - **OpenArtifacts publishing** for supported outputs.

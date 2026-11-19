@@ -5,7 +5,6 @@ import {
   stripChatImageReceipts,
   updateChatTranscript,
 } from "@/utils/chatImagePersistence";
-import { serializeFanoutComposite } from "@/agentMode/session/fanout/fanoutTypes";
 import { toolsUsedLines } from "@/agentMode/session/conversationHistory";
 import { AGENT_CHAT_MODE, AI_SENDER, COPILOT_CONVERSATION_TAG, USER_SENDER } from "@/constants";
 import { logError, logInfo, logWarn } from "@/logger";
@@ -386,10 +385,7 @@ export class AgentChatPersistenceManager {
     return messages
       .map((m) => {
         const ts = m.timestamp ? m.timestamp.display : "Unknown time";
-        const body =
-          m.message.length === 0 && m.fanout
-            ? serializeFanoutComposite(m.fanout, (id) => id)
-            : m.message;
+        const body = m.message;
         const tools = toolsUsedLines(m, getVaultBase(this.app));
         const data: SavedMessageData = {
           ...(tools.length > 0 ? { tools } : {}),

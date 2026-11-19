@@ -85,7 +85,7 @@ export const AgentDefaultModelSetting: React.FC<Props> = ({ descriptor, manager 
       <SettingItem
         type="select"
         title="Default model"
-        description="Used for new chats and multi-agent answers on this agent. Open chats switch on their next turn."
+        description="Used for new chats on this agent. Open chats switch on their next turn."
         value={selectedBaseId}
         onChange={onModelChange}
         options={modelOptions}

@@ -1,4 +1,3 @@
-import { FANOUT_READONLY_PREAMBLE } from "@/agentMode/session/fanout/fanoutTypes";
 import type { NewAgentChatMessage, PromptContent } from "@/agentMode/session/types";
 import { USER_SENDER, WEB_SELECTED_TEXT_TAG } from "@/constants";
 import { ContextProcessor } from "@/contextProcessor";
@@ -91,15 +90,6 @@ export function buildPromptBlocks(
   const extras = content ?? [];
   if (extras.length === 0) return [{ type: "text", text: headText }];
   return [{ type: "text", text: headText }, ...extras];
-}
-
-export function withReadOnlyPreamble(blocks: PromptContent[]): PromptContent[] {
-  const i = blocks.findIndex((b) => b.type === "text");
-  if (i === -1) return [{ type: "text", text: FANOUT_READONLY_PREAMBLE }, ...blocks];
-  const block = blocks[i] as Extract<PromptContent, { type: "text" }>;
-  const out = blocks.slice();
-  out[i] = { type: "text", text: `${FANOUT_READONLY_PREAMBLE}\n\n${block.text}` };
-  return out;
 }
 
 export async function serializeWebTabContext(context: MessageContext | undefined): Promise<string> {

@@ -1,10 +1,5 @@
 import { logInfo } from "@/logger";
 import {
-  parseFanoutComposite,
-  snapshotFanoutTurn,
-  type FanoutTurn,
-} from "@/agentMode/session/fanout/fanoutTypes";
-import {
   AgentCancelCause,
   AgentChatMessage,
   AgentMessagePart,
@@ -33,7 +28,6 @@ interface StoredAgentMessage {
   declinedPermission?: boolean;
   agentCancelCause?: AgentCancelCause;
   turnDurationMs?: number;
-  fanout?: FanoutTurn;
   fileChanges?: TurnFileChange[];
   toolsUsed?: readonly string[];
   version: number;
@@ -313,14 +307,6 @@ export class AgentMessageStore {
     }
   }
 
-  setFanout(id: string, turn: FanoutTurn): boolean {
-    const msg = this.messages.find((m) => m.id === id);
-    if (!msg) return false;
-    msg.fanout = turn;
-    this.touch(msg);
-    return true;
-  }
-
   setFileChanges(id: string, changes: TurnFileChange[]): boolean {
     const msg = this.messages.find((m) => m.id === id);
     if (!msg) return false;
@@ -521,8 +507,6 @@ export class AgentMessageStore {
   loadMessages(messages: AgentChatMessage[]): void {
     this.clear();
     for (const msg of messages) {
-      const fanout =
-        msg.sender === USER_SENDER ? undefined : (parseFanoutComposite(msg.message) ?? undefined);
       this.messages.push({
         id: msg.id || this.generateId(),
         displayText: msg.message,
@@ -535,7 +519,6 @@ export class AgentMessageStore {
         parts: msg.parts,
         turnStopReason: msg.turnStopReason,
         turnDurationMs: msg.turnDurationMs,
-        fanout,
         toolsUsed: msg.toolsUsed,
         version: 0,
       });
@@ -559,7 +542,6 @@ export class AgentMessageStore {
       turnDurationMs: m.turnDurationMs,
       fileChanges: m.fileChanges,
       toolsUsed: m.toolsUsed,
-      ...(m.fanout ? { fanout: snapshotFanoutTurn(m.fanout) } : {}),
     };
   }
 }

@@ -433,9 +433,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const projectPlacement = placementRef.current;
   const isProjectContextInline = projectPlacement?.standalone === true;
 
-  const mainAgentId =
-    manager.getActiveSession()?.backendId ?? manager.getStartingBackendId() ?? null;
-
   // eslint-disable-next-line react-hooks/exhaustive-deps -- sessionId intentionally re-rolls the otherwise argument-free greeting factory
   const greeting = useMemo(() => pickRandomGreeting(), [sessionId]);
 
@@ -624,11 +621,9 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const composerNode = (
     <AgentChatInput
       backend={backend}
-      plugin={plugin}
       chatInputId={chatInputId}
       draft={draft}
       app={app}
-      mainAgentId={mainAgentId}
       updateUserMessageHistory={updateUserMessageHistory}
       isStarting={isStarting}
       isLoading={isLoading}

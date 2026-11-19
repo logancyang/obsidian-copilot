@@ -321,30 +321,6 @@ describe("AgentChatPersistenceManager", () => {
       expect(contents).not.toContain("user-custom-tag");
     });
 
-    it("serializes a mid-stream fan-out turn so an interrupted autosave isn't blank", async () => {
-      const fanoutMsg: AgentChatMessage = {
-        id: "msg-2",
-        sender: AI_SENDER,
-        message: "",
-        isVisible: true,
-        timestamp: { epoch: 2, display: "2026/01/01 12:00:00", fileName: "20260101_120000" },
-        fanout: {
-          answers: {
-            opencode: { backendId: "opencode", status: "running", text: "partial opencode answer" },
-          },
-          summary: { status: "streaming", text: "" },
-        },
-      };
-      const saved = await manager.saveSession(
-        [makeMessage(USER_SENDER, "q"), fanoutMsg],
-        "claude",
-        {}
-      );
-      const file = app.files.get(saved!.path)!;
-      const loaded = await manager.loadFile(file as unknown as TFile);
-      expect(loaded.messages[1].message).toContain("partial opencode answer");
-    });
-
     it("escapes and round-trips a label containing quotes and backslashes", async () => {
       const tricky = 'has "quotes" and \\backslashes\\';
       const messages = [makeMessage(USER_SENDER, "hi")];

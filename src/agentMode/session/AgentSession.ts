@@ -38,10 +38,6 @@ import {
 } from "@/agentMode/session/types";
 import { MessageContext } from "@/types/message";
 import { err2String, formatDateTime } from "@/utils";
-import {
-  ensureMultiAgentEntitlement,
-  showMultiAgentUpgradePrompt,
-} from "@/agentMode/session/fanout/multiAgentEntitlement";
 import { Notice, type App, type DataAdapter } from "obsidian";
 import { MethodUnsupportedError } from "@/agentMode/session/errors";
 import {
@@ -64,22 +60,11 @@ import { savedChatImagePath } from "@/utils/chatImagePersistence";
 import { getEffectiveConversationsFolder } from "@/settings/copilotFolder";
 import { deriveChatTitleFromMessages } from "@/agentMode/session/chatHistoryMerge";
 import { isCompactCommand } from "@/commands/compactCommand";
-import type { FanoutRunInput } from "@/agentMode/session/fanout/FanoutOrchestrator";
-import { isFanout } from "@/agentMode/session/fanout/answerers";
 import {
   buildConversationHistoryBlock,
   type ConversationHistoryBlock,
-  MENTION_HISTORY_MAX_CHARS,
   SAVED_HISTORY_MAX_CHARS,
 } from "@/agentMode/session/conversationHistory";
-import {
-  buildPriorFanoutContextBlock,
-  isDirectAnswerTurn,
-  renderFanoutComposite,
-  serializeFanoutComposite,
-  type FanoutTurn,
-  type PendingFanoutContext,
-} from "@/agentMode/session/fanout/fanoutTypes";
 import { v4 as uuidv4 } from "uuid";
 import { getSettings } from "@/settings/model";
 import {
@@ -94,7 +79,6 @@ import {
   extractText,
   OUTPUT_LIMIT_CONTINUATION_PROMPT,
   serializeWebTabContext,
-  withReadOnlyPreamble,
 } from "@/agentMode/session/promptEnvelope";
 import {
   findToolCallPart,
@@ -123,10 +107,7 @@ import {
   type TurnFailure,
 } from "@/agentMode/session/chatExtension";
 
-export type RunFanoutTurn = (input: FanoutRunInput) => Promise<FanoutTurn>;
-
 export const DEFAULT_TITLE_PREFIX = "New session";
-const EMPTY_BACKEND_IDS: ReadonlyArray<BackendId> = Object.freeze([]);
 const EMPTY_TASKS: readonly AgentTask[] = Object.freeze([]);
 const EMPTY_MESSAGES: readonly AgentChatMessage[] = Object.freeze([]);
 const NO_EARLIER_CHATS: readonly string[] = Object.freeze([]);
@@ -220,7 +201,6 @@ export interface AgentSessionStartOptions extends ProjectContextUpdatesHooks {
   defaultModelSelection?: ModelSelection;
   defaultMode?: CopilotMode | null;
   getDescriptor?: () => BackendDescriptor | undefined;
-  runFanoutTurn?: RunFanoutTurn;
   getDisplayName?: (backendId: BackendId) => string;
   getApp?: () => App;
   getProjectContextBlock?: () => string;
@@ -239,7 +219,6 @@ export interface AgentSessionStateOptions extends ProjectContextUpdatesHooks {
   defaultMode?: CopilotMode | null;
   cwd?: string | null;
   getDescriptor?: () => BackendDescriptor | undefined;
-  runFanoutTurn?: RunFanoutTurn;
   getDisplayName?: (backendId: BackendId) => string;
   getApp?: () => App;
   chatExtensions?: readonly ChatExtension<unknown>[];
@@ -260,7 +239,6 @@ export class AgentSession implements ChatStateHost, ChatView {
   private firstPromptSent = false;
   private lastSentWebTabBlock: string | null = null;
   private readonly getDescriptor: (() => BackendDescriptor | undefined) | null;
-  private readonly runFanoutTurn: RunFanoutTurn | null;
   private readonly getDisplayName: ((backendId: BackendId) => string) | null;
   private readonly getApp: (() => App) | null;
   private readonly getProjectContextUpdatesFn: (() => ProjectContextUpdates | null) | null;
@@ -270,8 +248,6 @@ export class AgentSession implements ChatStateHost, ChatView {
   private startupFailed = false;
   private startupSettled = false;
   private agentBusy = false;
-  private lastMentionedAgents: ReadonlyArray<BackendId> = EMPTY_BACKEND_IDS;
-  private pendingFanoutContext: PendingFanoutContext[] = [];
   private resendSavedHistory = false;
   private continuedFrom: readonly string[] = NO_EARLIER_CHATS;
   private readonly turns: TurnTracker;
@@ -335,7 +311,6 @@ export class AgentSession implements ChatStateHost, ChatView {
     this.projectId = opts.projectId ?? GLOBAL_SCOPE;
     this.cwd = opts.cwd ?? null;
     this.getDescriptor = opts.getDescriptor ?? null;
-    this.runFanoutTurn = opts.runFanoutTurn ?? null;
     this.getDisplayName = opts.getDisplayName ?? null;
     this.getApp = opts.getApp ?? null;
     this.getProjectContextUpdatesFn = opts.getProjectContextUpdates ?? null;
@@ -720,8 +695,7 @@ export class AgentSession implements ChatStateHost, ChatView {
   sendPrompt(
     displayText: string,
     context?: MessageContext,
-    promptContent?: PromptContent[],
-    mentionedAgents?: ReadonlyArray<BackendId>
+    promptContent?: PromptContent[]
   ): { userMessageId: string; turn: Promise<StopReason> } {
     // Agents only compact when /compact is the whole prompt, so nothing rides along with it.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/634
@@ -730,7 +704,6 @@ export class AgentSession implements ChatStateHost, ChatView {
       displayText = displayText.trim();
       context = undefined;
       promptContent = undefined;
-      mentionedAgents = undefined;
     }
     const status = this.getStatus();
     if (status === "starting") {
@@ -739,17 +712,13 @@ export class AgentSession implements ChatStateHost, ChatView {
     if (status === "closed") {
       throw new Error("Session is closed");
     }
-    // Compaction and multi-agent questions are whole turns of their own, so they wait for the agent to finish. https://github.com/Brevilabs/obsidian-copilot-private/issues/509
+    // Compaction is a whole turn of its own, so it waits for the agent to finish. https://github.com/Brevilabs/obsidian-copilot-private/issues/509
     const busy =
       status === "running" ||
       status === "awaiting_permission" ||
       this.turns.getQueuedPrompts().length > 0;
     if (busy) {
-      if (
-        !this.acceptsMidTurnPrompts() ||
-        sendsCompact ||
-        isFanout(mentionedAgents ?? EMPTY_BACKEND_IDS, this.backendId)
-      ) {
+      if (!this.acceptsMidTurnPrompts() || sendsCompact) {
         throw new Error("Session already has a turn in flight");
       }
       const queued = this.queuePrompt(displayText, context, promptContent);
@@ -768,9 +737,6 @@ export class AgentSession implements ChatStateHost, ChatView {
       this.applyAgentLabel(deriveChatTitleFromMessages(this.store.getDisplayMessages()));
     }
 
-    this.lastMentionedAgents =
-      mentionedAgents && mentionedAgents.length > 0 ? mentionedAgents : EMPTY_BACKEND_IDS;
-
     const send = this.turns.startSend();
     const turn = this.runTurn(
       displayText,
@@ -784,12 +750,7 @@ export class AgentSession implements ChatStateHost, ChatView {
   }
 
   acceptsMidTurnPrompts(): boolean {
-    // A follow-up to a multi-agent question waits for the agents' answers, which ride the next normal turn. https://github.com/Brevilabs/obsidian-copilot-private/issues/509
-    const fanoutRunning =
-      this.turns.isSending() &&
-      this.runFanoutTurn !== null &&
-      isFanout(this.lastMentionedAgents, this.backendId);
-    return !fanoutRunning && this.getDescriptor?.()?.midTurnDelivery === true;
+    return this.getDescriptor?.()?.midTurnDelivery === true;
   }
 
   getQueuedPrompts(): readonly QueuedPrompt[] {
@@ -905,7 +866,7 @@ export class AgentSession implements ChatStateHost, ChatView {
           `This chat's model isn't enabled for ${this.displayNameFor(this.backendId)}. Pick an enabled model to continue.`
         );
       }
-      // Project context, its updates and fanout history ride the next normal turn.
+      // Project context and its updates ride the next normal turn.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/634
       const isFirstTurn = !this.firstPromptSent && !sendsCompact;
       const projectContextBlock = isFirstTurn ? (this.getProjectContextBlockFn?.() ?? null) : null;
@@ -914,48 +875,17 @@ export class AgentSession implements ChatStateHost, ChatView {
         : (this.getProjectContextUpdatesFn?.() ?? null);
       const projectContextUpdatesBlock = projectContextUpdates?.block ?? null;
 
-      if (this.runFanoutTurn && isFanout(this.lastMentionedAgents, this.backendId)) {
-        const entitled = await this.ensureMultiAgentEntitlement();
-        if (signal.aborted || this.disposed) return { stopReason: "cancelled" };
-        if (!entitled) {
-          showMultiAgentUpgradePrompt();
-          return this.turns.refuse(
-            "Multi-agent answers are a Copilot Plus feature. Upgrade to mention more than one agent in a message."
-          );
-        }
-
-        const historyBlock =
-          this.priorHistoryBlock(userMessageId, MENTION_HISTORY_MAX_CHARS, this.continuedFrom)
-            ?.text ?? null;
-        const promptBlocks = buildPromptBlocks(
-          displayText,
-          context,
-          promptContent,
-          webTabBlock,
-          projectContextBlock,
-          historyBlock,
-          projectContextUpdatesBlock
-        );
-        return { stopReason: await this.runFanoutPath(displayText, promptBlocks, signal) };
-      }
-
       // A reopened chat whose agent session is gone from this device sends its saved turns once.
       // https://github.com/logancyang/obsidian-copilot/issues/3643
       const sendsSavedHistory = this.resendSavedHistory && !sendsCompact;
-      const savedHistory = sendsSavedHistory
-        ? this.priorHistoryBlock(userMessageId, SAVED_HISTORY_MAX_CHARS, this.continuedFrom)
-        : null;
+      const savedHistory = sendsSavedHistory ? this.priorHistoryBlock(userMessageId) : null;
       const historyBlock = savedHistory?.text ?? null;
       // A feature card's tool call returns before the user answers it, so the answer rides their next message.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/860
       const promptNotes = sendsCompact ? [] : this.takePromptNotes();
       const leadingContextBlock = sendsCompact
         ? null
-        : [
-            historyBlock,
-            buildPriorFanoutContextBlock(this.pendingFanoutContext),
-            ...promptNotes.map(({ note }) => note.note),
-          ]
+        : [historyBlock, ...promptNotes.map(({ note }) => note.note)]
             .filter(Boolean)
             .join("\n\n") || null;
       // The agent keeps every earlier turn, so resending an unchanged page fills its context
@@ -984,9 +914,6 @@ export class AgentSession implements ChatStateHost, ChatView {
         onPushed
       );
       if (outcome.error !== undefined) return outcome;
-      if (leadingContextBlock !== null && outcome.stopReason !== "cancelled") {
-        this.pendingFanoutContext = [];
-      }
       // A note counts as told only once the backend accepts the prompt.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/860
       for (const { extension, note } of promptNotes) {
@@ -1019,77 +946,17 @@ export class AgentSession implements ChatStateHost, ChatView {
     }
   }
 
-  private ensureMultiAgentEntitlement(): Promise<boolean> {
-    return ensureMultiAgentEntitlement(this.getApp?.());
-  }
-
-  private async runFanoutPath(
-    originalPromptText: string,
-    promptBlocks: PromptContent[],
-    signal: AbortSignal
-  ): Promise<StopReason> {
-    const placeholderId = this.turns.getReplyId()!;
-    const turnStartedAtMs = this.turns.getReplyStartedAtMs();
-    const input: FanoutRunInput = {
-      agents: this.lastMentionedAgents,
-      mainAgent: this.backendId,
-      prompt: withReadOnlyPreamble(promptBlocks),
-      originalPromptText,
-      signal,
-      onChange: (turn) => {
-        this.store.setFanout(placeholderId, turn);
-        this.scheduleNotifyMessages();
-      },
-    };
-    const turn = await this.runFanoutTurn!(input);
-    this.store.setFanout(placeholderId, turn);
-
-    const stopReason: StopReason = signal.aborted ? "cancelled" : "end_turn";
-    // Persist the FULL composite as the message body so the dropdown reconstructs
-    // on reload. Any non-empty slot text counts (including a terminal slot's
-    // partial text), so a turn cancelled mid-stream is saved, not dropped blank.
-    // A sole agent's empty terminal slot also carries the only visible outcome
-    // and must survive reload with its error/cancel status.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/481
-    const hasAnswerText = Object.values(turn.answers).some((a) => a.text.trim().length > 0);
-    const hasContent =
-      turn.summary.text.trim().length > 0 || hasAnswerText || isDirectAnswerTurn(turn);
-    if (hasContent) {
-      const composite = serializeFanoutComposite(turn, (id) => this.displayNameFor(id));
-      this.store.appendAgentText(placeholderId, composite);
-      const summaryText = turn.summary.text.trim();
-      const replay =
-        turn.summary.complete && summaryText.length > 0
-          ? summaryText
-          : hasAnswerText
-            ? renderFanoutComposite(turn, (id) => this.displayNameFor(id))
-            : "";
-      if (replay) {
-        this.pendingFanoutContext.push({ question: originalPromptText, summary: replay });
-      }
-    }
-    if (this.store.markTurnComplete(placeholderId, stopReason, Date.now() - turnStartedAtMs)) {
-      this.notifyMessages();
-    }
-    this.turns.releaseReply(placeholderId);
-    return stopReason;
-  }
-
-  private priorHistoryBlock(
-    userMessageId: string,
-    maxChars: number,
-    continuedFrom?: readonly string[]
-  ): ConversationHistoryBlock | null {
+  private priorHistoryBlock(userMessageId: string): ConversationHistoryBlock | null {
     const app = this.getApp?.();
     const vaultBase = app ? getVaultBase(app) : null;
     return buildConversationHistoryBlock(
       this.store.getDisplayMessages().filter((m) => m.id !== userMessageId),
-      maxChars,
+      SAVED_HISTORY_MAX_CHARS,
       vaultBase,
       (image) => (app ? savedChatImagePath(app, getEffectiveConversationsFolder(), image) : null),
       // A project chat's agent works in the project folder, so the notes are named by full path.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/908
-      continuedFrom?.map((note) => (vaultBase ? joinPosix(vaultBase, note) : note))
+      this.continuedFrom.map((note) => (vaultBase ? joinPosix(vaultBase, note) : note))
     );
   }
 

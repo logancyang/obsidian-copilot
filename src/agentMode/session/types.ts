@@ -2,7 +2,6 @@ import type { EffortOption } from "@/lib/model-effort";
 import type React from "react";
 import type { ModelCapability } from "@/constants";
 import type { FormattedDateTime, MessageContext } from "@/types/message";
-import type { FanoutTurn } from "@/agentMode/session/fanout/fanoutTypes";
 import type { PlanUsage } from "@/agentMode/session/planUsage";
 import type { CopilotToolUse } from "@/agentMode/session/copilotToolCalls";
 
@@ -30,7 +29,6 @@ export interface AgentBrand {
   readonly id: BackendId;
   readonly displayName: string;
   readonly Icon: React.ComponentType<{ className?: string }>;
-  readonly needsSelfHostWarning?: boolean;
 }
 
 export type SessionId = string;
@@ -41,7 +39,6 @@ export interface ModeMapping {
   kind: "setMode" | "configOption";
   configId?: string;
   canonical: Partial<Record<CopilotMode, string>>;
-  readOnlyModeId?: string | null;
   unlistedModeShowsAs?: CopilotMode;
 }
 
@@ -498,7 +495,6 @@ export interface BackendProcess {
   setAskUserQuestionPrompter?(
     fn: (req: AskUserQuestionPrompt) => Promise<AgentQuestionAnswers>
   ): void;
-  setReadOnlySessionPredicate?(fn: (sessionId: SessionId) => boolean): void;
   readContextWindow?(wireModelId: string | null | undefined): Promise<number | null>;
   registerSessionHandler(sessionId: SessionId, handler: SessionUpdateHandler): () => void;
   newSession(params: OpenSessionInput): Promise<OpenSessionOutput>;
@@ -569,7 +565,6 @@ export interface AgentChatMessage {
   turnStopReason?: StopReason;
   agentCancelCause?: AgentCancelCause;
   turnDurationMs?: number;
-  fanout?: FanoutTurn;
   fileChanges?: TurnFileChange[];
   toolsUsed?: readonly string[];
 }

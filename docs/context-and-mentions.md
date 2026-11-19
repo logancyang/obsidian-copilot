@@ -7,7 +7,6 @@ Clicking a PDF page citation in a chat opens the target page at its top while ke
 | Context type                     | How long it lasts                                 |
 | -------------------------------- | ------------------------------------------------- |
 | Agent Chat attachment or mention | The next message                                  |
-| Mentioned agent                  | The current multi-agent question                  |
 | Project context                  | Every new chat started in that Project            |
 | Vault or Project `AGENTS.md`     | Every Agent Chat started in that vault or Project |
 | Quick Chat attachment            | The next Quick Chat message                       |
@@ -51,14 +50,6 @@ The manual selection command is available from the command palette or an assigne
 For text selected in the Web Viewer, run **Add web selection to chat context**. Copilot sends the selected excerpt together with the active web tab it came from.
 
 Selected text in notes is automatically added to chat context as you select it in Reading or Edit view, and stays attached when you move to chat. Reading view selections show the note path without line numbers. On desktop, this also works with Web Viewer selections. Text selected in a PDF or in an agent turn's diff tab, and shapes selected in an Excalidraw drawing, are attached the same way. Review or remove the selection badge before sending.
-
-## Mention other agents
-
-With active Plus access, type `@`, open **Agents**, and select one or more other installed agents. Each mentioned agent receives the same question, that turn's attachments, and a bounded slice of the visible conversation. With one other agent mentioned, only that agent responds and its answer is shown directly. With two or more, the current agent summarizes their answers without automatically answering separately.
-
-Multi-agent answers are designed for read-only research, second opinions, and review, but retrieval Skills can still run trusted scripts under an agent's permissions. They are not a security sandbox. Use a normal single-agent turn when you want files changed. Mentioning only the current agent behaves like a normal turn.
-
-Agent mentions select OpenCode, Claude, or Codex. They are different from note, folder, and web context mentions. See [Multi-agent answers](agent-mode-and-tools.md#multi-agent-answers) for permissions and model behavior.
 
 ## Reuse context with Projects
 

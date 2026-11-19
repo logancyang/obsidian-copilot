@@ -4,7 +4,6 @@ import { waitFor } from "@testing-library/react";
 import { AgentSession, type AgentTask } from "./AgentSession";
 import { buildNativeChatId } from "@/utils/nativeChatId";
 import { AI_SENDER, CHAT_AGENT_VIEWTYPE, USER_SENDER } from "@/constants";
-import { serializeFanoutComposite } from "@/agentMode/session/fanout/fanoutTypes";
 import { formatDateTime } from "@/utils";
 import { playNotificationSound } from "@/utils/notificationSound";
 import { refreshLatestVersion } from "@/hooks/useLatestVersion";
@@ -6417,7 +6416,7 @@ describe("AgentSessionManager", () => {
         ]);
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/908 shows a continued chat's carried messages as text followed by its replayed turns with their tool cards when its session reattaches, keeps the earlier chats' notes for later multi-agent mentions, and leaves the carried count its note holds", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/908 shows a continued chat's carried messages as text followed by its replayed turns with their tool cards when its session reattaches, keeps the earlier chats' notes for history it sends again, and leaves the carried count its note holds", async () => {
         const replay = buildReplayingBackend({
           onLoad: (emit) => {
             emit(replayChunk("user_message_chunk", "what was the codeword?", "u1"));
@@ -6801,13 +6800,16 @@ describe("AgentSessionManager", () => {
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/671 shows the note's messages when the note holds a fanout turn the agent's own session never saw", async () => {
-        const fanoutBody = serializeFanoutComposite(
-          {
-            answers: { codex: { backendId: "codex", status: "done", text: "codex answer" } },
-            summary: { status: "done", text: "the summary" },
-          },
-          (id) => id
-        );
+        const fanoutBody = [
+          "<!--copilot:multi-agent v=1-->",
+          "<!--copilot:summary-->",
+          "### Summary",
+          "the summary",
+          '<!--copilot:agent id="codex" name="codex" status="done"-->',
+          "### codex",
+          "codex answer",
+          "<!--copilot:multi-agent-end-->",
+        ].join("\n");
         const replay = buildReplayingBackend({
           onLoad: (emit) => {
             emit(replayChunk("user_message_chunk", "replayed question", "u1"));

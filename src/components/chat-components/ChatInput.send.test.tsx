@@ -12,7 +12,7 @@ import {
   $createTextNode,
   type LexicalEditor,
 } from "lexical";
-import { AgentPillNode, $createAgentPillNode, $isAgentPillNode } from "./pills/AgentPillNode";
+import { ToolPillNode, $createToolPillNode, $isToolPillNode } from "./pills/ToolPillNode";
 import type { ModelSelector } from "@/components/ui/ModelSelector";
 let mockEditor: LexicalEditor;
 let mockMention: () => void;
@@ -73,7 +73,7 @@ jest.mock("@/components/chat-components/LexicalEditor", () => ({
     React.useEffect(() => {
       mockEditor = createEditor({
         namespace: "restore-test",
-        nodes: [AgentPillNode],
+        nodes: [ToolPillNode],
         onError: (error) => {
           throw error;
         },
@@ -81,10 +81,7 @@ jest.mock("@/components/chat-components/LexicalEditor", () => ({
       mockEditor.update(
         () => {
           $getRoot().append(
-            $createParagraphNode().append(
-              $createAgentPillNode("codex", "Codex"),
-              $createTextNode(value)
-            )
+            $createParagraphNode().append($createToolPillNode("@websearch"), $createTextNode(value))
           );
         },
         { discrete: true }
@@ -255,13 +252,13 @@ describe("ChatInput", () => {
   });
   describe("prependContent()", () => {
     it.each(["draft in progress", ""])(
-      "restores agents, web context, and resolved text ahead of draft %p without losing existing pills https://github.com/Brevilabs/obsidian-copilot-private/issues/485",
+      "restores web context and resolved text ahead of draft %p without losing existing pills https://github.com/Brevilabs/obsidian-copilot-private/issues/485",
       (current) => {
         const { props, send } = composer(current, []);
         const ref: React.RefObject<ChatInputHandle> = { current: null };
         render(<ChatInput {...props} ref={ref} />);
         const webTab = { url: "https://example.com/report", title: "Report" };
-        act(() => ref.current!.prependContent("Review these changes", ["claude"], [webTab]));
+        act(() => ref.current!.prependContent("Review these changes", [webTab]));
         const restored = mockEditor.getEditorState().read(() => ({
           text: $getRoot().getTextContent(),
           nodes: $getRoot()
@@ -270,10 +267,9 @@ describe("ChatInput", () => {
               "getChildren" in node ? (node as import("lexical").ElementNode).getChildren() : []
             ),
         }));
-        expect(restored.text).toBe("Review these changes" + (current ? "\n\n" + current : ""));
-        expect(restored.nodes.filter($isAgentPillNode).map((node) => node.getBackendId())).toEqual([
-          "claude",
-          "codex",
+        expect(restored.text).toBe(`Review these changes\n\n@websearch${current}`);
+        expect(restored.nodes.filter($isToolPillNode).map((node) => node.getToolName())).toEqual([
+          "@websearch",
         ]);
         expect(props.setInputMessage).toHaveBeenCalledWith(restored.text);
         fireEvent.keyDown(screen.getByRole("textbox", { name: "Message" }), { key: "Enter" });

@@ -1,7 +1,6 @@
 import type { TFile } from "obsidian";
 import { USER_SENDER } from "@/constants";
 import { ContextProcessor } from "@/contextProcessor";
-import { FANOUT_READONLY_PREAMBLE } from "./fanout/fanoutTypes";
 import {
   buildPromptBlocks,
   buildUserDisplayContent,
@@ -9,7 +8,6 @@ import {
   extractText,
   serializeWebTabContext,
   stripUserMessageWrapper,
-  withReadOnlyPreamble,
 } from "./promptEnvelope";
 
 describe("promptEnvelope", () => {
@@ -371,19 +369,6 @@ describe("promptEnvelope", () => {
         { type: "text", text: "describe this" },
         { type: "image_url", image_url: { url: "data:image/png;base64,AAA=" } },
       ]);
-    });
-  });
-
-  describe("withReadOnlyPreamble()", () => {
-    it("leads the first text block with the read-only instruction", () => {
-      const out = withReadOnlyPreamble([{ type: "text", text: "the question" }]);
-      expect(out).toEqual([{ type: "text", text: `${FANOUT_READONLY_PREAMBLE}\n\nthe question` }]);
-    });
-
-    it("inserts a leading text block when the prompt has none (image-only)", () => {
-      const out = withReadOnlyPreamble([{ type: "image", mimeType: "image/png", data: "x" }]);
-      expect(out[0]).toEqual({ type: "text", text: FANOUT_READONLY_PREAMBLE });
-      expect(out).toHaveLength(2);
     });
   });
 

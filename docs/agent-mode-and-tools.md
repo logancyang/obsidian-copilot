@@ -244,18 +244,6 @@ In a Project chat, the Project info menu beside the Project name lists every fil
 
 The card covers the notes an agent changed with its editing tools. Changes an agent makes by running a shell command, such as deleting a note with `rm`, are not listed. Treat the card as a review aid rather than a complete audit of the turn.
 
-## Multi-agent answers
-
-With active Plus access, type `@`, open **Agents**, and mention one or more other installed agents in the same prompt. Copilot sends the same question, that turn's attachments, and a bounded slice of the visible conversation to each mentioned agent. With one other agent mentioned, only that agent responds and its answer is shown directly. With two or more, they answer in parallel and the current agent summarizes their answers without producing a separate answer of its own.
-
-This is useful for research, second opinions, and reviews. Mentioning only the current agent behaves like a normal turn.
-
-Each answer appears in its own tab. A direct one-agent turn shows only that agent. A turn with two or more answerers opens with **Summary** first. If one answerer fails in a multi-agent turn, Copilot keeps the successful answers and summarizes what completed.
-
-Multi-agent answers are designed for read-only research, not edits. Copilot denies explicit vault edit, delete, and move tools, along with tools it cannot classify. Retrieval Skills can still run their own scripts under the agent's permissions, so multi-agent answers are not a security sandbox. Use only trusted Skills, and use a regular single-agent turn when you want files changed.
-
-The default model and effort saved for each mentioned agent are used for its answer. If a multi-agent summary fails, its tab shows the error and any partial summary; the individual answers remain available. If an agent is not installed or ready, configure it before adding it to the prompt.
-
 ## Skills across agents
 
 Skills are reusable instruction packets built around a `SKILL.md` file. One Skill can be made available to OpenCode, Claude, and Codex without maintaining three copies.

@@ -287,8 +287,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   const sessionIndex = new AgentSessionIndex(createNodeFileStorage(), indexPath);
   let managerRef: AgentSessionManager | null = null;
   const prompter = createDefaultPermissionPrompter(
-    (id) => managerRef?.getSessionByBackendId(id) ?? null,
-    (id) => managerRef?.isReadOnlyFanoutSession(id) ?? false
+    (id) => managerRef?.getSessionByBackendId(id) ?? null
   );
   const askUserQuestionPrompter = createDefaultAskUserQuestionPrompter(
     (id) => managerRef?.getSessionByBackendId(id) ?? null

@@ -18,7 +18,6 @@ export type ProductUtmMedium =
   | "expired_modal"
   | "welcome_modal"
   | "chat_mode_select"
-  | "multi_agent"
   | "model_picker_lock"
   | "model_settings_lock"
   | "preview_hint"

@@ -50,12 +50,6 @@ import {
 import { MethodUnsupportedError } from "./errors";
 import { replayPersistedMode } from "./replayPersistedMode";
 import { applyModeSpec } from "./modeApply";
-import {
-  FanoutOrchestrator,
-  type FanoutHost,
-  type FanoutRunInput,
-} from "./fanout/FanoutOrchestrator";
-import type { FanoutTurn } from "./fanout/fanoutTypes";
 import { modelCatalogSignature } from "./translateBackendState";
 import { GLOBAL_SCOPE, type ProjectScopeId } from "./scope";
 import {
@@ -271,9 +265,7 @@ export class AgentSessionManager {
     }
   >();
 
-  private readonly readOnlyFanoutSessions = new Set<SessionId>();
   private readonly defaultApplyChains = new Map<string, Promise<void>>();
-  private readonly fanoutOrchestrator: FanoutOrchestrator;
   private readonly settingsUnsub: () => void;
 
   private getSessionState(internalId: string) {
@@ -297,7 +289,6 @@ export class AgentSessionManager {
     this.drafts = new AgentInputDraftStore(app, (chatInputId) =>
       this.getLiveChatInputIds().includes(chatInputId)
     );
-    this.fanoutOrchestrator = new FanoutOrchestrator(this.createFanoutHost());
     this.settingsUnsub = subscribeToSettingsChange((prev, next) =>
       this.onDefaultSelectionsChanged(prev, next)
     );
@@ -344,38 +335,6 @@ export class AgentSessionManager {
         }
       });
     this.defaultApplyChains.set(session.internalId, next);
-  }
-
-  isReadOnlyFanoutSession(backendSessionId: SessionId): boolean {
-    return this.readOnlyFanoutSessions.has(backendSessionId);
-  }
-
-  runFanoutTurn(input: FanoutRunInput): Promise<FanoutTurn> {
-    return this.fanoutOrchestrator.run(input);
-  }
-
-  private createFanoutHost(): FanoutHost {
-    return {
-      ensureBackendForFanout: async (backendId) => {
-        const descriptor = this.resolveDescriptor(backendId);
-        const proc = await this.ensureBackend(backendId, descriptor);
-        return { proc, descriptor };
-      },
-      getDefaultSelection: (backendId) => this.getSeedSelection(backendId),
-      onSelectionApplied: (backendId, state) => this.repairDefaultEffort(backendId, state),
-      getDisplayName: (backendId) => this.resolveDescriptor(backendId).displayName,
-      getCwd: () => {
-        const adapter = this.app.vault.adapter;
-        return adapter instanceof FileSystemAdapter ? adapter.getBasePath() : null;
-      },
-      registerReadOnlySession: (sessionId) => {
-        this.readOnlyFanoutSessions.add(sessionId);
-        return () => this.readOnlyFanoutSessions.delete(sessionId);
-      },
-      excludeSubSessionFromHistory: (backendId, sessionId) => {
-        void this.opts.sessionIndex?.deleteSession(backendId, sessionId);
-      },
-    };
   }
 
   private setupProjectRecordChangeMonitor(): void {
@@ -835,7 +794,6 @@ export class AgentSessionManager {
       const projectId = inVaultRoot ? undefined : resolveProjectIdForCwd(vaultBasePath, s.cwd);
       if (!inVaultRoot && !projectId) continue;
       if (probeSessionId && s.sessionId === probeSessionId) continue;
-      if (this.readOnlyFanoutSessions.has(s.sessionId)) continue;
       const title = s.title?.trim();
       if (!title || title.startsWith(DEFAULT_TITLE_PREFIX)) continue;
       const updatedAtMs = s.updatedAt ? Date.parse(s.updatedAt) : NaN;
@@ -937,7 +895,6 @@ export class AgentSessionManager {
       defaultModelSelection: resolvedSeed,
       defaultMode: this.getDefaultMode(resolvedId),
       getDescriptor: () => this.opts.resolveDescriptor(resolvedId),
-      runFanoutTurn: (input) => this.runFanoutTurn(input),
       getDisplayName: (backendId) => this.resolveDescriptor(backendId).displayName,
       getApp: () => this.app,
       chatExtensions: this.opts.chatExtensions,
@@ -2130,7 +2087,7 @@ export class AgentSessionManager {
       (m) => m.isVisible && m.sender === USER_SENDER && !isCompactCommand(m.message)
     ).length;
     const state = this.getSessionState(session.internalId);
-    // A multi-agent mention sends the history again on any later turn, including after the agent's own session reattaches.
+    // History sent again to the agent names the earlier chats this one continues.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/908
     session.setContinuedFrom(loaded.continuedFrom);
     if (replayedUserTurns > 0 && replayedUserTurns >= savedUserTurns) {
@@ -2342,7 +2299,6 @@ export class AgentSessionManager {
       defaultMode: this.getDefaultMode(backendId),
       cwd,
       getDescriptor: () => this.opts.resolveDescriptor(backendId),
-      runFanoutTurn: (input) => this.runFanoutTurn(input),
       getDisplayName: (id) => this.resolveDescriptor(id).displayName,
       getApp: () => this.app,
       chatExtensions: this.opts.chatExtensions,
@@ -2638,17 +2594,12 @@ export class AgentSessionManager {
     usage: SessionUsage | null
   ): string {
     const last = messages[messages.length - 1];
-    const fanoutSig = last?.fanout
-      ? Object.values(last.fanout.answers)
-          .map((a) => `${a.status}:${a.text.length}`)
-          .join(",") + `|${last.fanout.summary.status}:${last.fanout.summary.text.length}`
-      : "";
     // The note lists each reply's tools, so a tool call that adds no text still needs a save.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/906
     const toolsSig = last ? toolsUsedLines(last, getVaultBase(this.app)).join("|") : "";
     return `${label ?? ""}-${sessionId ?? ""}-${messages.length}-${
       last?.message ?? ""
-    }-${fanoutSig}-${toolsSig}-${usage?.updatedAt ?? ""}`;
+    }-${toolsSig}-${usage?.updatedAt ?? ""}`;
   }
 
   private async drainAutoSave(session: AgentSession): Promise<void> {
@@ -2765,7 +2716,6 @@ export class AgentSessionManager {
     if (this.opts.askUserQuestionPrompter) {
       proc.setAskUserQuestionPrompter?.(this.opts.askUserQuestionPrompter);
     }
-    proc.setReadOnlySessionPredicate?.((sessionId) => this.isReadOnlyFanoutSession(sessionId));
   }
 
   private async ensureBackend(

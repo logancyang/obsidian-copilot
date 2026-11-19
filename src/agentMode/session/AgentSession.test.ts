@@ -12,10 +12,6 @@ import {
   type AgentSessionStartOptions,
   type AgentSessionStateOptions,
 } from "./AgentSession";
-import {
-  ensureMultiAgentEntitlement,
-  showMultiAgentUpgradePrompt,
-} from "@/agentMode/session/fanout/multiAgentEntitlement";
 import { getSettings } from "@/settings/model";
 import { ContextProcessor } from "@/contextProcessor";
 import { GLOBAL_SCOPE } from "./scope";
@@ -24,8 +20,6 @@ import { writePermissionRequest } from "./testing/permissionPrompts";
 import { OUTPUT_LIMIT_CONTINUATION_PROMPT } from "./promptEnvelope";
 import { __resetVaultBaseCache } from "@/utils/vaultPath";
 import { AuthRequiredError, MethodUnsupportedError } from "./errors";
-import type { FanoutRunInput } from "./fanout/FanoutOrchestrator";
-import type { FanoutTurn } from "./fanout/fanoutTypes";
 import type {
   AgentChatMessage,
   AgentToolCallOutput,
@@ -48,10 +42,6 @@ jest.mock("@/logger", () => ({
 }));
 jest.mock("@/settings/model", () => ({
   getSettings: jest.fn().mockReturnValue({ agentMode: {} }),
-}));
-jest.mock("@/agentMode/session/fanout/multiAgentEntitlement", () => ({
-  ensureMultiAgentEntitlement: jest.fn(async () => true),
-  showMultiAgentUpgradePrompt: jest.fn(),
 }));
 
 interface MockBackend {
@@ -1746,45 +1736,6 @@ describe("AgentSession", () => {
         expect(markDelivered).toHaveBeenCalledWith(7);
       });
 
-      it(`https://github.com/Brevilabs/obsidian-copilot-private/issues/634 keeps buffered fan-out context for the next normal turn`, async () => {
-        const mock = makeMockBackend();
-        const fanoutTurn: FanoutTurn = {
-          answers: {
-            opencode: { backendId: "opencode", status: "done", text: "a" },
-            claude: { backendId: "claude", status: "done", text: "b" },
-          },
-          summary: { status: "done", text: "the fan-out summary", complete: true },
-        };
-        const runFanoutTurn = jest.fn(async (input: FanoutRunInput) => {
-          input.onChange(fanoutTurn);
-          return fanoutTurn;
-        });
-        const session = makeSession(mock, { runFanoutTurn });
-        await session.sendPrompt("compare X and Y", undefined, undefined, ["opencode", "claude"])
-          .turn;
-
-        await session.sendPrompt("/compact").turn;
-        expect(promptBlocks(mock, 0)).toEqual([{ type: "text", text: "/compact" }]);
-
-        await session.sendPrompt("now expand").turn;
-        expect((promptBlocks(mock, 1)[0] as { text: string }).text).toContain(
-          "the fan-out summary"
-        );
-      });
-
-      it(`https://github.com/Brevilabs/obsidian-copilot-private/issues/634 compacts only this chat's agent when other agents are @mentioned`, async () => {
-        const mock = makeMockBackend();
-        const runFanoutTurn = jest.fn();
-        const session = makeSession(mock, { runFanoutTurn });
-        jest.mocked(ensureMultiAgentEntitlement).mockClear();
-
-        await session.sendPrompt("/compact", undefined, undefined, ["opencode", "claude"]).turn;
-
-        expect(ensureMultiAgentEntitlement).not.toHaveBeenCalled();
-        expect(runFanoutTurn).not.toHaveBeenCalled();
-        expect(promptBlocks(mock, 0)).toEqual([{ type: "text", text: "/compact" }]);
-      });
-
       it(`https://github.com/Brevilabs/obsidian-copilot-private/issues/634 does not title a chat from its /compact message`, async () => {
         const mock = makeMockBackend();
         const session = makeSession(mock, { getDescriptor: nonSummarizingDescriptor });
@@ -2149,7 +2100,7 @@ describe("AgentSession", () => {
         expect(session.getQueuedPrompts()).toEqual([]);
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 refuses /compact and multi-agent questions while the agent works, even on a backend that takes mid-turn input", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 refuses /compact while the agent works, even on a backend that takes mid-turn input", () => {
         const mock = makeMockBackend();
         recordPrompts(mock);
         const session = makeSession(mock, { getDescriptor: midTurnDescriptor });
@@ -2158,44 +2109,7 @@ describe("AgentSession", () => {
         expect(() => session.sendPrompt("/compact")).toThrow(
           "Session already has a turn in flight"
         );
-        expect(() =>
-          session.sendPrompt("compare", undefined, undefined, ["claude", "codex"])
-        ).toThrow("Session already has a turn in flight");
         expect(session.getQueuedPrompts()).toEqual([]);
-      });
-
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 refuses a follow-up while a multi-agent question runs, so Copilot holds it and sends it with the agents' answers once they finish", async () => {
-        const mock = makeMockBackend();
-        const answered: FanoutTurn = {
-          answers: {
-            opencode: { backendId: "opencode", status: "done", text: "a" },
-            claude: { backendId: "claude", status: "done", text: "b" },
-          },
-          summary: { status: "done", text: "the fan-out summary", complete: true },
-        };
-        let finishFanout!: () => void;
-        const runFanoutTurn = jest.fn(
-          () => new Promise<FanoutTurn>((resolve) => (finishFanout = () => resolve(answered)))
-        );
-        const session = makeSession(mock, { getDescriptor: midTurnDescriptor, runFanoutTurn });
-        const fanout = session.sendPrompt("compare X and Y", undefined, undefined, [
-          "opencode",
-          "claude",
-        ]);
-        await waitFor(() => expect(runFanoutTurn).toHaveBeenCalled());
-
-        expect(session.acceptsMidTurnPrompts()).toBe(false);
-        expect(() => session.sendPrompt("expand on that")).toThrow(
-          "Session already has a turn in flight"
-        );
-
-        finishFanout();
-        await fanout.turn;
-        expect(session.acceptsMidTurnPrompts()).toBe(true);
-        await session.sendPrompt("expand on that").turn;
-        expect(promptText(mock.prompt.mock.calls[0][0] as PromptInput)).toContain(
-          "the fan-out summary"
-        );
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 shows a queued message at the point it reached the agent, keeps the work before it in its own reply, and renders later work below it in the same turn", async () => {
@@ -2857,292 +2771,6 @@ describe("AgentSession", () => {
           } finally {
             getInstance.mockRestore();
           }
-        });
-      });
-
-      describe("with several mentioned agents", () => {
-        const mockedEnsure = ensureMultiAgentEntitlement as jest.MockedFunction<
-          typeof ensureMultiAgentEntitlement
-        >;
-        const mockedUpgradePrompt = showMultiAgentUpgradePrompt as jest.MockedFunction<
-          typeof showMultiAgentUpgradePrompt
-        >;
-        const BOTH_AGENTS = ["opencode", "claude"];
-
-        const fanoutRunner = (turn: FanoutTurn) =>
-          jest.fn(async (input: FanoutRunInput): Promise<FanoutTurn> => {
-            input.onChange(turn);
-            return turn;
-          });
-
-        const twoAgentTurn = (
-          answers: [string, string] = ["a", "b"],
-          summary: FanoutTurn["summary"] = { status: "done", text: "summary" }
-        ): FanoutTurn => ({
-          answers: {
-            opencode: { backendId: "opencode", status: "done", text: answers[0] },
-            claude: { backendId: "claude", status: "done", text: answers[1] },
-          },
-          summary,
-        });
-
-        const fanoutPromptText = (runFanoutTurn: jest.Mock): string =>
-          (runFanoutTurn.mock.calls[0][0].prompt[0] as { type: "text"; text: string }).text;
-
-        const lastPromptText = (mock: MockBackend): string => {
-          const calls = mock.prompt.mock.calls;
-          return (calls[calls.length - 1][0] as { prompt: Array<{ text: string }> }).prompt[0].text;
-        };
-
-        beforeEach(() => {
-          mockedEnsure.mockReset();
-          mockedEnsure.mockResolvedValue(true);
-          mockedUpgradePrompt.mockReset();
-        });
-
-        it("https://github.com/Brevilabs/obsidian-copilot-private/issues/667 gives mentioned agents the full page even after the main agent received it", async () => {
-          const page = { url: "https://example.com/report", title: "Report", isActive: true };
-          const block = "<active_web_tab>\n<content>\nREPORT BODY\n</content>\n</active_web_tab>";
-          const processContextWebTabs = jest.fn().mockResolvedValue(block);
-          const getInstance = jest
-            .spyOn(ContextProcessor, "getInstance")
-            .mockReturnValue({ processContextWebTabs } as never);
-          try {
-            const mock = makeMockBackend();
-            const runFanoutTurn = fanoutRunner(twoAgentTurn());
-            const session = makeSession(mock, { runFanoutTurn });
-            const context = { notes: [], urls: [], webTabs: [page] };
-
-            await session.sendPrompt("summarize", context).turn;
-            await session.sendPrompt("review", context, undefined, BOTH_AGENTS).turn;
-
-            expect(fanoutPromptText(runFanoutTurn)).toContain("REPORT BODY");
-          } finally {
-            getInstance.mockRestore();
-          }
-        });
-
-        it("tells mentioned agents at most 48,000 characters of earlier turns, dropping the oldest, without a notice", async () => {
-          const mock = makeMockBackend();
-          const runFanoutTurn = fanoutRunner(twoAgentTurn());
-          const session = makeSession(mock, { runFanoutTurn });
-          session.loadDisplayMessages(
-            Array.from({ length: 20 }, (_, i) => ({
-              id: `h${i}`,
-              sender: i % 2 === 0 ? USER_SENDER : AI_SENDER,
-              message: `turn-${i}-${"x".repeat(5_000)}`,
-              isVisible: true,
-              timestamp: null,
-            }))
-          );
-          jest.mocked(Notice).mockClear();
-
-          await session.sendPrompt("review", undefined, undefined, BOTH_AGENTS).turn;
-
-          const history = fanoutPromptText(runFanoutTurn).match(
-            /<conversation_history>[\s\S]*<\/conversation_history>/
-          )![0];
-          expect(history.length).toBeLessThan(49_000);
-          expect(history).toContain("[earlier conversation truncated]");
-          expect(history).not.toContain("turn-0-");
-          expect(history).toContain("turn-19-");
-          expect(Notice).not.toHaveBeenCalled();
-        });
-
-        it("hands the turn to the fan-out runner instead of backend.prompt for an entitled user", async () => {
-          const mock = makeMockBackend();
-          const runFanoutTurn = fanoutRunner(
-            twoAgentTurn(["opencode answer", "claude answer"], { status: "pending", text: "" })
-          );
-          const session = makeSession(mock, { runFanoutTurn });
-
-          const stopReason = await session.sendPrompt("review", undefined, undefined, BOTH_AGENTS)
-            .turn;
-
-          expect(stopReason).toBe("end_turn");
-          expect(mockedEnsure).toHaveBeenCalledTimes(1);
-          expect(mockedUpgradePrompt).not.toHaveBeenCalled();
-          expect(runFanoutTurn).toHaveBeenCalledTimes(1);
-          expect(mock.prompt).not.toHaveBeenCalled();
-          expect(runFanoutTurn.mock.calls[0][0].agents).toEqual(BOTH_AGENTS);
-          expect(runFanoutTurn.mock.calls[0][0].mainAgent).toBe("opencode");
-          expect(fanoutPromptText(runFanoutTurn)).toContain("read-only");
-          expect(fanoutPromptText(runFanoutTurn)).toContain("review");
-          expect(aiMessage(session)?.fanout?.answers.claude.text).toBe("claude answer");
-        });
-
-        it("persists the full composite (summary + per-agent answers + markers) and keeps the live turn on the message", async () => {
-          const mock = makeMockBackend();
-          const runFanoutTurn = fanoutRunner(
-            twoAgentTurn(["OPENCODE_ANSWER", "CLAUDE_ANSWER"], {
-              status: "done",
-              text: "the narrative summary",
-            })
-          );
-          const session = makeSession(mock, { runFanoutTurn });
-
-          await session.sendPrompt("review", undefined, undefined, BOTH_AGENTS).turn;
-
-          const placeholder = aiMessage(session);
-          expect(placeholder?.message).toContain("<!--copilot:multi-agent v=1-->");
-          expect(placeholder?.message).toContain("the narrative summary");
-          expect(placeholder?.message).toContain("OPENCODE_ANSWER");
-          expect(placeholder?.message).toContain("CLAUDE_ANSWER");
-          expect(placeholder?.fanout?.summary.text).toBe("the narrative summary");
-        });
-
-        it("https://github.com/Brevilabs/obsidian-copilot-private/issues/481 persists an empty failed single-agent response so it survives reload", async () => {
-          const mock = makeMockBackend();
-          const runFanoutTurn = fanoutRunner({
-            answers: {
-              claude: { backendId: "claude", status: "error", text: "", error: "backend boom" },
-            },
-            summary: { status: "done", text: "" },
-          });
-          const session = makeSession(mock, { runFanoutTurn });
-
-          await session.sendPrompt("review", undefined, undefined, ["claude"]).turn;
-
-          const response = aiMessage(session);
-          expect(response?.message).toContain('id="claude"');
-          expect(response?.message).toContain('status="error"');
-          expect(response?.message).toContain('error="backend boom"');
-          expect(mock.prompt).not.toHaveBeenCalled();
-        });
-
-        it("refuses the turn with an upgrade prompt and an error message when the user is not entitled", async () => {
-          mockedEnsure.mockResolvedValue(false);
-          const mock = makeMockBackend();
-          const runFanoutTurn = fanoutRunner(twoAgentTurn());
-          const session = makeSession(mock, { runFanoutTurn });
-
-          const stopReason = await session.sendPrompt("review", undefined, undefined, BOTH_AGENTS)
-            .turn;
-
-          expect(stopReason).toBe("refusal");
-          expect(runFanoutTurn).not.toHaveBeenCalled();
-          expect(mock.prompt).not.toHaveBeenCalled();
-          expect(mockedUpgradePrompt).toHaveBeenCalledTimes(1);
-          expect(session.getStatus()).toBe("idle");
-          const placeholder = aiMessage(session);
-          expect(placeholder?.isErrorMessage).toBe(true);
-          expect(placeholder?.message).toContain("Copilot Plus");
-          expect(placeholder?.fanout).toBeUndefined();
-        });
-
-        it("skips the entitlement gate when no other agent is mentioned", async () => {
-          const mock = makeMockBackend();
-          const runFanoutTurn = jest.fn();
-          const session = makeSession(mock, { runFanoutTurn });
-
-          await session.sendPrompt("hi").turn;
-          await session.sendPrompt("hi again", undefined, undefined, ["opencode"]).turn;
-
-          expect(mockedEnsure).not.toHaveBeenCalled();
-          expect(runFanoutTurn).not.toHaveBeenCalled();
-          expect(mock.prompt).toHaveBeenCalledTimes(2);
-        });
-
-        it("does not let a first-turn fan-out consume the visible session's project context", async () => {
-          const mock = makeMockBackend();
-          const runFanoutTurn = fanoutRunner(twoAgentTurn());
-          const session = makeSession(mock, { runFanoutTurn });
-          (
-            session as unknown as { getProjectContextBlockFn: () => string }
-          ).getProjectContextBlockFn = () =>
-            "<project_context>\n## Included folders\n- `/vault/Papers`\n</project_context>";
-
-          await session.sendPrompt("review", undefined, undefined, BOTH_AGENTS).turn;
-          expect(fanoutPromptText(runFanoutTurn)).toContain("<project_context>");
-          expect(mock.prompt).not.toHaveBeenCalled();
-
-          await session.sendPrompt("now you").turn;
-          expect(mock.prompt).toHaveBeenCalledTimes(1);
-          expect(lastPromptText(mock)).toContain("<project_context>");
-        });
-
-        it("includes the prior transcript as a conversation_history block on a fan-out follow-up", async () => {
-          const mock = makeMockBackend();
-          const runFanoutTurn = fanoutRunner(twoAgentTurn());
-          const session = makeSession(mock, { runFanoutTurn });
-
-          await session.sendPrompt("what is the master plan").turn;
-          session.store.appendAgentText(aiMessage(session).id, "the master plan is X");
-
-          await session.sendPrompt("expand on that plan", undefined, undefined, BOTH_AGENTS).turn;
-
-          const text = fanoutPromptText(runFanoutTurn);
-          expect(text).toContain("<conversation_history>");
-          expect(text).toContain("what is the master plan");
-          expect(text).toContain("the master plan is X");
-          expect(text).toContain("<user-message>\nexpand on that plan\n</user-message>");
-          expect((text.match(/expand on that plan/g) ?? []).length).toBe(1);
-        });
-
-        it("https://github.com/Brevilabs/obsidian-copilot-private/issues/908 tells agents mentioned in a continued chat which notes hold the earlier chat they must not read", async () => {
-          const mock = makeMockBackend();
-          const runFanoutTurn = fanoutRunner(twoAgentTurn());
-          const session = makeSession(mock, { runFanoutTurn });
-          session.loadDisplayMessages([
-            {
-              id: "m0",
-              sender: USER_SENDER,
-              message: "the plan is X",
-              isVisible: true,
-              timestamp: null,
-            },
-          ]);
-          session.setContinuedFrom(["chats/original.md"]);
-
-          await session.sendPrompt("expand on that plan", undefined, undefined, BOTH_AGENTS).turn;
-
-          expect(fanoutPromptText(runFanoutTurn)).toContain(
-            "ignore their content if a search returns them:\n- chats/original.md\n"
-          );
-        });
-
-        it("injects the buffered question + summary on the next single-agent turn, then clears", async () => {
-          const mock = makeMockBackend();
-          const runFanoutTurn = fanoutRunner(
-            twoAgentTurn(["a", "b"], {
-              status: "done",
-              text: "the fan-out summary",
-              complete: true,
-            })
-          );
-          const session = makeSession(mock, { runFanoutTurn });
-
-          await session.sendPrompt("compare X and Y", undefined, undefined, BOTH_AGENTS).turn;
-          expect(mock.prompt).not.toHaveBeenCalled();
-
-          await session.sendPrompt("now expand on that").turn;
-
-          const text = lastPromptText(mock);
-          expect(text).toContain("<prior_turns>");
-          expect(text).toContain("compare X and Y");
-          expect(text).toContain("the fan-out summary");
-          expect(text).toContain("<user-message>\nnow expand on that\n</user-message>");
-
-          await session.sendPrompt("and again").turn;
-          expect(lastPromptText(mock)).not.toContain("<prior_turns>");
-        });
-
-        it("replays the agents' answers on the next single-agent turn when no summary was generated", async () => {
-          const mock = makeMockBackend();
-          const runFanoutTurn = fanoutRunner(
-            twoAgentTurn(["answer a", "answer b"], { status: "done", text: "" })
-          );
-          const session = makeSession(mock, { runFanoutTurn });
-
-          await session.sendPrompt("multi question", undefined, undefined, BOTH_AGENTS).turn;
-          await session.sendPrompt("follow-up").turn;
-
-          const text = lastPromptText(mock);
-          expect(text).toContain("<prior_turns>");
-          expect(text).toContain("multi question");
-          expect(text).toContain("answer a");
-          expect(text).toContain("answer b");
-          expect(text).not.toContain("a combined summary could not be generated");
         });
       });
 
@@ -4353,31 +3981,6 @@ describe("AgentSession", () => {
 
         await expect(turn).resolves.toBe("cancelled");
         expect(session.getStatus()).toBe("idle");
-      });
-
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 leaves one cancelled reply and runs no agents when Stop lands during the multi-agent entitlement check", async () => {
-        const mock = makeMockBackend();
-        let finishEntitlementCheck!: (entitled: boolean) => void;
-        jest
-          .mocked(ensureMultiAgentEntitlement)
-          .mockImplementationOnce(
-            () => new Promise<boolean>((resolve) => (finishEntitlementCheck = resolve))
-          );
-        const runFanoutTurn = jest.fn();
-        const session = makeSession(mock, { runFanoutTurn });
-        const { turn } = session.sendPrompt("review", undefined, undefined, ["opencode", "claude"]);
-
-        await session.cancel();
-        finishEntitlementCheck(true);
-
-        await expect(turn).resolves.toBe("cancelled");
-        expect(runFanoutTurn).not.toHaveBeenCalled();
-        expect(session.store.getDisplayMessages().map((m) => [m.sender, m.turnStopReason])).toEqual(
-          [
-            [USER_SENDER, undefined],
-            [AI_SENDER, "cancelled"],
-          ]
-        );
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 sends the next prompt once the stopped prompt is withdrawn, without waiting for a turn that will never come", async () => {

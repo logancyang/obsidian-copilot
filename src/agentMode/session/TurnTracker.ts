@@ -90,20 +90,12 @@ export class TurnTracker {
     return this.placeholderId;
   }
 
-  getReplyStartedAtMs(): number {
-    return this.replyStartedAtMs;
-  }
-
   getQueuedPrompts(): readonly QueuedPrompt[] {
     return this.queuedPrompts;
   }
 
   getTurnFiles(): FileCaptures {
     return this.turnFiles;
-  }
-
-  isSending(): boolean {
-    return this.sendController !== null;
   }
 
   isMainTurnRunning(): boolean {
@@ -140,10 +132,6 @@ export class TurnTracker {
     }
     this.deps.notifyMessages();
     return this.placeholderId;
-  }
-
-  releaseReply(replyId: string): void {
-    if (this.placeholderId === replyId) this.placeholderId = null;
   }
 
   startSend(): TurnSend {

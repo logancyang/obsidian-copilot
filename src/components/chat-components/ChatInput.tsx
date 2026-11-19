@@ -38,9 +38,6 @@ import { $findWebTabPills } from "./pills/WebTabPillNode";
 import LexicalEditor from "./LexicalEditor";
 import { cn } from "@/lib/utils";
 import { useObjectUrl } from "@/hooks/useObjectUrl";
-import { type AgentMentionBrand, EMPTY_AGENT_MENTION_BRANDS } from "./hooks/useAtMentionCategories";
-import { EMPTY_CLOUD_AGENT_IDS } from "./context/CloudAgentContext";
-import { $createAgentPillNode } from "./pills/AgentPillNode";
 
 const ACCENT_CIRCLE_BUTTON_CLASS =
   "tw-rounded-full tw-bg-interactive-accent tw-text-on-accent hover:tw-bg-interactive-accent-hover";
@@ -129,12 +126,6 @@ export interface ChatInputProps {
 
   isAgentMode?: boolean;
   projectFolderPath?: string;
-
-  agentBrands?: ReadonlyArray<AgentMentionBrand>;
-
-  cloudAgentIds?: ReadonlySet<string>;
-
-  onMentionedAgentsChange?: (backendIds: string[]) => void;
 }
 
 interface SelectedImagePreviewProps {
@@ -148,11 +139,7 @@ function SelectedImagePreview({ file }: SelectedImagePreviewProps) {
 
 export interface ChatInputHandle {
   removeToolPills(toolNames: string[]): void;
-  prependContent(
-    text: string,
-    agentIds: readonly string[],
-    webTabs: readonly WebTabContext[]
-  ): void;
+  prependContent(text: string, webTabs: readonly WebTabContext[]): void;
 }
 
 const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput(
@@ -192,9 +179,6 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
     initialContext,
     isAgentMode = false,
     projectFolderPath,
-    agentBrands = EMPTY_AGENT_MENTION_BRANDS,
-    cloudAgentIds = EMPTY_CLOUD_AGENT_IDS,
-    onMentionedAgentsChange,
   },
   ref
 ) {
@@ -298,13 +282,6 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
     handleSendMessage({ contextNotes: notes, urls, contextFolders: folders, webTabs: allWebTabs });
   };
 
-  const handleAgentsChange = useCallback(
-    (backendIds: string[]) => {
-      onMentionedAgentsChange?.(backendIds);
-    },
-    [onMentionedAgentsChange]
-  );
-
   const handleAddToContext = (
     category: string,
     data: TFile | string | TFolder | WebTabContext | null
@@ -338,17 +315,6 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
             if ($isRangeSelection(selection)) {
               const toolPill = $createToolPillNode(data);
               selection.insertNodes([toolPill]);
-            }
-          });
-        }
-        break;
-      case "agents":
-        if (typeof data === "string" && lexicalEditorRef.current) {
-          const label = agentBrands.find((b) => b.id === data)?.displayName ?? data;
-          lexicalEditorRef.current.update(() => {
-            const selection = $getSelection();
-            if ($isRangeSelection(selection)) {
-              selection.insertNodes([$createAgentPillNode(data, label)]);
             }
           });
         }
@@ -509,18 +475,15 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
   useImperativeHandle(
     ref,
     () => ({
-      prependContent(text, agentIds, webTabs) {
+      prependContent(text, webTabs) {
         setContextWebTabs((previous) => mergeWebTabContexts([...webTabs, ...previous]));
         lexicalEditorRef.current?.update(
           () => {
             // Preserve the current draft's structured pills when restoring a stopped queue.
             // https://github.com/Brevilabs/obsidian-copilot-private/issues/485
             const root = $getRoot();
-            const pills = agentIds.map((id) =>
-              $createAgentPillNode(id, agentBrands.find((b) => b.id === id)?.displayName ?? id)
-            );
             const separator = root.getTextContent().trim() ? "\n\n" : "";
-            root.selectStart().insertNodes([...pills, $createTextNode(text + separator)]);
+            root.selectStart().insertNodes([$createTextNode(text + separator)]);
             setInputMessage(root.getTextContent());
           },
           { discrete: true }
@@ -533,7 +496,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
         });
       },
     }),
-    [agentBrands, setInputMessage]
+    [setInputMessage]
   );
 
   return (
@@ -595,9 +558,6 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
               onToolsChange={isCopilotPlus ? onToolPillsChange : undefined}
               onFoldersChange={setFoldersFromPills}
               onWebTabsChange={setWebTabsFromPills}
-              agentBrands={agentBrands}
-              cloudAgentIds={cloudAgentIds}
-              onAgentsChange={handleAgentsChange}
               onEditorReady={onEditorReady}
               onImagePaste={onAddImage}
               onTagSelected={onTagSelected}

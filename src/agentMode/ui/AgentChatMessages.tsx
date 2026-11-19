@@ -1,6 +1,5 @@
 import { AgentTrail } from "@/agentMode/ui/AgentTrailView";
 import { AskUserQuestionCard } from "@/agentMode/ui/AskUserQuestionCard";
-import { FanoutMessageCard } from "@/agentMode/ui/FanoutMessageCard";
 import { PlanProposalCard } from "@/agentMode/ui/PlanProposalCard";
 import { placeChatCards } from "@/agentMode/ui/chatCards";
 import { CHAT_CARD_SLOTS } from "@/agentMode/ui/chatCardSlots";
@@ -115,25 +114,13 @@ const AgentMessageRow = memo(function AgentMessageRow({
       <AgentTurnDurationIndicator status="running" startedAtMs={runningTurnStartedAtMs} />
     ) : null;
   const isStreamingPlaceholder = isAssistant && isStreaming && !hasParts && !message.message;
-  const fanoutTurn = isAssistant ? message.fanout : undefined;
   const onContinue = isAssistant && onContinueFrom ? () => onContinueFrom(message.id) : undefined;
 
   return (
     // Off-screen turns skip paint so scrolling a long chat costs what is on screen, not the whole transcript.
     // https://github.com/logancyang/obsidian-copilot/issues/3343
     <div className="tw-w-full [contain-intrinsic-size:auto_500px] [content-visibility:auto]">
-      {fanoutTurn ? (
-        <div className="tw-px-3 tw-pt-2">
-          <FanoutMessageCard
-            message={message}
-            turn={fanoutTurn}
-            app={app}
-            footerStart={completedTurnDuration}
-            onContinue={onContinue}
-          />
-          {runningTurnDuration}
-        </div>
-      ) : isStreamingPlaceholder ? (
+      {isStreamingPlaceholder ? (
         <div className="tw-px-3 tw-pt-2">{runningTurnDuration}</div>
       ) : renderTrail ? (
         <div className="tw-px-3 tw-pt-2">
