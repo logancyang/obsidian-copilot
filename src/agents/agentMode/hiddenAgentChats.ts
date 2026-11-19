@@ -494,6 +494,12 @@ export class HiddenAgentChats {
         error: end.error?.message,
         stopped: run.stopped ?? undefined,
         declined: run.declined,
+        stillWorking: Array.from(this.chats.values())
+          .filter(
+            (other) =>
+              other.parent === hidden.parent && other.run?.question === null && !other.run.stopped
+          )
+          .map((other) => other.agent.name),
       }),
       end.files
     );

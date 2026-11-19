@@ -2,6 +2,7 @@ import { agentMentionsBlock, mentionedAgentNames } from "@/agents/agentMentionPr
 import { LEO, MAYA, NORA } from "@/agents/ui/testing/rosterFixtures";
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/947";
+const SEVERAL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/949";
 
 describe("agentMentionPrompt", () => {
   describe("mentionedAgentNames()", () => {
@@ -20,6 +21,24 @@ describe("agentMentionPrompt", () => {
 
     it(`ignores a name that only starts a longer word or sits inside an address (${ISSUE})`, () => {
       expect(mentionedAgentNames("@Mayan ruins, mail leo@leo.dev", [MAYA, LEO])).toEqual([]);
+    });
+
+    it(`names only the longer of two names a mention matches, so @Maya Chen doesn't also mention Maya (${SEVERAL})`, () => {
+      const mayaChen = { ...MAYA, slug: "maya-chen", name: "Maya Chen" };
+
+      expect(mentionedAgentNames("@Maya Chen does the budget hold?", [MAYA, mayaChen])).toEqual([
+        "Maya Chen",
+      ]);
+      expect(mentionedAgentNames("@Maya Chen and @Maya, check it", [MAYA, mayaChen])).toEqual([
+        "Maya",
+        "Maya Chen",
+      ]);
+    });
+
+    it(`names an agent mentioned twice in one message once, so it is asked once (${SEVERAL})`, () => {
+      expect(mentionedAgentNames("@Maya check it, then @maya again", [MAYA, LEO])).toEqual([
+        "Maya",
+      ]);
     });
 
     it("finds a name with spaces and symbols", () => {

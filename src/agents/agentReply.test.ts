@@ -1,11 +1,13 @@
 import {
   AGENT_REPLY_MARKER,
   formatAgentReply,
+  joinNames,
   readAgentReply,
   RELAY_PRINCIPLE,
 } from "@/agents/agentReply";
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/944";
+const SEVERAL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/949";
 const MAYA = { agent: "maya", name: "Maya", mention: "mention-1" };
 const NOTHING = { changed: [] };
 
@@ -96,6 +98,27 @@ describe("agentReply", () => {
       expect(readAgentReply(text)?.reply).toBe("October or November?");
     });
 
+    it(`names the other agents asked from the chat that still work, so the current agent says they are still at it (${SEVERAL})`, () => {
+      const one = formatAgentReply({ ...MAYA, ...NOTHING, reply: "Fine.", stillWorking: ["Leo"] });
+      const two = formatAgentReply({
+        ...MAYA,
+        ...NOTHING,
+        reply: "Fine.",
+        stillWorking: ["Leo", "Nora"],
+      });
+
+      expect(one.split("\n\n").slice(1, 3)).toEqual([
+        "Maya replied. Pass the reply on to the user now.",
+        "Leo is still working on what you asked. Tell the user so, and that you'll pass the reply on when it comes back.",
+      ]);
+      expect(two).toContain(
+        "Leo and Nora are still working on what you asked. Tell the user so, and that you'll pass each reply on when it comes back."
+      );
+      expect(formatAgentReply({ ...MAYA, ...NOTHING, reply: "Fine.", stillWorking: [] })).toBe(
+        formatAgentReply({ ...MAYA, ...NOTHING, reply: "Fine." })
+      );
+    });
+
     it(`names the files the agent changed, which the user sees under the reply (${ISSUE})`, () => {
       expect(
         formatAgentReply({ ...MAYA, ...NOTHING, reply: "Done.", changed: ["Plans/a.md", "b.md"] })
@@ -121,6 +144,14 @@ describe("agentReply", () => {
       expect(formatAgentReply({ ...MAYA, ...NOTHING, reply: "" })).toContain(
         '<agent-reply from="Maya">\n(no reply)\n</agent-reply>'
       );
+    });
+  });
+
+  describe("joinNames()", () => {
+    it(`lists names the way a sentence does: one alone, two with "and", more with commas and a final "and" (${SEVERAL})`, () => {
+      expect(joinNames(["Maya"])).toBe("Maya");
+      expect(joinNames(["Maya", "Leo"])).toBe("Maya and Leo");
+      expect(joinNames(["Maya", "Leo", "Nora"])).toBe("Maya, Leo and Nora");
     });
   });
 

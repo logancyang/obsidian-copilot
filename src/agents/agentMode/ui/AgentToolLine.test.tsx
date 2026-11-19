@@ -1,6 +1,7 @@
+import type { AgentToolCall } from "@/agents/agentMode/agentToolCalls";
 import { AgentToolLine } from "@/agents/agentMode/ui/AgentToolLine";
 import { ChatAgentsContext } from "@/agents/ui/chatAgents";
-import { MAYA, THREE_AGENTS } from "@/agents/ui/testing/rosterFixtures";
+import { LEO, MAYA, NORA, THREE_AGENTS } from "@/agents/ui/testing/rosterFixtures";
 import { render, screen } from "@testing-library/react";
 import type { App } from "obsidian";
 import React from "react";
@@ -10,14 +11,16 @@ jest.mock("@/agentMode/ui/AgentMarkdownText", () => ({
 }));
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/947";
+const SEVERAL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/949";
 const SENT = "Zero wants a blunt read of [[Launch video plan]]: six features in 90 seconds.";
-const ASK = { tool: "ask_agent", agent: "maya", message: SENT };
+const ASK: AgentToolCall = { tool: "ask_agent", agent: "maya", message: SENT };
+const ASK_LEO: AgentToolCall = { tool: "ask_agent", agent: "Leo", message: "Check the numbers." };
 const ORDINARY = <div>obsidian-copilot · Ask agent</div>;
 
-function line(call: typeof ASK | { tool: string; agent: string; message: null }, open = false) {
+function line(call: AgentToolCall | AgentToolCall[], open = false) {
   return (
     <AgentToolLine
-      call={call}
+      calls={Array.isArray(call) ? call : [call]}
       app={{} as App}
       open={open}
       onToggle={jest.fn()}
@@ -26,9 +29,9 @@ function line(call: typeof ASK | { tool: string; agent: string; message: null },
   );
 }
 
-function inChat(element: React.ReactElement) {
+function inChat(element: React.ReactElement, agents = THREE_AGENTS) {
   return (
-    <ChatAgentsContext.Provider value={{ agents: THREE_AGENTS, self: "coco" }}>
+    <ChatAgentsContext.Provider value={{ agents, self: "coco" }}>
       {element}
     </ChatAgentsContext.Provider>
   );
@@ -46,6 +49,38 @@ describe("AgentToolLine", () => {
       rerender(inChat(line(ASK, true)));
 
       expect(screen.getByTestId("agent-markdown").textContent).toBe(SENT);
+    });
+
+    it(`names every agent asked one after another in one line with their faces, and opens to each message under its agent's name (${SEVERAL})`, () => {
+      const { container, rerender } = render(inChat(line([ASK, ASK_LEO])));
+
+      expect(screen.getByRole("button").textContent).toBe(`Asked Maya and Leo· ${SENT}`);
+      expect([...container.querySelectorAll("img")].map((img) => img.getAttribute("src"))).toEqual([
+        MAYA.faceSrc,
+        LEO.faceSrc,
+      ]);
+
+      rerender(inChat(line([ASK, ASK_LEO], true)));
+
+      expect(screen.getByRole("button").nextElementSibling?.textContent).toBe(
+        `Maya${SENT}LeoCheck the numbers.`
+      );
+    });
+
+    it(`lists three agents asked together with commas and a final "and" (${SEVERAL})`, () => {
+      const askNora: AgentToolCall = { tool: "ask_agent", agent: "Nora", message: SENT };
+
+      const { container } = render(inChat(line([ASK, ASK_LEO, askNora]), [...THREE_AGENTS, NORA]));
+
+      expect(container.querySelector("[role=button]")?.textContent).toBe(
+        `Asked Maya, Leo and Nora· ${SENT}`
+      );
+    });
+
+    it(`names an agent asked twice in a row once (${SEVERAL})`, () => {
+      render(inChat(line([ASK, { ...ASK, message: "And the intro?" }])));
+
+      expect(screen.getByRole("button").textContent).toBe(`Asked Maya· ${SENT}`);
     });
 
     it(`names the agent in a line of its own for the tools that send no message (${ISSUE})`, () => {

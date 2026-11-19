@@ -19,11 +19,16 @@ export interface AgentReplyRelay extends AgentReplyMarker {
   stopped?: "stopped_by_user" | "agent_deleted";
   declined?: boolean;
   question?: boolean;
+  stillWorking?: readonly string[];
 }
 
 export interface AgentReply {
   marker: AgentReplyMarker;
   reply: string;
+}
+
+export function joinNames(names: readonly string[]): string {
+  return names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
 }
 
 const MARKER_LINE = new RegExp(`^<!-- ${AGENT_REPLY_MARKER} (\\{[^\\n]*\\}) -->\\n`);
@@ -40,6 +45,7 @@ export function formatAgentReply({
   stopped,
   declined,
   question,
+  stillWorking = [],
 }: AgentReplyRelay): string {
   const marker = JSON.stringify({ agent, name, mention }).replace(/>/g, "\\u003e");
   // The reply can quote a note or page written to close the quote early and pass its own text off as Copilot's.
@@ -54,6 +60,13 @@ export function formatAgentReply({
         : error
           ? `${name} didn't finish (${error.trim()}). Tell the user how far ${name} got and why.`
           : `${name} replied. Pass the reply on to the user now.`,
+    // One message can ask several agents, and the user should hear who is still at it when the first reply comes back.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/949
+    ...(stillWorking.length > 0
+      ? [
+          `${joinNames(stillWorking)} ${stillWorking.length > 1 ? "are" : "is"} still working on what you asked. Tell the user so, and that you'll pass ${stillWorking.length > 1 ? "each" : "the"} reply on when it comes back.`,
+        ]
+      : []),
     ...(declined
       ? [`The user turned down a request from ${name} on a permission card in this chat.`]
       : []),
