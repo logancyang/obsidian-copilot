@@ -49,6 +49,9 @@ interface GlobalRecentChatsSectionProps {
   attentionChatIds?: ReadonlySet<string>;
   projectNamesById?: Readonly<Record<string, string>>;
   sortStrategy?: SortStrategy;
+  getIcon?: (item: ChatHistoryItem) => React.ComponentType<{ className?: string }> | undefined;
+  searchPlaceholder?: string;
+  emptyState?: React.ReactNode;
   className?: string;
 }
 
@@ -102,6 +105,7 @@ ChatIconTile.displayName = "ChatIconTile";
 interface RecentChatRowProps {
   item: ChatHistoryItem;
   projectName?: string;
+  Icon: React.ComponentType<{ className?: string }>;
   onOpen: (id: string) => void;
   actions: RecentChatActions;
   selection: ChatSelection<ChatHistoryItem>;
@@ -114,6 +118,7 @@ interface RecentChatRowProps {
 const RecentChatRow = memo(function RecentChatRow({
   item,
   projectName,
+  Icon,
   onOpen,
   actions,
   selection,
@@ -123,7 +128,6 @@ const RecentChatRow = memo(function RecentChatRow({
   hasAttention,
 }: RecentChatRowProps): React.ReactElement {
   const { onOpenSourceFile, onCloseSession, onSetChatPinned } = actions;
-  const Icon = chatBackendIcon(item);
   const [menuOpen, setMenuOpen] = useState(false);
   const pinned = isPinned(item);
   const selected = selection.isSelected(item.id);
@@ -244,6 +248,9 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
   attentionChatIds,
   projectNamesById,
   sortStrategy = "recent",
+  getIcon,
+  searchPlaceholder = "Search chats...",
+  emptyState,
   className,
 }: GlobalRecentChatsSectionProps): React.ReactElement {
   const [query, setQuery] = useState("");
@@ -321,6 +328,7 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
       key={item.id}
       item={item}
       projectName={getProjectName(item)}
+      Icon={getIcon?.(item) ?? chatBackendIcon(item)}
       onOpen={handleOpen}
       actions={actions}
       selection={selection}
@@ -342,7 +350,7 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
           <SearchBar
             value={query}
             onChange={handleQueryChange}
-            placeholder="Search chats..."
+            placeholder={searchPlaceholder}
             inputClassName="!tw-h-7"
           />
         </div>
@@ -351,9 +359,8 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
         <div className="tw-flex tw-flex-1 tw-items-center tw-justify-center tw-px-2 tw-py-1.5 tw-text-xs tw-text-muted">
           {items.length > 0
             ? "No matching chats"
-            : variant === "project"
-              ? "No chats in this project yet"
-              : "No recent chats"}
+            : (emptyState ??
+              (variant === "project" ? "No chats in this project yet" : "No recent chats"))}
         </div>
       ) : (
         <AgentHomePreviewList>

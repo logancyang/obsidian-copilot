@@ -77,7 +77,7 @@ export abstract class BasePillNode extends DecoratorNode<JSX.Element> implements
 
   exportDOM(editor: LexicalEditor): DOMExportOutput {
     const element = getEditorDocument(editor).win.createSpan({
-      text: this.__value,
+      text: this.getTextContent(),
       attr: { [this.getDataAttribute()]: "", "data-pill-value": this.__value },
     });
     return { element };

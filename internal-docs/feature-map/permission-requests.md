@@ -7,11 +7,13 @@
 - card-permission: `Permission required` says who wants to run what ("The agent wants to run …", or a subagent by name), with its `Type`, the change or `Show details`, and the agent's choices, such as `Allow once`, `Allow always`, and `Deny once`. An "always" choice explains on hover what it covers.
 - card-connector-tool: a connected service's write tool is named like its [reply](agent-replies.md) step: "The agent wants to run <service> · <tool>.", including OpenCode’s direct calls.
 - card-connector-batch: when OpenCode requests several connector tools, each write call has its own named approval; read-only calls run without a card.
+- card-mentioned-agent: an agent `@`-mentioned from this chat asks here: the card shows that agent's face and name in place of "The agent", and the answer goes back to it without a turn from the chat's own agent. See [agent mentions](agent-mentions.md).
 - card-task-approval: a background task waiting on a permission shows `Needs approval`; inside the task, "The chat is waiting for your answer." with `Open chat`.
 
 ## How to get to it
 
 - Choose `Safe` in `Mode` in the [chat input](chat-input.md), then ask the agent to create or edit a note.
+- Mentioned agent: with a license that includes Copilot Teammates, in `Safe` mode, send `@Maya add one line to <note>`. `Permission required` shows Maya's face and "Maya wants to run …". Choose `Allow once`: the note changes and the chat's agent passes on Maya's reply.
 - Task approval: in `Safe` mode, ask the agent to run a background subagent that edits a note. Open the task from its card in the conversation or from `N tasks running` in the [chat controls](chat-controls.md).
 
 ## Driving it

@@ -68,7 +68,7 @@ display name is blank, the picker shows the provider's internal ID instead.
 
 A model or effort picked beside the message box applies to that chat; it does
 not replace the saved **Default model** or **Default effort**. Saved agent
-defaults are used for new chats and multi-agent answers. Changes to an explicit
+defaults are used for new chats. Changes to an explicit
 default apply to open chats on their next turn; choosing **Agent default**
 leaves open chats unchanged.
 

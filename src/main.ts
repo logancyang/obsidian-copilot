@@ -1,7 +1,9 @@
 import { startReleaseUpdateCheck } from "@/services/releaseUpdateNotice";
 import { releaseCursorAssociation } from "@/editor/releaseCursorAssociation";
 import { registerNoteHeaderAction } from "@/editor/registerNoteHeaderAction";
-import type { AgentSessionManager, SkillManager } from "@/agentMode";
+import type { AgentSessionManager, HiddenAgentChats, SkillManager } from "@/agentMode";
+import { CustomAgentStore, runCustomAgentStoreWhileEnabled } from "@/agents/CustomAgentStore";
+import { registerStartAgentChatCommand } from "@/agents/startAgentChatCommand";
 import { isNativeChatId, parseNativeChatId } from "@/utils/nativeChatId";
 import {
   buildChatDeepLink,
@@ -184,6 +186,8 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
   customConnectors?: CustomConnectors;
   openArtifactsPublisher!: OpenArtifactsPublisher;
   skills?: SkillManager;
+  customAgents?: CustomAgentStore;
+  hiddenAgentChats?: HiddenAgentChats;
   private CopilotAgentView?: typeof import("@/agentMode").CopilotAgentView;
   private PlanPreviewView?: typeof import("@/agentMode").PlanPreviewView;
   private TurnDiffView?: typeof import("@/agentMode").TurnDiffView;
@@ -393,6 +397,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
           registerTurnDiffCommands,
           acpFrameSink,
           createAgentSessionManager,
+          startCustomAgentChat,
           MAX_PROVIDED_TOOL_NAME_LENGTH,
           setFrameSinkVaultBasePath,
           SkillManager,
@@ -453,8 +458,18 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
       this.register(() => connectionManager.dispose());
       void connectionManager.checkStatus();
 
-      this.agentSessionManager = createAgentSessionManager(this.app, this);
+      const agentSessionManager = createAgentSessionManager(this.app, this);
+      this.agentSessionManager = agentSessionManager;
       this.skills = SkillManager.getInstance();
+      const customAgents = new CustomAgentStore(this.app);
+      this.customAgents = customAgents;
+      this.register(runCustomAgentStoreWhileEnabled(customAgents));
+      this.register(
+        registerStartAgentChatCommand(this, customAgents, async (agent) => {
+          await this.activateAgentView();
+          await startCustomAgentChat(agentSessionManager, agent);
+        })
+      );
       this.agentModelDiscoveryUnsubscriber = wireAgentModelDiscovery(
         this,
         this.agentSessionManager

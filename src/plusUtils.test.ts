@@ -165,7 +165,7 @@ describe("plusUtils", () => {
   describe("navigateToPlusPage()", () => {
     afterEach(() => jest.restoreAllMocks());
 
-    it.each(["settings", "multi_agent", "chat_mode_select", "expired_modal"] as const)(
+    it.each(["settings", "navigator_dialog", "chat_mode_select", "expired_modal"] as const)(
       "opens pricing with the %s placement and shared source — https://github.com/Brevilabs/obsidian-copilot-private/issues/640",
       (medium) => {
         const open = jest.spyOn(window, "open").mockImplementation(() => null);

@@ -5,7 +5,6 @@ import type {
   AgentChatMessage,
   AgentQuestionAnswers,
   AskUserQuestionPrompt,
-  BackendId,
   BackendState,
   CurrentPlan,
   PermissionPrompt,
@@ -21,8 +20,7 @@ export interface AgentChatBackend extends ChatStateHost {
   sendMessage(
     text: string,
     context?: MessageContext,
-    promptContent?: PromptContent[],
-    mentionedAgents?: ReadonlyArray<BackendId>
+    promptContent?: PromptContent[]
   ): { id: string; turn: Promise<void> };
   acceptsMidTurnMessages(): boolean;
   getQueuedPrompts(): readonly QueuedPrompt[];

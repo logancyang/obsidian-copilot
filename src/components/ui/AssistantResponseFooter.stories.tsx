@@ -32,20 +32,33 @@ const CompletedDuration: React.FC = () => (
   </div>
 );
 
+const SENT_AT = new Date(2026, 10, 18, 14, 2, 11).getTime();
+
 const CompletedResponseVariantsDemo: React.FC = () => (
   <div className="tw-flex tw-min-w-0 tw-flex-col tw-gap-5">
-    <section className="tw-min-w-0">
-      <div className="tw-mb-2 tw-text-xs tw-font-medium tw-text-muted">Completed duration</div>
+    <section className="tw-group/response tw-min-w-0">
+      <div className="tw-mb-2 tw-text-xs tw-font-medium tw-text-muted">
+        Newest response: dimmed at rest, full strength while pointed at
+      </div>
       <AssistantResponseFooter
         leading={<CompletedDuration />}
-        timestamp="2026/08/07 20:31:10"
+        timestampMs={SENT_AT}
         actions={<StoryActions />}
       />
     </section>
 
+    <section className="tw-group/response tw-min-w-0">
+      <div className="tw-mb-2 tw-text-xs tw-font-medium tw-text-muted">
+        Older response: its time shows while pointed at
+      </div>
+      <AssistantResponseFooter timestampMs={SENT_AT} actions={<StoryActions />} />
+    </section>
+
     <section className="tw-min-w-0">
-      <div className="tw-mb-2 tw-text-xs tw-font-medium tw-text-muted">Timestamp fallback</div>
-      <AssistantResponseFooter timestamp="2026/08/07 20:31:10" actions={<StoryActions />} />
+      <div className="tw-mb-2 tw-text-xs tw-font-medium tw-text-muted">
+        Shown at rest, as in a user message's bar
+      </div>
+      <AssistantResponseFooter timestampMs={SENT_AT} actions={<StoryActions />} shownAtRest />
     </section>
   </div>
 );

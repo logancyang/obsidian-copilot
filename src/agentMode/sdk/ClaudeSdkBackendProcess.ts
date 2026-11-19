@@ -36,6 +36,7 @@ import type {
   PermissionPrompt,
   PromptInput,
   ResumeSessionInput,
+  SessionAgent,
   ResumeSessionOutput,
   SessionEvent,
   SessionId,
@@ -77,6 +78,8 @@ interface SessionState {
   live?: ClaudeLiveQuery;
   starting?: Promise<ClaudeLiveQuery>;
   systemPromptAppend: string;
+  customAgent: boolean;
+  agentMemoryPath?: string;
 }
 
 // Subagents run in the background unless the model chooses: the chat lists them as tasks and their reports start replies, while a model that needs a result before going on can still wait on it. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
@@ -203,7 +206,6 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
   private permissionPrompter: ((req: PermissionPrompt) => Promise<PermissionDecision>) | null =
     null;
   private askUserQuestionPrompter: AskUserQuestionPrompter | null = null;
-  private isReadOnlySession: ((sessionId: SessionId) => boolean) | null = null;
   private exitListeners = new Set<() => void>();
   private shuttingDown = false;
   private cachedModels: ModelInfo[] | null = null;
@@ -231,16 +233,13 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     this.permissionPrompter = fn;
   }
 
-  setReadOnlySessionPredicate(fn: (sessionId: SessionId) => boolean): void {
-    this.isReadOnlySession = fn;
-  }
-
   setAskUserQuestionPrompter(fn: AskUserQuestionPrompter): void {
     this.askUserQuestionPrompter = fn;
   }
 
-  private resolveSystemPromptAppend(): string {
-    return this.opts.getSystemPromptAppend?.() ?? "";
+  private resolveSystemPromptAppend(agent: SessionAgent | undefined): string {
+    const shared = this.opts.getSystemPromptAppend?.() ?? "";
+    return agent ? [shared, agent.prompt].filter(Boolean).join("\n\n") : shared;
   }
 
   registerSessionHandler(sessionId: SessionId, handler: SessionUpdateHandler): () => void {
@@ -292,7 +291,9 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       hasTranscript: false,
       model: seedModelId,
       mcpServers: params.mcpServers,
-      systemPromptAppend: this.resolveSystemPromptAppend(),
+      systemPromptAppend: this.resolveSystemPromptAppend(params.agent),
+      customAgent: params.agent !== undefined,
+      agentMemoryPath: params.agent?.memoryPath,
       translator: createTranslatorState(),
     });
 
@@ -371,7 +372,8 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       getPrompter: () => this.permissionPrompter,
       getAskUserQuestionPrompter: () => this.askUserQuestionPrompter,
       isPlanModePlanFilePath: this.opts.isPlanModePlanFilePath,
-      getIsReadOnlySession: () => this.isReadOnlySession,
+      agentMemoryPath: session.agentMemoryPath,
+      isPlanMode: () => session.permissionMode === "plan",
       getModeAfterPlanApproval: () => session.lastNonPlanPromptMode ?? this.autoPermissionMode(),
     });
 
@@ -429,7 +431,9 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     options.thinking = session.thinking
       ? { type: "adaptive", display: "summarized" }
       : { type: "disabled" };
-    options.env = env;
+    // Claude Code's own auto memory would be a second place a custom agent saves rules, so its MEMORY.md stays the only one.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/942
+    options.env = session.customAgent ? { ...env, CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1" } : env;
 
     if (this.sessions.get(sessionId) !== session) {
       throw new Error(`Session ${sessionId} closed before its prompt was sent`);
@@ -658,7 +662,9 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       hasTranscript: true,
       model: seedModelId,
       mcpServers: params.mcpServers,
-      systemPromptAppend: this.resolveSystemPromptAppend(),
+      systemPromptAppend: this.resolveSystemPromptAppend(params.agent),
+      customAgent: params.agent !== undefined,
+      agentMemoryPath: params.agent?.memoryPath,
       translator: createTranslatorState(claudeTaskPlan),
     });
 

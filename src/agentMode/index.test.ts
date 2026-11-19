@@ -3,7 +3,8 @@ import type CopilotPlugin from "@/main";
 import type { CopilotSettings } from "@/settings/model";
 import type { InstallState } from "./session/types";
 import type { BuiltinSkillRuntime } from "./skills/SkillManager";
-import { createAgentSessionManager, isCopilotToolOn } from "./index";
+import { createAgentSessionManager, isCopilotToolOn, startCustomAgentChat } from "./index";
+import { loadAgentSessionPrompt } from "@/agents/agentSessionPrompt";
 import { trackTabStripShown } from "./ui/trackTabStripShown";
 import { AgentSessionManager } from "./session/AgentSessionManager";
 import { reconcileBuiltinSkills } from "./skills/builtin/reconcileBuiltinSkills";
@@ -11,6 +12,10 @@ import { BackendConfigRegistry } from "@/modelManagement";
 import { isObsidianCliEnabled } from "@/services/obsidianCli/ObsidianCliClient";
 import { createCopilotMcpServer } from "./session/copilotMcpServer";
 import { isConnectorsEnabled } from "@/connectors/connectorsEntitlement";
+import { createDefaultPermissionPrompter } from "./ui/permissionPrompter";
+import { fakeChat } from "./session/testing/fakeChat";
+import { buildNativeChatId } from "@/utils/nativeChatId";
+import { AGENT_DRAFT_CARD, AGENT_DRAFT_CARD_EXTENSION } from "@/agents/agentMode/agentDraftCard";
 
 jest.mock("@/constants", () => ({}));
 jest.mock("@/logger", () => ({ logError: jest.fn() }));
@@ -39,20 +44,30 @@ jest.mock("@/utils/appPaths", () => ({
 }));
 jest.mock("./backends/shared/agentSystemPrompt", () => ({
   buildAgentSystemPrompt: (id: string, app: { plugins?: { getPlugin(id: string): unknown } }) =>
-    `prompt:${id}:${JSON.stringify(mockSettings.agentMode.skills.builtinPreferences ?? {})}:${mockSettings.agentMode.offerFeedbackCards}:${mockSettings.enableMiyoSearchSkill}:${mockSettings.enableMiyoDocumentProcessing}:${app.plugins?.getPlugin("obsidian-excalidraw-plugin") != null}:${jest.requireMock<typeof import("@/services/obsidianCli/ObsidianCliClient")>("@/services/obsidianCli/ObsidianCliClient").isObsidianCliEnabled()}`,
+    `prompt:${id}:${mockCustomAgentsGate}:${JSON.stringify(mockSettings.agentMode.skills.builtinPreferences ?? {})}:${mockSettings.agentMode.offerFeedbackCards}:${mockSettings.enableMiyoSearchSkill}:${mockSettings.enableMiyoDocumentProcessing}:${app.plugins?.getPlugin("obsidian-excalidraw-plugin") != null}:${jest.requireMock<typeof import("@/services/obsidianCli/ObsidianCliClient")>("@/services/obsidianCli/ObsidianCliClient").isObsidianCliEnabled()}`,
 }));
 jest.mock("./backends/shared/builtinSkillEnv", () => ({
   getBuiltinSkillEnvRestartPolicy: () => "none",
 }));
 jest.mock("./backends/registry", () => ({
   backendRegistry: {},
+  getActiveBackendDescriptor: () => mockDescriptors[0],
   listBackendDescriptors: () => mockDescriptors,
+  findBackendForModel: (settings: unknown, baseModelId: string) =>
+    mockDescriptors.find((descriptor) =>
+      (descriptor as { getEnabledModelEntries?: (s: unknown) => { baseModelId: string }[] })
+        .getEnabledModelEntries?.(settings)
+        ?.some((entry) => entry.baseModelId === baseModelId)
+    ),
 }));
 jest.mock("./session/AgentChatPersistenceManager", () => ({
   AgentChatPersistenceManager: jest.fn(),
 }));
 jest.mock("./session/AgentModelPreloader", () => ({ AgentModelPreloader: jest.fn() }));
-jest.mock("./session/AgentSessionIndex", () => ({ AgentSessionIndex: jest.fn() }));
+let mockAskedConversations: unknown[] = [];
+jest.mock("./session/AgentSessionIndex", () => ({
+  AgentSessionIndex: jest.fn(() => ({ getAskedConversations: async () => mockAskedConversations })),
+}));
 jest.mock("./session/nodeFileStorage", () => ({ createNodeFileStorage: jest.fn() }));
 jest.mock("./session/AgentSessionManager", () => ({
   AgentSessionManager: jest.fn(() => mockManager),
@@ -97,6 +112,17 @@ jest.mock("./session/debugSink", () => ({}));
 jest.mock("./backends/shared/ui/AgentBackendHeader", () => ({}));
 jest.mock("./session/useBackendAuthState", () => ({}));
 jest.mock("@/connectors/connectorsEntitlement", () => ({ isConnectorsEnabled: jest.fn() }));
+jest.mock("@/agents/agentSessionPrompt", () => ({ loadAgentSessionPrompt: jest.fn() }));
+let mockCustomAgentsGate = "full";
+const mockGateListeners: Array<() => void> = [];
+jest.mock("@/agents/customAgentsGate", () => ({
+  getCustomAgentsGate: () => mockCustomAgentsGate,
+  subscribeToCustomAgentsGate: (listener: () => void) => {
+    mockGateListeners.push(listener);
+    return () => {};
+  },
+}));
+jest.mock("@/utils/vaultPath", () => ({ getVaultBase: () => "/vault" }));
 
 const ISSUE = "https://github.com/logancyang/obsidian-copilot/issues/3022";
 
@@ -190,9 +216,13 @@ describe("agentMode", () => {
       jest.mocked(isObsidianCliEnabled).mockReturnValue(false);
       mockRefresh.mockImplementation(() => mockRuntime.prepare("copilot/skills"));
       mockSettingsSubscribers.length = 0;
+      mockGateListeners.length = 0;
+      mockAskedConversations = [];
+      mockCustomAgentsGate = "full";
       mockSettings = settingsWith({ reasoning: true });
       plugin = {
         manifest: { id: "copilot" },
+        register: jest.fn(),
         modelManagement: {
           providerRegistry: { subscribe: jest.fn() },
           backendConfigRegistry: new BackendConfigRegistry(
@@ -216,6 +246,25 @@ describe("agentMode", () => {
       expect(reconcile).toHaveBeenLastCalledWith(
         expect.objectContaining({ settings: expect.objectContaining({ plusLicenseKey: "" }) })
       );
+    });
+
+    it("gives the manager the plugin's custom agents to start a chat as one", async () => {
+      const agent = {
+        slug: "coco",
+        name: "Coco",
+        prompt: "In this chat you are Coco.",
+        memoryPath: "/vault/copilot/agents/coco/MEMORY.md",
+      };
+      jest.mocked(loadAgentSessionPrompt).mockResolvedValueOnce(agent);
+      const customAgents = {};
+      createAgentSessionManager({} as App, { ...plugin, customAgents } as unknown as CopilotPlugin);
+
+      const resolved = await jest
+        .mocked(AgentSessionManager)
+        .mock.calls[0][2].resolveAgent?.("coco");
+
+      expect(resolved).toBe(agent);
+      expect(loadAgentSessionPrompt).toHaveBeenCalledWith(customAgents, "coco", "/vault");
     });
 
     it("tells the manager whether a tab strip holds its chats as the workspace layout changes for https://github.com/Brevilabs/obsidian-copilot-private/issues/849", () => {
@@ -331,6 +380,24 @@ describe("agentMode", () => {
         "system prompt changed"
       );
       expect(reconcile).toHaveBeenCalledTimes(passes);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/959 re-checks the shared prompt as soon as the custom agents gate changes, so a stored license verified after start doesn't restart the backends at the next agent start", async () => {
+      mockCustomAgentsGate = "pending";
+      createAgentSessionManager({} as App, plugin);
+      await mockManager.registerPreload.mock.calls[0][1];
+
+      mockCustomAgentsGate = "full";
+      mockGateListeners.forEach((listener) => listener());
+      expect(mockManager.noteSpawnConfigChanged).toHaveBeenCalledWith(
+        "opencode",
+        "system prompt changed"
+      );
+
+      mockManager.noteSpawnConfigChanged.mockClear();
+      const { beforeBackendStart } = jest.mocked(AgentSessionManager).mock.calls[0][2];
+      await beforeBackendStart!("claude");
+      expect(mockManager.noteSpawnConfigChanged).not.toHaveBeenCalled();
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/787 offers a reload when the Excalidraw plugin is turned on between agent starts, so new chats gain the Excalidraw steering, without re-reconciling skills", async () => {
@@ -693,6 +760,182 @@ describe("agentMode", () => {
       expect(connectorCardsExtension()).toBeUndefined();
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/944 offers ask_agent among Copilot's tools and stops the agents it asked when the plugin unloads", () => {
+      createAgentSessionManager({} as App, plugin);
+
+      const hosted = jest.mocked(createCopilotMcpServer).mock.calls[0][1];
+      expect(hosted.map(({ definition }) => definition.name)).toContain("ask_agent");
+      expect(plugin.register).toHaveBeenCalledWith(expect.any(Function));
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/944 has the agents list Copilot's tools again when custom agents turn unavailable or available, so OpenCode's shared listing follows a license entered while it runs", () => {
+      const notifyToolsChanged = jest.fn();
+      const { createCopilotMcpServer: create } = jest.requireActual<
+        typeof import("./session/copilotMcpServer")
+      >("./session/copilotMcpServer");
+      jest
+        .mocked(createCopilotMcpServer)
+        .mockImplementationOnce((...args) => ({ ...create(...args), notifyToolsChanged }));
+      createAgentSessionManager({} as App, plugin);
+
+      mockCustomAgentsGate = "locked";
+      mockGateListeners.forEach((listener) => listener());
+      mockGateListeners.forEach((listener) => listener());
+      mockCustomAgentsGate = "full";
+      mockGateListeners.forEach((listener) => listener());
+
+      expect(notifyToolsChanged).toHaveBeenCalledTimes(2);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/945 offers check_agent, answer_agent, stop_agent and ask_user and hands the profile's delete the asked agents' chats to stop", () => {
+      createAgentSessionManager({} as App, plugin);
+
+      const hosted = jest.mocked(createCopilotMcpServer).mock.calls[0][1];
+      expect(hosted.map(({ definition }) => definition.name)).toEqual(
+        expect.arrayContaining(["check_agent", "answer_agent", "stop_agent", "ask_user"])
+      );
+      expect(plugin.hiddenAgentChats).toEqual(
+        expect.objectContaining({ stopAgent: expect.any(Function) })
+      );
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/941 offers draft_agent to every chat the user sees, with or without a custom agent, refuses a hidden chat's call, and keeps the draft card with the chat", async () => {
+      const coco = Object.assign(fakeChat(), { agentSlug: "coco" });
+      const copilot = Object.assign(fakeChat(), { agentSlug: null });
+      Object.assign(mockManager, {
+        getSession: (key: string) => ({ "coco-chat": coco, "copilot-chat": copilot })[key],
+        getSessions: () => [coco, copilot],
+        isUnlistedSession: (key: string) => key === "hidden-chat",
+      });
+      createAgentSessionManager({} as App, plugin);
+      const draftAgent = jest
+        .mocked(createCopilotMcpServer)
+        .mock.calls[0][1].find(({ definition }) => definition.name === "draft_agent")!;
+      const listedFor = (sessionKey: string) =>
+        draftAgent.listedAs?.({ sessionKey, backendId: "claude" }) ?? null;
+      const nora = { name: "Nora", title: "", instruction: "You plan pickups." };
+
+      expect(listedFor("coco-chat")).not.toBeNull();
+      expect(listedFor("copilot-chat")).not.toBeNull();
+      expect(listedFor("hidden-chat")).toBeNull();
+      expect((await draftAgent.call(nora, fakeChat())).text).toContain(
+        "Only a chat the user sees can draft an agent"
+      );
+      expect((await draftAgent.call(nora, coco)).text).toContain("Shown to the user as a card");
+      expect(coco.readChatState(AGENT_DRAFT_CARD)?.draftedBy).toBe("coco");
+      expect((await draftAgent.call(nora, copilot)).text).toContain("Shown to the user as a card");
+      expect(copilot.readChatState(AGENT_DRAFT_CARD)?.draftedBy).toBeNull();
+      expect(jest.mocked(AgentSessionManager).mock.calls[0][2].chatExtensions).toContain(
+        AGENT_DRAFT_CARD_EXTENSION
+      );
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/959 lists a chat's own earlier chats without the calling chat, and tells an asked agent's hidden chat it has none", async () => {
+      const at = new Date(2026, 10, 11);
+      const item = (id: string, title: string, agent?: string) => ({
+        id,
+        title,
+        createdAt: at,
+        lastAccessedAt: at,
+        ...(agent ? { agent } : {}),
+      });
+      const juno = Object.assign(fakeChat(), {
+        agentSlug: "juno",
+        internalId: "juno-chat",
+        backendId: "claude",
+        getBackendSessionId: () => "s-now",
+      });
+      Object.assign(mockManager, {
+        getSessions: () => [juno],
+        getSessionSourcePath: (internalId: string) =>
+          internalId === "juno-chat" ? "chats/this-chat.md" : "",
+        getChatHistoryItems: async () => [
+          item("chats/this-chat.md", "This chat", "juno"),
+          item(buildNativeChatId("claude", "s-now"), "This chat, by its backend id", "juno"),
+          item("chats/plan.md", "Release video plan", "juno"),
+          item("chats/rex.md", "Podcast sponsorship", "rex"),
+        ],
+      });
+      createAgentSessionManager({} as App, plugin);
+      const listChats = jest
+        .mocked(createCopilotMcpServer)
+        .mock.calls[0][1].find(({ definition }) => definition.name === "list_chats")!;
+
+      expect((await listChats.call({}, fakeChat())).text).toContain(
+        "Another agent asked you into this chat, so it has no earlier chats with the user."
+      );
+      const { text } = await listChats.call({}, juno);
+      expect(text).toContain("- 2026-11-11 · Release video plan · /vault/chats/plan.md");
+      expect(text).not.toContain("This chat");
+      expect(text).not.toContain("Podcast sponsorship");
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/980 lists the conversations the calling agent was asked into, naming who asked and the asking chat by its title", async () => {
+      const at = new Date(2026, 10, 11);
+      const juno = Object.assign(fakeChat(), {
+        agentSlug: "juno",
+        internalId: "juno-chat",
+        backendId: "claude",
+        getBackendSessionId: () => "s-now",
+      });
+      Object.assign(mockManager, {
+        getSessions: () => [juno],
+        getSessionSourcePath: () => "",
+        getChatHistoryItems: async () => [
+          {
+            id: "chats/rex.md",
+            title: "Podcast sponsorship",
+            createdAt: at,
+            lastAccessedAt: at,
+            agent: "rex",
+            backendId: "codex",
+            sessionId: "rex-chat",
+          },
+        ],
+      });
+      mockAskedConversations = [
+        {
+          backendId: "claude",
+          sessionId: "juno-hidden",
+          agent: "juno",
+          askedBy: "rex",
+          askedIn: { backendId: "codex", sessionId: "rex-chat" },
+          firstAtMs: at.getTime(),
+          lastAtMs: at.getTime(),
+          asks: 1,
+          firstAsk: "Which sponsor fits?",
+          latestAnswer: "The note-taking app.",
+          ending: "finished",
+        },
+      ];
+      const customAgents = { getAgents: () => [{ slug: "rex", name: "Rex" }] };
+      createAgentSessionManager({} as App, { ...plugin, customAgents } as unknown as CopilotPlugin);
+      const listChats = jest
+        .mocked(createCopilotMcpServer)
+        .mock.calls[0][1].find(({ definition }) => definition.name === "list_chats")!;
+
+      const { text } = await listChats.call({}, juno);
+
+      expect(text).toContain(
+        '- 2026-11-11 · Rex asked you in "Podcast sponsorship" · times asked: 1 · first ask: "Which sponsor fits?" · your latest answer: "The note-taking app."'
+      );
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/944 hands a permission request no asked agent made to the chat's own prompter", async () => {
+      const chatPrompter = jest.fn(async () => ({ outcome: { outcome: "cancelled" as const } }));
+      jest.mocked(createDefaultPermissionPrompter).mockReturnValueOnce(chatPrompter);
+      createAgentSessionManager({} as App, plugin);
+      const request = {
+        sessionId: "chat-session",
+        toolCall: { toolCallId: "t", title: "Edit" },
+        options: [],
+      };
+
+      await jest.mocked(AgentSessionManager).mock.calls[0][2].permissionPrompter(request);
+
+      expect(chatPrompter).toHaveBeenCalledWith(request);
+    });
+
     it(`retains only previously ready agents during compatibility checks ${ISSUE}`, async () => {
       createAgentSessionManager({} as App, plugin);
       await mockManager.registerPreload.mock.calls[0][1];
@@ -705,6 +948,65 @@ describe("agentMode", () => {
       expect(reconcile).toHaveBeenLastCalledWith(
         expect.objectContaining({ availableAgents: ["claude"] })
       );
+    });
+  });
+
+  describe("startCustomAgentChat()", () => {
+    function startWith(model: { baseModelId: string; effort: string | null } | null) {
+      const manager = {
+        getSeedSelection: jest.fn((_backendId: string, preferred: unknown) => preferred),
+        createSession: jest.fn(async () => ({})),
+      };
+      mockDescriptors.forEach((descriptor) => {
+        mockStates[descriptor.id] = { kind: "ready", source: "managed" };
+        Object.assign(descriptor, {
+          getEnabledModelEntries: () => [
+            { baseModelId: `${descriptor.id}-model`, credentialState: "ok" },
+          ],
+        });
+      });
+      const started = startCustomAgentChat(manager as unknown as AgentSessionManager, {
+        slug: "coco",
+        name: "Coco",
+        model,
+      });
+      return { manager, started };
+    }
+
+    it("starts the agent's chat as that agent on the backend that runs its model, on that model", async () => {
+      const model = { baseModelId: "opencode-model", effort: null };
+
+      const { manager, started } = startWith(model);
+      await started;
+
+      expect(manager.createSession).toHaveBeenCalledWith(
+        "opencode",
+        undefined,
+        model,
+        undefined,
+        "coco"
+      );
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/937 starts an agent with no model on the default agent backend and its default model", async () => {
+      const { manager, started } = startWith(null);
+      await started;
+
+      expect(manager.getSeedSelection).not.toHaveBeenCalled();
+      expect(manager.createSession).toHaveBeenCalledWith(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        "coco"
+      );
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/962 refuses an agent whose model no backend runs here, before any chat opens", async () => {
+      const { manager, started } = startWith({ baseModelId: "gpt-6", effort: null });
+
+      await expect(started).rejects.toThrow("Coco's model, gpt-6, isn't available on this device.");
+      expect(manager.createSession).not.toHaveBeenCalled();
     });
   });
 });

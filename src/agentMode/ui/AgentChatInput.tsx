@@ -1,6 +1,5 @@
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import { expandCustomCommandPrefix } from "@/agentMode/session/expandCustomCommandPrefix";
-import { useCanUseMultiAgent } from "@/agentMode/session/fanout/multiAgentEntitlement";
 import { resolveActiveNoteToken } from "@/agentMode/session/resolveActiveNoteToken";
 import type { QueuedAgentMessage } from "@/agentMode/session/AgentInputDraftStore";
 import type { PromptContent, QueuedPrompt } from "@/agentMode/session/types";
@@ -17,19 +16,12 @@ import ChatInput, {
   type ChatInputHandle,
   type ChatInputProps,
 } from "@/components/chat-components/ChatInput";
-import { EMPTY_AGENT_MENTION_BRANDS } from "@/components/chat-components/hooks/useAtMentionCategories";
 import { useActiveWebTabState } from "@/components/chat-components/hooks/useActiveWebTabState";
 import { ACTIVE_NOTE_MENTION, ACTIVE_WEB_TAB_MARKER, EVENT_NAMES } from "@/constants";
 import { EventTargetContext } from "@/context";
+import { mentionedAgentNames } from "@/agents/agentMentionPrompt";
+import { useMentionableAgents } from "@/agents/ui/chatAgents";
 import { logError, logWarn } from "@/logger";
-import {
-  isFanout,
-  resolveAnswerers,
-  useInstalledAgentBrands,
-} from "@/agentMode/ui/mentionedAgents";
-import type { BackendId } from "@/agentMode/session/types";
-import type CopilotPlugin from "@/main";
-import { getCloudAgentIds } from "@/agentMode/backends/registry";
 import { buildWebTabsWithActiveSnapshot } from "@/services/webViewerService/activeWebTabSnapshot";
 import {
   isNoteSelectedTextContext,
@@ -42,17 +34,15 @@ import { modelSupportsVision } from "@/utils";
 import { arrayBufferToBase64, base64ToArrayBuffer } from "@/utils/base64";
 import { mergeWebTabContexts } from "@/utils/urlNormalization";
 import { App, Notice, TFile } from "obsidian";
-import React, { memo, useCallback, useContext, useEffect, useMemo, useRef } from "react";
+import React, { memo, useCallback, useContext, useEffect, useRef } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
 interface AgentChatInputProps {
   backend: AgentChatBackend;
-  plugin: CopilotPlugin;
   chatInputId: string;
   draft: AgentInputDraftControls;
   app: App;
-  mainAgentId: BackendId | null;
   updateUserMessageHistory: (newMessage: string) => void;
   isStarting: boolean;
   isLoading: boolean;
@@ -66,6 +56,7 @@ interface AgentChatInputProps {
   disabled?: boolean;
   projectFolderPath?: string;
   hasChatMovedFrom: (backend: AgentChatBackend) => boolean;
+  placeholder?: string;
 }
 
 const dedupeBy = <T,>(items: Iterable<T>, key: (item: T) => string): T[] => {
@@ -84,9 +75,16 @@ const buildMessageContext = (
   notes: TFile[],
   selected: readonly SelectedTextContext[],
   webTabs: readonly WebTabContext[],
-  folders: readonly string[]
+  folders: readonly string[],
+  agents: readonly string[] = []
 ): MessageContext | undefined => {
-  if (notes.length === 0 && selected.length === 0 && webTabs.length === 0 && folders.length === 0)
+  if (
+    notes.length === 0 &&
+    selected.length === 0 &&
+    webTabs.length === 0 &&
+    folders.length === 0 &&
+    agents.length === 0
+  )
     return undefined;
   return {
     notes,
@@ -94,6 +92,7 @@ const buildMessageContext = (
     folders: folders.length > 0 ? [...folders] : undefined,
     selectedTextContexts: selected.length > 0 ? [...selected] : undefined,
     webTabs: webTabs.length > 0 ? [...webTabs] : undefined,
+    agents: agents.length > 0 ? [...agents] : undefined,
   };
 };
 
@@ -104,11 +103,8 @@ const combineQueuedMessages = (items: QueuedAgentMessage[]): QueuedAgentMessage 
   const allSelected = items.flatMap((i) => i.context?.selectedTextContexts ?? []);
   const allWebTabs = items.flatMap((i) => i.context?.webTabs ?? []);
   const allFolders = items.flatMap((i) => i.context?.folders ?? []);
+  const allAgents = items.flatMap((i) => i.context?.agents ?? []);
   const allPromptContent = items.flatMap((i) => i.promptContent ?? []);
-  const mergedAgents = dedupeBy(
-    items.flatMap((i) => i.mentionedAgents ?? []),
-    (id) => id
-  );
 
   return {
     id: `queued-combined-${uuidv4()}`,
@@ -118,10 +114,10 @@ const combineQueuedMessages = (items: QueuedAgentMessage[]): QueuedAgentMessage 
       dedupeBy(allNotes, (n) => n.path),
       dedupeBy(allSelected, (s) => s.id),
       mergeWebTabContexts(allWebTabs),
-      dedupeBy(allFolders, (folder) => folder)
+      dedupeBy(allFolders, (folder) => folder),
+      dedupeBy(allAgents, (name) => name)
     ),
     promptContent: allPromptContent.length > 0 ? allPromptContent : undefined,
-    mentionedAgents: mergedAgents.length > 0 ? mergedAgents : undefined,
   };
 };
 
@@ -156,11 +152,9 @@ function imageBlockToFile(block: PromptContent, index: number): File | null {
 
 export const AgentChatInput = memo(function AgentChatInput({
   backend,
-  plugin,
   chatInputId,
   draft,
   app,
-  mainAgentId,
   updateUserMessageHistory,
   isStarting,
   isLoading: loading,
@@ -174,27 +168,16 @@ export const AgentChatInput = memo(function AgentChatInput({
   disabled = false,
   projectFolderPath,
   hasChatMovedFrom,
+  placeholder = "Ask anything • @ to add context • / for commands",
 }: AgentChatInputProps) {
   const eventTarget = useContext(EventTargetContext);
+  const mentionableAgents = useMentionableAgents();
   const chatInputRef = useRef<ChatInputHandle>(null);
 
   const selectedTextContexts = useSelectedTextContexts();
   const { activeWebTabForMentions } = useActiveWebTabState();
 
   const previousChatInputIdRef = useRef(chatInputId);
-
-  const canUseMultiAgent = useCanUseMultiAgent();
-
-  const installedAgentBrands = useInstalledAgentBrands(plugin);
-  const agentBrands = canUseMultiAgent ? installedAgentBrands : EMPTY_AGENT_MENTION_BRANDS;
-  const installedAgentIds = useMemo(
-    () => new Set(installedAgentBrands.map((b) => b.id)),
-    [installedAgentBrands]
-  );
-  const mentionedAgentIdsRef = useRef<string[]>([]);
-  const handleMentionedAgentsChange = useCallback((backendIds: string[]) => {
-    mentionedAgentIdsRef.current = backendIds;
-  }, []);
 
   const {
     input: inputMessage,
@@ -227,7 +210,6 @@ export const AgentChatInput = memo(function AgentChatInput({
     if (previousChatInputIdRef.current === chatInputId) return;
     previousChatInputIdRef.current = chatInputId;
     clearSelection();
-    mentionedAgentIdsRef.current = [];
   }, [chatInputId]);
 
   // Selected text remains ephemeral and is deliberately not restored.
@@ -245,7 +227,6 @@ export const AgentChatInput = memo(function AgentChatInput({
       if (restoredWebTabs.some((tab) => tab.url === activeUrl)) setIncludeActiveWebTab(true);
       chatInputRef.current?.prependContent(
         restored.text,
-        restored.mentionedAgents ?? [],
         restoredWebTabs.filter((tab) => tab.url !== activeUrl)
       );
       // A fixed copy of the active note would duplicate its Active Note badge and outlive that
@@ -301,12 +282,7 @@ export const AgentChatInput = memo(function AgentChatInput({
     async (item: QueuedAgentMessage) => {
       setLoading(true);
       try {
-        const { turn } = backend.sendMessage(
-          item.text,
-          item.context,
-          item.promptContent,
-          item.mentionedAgents
-        );
+        const { turn } = backend.sendMessage(item.text, item.context, item.promptContent);
         if (item.rawInput) updateUserMessageHistory(item.rawInput);
         await turn;
       } catch (error) {
@@ -387,16 +363,6 @@ export const AgentChatInput = memo(function AgentChatInput({
         return;
       }
 
-      let mentionedAgents: ReadonlyArray<BackendId> | undefined;
-      if (mainAgentId) {
-        const answerers = resolveAnswerers({
-          mentionedAgentIds: mentionedAgentIdsRef.current,
-          installedAgentIds,
-        });
-        if (isFanout(answerers, mainAgentId)) mentionedAgents = answerers;
-      }
-
-      mentionedAgentIdsRef.current = [];
       resetCompose();
       clearSelection();
 
@@ -417,9 +383,14 @@ export const AgentChatInput = memo(function AgentChatInput({
         id: `queued-${uuidv4()}`,
         text: resolvedText,
         rawInput,
-        context: buildMessageContext(notes, selectedTextContexts, resolvedWebTabs, folders),
+        context: buildMessageContext(
+          notes,
+          selectedTextContexts,
+          resolvedWebTabs,
+          folders,
+          mentionedAgentNames(resolvedText, mentionableAgents)
+        ),
         promptContent: content.length > 0 ? content : undefined,
-        mentionedAgents,
       };
 
       // A chat moved to another agent while its images were read is closing, and a message sent to it would vanish. The composer remounts for the new chat, so the draft goes back through the store.
@@ -437,13 +408,8 @@ export const AgentChatInput = memo(function AgentChatInput({
       }
 
       if (loading || isStarting || queuedPrompts.length > 0) {
-        // Compaction and multi-agent questions are whole turns of their own, so Copilot holds them until the agent finishes. https://github.com/Brevilabs/obsidian-copilot-private/issues/509
-        if (
-          !isStarting &&
-          acceptsMidTurnMessages &&
-          !isCompactCommand(item.text) &&
-          !item.mentionedAgents
-        ) {
+        // Compaction is a whole turn of its own, so Copilot holds it until the agent finishes. https://github.com/Brevilabs/obsidian-copilot-private/issues/509
+        if (!isStarting && acceptsMidTurnMessages && !isCompactCommand(item.text)) {
           sendMidTurn(item);
           return;
         }
@@ -468,12 +434,11 @@ export const AgentChatInput = memo(function AgentChatInput({
       acceptsMidTurnMessages,
       sendMidTurn,
       unsupportedImageModelLabel,
+      mentionableAgents,
       disabled,
       resetCompose,
       runSend,
       setQueuedMessages,
-      mainAgentId,
-      installedAgentIds,
       backend,
       hasChatMovedFrom,
       setInputMessage,
@@ -540,7 +505,7 @@ export const AgentChatInput = memo(function AgentChatInput({
           ref={chatInputRef}
           key={chatInputId}
           isAgentMode
-          placeholder="Ask anything • @ to add context • / for commands"
+          placeholder={placeholder}
           inputMessage={inputMessage}
           setInputMessage={setInputMessage}
           handleSendMessage={safeAsyncHandler(handleSendMessage)}
@@ -566,9 +531,6 @@ export const AgentChatInput = memo(function AgentChatInput({
           modePickerOverride={modePickerOverride ?? undefined}
           selectedTextContexts={selectedTextContexts}
           onRemoveSelectedText={dismissSelection}
-          agentBrands={agentBrands}
-          cloudAgentIds={getCloudAgentIds()}
-          onMentionedAgentsChange={handleMentionedAgentsChange}
           projectFolderPath={projectFolderPath}
         />
       </div>

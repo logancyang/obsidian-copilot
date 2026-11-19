@@ -53,7 +53,6 @@ Remaining behavioral gaps include the complete Settings navigation/save/reopen j
 - `src/agentMode/ui/AgentTabStrip.tsx`
 - `src/agentMode/ui/CopilotAgentView.tsx`
 - `src/agentMode/ui/CreateProjectPanel.tsx`
-- `src/agentMode/ui/FanoutMessageCard.tsx`
 - `src/agentMode/ui/PlanPreviewView.tsx`
 - `src/agentMode/ui/PlanProposalCard.tsx`
 - `src/agentMode/ui/ReportIssueModal.tsx`

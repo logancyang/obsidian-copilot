@@ -15,7 +15,7 @@ A sidebar listing chats and projects, available only as a preview for Supporters
 - nav-archived: `Sidebar options` → View archived lists archived chats and projects to open or unarchive, under the same rule.
 - nav-upgrade: without a Supporter license, opening it shows `Copilot Navigator is a preview for Supporters` instead.
 
-Each chat in the list is a [chat row](chat-rows.md).
+Each chat in the list is a [chat row](chat-rows.md). A chat with one of the user's agents starts with the agent's face in place of the logo, under Pinned, Projects, and Recents alike.
 
 ## How to get to it
 
@@ -31,6 +31,7 @@ Run the `Open Copilot Navigator` command, or choose `Open Copilot Navigator` at 
 - Folder: click a project row or press Enter on it. Its home opens. Choose the row's `Show/Hide chats in <project>` chevron, or focus it and press Enter or Space: the chats expand or collapse and the shown chat does not change.
 - New chat in a project: hover a folder and choose `New chat in <project>`. Agent Chat shows a new chat inside that project.
 - Project name: open a chat outside every project. Each project name is dimmed; open a chat in one project and its name brightens.
+- Agent faces: open the Navigator with chats from agents the user made and from Copilot. Agent chats show their agent's face, Copilot chats their logo; the running spinner and the unread bell stay at the right end.
 - Archived: choose `Sidebar options` → View archived. Archived chats are listed; Unarchive returns one to Recents.
 - Close: close the Navigator. The chat tabs return, one per chat still showing `Running`.
 

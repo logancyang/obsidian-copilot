@@ -1,4 +1,6 @@
 import { SessionsSidebarPanel } from "@/agentMode/navigator/ui/SessionsSidebarPanel";
+import { COCO, LEO, MAYA, NORA } from "@/agents/ui/testing/rosterFixtures";
+import { useAgentChatIcon } from "@/agents/ui/useAgentRecentChats";
 import {
   inertChatActions,
   sidebarChat,
@@ -349,4 +351,49 @@ export const SelectedChatsMenu: StoryObj<SessionsSidebarPanelProps> = {
     activeChatIds: new Set(["chats/recent-2.md"]),
   },
   render: SelectedChatsMenuPanel,
+};
+
+const NAVIGATOR_AGENTS = [COCO, LEO, MAYA, NORA];
+
+function WithAgentFaces(args: Partial<SessionsSidebarPanelProps>) {
+  return <WithToggleableFolders {...args} getIcon={useAgentChatIcon(NAVIGATOR_AGENTS)} />;
+}
+
+export const AgentAndCopilotChats: StoryObj<SessionsSidebarPanelProps> = {
+  args: {
+    items: [
+      sidebarChat("chats/ideas.md", "Ideas to talk through tonight", 900, {
+        pinnedAt: 1,
+        backendId: "claude",
+      }),
+      sidebarChat("chats/ads.md", "Budget for the launch video ads", 40, {
+        projectId: "launch",
+        backendId: "claude",
+        agent: "leo",
+      }),
+      sidebarChat("chats/shots.md", "Shot list from the release notes", 80, {
+        projectId: "launch",
+        backendId: "claude",
+        agent: "coco",
+      }),
+      sidebarChat("chats/plan.md", "Launch video plan", 2, { backendId: "claude", agent: "coco" }),
+      sidebarChat("chats/books.md", "October books", 10, { backendId: "claude", agent: "leo" }),
+      sidebarChat("chats/cut.md", "What to cut from the launch video", 30, {
+        backendId: "claude",
+        agent: "maya",
+      }),
+      sidebarChat("chats/notes.md", "Release notes 4.0.21", 60, { backendId: "claude" }),
+      sidebarChat("chats/winter.md", "Winter break schedule", 120, {
+        backendId: "claude",
+        agent: "nora",
+      }),
+    ],
+    projects: [sidebarProject("launch", "4.0.21 launch video")],
+    expandedProjectIds: new Set(["launch"]),
+    activeChatIds: new Set(["chats/plan.md"]),
+    openChatIds: new Set(["chats/plan.md", "chats/books.md"]),
+    runningChatIds: new Set(["chats/books.md"]),
+    attentionChatIds: new Set(["chats/cut.md"]),
+  },
+  render: WithAgentFaces,
 };

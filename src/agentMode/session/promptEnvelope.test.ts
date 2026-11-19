@@ -1,7 +1,6 @@
 import type { TFile } from "obsidian";
 import { USER_SENDER } from "@/constants";
 import { ContextProcessor } from "@/contextProcessor";
-import { FANOUT_READONLY_PREAMBLE } from "./fanout/fanoutTypes";
 import {
   buildPromptBlocks,
   buildUserDisplayContent,
@@ -9,7 +8,6 @@ import {
   extractText,
   serializeWebTabContext,
   stripUserMessageWrapper,
-  withReadOnlyPreamble,
 } from "./promptEnvelope";
 
 describe("promptEnvelope", () => {
@@ -137,6 +135,34 @@ describe("promptEnvelope", () => {
 
       expect((blocks[0] as { type: "text"; text: string }).text).toContain(
         "\n\nFolders:\n- Research\n</copilot-context>"
+      );
+    });
+
+    it("names the agents the user @-mentioned after the attached context, so the agent asks them (https://github.com/Brevilabs/obsidian-copilot-private/issues/947)", () => {
+      const blocks = buildPromptBlocks("@Maya what do you think of [[Launch plan]]?", {
+        notes: [makeFile("Plans/Launch plan.md")],
+        urls: [],
+        agents: ["Maya"],
+      });
+
+      expect((blocks[0] as { type: "text"; text: string }).text).toBe(
+        [
+          "<copilot-context>",
+          "The user attached the following vault items as context. The vault is your current working directory; open them if you need their contents.",
+          "",
+          "Notes:",
+          "- Plans/Launch plan.md",
+          "</copilot-context>",
+          "",
+          "<copilot-agents>",
+          "The user @-mentioned these agents in this message. Ask each of them with the ask_agent tool:",
+          "- Maya",
+          "</copilot-agents>",
+          "",
+          "<user-message>",
+          "@Maya what do you think of [[Launch plan]]?",
+          "</user-message>",
+        ].join("\n")
       );
     });
 
@@ -371,19 +397,6 @@ describe("promptEnvelope", () => {
         { type: "text", text: "describe this" },
         { type: "image_url", image_url: { url: "data:image/png;base64,AAA=" } },
       ]);
-    });
-  });
-
-  describe("withReadOnlyPreamble()", () => {
-    it("leads the first text block with the read-only instruction", () => {
-      const out = withReadOnlyPreamble([{ type: "text", text: "the question" }]);
-      expect(out).toEqual([{ type: "text", text: `${FANOUT_READONLY_PREAMBLE}\n\nthe question` }]);
-    });
-
-    it("inserts a leading text block when the prompt has none (image-only)", () => {
-      const out = withReadOnlyPreamble([{ type: "image", mimeType: "image/png", data: "x" }]);
-      expect(out[0]).toEqual({ type: "text", text: FANOUT_READONLY_PREAMBLE });
-      expect(out).toHaveLength(2);
     });
   });
 

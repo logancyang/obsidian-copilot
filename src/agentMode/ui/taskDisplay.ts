@@ -52,7 +52,10 @@ export function taskDisplayStatus(
 ): TaskDisplayStatus {
   if (task.status !== "running") return task.status;
   const asking = permissions.some(
-    (p) => typeof p.requester === "object" && p.requester.taskId === task.taskId
+    (p) =>
+      typeof p.requester === "object" &&
+      "taskId" in p.requester &&
+      p.requester.taskId === task.taskId
   );
   return asking ? "needs_approval" : "running";
 }
@@ -62,7 +65,7 @@ export function permissionRequesterName(
   tasks: readonly AgentTask[]
 ): string | undefined {
   const requester = request.requester;
-  if (typeof requester !== "object") return undefined;
+  if (typeof requester !== "object" || !("taskId" in requester)) return undefined;
   const task = tasks.find((t) => t.taskId === requester.taskId);
   return task ? `${taskKindLabel(task)} "${taskTitle(task)}"` : undefined;
 }

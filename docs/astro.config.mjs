@@ -11,10 +11,6 @@ const sidebar = [
     items: [
       { label: "Agent Chat overview", link: "/agent-mode-and-tools/" },
       { label: "Choose an agent", link: "/agent-mode-and-tools/#choose-an-agent" },
-      {
-        label: "Multi-agent answers",
-        link: "/agent-mode-and-tools/#multi-agent-answers",
-      },
       { label: "Skills across agents", link: "/agent-mode-and-tools/#skills-across-agents" },
       { slug: "connectors" },
       { slug: "projects" },

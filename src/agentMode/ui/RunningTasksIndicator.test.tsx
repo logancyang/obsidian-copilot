@@ -14,6 +14,7 @@ import React from "react";
 
 const ISSUE_749 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/749";
 const ISSUE_748 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/748";
+const ISSUE_948 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/948";
 const OUTPUT = "/tmp/tasks/task-2.output";
 
 function renderIndicator(
@@ -179,5 +180,22 @@ describe("RunningTasksIndicator", () => {
 
     expect(screen.getByText("Print 30 progress lines")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Stop task" })).toBeNull();
+  });
+
+  it(`shows other runs from the chat, with their label in place of the count and their rows first, also while no task runs (${ISSUE_948})`, () => {
+    const runs = {
+      label: "Leo is working",
+      rows: () => <li>Leo · Reconcile October</li>,
+    };
+    const { rerenderWith } = renderIndicator({ runs, tasks: [] });
+
+    fireEvent.pointerEnter(screen.getByRole("button", { name: "Leo is working" }));
+    expect(screen.getAllByRole("listitem").map((row) => row.textContent)).toEqual([
+      "Leo · Reconcile October",
+    ]);
+
+    rerenderWith({ runs, tasks: [makeTask()] });
+    expect(screen.getAllByRole("listitem")[0].textContent).toBe("Leo · Reconcile October");
+    expect(screen.getAllByRole("listitem")[1].textContent).toContain("Count words in Welcome");
   });
 });

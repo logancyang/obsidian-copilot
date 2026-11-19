@@ -441,6 +441,27 @@ describe("descriptor", () => {
         expect(callback).toHaveBeenCalledTimes(3);
       });
     });
+
+    describe("getModeMapping()", () => {
+      const modeOption = (currentValue: string) => [
+        { id: "mode", type: "select" as const, currentValue, options: [] },
+      ];
+
+      it("maps Default and Auto to Copilot's own OpenCode agents in a Copilot chat", () => {
+        expect(
+          OpencodeBackendDescriptor.getModeMapping?.(null, modeOption("copilot-build"))?.canonical
+        ).toEqual({ default: "copilot-build", auto: "build" });
+      });
+
+      it.each(["copilot-agent-coco/default", "copilot-agent-coco/auto"])(
+        "https://github.com/Brevilabs/obsidian-copilot-private/issues/937 maps Default and Auto to the custom agent's own pair while the chat runs as %s",
+        (current) => {
+          expect(
+            OpencodeBackendDescriptor.getModeMapping?.(null, modeOption(current))?.canonical
+          ).toEqual({ default: "copilot-agent-coco/default", auto: "copilot-agent-coco/auto" });
+        }
+      );
+    });
   });
 
   const CONFIG_DIR = "my-config";

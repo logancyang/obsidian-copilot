@@ -60,4 +60,4 @@ Agents run Python in UTF-8 mode (`PYTHONUTF8=1`). To use a different value, set 
 
 Select the **Agent Chat** ribbon icon or run **Open Copilot Agent Chat window** from the command palette. Choose an installed agent and select **Start chat**.
 
-For models, effort, permissions, Projects, and multi-agent answers, see [Agent Chat](agent-mode-and-tools.md).
+For models, effort, permissions, and Projects, see [Agent Chat](agent-mode-and-tools.md).

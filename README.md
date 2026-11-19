@@ -73,9 +73,9 @@ Your chosen route determines where prompts and included context are processed. R
 
 ## Plans
 
-The Copilot plugin is open source and works without a Copilot license when you use your own agent account, provider key, or local model. Free use includes normal single-agent Agent chats, Projects with Markdown context, custom Skills and Commands, Quick Chat, Quick Ask, and local Miyo search.
+The Copilot plugin is open source and works without a Copilot license when you use your own agent account, provider key, or local model. Free use includes Agent Chat, Projects with Markdown context, custom Skills and Commands, Quick Chat, Quick Ask, and local Miyo search.
 
-Paid access can include Copilot-hosted models and cloud-backed tools. Multi-agent requires active Plus access; check your dashboard for the current entitlement. Model availability and service limits can change, so the [pricing page](https://www.obsidiancopilot.com/en/pricing) and in-app model pickers are the current source of truth.
+Paid access can include Copilot-hosted models and cloud-backed tools. Model availability and service limits can change, so the [pricing page](https://www.obsidiancopilot.com/en/pricing) and in-app model pickers are the current source of truth.
 
 <p align="center"><a href="https://www.obsidiancopilot.com/en/pricing"><strong>Compare plans →</strong></a></p>
 

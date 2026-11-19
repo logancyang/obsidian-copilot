@@ -1,9 +1,17 @@
+import type { CustomAgent } from "@/agents/CustomAgentStore";
+import { AgentRoster, NewAgentButton } from "@/agents/ui/AgentRoster";
+import { FirstAgentBannerView } from "@/agents/ui/FirstAgentBanner";
+import { FIVE_AGENTS, RECENT_CHATS } from "@/agents/ui/testing/rosterFixtures";
+import { useAgentRecentChats } from "@/agents/ui/useAgentRecentChats";
 import { AgentHomeShelf, type AgentHomeShelfSection } from "@/agentMode/ui/AgentHomeShelf";
 import { AgentLandingStack } from "@/agentMode/ui/AgentLandingStack";
+import { GlobalRecentChatsSection } from "@/agentMode/ui/GlobalRecentChatsSection";
 import { CopilotBrandIcon } from "@/components/ui/CopilotBrandIcon";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import type { Meta, StoryObj } from "@/lib/story";
+import { AgentProjectHeader } from "@/projects/ui/AgentProjectHeader";
 import { FileSearch, Files, Folder, MessageSquare, RefreshCw } from "lucide-react";
-import React from "react";
+import React, { useState } from "react";
 
 type AgentLandingStackProps = React.ComponentProps<typeof AgentLandingStack>;
 
@@ -206,4 +214,137 @@ export const GlobalLandingRelevantNotesInSidePanel: StoryObj<AgentLandingStackPr
 
 export const ProjectLanding: StoryObj<AgentLandingStackProps> = {
   render: (args) => <LandingCanvas args={args} project />,
+};
+
+export const WithoutShelf: StoryObj<AgentLandingStackProps> = {
+  render: (args) => <LandingStackCanvas args={args} shelf={null} />,
+};
+
+const noop = async () => {};
+
+function AgentHomeCanvas({
+  agents,
+  initialSlug,
+  project = false,
+  customAgentsAvailable = true,
+}: {
+  agents: readonly CustomAgent[];
+  initialSlug: string | null;
+  project?: boolean;
+  customAgentsAvailable?: boolean;
+}) {
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [selectedSlug, setSelectedSlug] = useState(initialSlug);
+  const selected = agents.find((agent) => agent.slug === selectedSlug) ?? null;
+  const recentChats = useAgentRecentChats(RECENT_CHATS, agents, selected);
+  const chatsSection: AgentHomeShelfSection = {
+    id: project ? "project-chats" : "chats",
+    icon: <MessageSquare className="tw-size-4" />,
+    title: "Recent chats",
+    renderBody: () => (
+      <GlobalRecentChatsSection
+        {...recentChats}
+        variant={project ? "project" : "global"}
+        onLoadChat={noop}
+        onUpdateTitle={noop}
+        onDeleteChat={noop}
+        onOpenSourceFile={noop}
+        onCopyChatLink={noop}
+        onSetChatPinned={noop}
+        onSetChatArchived={noop}
+        onDeleteChats={noop}
+        onArchiveChats={noop}
+        getChatBookmarkState={async () => "not-bookmarked"}
+        onSetChatBookmarked={noop}
+      />
+    ),
+  };
+  return (
+    <TooltipProvider>
+      <div className="tw-flex tw-size-full tw-flex-col">
+        {project && (
+          <AgentProjectHeader
+            projectName="4.0.21 launch video"
+            onOpenHome={() => {}}
+            onExit={() => {}}
+            isProjectHome
+          />
+        )}
+        <div className="tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-y-auto tw-px-2">
+          <AgentLandingStack
+            hero={
+              <AgentRoster
+                agents={agents}
+                selectedSlug={selected?.slug ?? null}
+                onSelect={setSelectedSlug}
+                emptyHero={
+                  <div className="tw-text-center tw-text-3xl tw-font-[330] tw-text-normal">
+                    What are you working on?
+                  </div>
+                }
+                newAgentButton={
+                  customAgentsAvailable && (
+                    <NewAgentButton emphasized={agents.length === 0} onClick={() => {}} />
+                  )
+                }
+              />
+            }
+            composer={
+              <>
+                <div className="tw-flex tw-min-h-28 tw-flex-col tw-justify-between tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-primary tw-p-3 tw-text-ui-small tw-text-muted">
+                  <div className="tw-truncate">
+                    {selected
+                      ? `Ask ${selected.name} anything • @ to add context • / for commands`
+                      : "Ask anything • @ to add context • / for commands"}
+                  </div>
+                  <div className="tw-truncate">Default (recommended) · high</div>
+                </div>
+                {customAgentsAvailable && agents.length === 0 && !project && !bannerDismissed && (
+                  <FirstAgentBannerView
+                    faces={FIVE_AGENTS.slice(0, 3).map((agent) => agent.faceSrc)}
+                    onCreate={() => {}}
+                    onDismiss={() => setBannerDismissed(true)}
+                  />
+                )}
+              </>
+            }
+            shelf={
+              <AgentHomeShelf
+                sections={
+                  project
+                    ? [projectLandingSections[0], chatsSection]
+                    : [chatsSection, ...relevantNotesSections, ...projectSections]
+                }
+                activeSectionId={chatsSection.id}
+              />
+            }
+          />
+        </div>
+      </div>
+    </TooltipProvider>
+  );
+}
+
+export const AgentHomeAgentSelected: StoryObj<AgentLandingStackProps> = {
+  render: () => <AgentHomeCanvas agents={FIVE_AGENTS} initialSlug="coco" />,
+};
+
+export const AgentHomeCopilotSelected: StoryObj<AgentLandingStackProps> = {
+  render: () => <AgentHomeCanvas agents={FIVE_AGENTS} initialSlug={null} />,
+};
+
+export const AgentHomeAgentWithoutChats: StoryObj<AgentLandingStackProps> = {
+  render: () => <AgentHomeCanvas agents={FIVE_AGENTS} initialSlug="kai" />,
+};
+
+export const AgentHomeFirstAgentBanner: StoryObj<AgentLandingStackProps> = {
+  render: () => <AgentHomeCanvas agents={[]} initialSlug={null} />,
+};
+
+export const AgentHomeWithoutCopilotTeammates: StoryObj<AgentLandingStackProps> = {
+  render: () => <AgentHomeCanvas agents={[]} initialSlug={null} customAgentsAvailable={false} />,
+};
+
+export const ProjectHomeAgentSelected: StoryObj<AgentLandingStackProps> = {
+  render: () => <AgentHomeCanvas agents={FIVE_AGENTS} initialSlug="maya" project />,
 };

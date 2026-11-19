@@ -16,7 +16,7 @@ import type {
 } from "@/agentMode/session/types";
 import { PERMISSION_OPTION_KINDS } from "@/agentMode/session/types";
 import { resolveToolName } from "@/agentMode/session/toolName";
-import { isVaultWriteToolKind } from "@/agentMode/session/fanout/fanoutTypes";
+import { isAgentMemoryFile } from "@/agents/agentMemoryFile";
 import { err2String } from "@/utils";
 import { logSdkInbound, logSdkOutbound } from "./sdkDebugTap";
 import { deriveToolKind, deriveToolTitle, vendorMetaFields } from "./toolMeta";
@@ -35,9 +35,12 @@ export interface PermissionBridgeOptions {
   getPrompter: () => Prompter | null;
   getAskUserQuestionPrompter?: () => AskUserQuestionPrompter | null;
   isPlanModePlanFilePath?: (absolutePath: string) => boolean;
-  getIsReadOnlySession?: () => ((sessionId: SessionId) => boolean) | null;
+  agentMemoryPath?: string;
+  isPlanMode?: () => boolean;
   getModeAfterPlanApproval?: () => PermissionMode | null;
 }
+
+const MEMORY_SAVE_TOOLS = new Set(["Write", "Edit"]);
 
 export class PermissionBridge {
   constructor(
@@ -57,20 +60,6 @@ export class PermissionBridge {
       sessionId
     );
 
-    const isReadOnlySession = this.opts.getIsReadOnlySession?.();
-    if (sessionId && isReadOnlySession?.(sessionId)) {
-      const { tool, mcpServer } = resolveToolName(toolName);
-      const kind = deriveToolKind(tool, mcpServer);
-      const isUnverifiableMcpTool = Boolean(mcpServer) && kind === "other";
-      if (isVaultWriteToolKind(kind) || isUnverifiableMcpTool) {
-        return this.deny(
-          "canUseTool:response",
-          "Read-only QA turn: vault-write tools are disabled.",
-          sessionId
-        );
-      }
-    }
-
     if (toolName === "Write") {
       const filePath = typeof input.file_path === "string" ? input.file_path : null;
       if (filePath && this.opts.isPlanModePlanFilePath?.(filePath)) {
@@ -78,6 +67,27 @@ export class PermissionBridge {
         logSdkOutbound("canUseTool:response:auto-allow-plan", result, sessionId);
         return result;
       }
+    }
+
+    const memoryPath = this.opts.agentMemoryPath;
+    if (
+      memoryPath &&
+      MEMORY_SAVE_TOOLS.has(toolName) &&
+      typeof input.file_path === "string" &&
+      isAgentMemoryFile(input.file_path, memoryPath)
+    ) {
+      // A custom agent saves a rule without asking, except in a mode that changes no files.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/942
+      if (this.opts.isPlanMode?.()) {
+        return this.deny(
+          "canUseTool:response:agent-memory-plan",
+          "You can't save a rule in Plan mode. Tell the user you can't save a rule in this mode.",
+          sessionId
+        );
+      }
+      const result: PermissionResult = { behavior: "allow", updatedInput: input };
+      logSdkOutbound("canUseTool:response:auto-allow-agent-memory", result, sessionId);
+      return result;
     }
 
     const prompter = this.opts.getPrompter();

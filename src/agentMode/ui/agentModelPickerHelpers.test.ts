@@ -1,6 +1,7 @@
 import {
   appendBackendSection,
   backendReadinessReason,
+  buildAgentModelChoices,
   buildEffortOptionsByModelKey,
   buildEffortSibling,
   buildModelOnChange,
@@ -1228,6 +1229,80 @@ describe("agentModelPickerHelpers", () => {
       const entries = [synthesizeAgentEntry(OTHER, OTHER, opencode)];
       const out = buildEffortOptionsByModelKey(manager, entries);
       expect(out[getModelKeyFromModel(entries[0])]).toEqual([]);
+    });
+  });
+
+  describe("buildAgentModelChoices()", () => {
+    const sonnetEffort = [
+      { value: "medium", label: "medium" },
+      { value: "high", label: "high" },
+    ];
+
+    function enabledDescriptor(id: "claude" | "codex", models: string[]): BackendDescriptor {
+      return {
+        ...makeDescriptor(id),
+        getEnabledModelEntries: () =>
+          models.map((baseModelId) => ({ baseModelId, name: baseModelId, credentialState: "ok" })),
+      } as unknown as BackendDescriptor;
+    }
+
+    function choicesFor(
+      defaultSelectionById: Record<string, { baseModelId: string; effort: string | null } | null>,
+      activeBackend = "claude"
+    ) {
+      const manager = makeManager({
+        catalogById: {
+          claude: makeCatalog([
+            { ...makeModelEntry("opus"), effortOptions: [] },
+            { ...makeModelEntry("sonnet"), effortOptions: sonnetEffort },
+          ]),
+          codex: makeCatalog([makeModelEntry("gpt-5.5")]),
+        },
+        defaultSelectionById,
+      });
+      return buildAgentModelChoices({
+        manager,
+        descriptors: [
+          enabledDescriptor("claude", ["opus", "sonnet"]),
+          enabledDescriptor("codex", ["gpt-5.5"]),
+        ],
+        settings: { ...emptySettings, agentMode: { activeBackend } } as CopilotSettings,
+      });
+    }
+
+    it("offers every agent's enabled models with their effort levels, starting on the default agent's saved model and effort (https://github.com/Brevilabs/obsidian-copilot-private/issues/939)", () => {
+      const choices = choicesFor({ claude: { baseModelId: "sonnet", effort: "high" } });
+
+      expect(choices.models.map((entry) => `${entry._group}/${entry.name}`)).toEqual([
+        "claude/opus",
+        "claude/sonnet",
+        "codex/gpt-5.5",
+      ]);
+      expect(choices.effortOptionsByModelKey[getModelKeyFromModel(choices.models[1])]).toEqual(
+        sonnetEffort
+      );
+      expect(choices.initial).toEqual({ baseModelId: "sonnet", effort: "high" });
+    });
+
+    it(`starts a model saved without an effort on the effort a chat resolves it to (https://github.com/Brevilabs/obsidian-copilot-private/issues/939)`, () => {
+      const choices = choicesFor({ claude: { baseModelId: "sonnet", effort: null } });
+
+      expect(choices.initial).toEqual({ baseModelId: "sonnet", effort: "medium" });
+    });
+
+    it("starts on the default agent's first model when it has no saved model", () => {
+      expect(choicesFor({}, "codex").initial).toEqual({ baseModelId: "gpt-5.5", effort: null });
+      expect(choicesFor({}).initial).toEqual({ baseModelId: "opus", effort: null });
+    });
+
+    it("starts on no model when no agent offers one", () => {
+      const choices = buildAgentModelChoices({
+        manager: makeManager({}),
+        descriptors: [],
+        settings: { ...emptySettings, agentMode: { activeBackend: "claude" } } as CopilotSettings,
+      });
+
+      expect(choices).toEqual({ models: [], effortOptionsByModelKey: {}, initial: null });
     });
   });
 

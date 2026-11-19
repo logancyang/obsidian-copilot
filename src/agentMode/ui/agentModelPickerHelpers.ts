@@ -1,4 +1,4 @@
-import { sortEffortOptions } from "@/lib/model-effort";
+import { resolveEffort, sortEffortOptions } from "@/lib/model-effort";
 import { Notice } from "obsidian";
 import { logError } from "@/logger";
 import type { ModelCapability } from "@/constants";
@@ -23,6 +23,7 @@ import type {
   ModelState,
 } from "@/agentMode/session/types";
 import type { AgentModelPickerOverride } from "./useAgentModelPicker";
+import type { AgentModelChoices } from "@/agents/ui/CreateAgentForm";
 
 export const EMPTY_EFFORT_OPTIONS = Object.freeze([]) as unknown as EffortOption[];
 
@@ -491,5 +492,44 @@ export function buildAgentModelPicker(args: {
     effortOptionsByModelKey: buildEffortOptionsByModelKey(manager, entries),
     onChange,
     commitSelection: buildCommitSelection(manager, ctx, entries, onChange),
+  };
+}
+
+export function buildAgentModelChoices(args: {
+  manager: AgentSessionManager;
+  descriptors: BackendDescriptor[];
+  settings: CopilotSettings;
+}): AgentModelChoices {
+  const { manager, descriptors, settings } = args;
+  const noChat: ModelActiveContext = {
+    activeSession: null,
+    activeChatUIState: null,
+    activeBackendId: null,
+    activeDescriptor: undefined,
+    activeChatTiedToAgent: false,
+    activeModelState: null,
+    activeCurrentEntry: undefined,
+  };
+  const { entries } = buildPickerEntries(manager, descriptors, noChat, settings);
+  const runnable = entries.filter((entry) => !entry._disabledReason && !entry._needsLicense);
+  const backendId = settings.agentMode.activeBackend;
+  const saved = manager.getDefaultSelection(backendId);
+  const savedEntry =
+    saved && runnable.find((e) => e._backendId === backendId && e.name === saved.baseModelId);
+  const initial =
+    savedEntry || runnable.find((entry) => entry._backendId === backendId) || runnable[0];
+  const effortOptionsByModelKey = buildEffortOptionsByModelKey(manager, entries);
+  // A model saved without an effort runs at the level a chat resolves it to, so the field shows that level as the composer does.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/939
+  const initialEffort =
+    initial &&
+    resolveEffort(
+      savedEntry ? saved.effort : null,
+      effortOptionsByModelKey[getModelKeyFromModel(initial)]
+    );
+  return {
+    models: entries,
+    effortOptionsByModelKey,
+    initial: initial ? { baseModelId: initial.name, effort: initialEffort ?? null } : null,
   };
 }

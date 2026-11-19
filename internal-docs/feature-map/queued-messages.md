@@ -5,7 +5,7 @@ Messages the user sends while the agent is still working, listed above the [chat
 ## Sub-features
 
 - queue-next-step: with Claude, a message sent mid-reply lists under `The agent reads these at its next step`.
-- queue-held: with other agents, for `/compact`, for messages that mention another agent, and for any message sent while the agent is starting, it lists under `Sends when the agent finishes`.
+- queue-held: with other agents, for `/compact`, and for any message sent while the agent is starting, it lists under `Sends when the agent finishes`.
 - queue-send-now: `Send now` stops the agent's current reply and has it read the waiting messages right away.
 - queue-withdraw: `Withdraw queued message` takes back a message before the agent reads it and puts it back in the chat input.
 - queue-remove: `Remove queued message` deletes a held message.

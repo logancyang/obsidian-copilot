@@ -30,6 +30,9 @@ export interface PromptNote<S> {
 export interface ChatExtension<S> {
   readonly key: ChatStateKey<S>;
   readonly keepOnReload?: boolean;
+  // A card the user can still act on must come back with the chat, so its state is saved in the chat's note and read back here; the note is the user's file, so this checks what it reads.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/941
+  readonly readFromNote?: (saved: unknown) => S;
   beforePrompt?(state: S): PromptNote<S> | null;
   onTurnFailed?(state: S, chat: ChatView, failure: TurnFailure): S;
 }
@@ -39,6 +42,10 @@ export type ChatStates = ReadonlyMap<string, unknown>;
 export const EMPTY_CHAT_STATES: ChatStates = Object.freeze(new Map<string, unknown>());
 
 export const EMPTY_CHAT_EXTENSIONS: readonly ChatExtension<unknown>[] = Object.freeze([]);
+
+export type SavedChatStates = Readonly<Record<string, unknown>>;
+
+export const NO_SAVED_CHAT_STATES: SavedChatStates = Object.freeze({});
 
 export function defineChatExtension<S>(extension: ChatExtension<S>): ChatExtension<unknown> {
   return Object.freeze(extension);

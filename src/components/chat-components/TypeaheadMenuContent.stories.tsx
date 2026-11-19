@@ -1,6 +1,8 @@
 import React from "react";
 import type { Meta, StoryObj } from "@/lib/story";
-import { FileText, Folder, Hash } from "lucide-react";
+import { FileText, Folder, Globe, Hash } from "lucide-react";
+import { AGENTS_MENTION_CATEGORY, agentMentionOptions } from "@/agents/ui/agentMentionOptions";
+import { COCO, LEO, MAYA, NORA } from "@/agents/ui/testing/rosterFixtures";
 import { composeSlashMenuItems } from "./plugins/slashMenuItems";
 import { TypeaheadMenuContent, type TypeaheadMenuContentProps } from "./TypeaheadMenuContent";
 
@@ -67,5 +69,42 @@ export const AddContextSearch: StoryObj<TypeaheadMenuContentProps> = {
     searchBarMode: true,
     searchQuery: "",
     onSearchChange: () => undefined,
+  },
+};
+
+const agentMentionCategories = [
+  { key: "notes", title: "Notes", icon: <FileText className="tw-size-4" /> },
+  { key: "webTabs", title: "Web tabs", icon: <Globe className="tw-size-4" /> },
+  { key: "folders", title: "Folders", icon: <Folder className="tw-size-4" /> },
+];
+
+const lockedAgents = { ...AGENTS_MENTION_CATEGORY, lockedNote: "Supporter preview" };
+
+export const AgentMentionMenuWithLockedAgents: StoryObj<TypeaheadMenuContentProps> = {
+  args: {
+    options: [lockedAgents, ...agentMentionCategories],
+    selectedIndex: 0,
+    onSelect: () => undefined,
+    onHighlight: () => undefined,
+    mode: "category",
+  },
+};
+
+export const AgentMentionSearchWithoutValidLicense: StoryObj<TypeaheadMenuContentProps> = {
+  args: {
+    options: [
+      ...agentMentionOptions([COCO, MAYA, LEO, NORA], "ma", () => "Supporter preview"),
+      {
+        key: "note-roadmap",
+        title: "Roadmap",
+        subtitle: "Planning/Roadmap.md",
+        icon: <FileText className="tw-size-4" />,
+      },
+    ],
+    selectedIndex: 0,
+    onSelect: () => undefined,
+    onHighlight: () => undefined,
+    mode: "category",
+    query: "ma",
   },
 };

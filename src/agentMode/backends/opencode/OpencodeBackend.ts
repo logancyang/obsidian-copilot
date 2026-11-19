@@ -3,7 +3,7 @@ import { assertBinaryCompatible } from "@/agentMode/backends/shared/binaryCompat
 import { OPENCODE_MIN_VERSION } from "./ui/opencodeVersion";
 import { readOpencodeCopilotTools } from "./opencodeCopilotToolCalls";
 import { ChatModelProviders } from "@/constants";
-import { logInfo } from "@/logger";
+import { logInfo, logWarn } from "@/logger";
 import type { App } from "obsidian";
 import { getSettings } from "@/settings/model";
 import type { CopilotSettings } from "@/settings/model";
@@ -12,7 +12,7 @@ import { isCatalogProviderDefaultEndpoint, opencodeSdkBaseUrl } from "@/utils/pr
 import { agentShellPath } from "@/utils/loginShellPath";
 import type { BackendConfigRegistry, ProviderRegistry } from "@/modelManagement";
 import { AcpBackend, AcpSpawnDescriptor } from "@/agentMode/acp/types";
-import type { CopilotMode } from "@/agentMode/session/types";
+import type { BackendConfigOption, CopilotMode, SessionAgent } from "@/agentMode/session/types";
 import { composeDenyList, getManagedSkills, SkillManager } from "@/agentMode/skills";
 import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
 import { pythonUtf8Env } from "@/agentMode/backends/shared/pythonUtf8Env";
@@ -28,6 +28,12 @@ import type { SelfHostWebSearchAgentChannel } from "@/LLMProviders/selfHostServi
 import type { Config } from "@opencode/schema/config";
 import { installOpencodeCopilotPlugin } from "./opencodeCopilotPlugin";
 import { COPILOT_MCP_SERVER_NAME } from "@/agentMode/session/copilotMcpServer";
+import {
+  createAgentsFolder,
+  customAgentModeId,
+  readCustomAgentModeId,
+  writeAgentsFile,
+} from "./opencodeCustomAgents";
 
 export const OPENCODE_PROVIDER_MAP: Partial<Record<ChatModelProviders, string>> = {
   [ChatModelProviders.ANTHROPIC]: "anthropic",
@@ -45,6 +51,8 @@ const OPENCODE_COPILOT_BUILD_AGENT_ID = "copilot-build";
 
 const OPENCODE_BUILTIN_BUILD_AGENT_ID = "build";
 
+export const OPENCODE_MODE_CONFIG_OPTION_ID = "mode";
+
 export const OPENCODE_CANONICAL_MODE_AGENT_IDS: Partial<Record<CopilotMode, string>> = {
   default: OPENCODE_COPILOT_BUILD_AGENT_ID,
   auto: OPENCODE_BUILTIN_BUILD_AGENT_ID,
@@ -58,6 +66,16 @@ export interface OpencodeModelDeps {
   getCopilotPluginDir?: () => string;
   getSelfHostWebSearchChannel?: () => Promise<Readonly<SelfHostWebSearchAgentChannel>>;
   readCopilotReadOnlyToolNames?: () => Promise<ReadonlyArray<string>>;
+  customAgentsFile?: string;
+}
+
+type AgentConfig = NonNullable<OpencodeConfig["agents"]>[string];
+
+interface CustomAgentsTarget {
+  file: string;
+  configContent: string;
+  entries: Record<string, AgentConfig>;
+  written: Promise<void>;
 }
 
 export class OpencodeBackend implements AcpBackend {
@@ -68,6 +86,8 @@ export class OpencodeBackend implements AcpBackend {
   readonly #deps: OpencodeModelDeps;
 
   readonly #copilotPlus = new CopilotPlusUsageReader();
+
+  #customAgents: CustomAgentsTarget | null = null;
 
   constructor(deps: OpencodeModelDeps) {
     this.#deps = deps;
@@ -151,6 +171,26 @@ export class OpencodeBackend implements AcpBackend {
       this.#deps.clientVersion,
       selfHostSearchChannel
     );
+    // A user's own OPENCODE_CONFIG keeps working; custom agents then cannot run on OpenCode.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/937
+    const ownsConfigFile =
+      envOverrides.OPENCODE_CONFIG === undefined && process.env.OPENCODE_CONFIG === undefined;
+    this.#customAgents =
+      ownsConfigFile && this.#deps.customAgentsFile
+        ? {
+            file: this.#deps.customAgentsFile,
+            configContent,
+            entries: {},
+            written: Promise.resolve(),
+          }
+        : null;
+    if (this.#customAgents) {
+      // Custom agents must never stop OpenCode from starting for a chat that does not use them.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/937
+      await createAgentsFolder(this.#customAgents.file).catch((e: unknown) =>
+        logWarn("[AgentMode] could not create the OpenCode custom agents folder", e)
+      );
+    }
 
     return {
       command: binaryPath,
@@ -170,8 +210,54 @@ export class OpencodeBackend implements AcpBackend {
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/650
         OPENCODE_LOG_LEVEL: "INFO",
         ...envOverrides,
+        ...(this.#customAgents ? { OPENCODE_CONFIG: this.#customAgents.file } : {}),
         OPENCODE_CONFIG_CONTENT: configContent,
       },
+    };
+  }
+
+  // OpenCode runs a custom agent as one of its own agents, defined in the watched OPENCODE_CONFIG file and chosen with the session's mode.
+  // A chat whose agent cannot load leaves that agent's mode, since a mode whose agent is gone from the file hangs the next turn.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/937
+  async selectAgentMode(
+    agent: SessionAgent | null,
+    configOptions: readonly BackendConfigOption[] | null
+  ): Promise<{ configId: string; value: string } | null> {
+    const current = configOptions?.find(
+      (option) => option.id === OPENCODE_MODE_CONFIG_OPTION_ID
+    )?.currentValue;
+    const running = typeof current === "string" ? readCustomAgentModeId(current) : null;
+    if (!agent) {
+      if (!running) return null;
+      return {
+        configId: OPENCODE_MODE_CONFIG_OPTION_ID,
+        value: running.auto ? OPENCODE_BUILTIN_BUILD_AGENT_ID : OPENCODE_COPILOT_BUILD_AGENT_ID,
+      };
+    }
+    const target = this.#customAgents;
+    if (!target) {
+      throw new Error("Copilot Teammates can't run on OpenCode while OPENCODE_CONFIG is set.");
+    }
+    const spawnAgents = (JSON.parse(target.configContent) as OpencodeConfig).agents ?? {};
+    const define = (baseId: string, auto: boolean) => {
+      const base = spawnAgents[baseId] ?? {};
+      target.entries[customAgentModeId({ slug: agent.slug, auto })] = {
+        ...base,
+        mode: "primary",
+        system: [base.system, agent.prompt].filter(Boolean).join("\n\n"),
+      };
+    };
+    define(OPENCODE_COPILOT_BUILD_AGENT_ID, false);
+    define(OPENCODE_BUILTIN_BUILD_AGENT_ID, true);
+    const content = JSON.stringify({ agents: target.entries });
+    target.written = target.written
+      .catch(() => undefined)
+      .then(() => writeAgentsFile(target.file, content));
+    await target.written;
+    const auto = running?.auto ?? current === OPENCODE_BUILTIN_BUILD_AGENT_ID;
+    return {
+      configId: OPENCODE_MODE_CONFIG_OPTION_ID,
+      value: customAgentModeId({ slug: agent.slug, auto }),
     };
   }
 }

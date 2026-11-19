@@ -186,7 +186,7 @@ const TrailDemo: React.FC<{
         isStreaming={isStreaming}
         turnStartedAtMs={isStreaming ? Date.now() - 138_000 : undefined}
         turnDurationMs={!isStreaming && showCompletedDuration ? 138_000 : undefined}
-        timestamp="2026/08/07 20:31:10"
+        timestampMs={new Date(2026, 7, 7, 20, 31, 10).getTime()}
         app={app}
         turnStopReason={isStreaming ? undefined : stopReason}
         fileChanges={fileChanges}

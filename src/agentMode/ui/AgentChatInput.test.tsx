@@ -1,5 +1,6 @@
+import { ChatAgentsContext } from "@/agents/ui/chatAgents";
+import { THREE_AGENTS } from "@/agents/ui/testing/rosterFixtures";
 import { expandCustomCommandPrefix } from "@/agentMode/session/expandCustomCommandPrefix";
-import { EMPTY_AGENT_MENTION_BRANDS } from "@/components/chat-components/hooks/useAtMentionCategories";
 import { AgentChatInput } from "@/agentMode/ui/AgentChatInput";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import { AgentInputDraftStore } from "@/agentMode/session/AgentInputDraftStore";
@@ -18,23 +19,6 @@ import React from "react";
 
 /* eslint-disable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
 
-const mockUseCanUseMultiAgent = jest.fn<boolean, []>();
-jest.mock("@/agentMode/session/fanout/multiAgentEntitlement", () => ({
-  useCanUseMultiAgent: () => mockUseCanUseMultiAgent(),
-}));
-jest.mock("@/plusUtils", () => ({
-  navigateToPlusPage: jest.fn(),
-}));
-
-const FAKE_BRANDS = Object.freeze([{ id: "claude", displayName: "Claude", Icon: () => null }]);
-jest.mock("@/agentMode/ui/mentionedAgents", () => ({
-  EMPTY_ANSWERERS: Object.freeze([]),
-  isFanout: () => false,
-  resolveAnswerers: () => [],
-  useInstalledAgentBrands: () => FAKE_BRANDS,
-}));
-
-let capturedAgentBrands: ReadonlyArray<unknown> | undefined;
 const mockPrependContent = jest.fn();
 jest.mock("@/components/chat-components/ChatInput", () => ({
   __esModule: true,
@@ -42,29 +26,29 @@ jest.mock("@/components/chat-components/ChatInput", () => ({
     (
       props: {
         setInputMessage: React.Dispatch<React.SetStateAction<string>>;
-        agentBrands?: ReadonlyArray<unknown>;
         handleSendMessage?: (meta?: {
           contextNotes?: import("obsidian").TFile[];
           contextFolders?: string[];
         }) => void;
         onStopGenerating?: () => void;
         isGenerating?: boolean;
+        placeholder?: string;
       },
       ref: React.ForwardedRef<import("@/components/chat-components/ChatInput").ChatInputHandle>
     ) => {
       React.useImperativeHandle(ref, () => ({
         removeToolPills: jest.fn(),
-        prependContent: (text: string, agents: readonly string[], webTabs: readonly unknown[]) => {
-          mockPrependContent(text, agents, webTabs);
+        prependContent: (text: string, webTabs: readonly unknown[]) => {
+          mockPrependContent(text, webTabs);
           props.setInputMessage((current) =>
             [text, current].filter((part) => part.trim()).join("\n\n")
           );
         },
       }));
-      capturedAgentBrands = props.agentBrands;
       return (
         <>
           <span data-testid="generating-state">{props.isGenerating ? "running" : "idle"}</span>
+          <span data-testid="placeholder">{props.placeholder}</span>
           <button type="button" onClick={() => props.handleSendMessage?.()}>
             send
           </button>
@@ -108,6 +92,8 @@ jest.mock("@/settings/model", () => ({
   getSettings: () => ({ debug: false }),
 }));
 /* eslint-enable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
+
+jest.mock("@/agents/customAgentsGate", () => ({ useCustomAgentsGate: jest.fn(() => "full") }));
 
 jest.mock("@/commands/customCommandManager", () => ({
   CustomCommandManager: { getInstance: () => ({ recordUsage: jest.fn() }) },
@@ -169,11 +155,9 @@ function inputNode(
   return (
     <AgentChatInput
       backend={backend}
-      plugin={{} as never}
       chatInputId="input-1"
       draft={draft}
       app={makeApp()}
-      mainAgentId={null}
       updateUserMessageHistory={jest.fn()}
       isStarting={false}
       isLoading={draft.loading}
@@ -232,8 +216,6 @@ describe("AgentChatInput", () => {
     mockSelectedTextContexts = [];
     mockActiveWebTab = undefined;
     mockActiveFile = null;
-    capturedAgentBrands = undefined;
-    mockUseCanUseMultiAgent.mockReturnValue(true);
   });
 
   describe("AgentChatInput()", () => {
@@ -320,6 +302,22 @@ describe("AgentChatInput", () => {
         selectedTextContexts: [selection],
         webTabs: [activeTab],
       });
+    });
+
+    it("hints at @ for context and / for commands, naming the agent when one is given (https://github.com/Brevilabs/obsidian-copilot-private/issues/588)", () => {
+      const backend = { takeWithdrawnPrompts: () => [] } as unknown as AgentChatBackend;
+      const { unmount } = renderInput(backend, makeDraft());
+      expect(screen.getByTestId("placeholder").textContent).toBe(
+        "Ask anything • @ to add context • / for commands"
+      );
+      unmount();
+
+      renderInput(backend, makeDraft(), {
+        placeholder: "Ask Coco anything • @ to add context • / for commands",
+      });
+      expect(screen.getByTestId("placeholder").textContent).toBe(
+        "Ask Coco anything • @ to add context • / for commands"
+      );
     });
 
     it("sends text-only commands that expand to empty without an image-read error https://github.com/logancyang/obsidian-copilot/issues/2850", async () => {
@@ -564,6 +562,27 @@ describe("AgentChatInput", () => {
       });
     });
 
+    it("sends each agent the text @-mentions, other than the chat's own, as the message's context (https://github.com/Brevilabs/obsidian-copilot-private/issues/947)", async () => {
+      const backend = {
+        sendMessage: jest.fn(() => ({ turn: Promise.resolve() })),
+        takeWithdrawnPrompts: () => [],
+      } as unknown as AgentChatBackend;
+      render(
+        <ChatAgentsContext.Provider value={{ agents: THREE_AGENTS, self: "coco" }}>
+          {inputNode(backend, makeDraft({ input: "@Maya and @Coco, is this too long?" }))}
+        </ChatAgentsContext.Provider>
+      );
+
+      fireEvent.click(screen.getByText("send"));
+
+      await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
+      expect(jest.mocked(backend.sendMessage).mock.calls[0][1]).toEqual({
+        notes: [],
+        urls: [],
+        agents: ["Maya"],
+      });
+    });
+
     it("sends the notes and folders mentioned in the text with the attached ones, each once (https://github.com/Brevilabs/obsidian-copilot-private/issues/932)", async () => {
       const attached = makeFile("Attached.md");
       const mentioned = makeFile("Mentioned.md");
@@ -674,7 +693,6 @@ describe("AgentChatInput", () => {
             id: "one",
             rawInput: "first",
             text: "first",
-            mentionedAgents: ["claude"],
             context: {
               notes: [],
               urls: [],
@@ -693,11 +711,9 @@ describe("AgentChatInput", () => {
       expect(getDraft().input).toBe("first\n\nReview the changes\n\ncurrent draft");
       expect(getDraft().images[0]).toMatchObject({ name: "queued-image-1.png" });
       expect(getDraft().images[1]).toBe(image);
-      expect(mockPrependContent).toHaveBeenLastCalledWith(
-        "first\n\nReview the changes",
-        ["claude"],
-        [{ url: "https://example.com/report", title: "Report" }]
-      );
+      expect(mockPrependContent).toHaveBeenLastCalledWith("first\n\nReview the changes", [
+        { url: "https://example.com/report", title: "Report" },
+      ]);
       await act(async () => settleCancel());
     });
 
@@ -721,7 +737,7 @@ describe("AgentChatInput", () => {
 
       await act(async () => fireEvent.click(screen.getByText("stop")));
 
-      expect(mockPrependContent).toHaveBeenLastCalledWith("follow-up", [], [other]);
+      expect(mockPrependContent).toHaveBeenLastCalledWith("follow-up", [other]);
       expect(getDraft().includeActiveWebTab).toBe(true);
       await act(async () => settleCancel());
     });
@@ -894,19 +910,6 @@ describe("AgentChatInput", () => {
       await waitFor(() => expect(draft.setLoading).toHaveBeenCalledWith(false));
     });
 
-    it("passes the real installed-agent list when entitled", () => {
-      mockUseCanUseMultiAgent.mockReturnValue(true);
-      renderInput(
-        {
-          sendMessage: jest.fn(),
-          cancel: jest.fn(),
-          takeWithdrawnPrompts: () => [],
-        } as unknown as AgentChatBackend,
-        makeDraft()
-      );
-      expect(capturedAgentBrands).toBe(FAKE_BRANDS);
-    });
-
     it("clears input-scoped context only when the logical chat input changes", () => {
       const clearSelection = jest.requireMock("@/selection/selectionStore")
         .clearSelection as jest.Mock;
@@ -925,21 +928,7 @@ describe("AgentChatInput", () => {
       expect(clearSelection).toHaveBeenCalledTimes(1);
     });
 
-    it("passes the frozen empty list (not a fresh []) when not entitled", () => {
-      mockUseCanUseMultiAgent.mockReturnValue(false);
-      renderInput(
-        {
-          sendMessage: jest.fn(),
-          cancel: jest.fn(),
-          takeWithdrawnPrompts: () => [],
-        } as unknown as AgentChatBackend,
-        makeDraft()
-      );
-      expect(capturedAgentBrands).toBe(EMPTY_AGENT_MENTION_BRANDS);
-    });
-
     it("shows the running state while a plan-approved turn continues after the composer send settles (https://github.com/Brevilabs/obsidian-copilot-private/issues/41)", () => {
-      mockUseCanUseMultiAgent.mockReturnValue(true);
       const backend = {
         sendMessage: jest.fn(),
         cancel: jest.fn(),

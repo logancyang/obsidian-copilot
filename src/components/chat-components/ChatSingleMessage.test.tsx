@@ -7,6 +7,7 @@ import ChatSingleMessage, {
 import { ChatMessage } from "@/types/message";
 import type { App } from "obsidian";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { formatMessageClock } from "@/lib/messageTime";
 
 const mockCopy = jest.fn();
 jest.mock("@/hooks/useCopyToClipboard", () => ({
@@ -427,15 +428,13 @@ describe("ChatSingleMessage", () => {
       expect(messageSegment?.classList.contains("markdown-rendered")).toBe(true);
     });
 
-    it("shows supplied Agent Mode metadata instead of the timestamp in the response footer", async () => {
-      const timestamp = "2026/08/07 20:31:10";
+    it("shows supplied Agent Mode metadata instead of the time in the response footer", async () => {
+      const sentAt = new Date(2026, 7, 7, 20, 31, 10).getTime();
+      const timestamp = { epoch: sentAt, display: "2026/08/07 20:31:10", fileName: "now" };
       const { rerender } = render(
         <TooltipProvider>
           <ChatSingleMessage
-            message={{
-              ...baseMessage,
-              timestamp: { epoch: 1, display: timestamp, fileName: "now" },
-            }}
+            message={{ ...baseMessage, timestamp }}
             app={createAppStub()}
             isStreaming={false}
             footerStart={<span>Worked for 24s</span>}
@@ -448,22 +447,144 @@ describe("ChatSingleMessage", () => {
       const duration = screen.getByText("Worked for 24s");
       const footer = duration.closest(".tw-justify-between");
       expect(footer?.contains(screen.getByTitle("Copy"))).toBe(true);
-      expect(screen.queryByText(timestamp)).toBeNull();
+      expect(screen.queryByText(formatMessageClock(sentAt))).toBeNull();
 
       rerender(
         <TooltipProvider>
           <ChatSingleMessage
+            message={{ ...baseMessage, timestamp }}
+            app={createAppStub()}
+            isStreaming={false}
+          />
+        </TooltipProvider>
+      );
+      expect(screen.getByText(formatMessageClock(sentAt))).toBeTruthy();
+      expect(screen.queryByText("2026/08/07 20:31:10")).toBeNull();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/971 floats a user message's time and buttons in a bar at the bubble's lower right that takes no space and shows only while the message is pointed at or focused", () => {
+      const sentAt = new Date(2026, 10, 18, 14, 2, 11).getTime();
+      render(
+        <TooltipProvider>
+          <ChatSingleMessage
             message={{
               ...baseMessage,
-              timestamp: { epoch: 1, display: timestamp, fileName: "now" },
+              sender: "user",
+              message: "Draft the recap",
+              timestamp: { epoch: sentAt, display: "2026/11/18 14:02:11", fileName: "" },
             }}
             app={createAppStub()}
             isStreaming={false}
           />
         </TooltipProvider>
       );
-      expect(screen.getByText(timestamp)).toBeTruthy();
+
+      const bubble = screen.getByText("Draft the recap").closest(".tw-border-solid");
+      const time = screen.getByText(formatMessageClock(sentAt));
+      const bar = time.closest(".tw-absolute");
+      expect(bubble?.contains(time)).toBe(false);
+      expect(bar?.contains(screen.getByTitle("Copy"))).toBe(true);
+      expect(bar?.className).toContain("tw-right-4");
+      expect(bar?.className).toContain("tw-bottom-0");
+      expect(bar?.className).toContain("tw-opacity-0");
+      expect(bar?.className).toContain("group-hover/message:tw-opacity-100");
+      expect(bar?.className).toContain("group-focus-within/message:tw-opacity-100");
+      expect(bar?.parentElement?.className).toContain("tw-group/message");
+      expect(bar?.parentElement?.className).toContain("tw-relative");
     });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/971 keeps a phone message's time and one Message actions button in view under the bubble, since a phone has no pointer to hover with", () => {
+      const { Platform } = jest.requireMock<{ Platform: { isMobile: boolean } }>("obsidian");
+      Platform.isMobile = true;
+      try {
+        const sentAt = new Date(2026, 10, 18, 14, 2, 11).getTime();
+        render(
+          <TooltipProvider>
+            <ChatSingleMessage
+              message={{
+                ...baseMessage,
+                sender: "user",
+                message: "Which one is shortest?",
+                timestamp: { epoch: sentAt, display: "2026/11/18 14:02:11", fileName: "" },
+              }}
+              app={createAppStub()}
+              isStreaming={false}
+              onEdit={() => undefined}
+              onDelete={() => undefined}
+            />
+          </TooltipProvider>
+        );
+
+        const time = screen.getByText(formatMessageClock(sentAt));
+        expect(time.className).not.toContain("tw-opacity-0");
+        expect(time.closest(".tw-absolute")).toBeNull();
+        expect(
+          screen.getByText("Which one is shortest?").closest(".tw-border-solid")?.contains(time)
+        ).toBe(false);
+        expect(screen.getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual([
+          "Message actions",
+        ]);
+      } finally {
+        Platform.isMobile = false;
+      }
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/971 copies and inserts the whole response's text from the reply that ends the response", async () => {
+      const insert = jest.spyOn(
+        jest.requireActual<typeof import("@/utils")>("@/utils"),
+        "insertAtCursor"
+      );
+      insert.mockResolvedValue(undefined);
+      const app = createAppStub();
+      render(
+        <TooltipProvider>
+          <ChatSingleMessage
+            message={{ ...baseMessage, message: "The year is fixed." }}
+            app={app}
+            isStreaming={false}
+            responseText={"I asked Maya.\n\nThe year is fixed."}
+          />
+        </TooltipProvider>
+      );
+      await waitFor(() => expect(renderMarkdownMock).toHaveBeenCalled());
+
+      fireEvent.click(screen.getByTitle("Copy"));
+      fireEvent.click(screen.getByTitle("Insert / Replace at cursor"));
+
+      expect(mockCopy).toHaveBeenLastCalledWith("I asked Maya.\n\nThe year is fixed.");
+      expect(insert).toHaveBeenCalledWith(app, "I asked Maya.\n\nThe year is fixed.");
+      insert.mockRestore();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/971 keeps a reply's row outside the box that clips its content, so the phone's larger menu button is not cut off", async () => {
+      render(
+        <TooltipProvider>
+          <ChatSingleMessage message={baseMessage} app={createAppStub()} isStreaming={false} />
+        </TooltipProvider>
+      );
+      await waitFor(() => expect(renderMarkdownMock).toHaveBeenCalled());
+
+      expect(screen.getByTitle("Copy").closest(".tw-overflow-hidden")).toBeNull();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/971 renders no row under a reply inside a response, whose row sits at the response's end", async () => {
+      render(
+        <TooltipProvider>
+          <ChatSingleMessage
+            message={baseMessage}
+            app={createAppStub()}
+            isStreaming={false}
+            footerStart={<span>Worked for 24s</span>}
+            hideFooter
+          />
+        </TooltipProvider>
+      );
+      await waitFor(() => expect(renderMarkdownMock).toHaveBeenCalled());
+
+      expect(screen.queryByTitle("Copy")).toBeNull();
+      expect(screen.queryByText("Worked for 24s")).toBeNull();
+    });
+
     it("collapses an oversized user message behind a Show more control (https://github.com/Brevilabs/obsidian-copilot-private/issues/151)", () => {
       const restoreContentHeight = stubContentDimensions(2000, 240);
 

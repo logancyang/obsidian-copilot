@@ -1,4 +1,7 @@
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
+import type { CustomAgent, CustomAgentStore } from "@/agents/CustomAgentStore";
+import { setCustomAgentsAccess } from "@/agents/testing/customAgentsAccess";
+import { fakeAgentStore } from "@/agents/ui/testing/fakeAgentStore";
 import { SessionsSidebar } from "@/agentMode/navigator/ui/SessionsSidebar";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { logError } from "@/logger";
@@ -9,12 +12,14 @@ import { dragByKeyboard, stackRowsVertically } from "@/agentMode/navigator/ui/te
 import { installRadixMenuPolyfills } from "@/agentMode/ui/testing/radixMenuPolyfills";
 import { ArchivedChatsModal } from "@/agentMode/ui/ArchivedChatsModal";
 import type { ProjectFileRecord } from "@/projects/type";
+import { resetSettings } from "@/settings/model";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { AppContext } from "@/context";
 import { type App, Notice } from "obsidian";
 import React from "react";
 
 jest.mock("@/logger");
+jest.mock("@/entitlement");
 jest.mock("@/projects/ProjectFileManager", () => ({
   ProjectFileManager: { getInstance: jest.fn() },
 }));
@@ -121,7 +126,11 @@ const createProject = jest.fn(async (project: { id: string; name: string }) => {
   ]);
 });
 
-function renderSidebar(manager: FakeManager, localStorage = new FakeLocalStorage()) {
+function renderSidebar(
+  manager: FakeManager,
+  localStorage = new FakeLocalStorage(),
+  customAgents?: CustomAgentStore
+) {
   jest.mocked(ProjectFileManager.getInstance).mockReturnValue({
     deleteProject: jest.fn(async () => {}),
     createProject,
@@ -133,6 +142,7 @@ function renderSidebar(manager: FakeManager, localStorage = new FakeLocalStorage
       loadLocalStorage: localStorage.loadLocalStorage,
       saveLocalStorage: localStorage.saveLocalStorage,
     },
+    customAgents,
     openChatSourceFile: jest.fn(async () => {}),
     loadChatById: jest.fn(async () => {}),
     activateAgentView: jest.fn(async () => {
@@ -202,6 +212,59 @@ describe("SessionsSidebar", () => {
       cleanup();
       projectsState.updateCachedProjectRecords([]);
       jest.clearAllMocks();
+    });
+
+    beforeEach(() => resetSettings());
+
+    const COCO = { slug: "coco", name: "Coco", faceSrc: "face:coco" } as CustomAgent;
+
+    function rowFaces(): (string | null)[] {
+      return ["Plan the launch video", "Release notes", "Taxes"].map(
+        (title) =>
+          screen.getByRole("button", { name: title }).querySelector("img")?.getAttribute("src") ??
+          null
+      );
+    }
+
+    function agentChats(): ChatHistoryItem[] {
+      return [
+        chat("plan.md", "Plan the launch video", 3_000, { agent: "coco", backendId: "claude" }),
+        chat("notes.md", "Release notes", 2_000, { backendId: "claude" }),
+        chat("taxes.md", "Taxes", 1_000, { agent: "gone", backendId: "claude" }),
+      ];
+    }
+
+    it("shows the agent's face on an agent chat's row, and the backend icon on a Copilot chat or a chat whose agent is gone, for https://github.com/Brevilabs/obsidian-copilot-private/issues/938", async () => {
+      await setCustomAgentsAccess("team");
+      const manager = new FakeManager();
+      manager.items = agentChats();
+
+      renderSidebar(manager, undefined, fakeAgentStore([COCO]).store);
+
+      await waitFor(() => expect(rowFaces()).toEqual(["face:coco", null, null]));
+    });
+
+    it("updates an agent chat's row when the agent's face changes, without a reload, for https://github.com/Brevilabs/obsidian-copilot-private/issues/938", async () => {
+      await setCustomAgentsAccess("team");
+      const manager = new FakeManager();
+      manager.items = agentChats();
+      const agents = fakeAgentStore([COCO]);
+      renderSidebar(manager, undefined, agents.store);
+      await waitFor(() => expect(rowFaces()[0]).toBe("face:coco"));
+
+      agents.publish([{ ...COCO, faceSrc: "face:coco?v=2" }]);
+
+      expect(rowFaces()[0]).toBe("face:coco?v=2");
+    });
+
+    it("keeps the agent's face on an agent chat's row while the license does not carry custom agents, so a locked vault's chats stay recognizable, for https://github.com/Brevilabs/obsidian-copilot-private/issues/950", async () => {
+      await setCustomAgentsAccess("plus-without-custom-agents");
+      const manager = new FakeManager();
+      manager.items = agentChats();
+
+      renderSidebar(manager, undefined, fakeAgentStore([COCO]).store);
+
+      await waitFor(() => expect(rowFaces()).toEqual(["face:coco", null, null]));
     });
 
     it("lists the saved chats the manager reports, newest first, once history loads for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {

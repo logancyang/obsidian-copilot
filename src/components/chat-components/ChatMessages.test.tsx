@@ -17,8 +17,23 @@ jest.mock("@/hooks/useChatScrolling", () => ({
 }));
 jest.mock("@/components/chat-components/ChatSingleMessage", () => ({
   __esModule: true,
-  default: ({ sourcePath, message }: { sourcePath: string; message: ChatMessage }) => (
-    <div data-testid="message-source" data-text={message.message}>
+  default: ({
+    sourcePath,
+    message,
+    responseText,
+    hideFooter,
+  }: {
+    sourcePath: string;
+    message: ChatMessage;
+    responseText?: string;
+    hideFooter?: boolean;
+  }) => (
+    <div
+      data-testid="message-source"
+      data-text={message.message}
+      data-response-text={responseText}
+      data-row={hideFooter ? "none" : "shown"}
+    >
       {sourcePath}
     </div>
   ),
@@ -123,6 +138,95 @@ describe("ChatMessages", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "Scroll to end" }));
       expect(mockScrollState.onResume).toHaveBeenCalledTimes(1);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/971 gives each response one row, on its last reply, copying the text of every reply in it", () => {
+      render(
+        <ChatMessages
+          chatHistory={[
+            message({ message: "question" }),
+            message({ message: "first answer", sender: "AI" }),
+            message({ message: "follow-up" }),
+            message({ message: "second answer", sender: "AI" }),
+            message({ message: "more of it", sender: "AI" }),
+          ]}
+          currentAiMessage=""
+          app={{} as never}
+          onRegenerate={() => undefined}
+          onEdit={() => undefined}
+          onDelete={() => undefined}
+        />
+      );
+
+      expect(
+        screen
+          .getAllByTestId("message-source")
+          .map((m) => [m.dataset.text, m.dataset.row, m.dataset.responseText])
+      ).toEqual([
+        ["question", "shown", undefined],
+        ["first answer", "shown", "first answer"],
+        ["follow-up", "shown", undefined],
+        ["second answer", "none", undefined],
+        ["more of it", "shown", "second answer\n\nmore of it"],
+      ]);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/971 puts each response's messages in one hover group, apart from the user's messages", () => {
+      render(
+        <ChatMessages
+          chatHistory={[
+            message({ message: "question" }),
+            message({ message: "first answer", sender: "AI" }),
+            message({ message: "more of it", sender: "AI" }),
+          ]}
+          currentAiMessage=""
+          app={{} as never}
+          onRegenerate={() => undefined}
+          onEdit={() => undefined}
+          onDelete={() => undefined}
+        />
+      );
+
+      const [question, first, more] = screen.getAllByTestId("message-source");
+      const response = first.closest(".tw-group\\/response");
+      expect(response?.contains(more)).toBe(true);
+      expect(response?.contains(question)).toBe(false);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/971 labels the first message of each day above it", () => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date(2026, 10, 18, 15, 0));
+      try {
+        const sentAt = (d: number, h: number) => {
+          const epoch = new Date(2026, 10, d, h).getTime();
+          return { epoch, display: "", fileName: "" };
+        };
+        render(
+          <ChatMessages
+            chatHistory={[
+              message({ message: "question", timestamp: sentAt(17, 9) }),
+              message({ message: "answer", sender: "AI", timestamp: sentAt(17, 9) }),
+              message({ message: "next day", timestamp: sentAt(18, 9) }),
+            ]}
+            currentAiMessage=""
+            app={{} as never}
+            onRegenerate={() => undefined}
+            onEdit={() => undefined}
+            onDelete={() => undefined}
+          />
+        );
+
+        const labels = [screen.getByText("Yesterday"), screen.getByText("Today")].map((el) => [
+          el.textContent,
+          el.nextElementSibling?.getAttribute("data-text"),
+        ]);
+        expect(labels).toEqual([
+          ["Yesterday", "question"],
+          ["Today", "next day"],
+        ]);
+      } finally {
+        jest.useRealTimers();
+      }
     });
   });
 

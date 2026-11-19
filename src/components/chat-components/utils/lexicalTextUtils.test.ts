@@ -1,4 +1,5 @@
-import { parseTextForPills } from "./lexicalTextUtils";
+import { $insertTextWithPills, parseTextForPills } from "./lexicalTextUtils";
+import { $createParagraphNode, $getRoot, $getSelection, createEditor } from "lexical";
 import { App, TFile } from "obsidian";
 import { mockTFolder } from "@/__tests__/mockObsidian";
 
@@ -255,6 +256,30 @@ describe("lexicalTextUtils", () => {
         text("[[Note with [brackets]]"),
         text("]"),
       ]);
+    });
+  });
+
+  describe("$insertTextWithPills()", () => {
+    it("leaves the caret at the end of text inserted into a just-focused empty composer, so typing continues it (https://github.com/Brevilabs/obsidian-copilot-private/issues/939)", () => {
+      const editor = createEditor({
+        onError: (error) => {
+          throw error;
+        },
+      });
+      editor.setRootElement(document.body.appendChild(document.createElement("div")));
+      editor.update(() => $getRoot().append($createParagraphNode()), { discrete: true });
+
+      editor.focus();
+      editor.update(() => $insertTextWithPills(app, "Here's what it should do: "), {
+        discrete: true,
+      });
+      editor.update(() => $getSelection()?.insertText("You handle marketing."), {
+        discrete: true,
+      });
+
+      expect(editor.getEditorState().read(() => $getRoot().getTextContent())).toBe(
+        "Here's what it should do: You handle marketing."
+      );
     });
   });
 });

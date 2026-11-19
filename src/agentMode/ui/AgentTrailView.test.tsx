@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppContext } from "@/context";
 import { AgentTrail } from "@/agentMode/ui/AgentTrailView";
+import { formatMessageClock } from "@/lib/messageTime";
 import type { AgentMessagePart, TurnFileChange } from "@/agentMode/session/types";
 import { miyoSearchCall } from "@/miyo/agentMode/testing/miyoSearchCall";
 import { excalidrawToolCall } from "@/excalidraw/agentMode/testing/excalidrawToolCall";
@@ -41,6 +42,7 @@ jest.mock("obsidian", () => {
       register() {}
     },
     App: class {},
+    Modal: class {},
     FileSystemAdapter: class {},
     WorkspaceLeaf: class {},
     Notice: class {},
@@ -49,6 +51,9 @@ jest.mock("obsidian", () => {
 });
 
 const { insertAtCursor } = jest.requireMock<{ insertAtCursor: jest.Mock }>("@/utils");
+
+const SENT_AT = new Date(2026, 7, 7, 20, 31, 10).getTime();
+const SENT_CLOCK = formatMessageClock(SENT_AT);
 
 const text = (value: string): AgentMessagePart => ({ kind: "text", text: value });
 
@@ -140,6 +145,27 @@ describe("AgentTrail", () => {
     expect(insertAtCursor).toHaveBeenCalledWith(app, "The final answer.");
   });
 
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/971 copies and inserts the whole response's text when the reply ends a response", () => {
+    const { app } = renderTrail({
+      parts: [text("Maya found one wrong year.")],
+      responseText: "I asked Maya.\n\nMaya found one wrong year.",
+    });
+
+    fireEvent.click(screen.getByTitle("Copy"));
+    expect(writeText).toHaveBeenCalledWith("I asked Maya.\n\nMaya found one wrong year.");
+
+    fireEvent.click(screen.getByTitle("Insert / Replace at cursor"));
+    expect(insertAtCursor).toHaveBeenCalledWith(app, "I asked Maya.\n\nMaya found one wrong year.");
+  });
+
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/971 renders no row under a reply inside a response, whose row sits at the response's end", () => {
+    renderTrail({ hideFooter: true, turnDurationMs: 12_000, timestampMs: SENT_AT });
+
+    expect(screen.queryByTitle("Copy")).toBeNull();
+    expect(screen.queryByText("Worked for")).toBeNull();
+    expect(screen.queryByText(SENT_CLOCK)).toBeNull();
+  });
+
   it("https://github.com/Brevilabs/obsidian-copilot-private/issues/908 shows Continue from here in a new chat beside Copy only when the chat offers it, and runs it on click", () => {
     const onContinue = jest.fn();
     const view = renderTrail();
@@ -210,18 +236,18 @@ describe("AgentTrail", () => {
       isStreaming: true,
       turnStopReason: undefined,
       turnStartedAtMs: Date.now() - 24_000,
-      timestamp: "2026/08/07 20:31:10",
+      timestampMs: SENT_AT,
     });
 
     expect(screen.getByText("Worked for")).toBeTruthy();
-    expect(screen.queryByText("2026/08/07 20:31:10")).toBeNull();
+    expect(screen.queryByText(SENT_CLOCK)).toBeNull();
   });
 
-  it("renders neither button when the turn was cancelled", () => {
-    renderTrail({ turnStopReason: "cancelled", timestamp: "2026/08/07 20:31:10" });
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/971 renders no row for a cancelled turn without a duration, since a row of only a hidden time would leave a blank line", () => {
+    renderTrail({ turnStopReason: "cancelled", timestampMs: SENT_AT });
     expect(screen.queryByTitle("Copy")).toBeNull();
     expect(screen.queryByTitle("Insert / Replace at cursor")).toBeNull();
-    expect(screen.getByText("2026/08/07 20:31:10")).toBeTruthy();
+    expect(screen.queryByText(SENT_CLOCK)).toBeNull();
   });
 
   it("renders neither button when the turn produced no trailing prose", () => {
@@ -231,9 +257,9 @@ describe("AgentTrail", () => {
   });
 
   it("shows the timestamp with response controls when a completed duration is unavailable", () => {
-    renderTrail({ timestamp: "2026/08/07 20:31:10" });
+    renderTrail({ timestampMs: SENT_AT });
 
-    expect(screen.getByText("2026/08/07 20:31:10")).toBeTruthy();
+    expect(screen.getByText(SENT_CLOCK)).toBeTruthy();
     expect(screen.getByTitle("Copy")).toBeTruthy();
     expect(screen.queryByText("Worked for")).toBeNull();
   });
@@ -246,12 +272,12 @@ describe("AgentTrail", () => {
       ],
       turnStopReason: "end_turn",
       turnDurationMs: 138_000,
-      timestamp: "2026/08/07 20:31:10",
+      timestampMs: SENT_AT,
     });
 
     expect(screen.getByText("Worked for")).toBeTruthy();
     expect(screen.getByText("2m 18s")).toBeTruthy();
-    expect(screen.queryByText("2026/08/07 20:31:10")).toBeNull();
+    expect(screen.queryByText(SENT_CLOCK)).toBeNull();
     expect(screen.queryByRole("button", { name: /Worked for/i })).toBeNull();
     const footer = screen.getByText("Worked for").closest(".tw-justify-between");
     expect(footer?.classList.contains("tw-items-center")).toBe(true);
@@ -314,13 +340,13 @@ describe("AgentTrail", () => {
       renderTrail({
         parts,
         turnDurationMs: 138_000,
-        timestamp: "2026/08/07 20:31:10",
+        timestampMs: SENT_AT,
       });
 
       expect(screen.getByText("Context compacted")).toBeTruthy();
       expect(screen.queryByText("Worked for")).toBeNull();
       expect(screen.queryByTitle("Copy")).toBeNull();
-      expect(screen.queryByText("2026/08/07 20:31:10")).toBeNull();
+      expect(screen.queryByText(SENT_CLOCK)).toBeNull();
     }
   );
 
@@ -755,6 +781,49 @@ describe("AgentTrail", () => {
     });
 
     expect(screen.getByTestId("agent-md").getAttribute("data-miyo-paths")).toBe("v/a.md|v/b.md");
+  });
+
+  it("shows a custom agent's saved rule in place of the edit that wrote it, in the turn's order (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", () => {
+    const save = toolCall("save", {
+      vendorToolName: "Edit",
+      toolKind: "edit",
+      title: "Edit MEMORY.md",
+      locations: [{ path: "copilot/agents/coco/MEMORY.md" }],
+    });
+    const { container } = renderTrail({
+      parts: [READ_A, save, text("Reworked the outline.")],
+      memorySaves: {
+        anchorId: "save",
+        saves: [
+          {
+            agentName: "Coco",
+            memoryPath: "copilot/agents/coco/MEMORY.md",
+            rule: "Launch videos lead with user value.",
+          },
+        ],
+      },
+    });
+
+    const shown = container.textContent ?? "";
+    expect(shown).not.toContain("MEMORY.md");
+    expect(shown.indexOf("Coco remembered")).toBeGreaterThan(-1);
+    expect(shown.indexOf("Coco remembered")).toBeLessThan(shown.indexOf("Reworked the outline."));
+  });
+
+  it("keeps the edit card of a save whose rule is not known yet, as while its turn runs", () => {
+    const save = toolCall("save", {
+      vendorToolName: "Edit",
+      toolKind: "edit",
+      title: "Edit MEMORY.md",
+      locations: [{ path: "copilot/agents/coco/MEMORY.md" }],
+    });
+    const { container } = renderTrail({
+      parts: [save, text("Reworked the outline.")],
+      memorySaves: null,
+    });
+
+    expect(container.textContent).toContain("MEMORY.md");
+    expect(screen.queryByText("Coco remembered")).toBeNull();
   });
 
   it("renders an Excalidraw write as a Copilot card between grouped work and opens the drawing in a new tab (https://github.com/Brevilabs/obsidian-copilot-private/issues/787)", () => {

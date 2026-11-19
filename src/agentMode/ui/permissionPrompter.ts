@@ -4,35 +4,12 @@ import type {
   AskUserQuestionPrompter,
   PermissionPrompter,
 } from "@/agentMode/session/AgentSessionManager";
-import { isVaultWriteToolKind } from "@/agentMode/session/fanout/fanoutTypes";
-import {
-  PERMISSION_ALLOW_KINDS,
-  PERMISSION_REJECT_KINDS,
-  type PermissionDecision,
-  type PermissionPrompt,
-  type SessionId,
-} from "@/agentMode/session/types";
-
-function decideReadOnly(req: PermissionPrompt): PermissionDecision {
-  const kind = req.toolCall.kind;
-  const deny = isVaultWriteToolKind(kind) || kind === "other";
-  const kinds = deny ? PERMISSION_REJECT_KINDS : PERMISSION_ALLOW_KINDS;
-  const opt = req.options.find((o) => kinds.includes(o.kind));
-  if (!opt) return { outcome: { outcome: "cancelled" } };
-  const decision: PermissionDecision = { outcome: { outcome: "selected", optionId: opt.optionId } };
-  return deny
-    ? { ...decision, denyMessage: "Read-only QA turn: vault-write tools are disabled." }
-    : decision;
-}
+import type { SessionId } from "@/agentMode/session/types";
 
 export function createDefaultPermissionPrompter(
-  resolveSession: (backendSessionId: SessionId) => AgentSession | null,
-  isReadOnlySession?: (backendSessionId: SessionId) => boolean
+  resolveSession: (backendSessionId: SessionId) => AgentSession | null
 ): PermissionPrompter {
   return (req) => {
-    if (isReadOnlySession?.(req.sessionId)) {
-      return Promise.resolve(decideReadOnly(req));
-    }
     const session = resolveSession(req.sessionId);
     if (!session) return Promise.resolve({ outcome: { outcome: "cancelled" } });
     // Codex's ACP plan review carries the plan in a switch-mode request, without

@@ -5,7 +5,6 @@ import {
   stripChatImageReceipts,
   updateChatTranscript,
 } from "@/utils/chatImagePersistence";
-import { serializeFanoutComposite } from "@/agentMode/session/fanout/fanoutTypes";
 import { toolsUsedLines } from "@/agentMode/session/conversationHistory";
 import { AGENT_CHAT_MODE, AI_SENDER, COPILOT_CONVERSATION_TAG, USER_SENDER } from "@/constants";
 import { logError, logInfo, logWarn } from "@/logger";
@@ -26,9 +25,10 @@ import {
   trashFile,
 } from "@/utils/vaultAdapterUtils";
 import { formatChatNoteMessage } from "@/utils/chatHistoryUtils";
+import { isRecord } from "@/utils/obsidianInternals";
 import { joinPosix } from "@/utils/pathUtils";
 import { getVaultBase } from "@/utils/vaultPath";
-import { TFile, type App } from "obsidian";
+import { parseYaml, TFile, type App } from "obsidian";
 import {
   coerceProjectId,
   escapeYamlString,
@@ -37,6 +37,9 @@ import {
   unescapeYamlString,
 } from "./agentChatYaml";
 import { sanitizeModel } from "./AgentSessionIndex";
+import { NO_SAVED_CHAT_STATES, type SavedChatStates } from "./chatExtension";
+import type { MemorySave } from "@/agents/memorySaves";
+import { restoreAgentMentions, type AgentMention } from "@/agents/agentMentions";
 import { GLOBAL_SCOPE } from "./scope";
 import type { AgentChatMessage, BackendId, ModelSelection, SessionUsage } from "./types";
 
@@ -57,6 +60,28 @@ interface SavedMessageData {
   notes?: string[];
   folders?: string[];
   webTabs?: { url: string; title?: string }[];
+  agents?: string[];
+  // A custom agent's save lines come back with the chat only from its note; a build without custom agents ignores the key and shows the reply as ordinary text.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/942
+  memorySaves?: readonly MemorySave[];
+  // Each @-mentioned agent's run comes back with the chat only from its note; master and a build without custom agents ignore the key.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
+  agentMentions?: readonly AgentMention[];
+  // A card the user can still act on comes back with the chat only from its note, kept on the last message; master and a build without the card's feature ignore the key.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/941
+  chatStates?: SavedChatStates;
+}
+
+function loadedMemorySaves(saved: unknown): MemorySave[] {
+  if (!Array.isArray(saved)) return [];
+  return saved.filter((entry: unknown): entry is MemorySave => {
+    const save = entry as Partial<Record<keyof MemorySave, unknown>> | null;
+    return (
+      typeof save?.rule === "string" &&
+      typeof save.agentName === "string" &&
+      typeof save.memoryPath === "string"
+    );
+  });
 }
 
 function readMessageData(json: string): SavedMessageData {
@@ -71,6 +96,7 @@ function savedContext(context: MessageContext | undefined): SavedMessageData {
   const saved: SavedMessageData = {};
   if (context?.notes?.length) saved.notes = context.notes.map((note) => note.path);
   if (context?.folders?.length) saved.folders = context.folders;
+  if (context?.agents?.length) saved.agents = context.agents;
   if (context?.webTabs?.length)
     saved.webTabs = context.webTabs.map(({ url, title }) => ({ url, title }));
   return saved;
@@ -87,12 +113,17 @@ function loadedContext(saved: SavedMessageData, app: App): MessageContext | unde
   const folders = (Array.isArray(saved.folders) ? saved.folders : []).filter(
     (path) => typeof path === "string"
   );
-  if (notes.length === 0 && webTabs.length === 0 && folders.length === 0) return undefined;
+  const agents = (Array.isArray(saved.agents) ? saved.agents : []).filter(
+    (name) => typeof name === "string"
+  );
+  if (notes.length === 0 && webTabs.length === 0 && folders.length === 0 && agents.length === 0)
+    return undefined;
   return {
     notes,
     urls: [],
     ...(folders.length > 0 ? { folders } : {}),
     ...(webTabs.length > 0 ? { webTabs } : {}),
+    ...(agents.length > 0 ? { agents } : {}),
   };
 }
 
@@ -113,6 +144,17 @@ function parseContinuedFrom(raw: string | undefined): string[] | undefined {
   try {
     const notes: unknown = JSON.parse(raw ?? "null");
     return Array.isArray(notes) && notes.every((n) => typeof n === "string") ? notes : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// A chat note is the user's file: a hand edit or the Properties panel can leave agent as a list, a number, null or broken YAML, and the chat still opens.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/937
+function parseAgentSlug(yaml: string): string | undefined {
+  try {
+    const agent: unknown = (parseYaml(yaml) as { agent?: unknown } | null)?.agent;
+    return typeof agent === "string" ? agent.trim() || undefined : undefined;
   } catch {
     return undefined;
   }
@@ -145,6 +187,8 @@ export interface LoadedAgentChat {
   model?: ModelSelection;
   carriedMessages?: number;
   continuedFrom?: string[];
+  agent?: string;
+  chatStates?: SavedChatStates;
 }
 
 export class AgentChatPersistenceManager {
@@ -175,6 +219,8 @@ export class AgentChatPersistenceManager {
       usage?: SessionUsage;
       carriedMessages?: number;
       continuedFrom?: readonly string[];
+      agent?: string | null;
+      chatStates?: SavedChatStates;
     }
   ): Promise<{ path: string } | null> {
     if (messages.length === 0) return null;
@@ -206,7 +252,7 @@ export class AgentChatPersistenceManager {
           : "",
         preferredFileName
       );
-      const chatContent = this.formatChatContent(preparedMessages);
+      const chatContent = this.formatChatContent(preparedMessages, options?.chatStates);
 
       const updates = this.frontmatterUpdates({
         firstMessageEpoch,
@@ -218,6 +264,7 @@ export class AgentChatPersistenceManager {
         usage: options?.usage,
         carriedMessages: options?.carriedMessages,
         continuedFrom: options?.continuedFrom,
+        agent: options?.agent,
       });
       // A chat link finds its note by exact epoch, and a resumed Claude transcript starts at a later time than the note.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/744
@@ -272,7 +319,7 @@ export class AgentChatPersistenceManager {
     const content = await this.app.vault.read(file);
     const key = this.app.vault.getAbstractFileByPath(file.path) ?? file.path;
     this.loadedTranscripts.set(key, content);
-    const { frontmatter, body } = this.splitFrontmatter(content);
+    const { frontmatter, yaml, body } = this.splitFrontmatter(content);
     const backendId = (frontmatter.backendId ?? "").trim();
     if (!backendId) {
       throw new Error(`Missing backendId in agent chat frontmatter: ${file.path}`);
@@ -286,7 +333,13 @@ export class AgentChatPersistenceManager {
     const model = parseModelJson(frontmatter.model);
     const carriedMessages = Number(frontmatter.carriedMessages) || undefined;
     const continuedFrom = parseContinuedFrom(frontmatter.continuedFrom);
-    const messages = this.parseChatBody(body, parseLinkableEpoch(frontmatter.epoch));
+    const agent = parseAgentSlug(yaml);
+    const { messages, chatStates } = this.parseChatBody(
+      body,
+      // A continued chat's epoch is the time it was continued, and its first message's time and day label must show when it was sent.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/971
+      continuedFrom ? undefined : parseLinkableEpoch(frontmatter.epoch)
+    );
 
     logInfo(
       `[AgentChatPersistenceManager] Loaded ${messages.length} messages from ${file.path} (backend=${backendId}, sessionId=${sessionId ?? "none"}, projectId=${projectId})`
@@ -301,6 +354,8 @@ export class AgentChatPersistenceManager {
       model,
       carriedMessages,
       continuedFrom,
+      agent,
+      chatStates,
     };
   }
 
@@ -382,18 +437,23 @@ export class AgentChatPersistenceManager {
     return file instanceof TFile ? file : null;
   }
 
-  private formatChatContent(messages: AgentChatMessage[]): string {
+  private formatChatContent(
+    messages: AgentChatMessage[],
+    chatStates: SavedChatStates = NO_SAVED_CHAT_STATES
+  ): string {
     return messages
-      .map((m) => {
+      .map((m, index) => {
         const ts = m.timestamp ? m.timestamp.display : "Unknown time";
-        const body =
-          m.message.length === 0 && m.fanout
-            ? serializeFanoutComposite(m.fanout, (id) => id)
-            : m.message;
+        const body = m.message;
         const tools = toolsUsedLines(m, getVaultBase(this.app));
         const data: SavedMessageData = {
           ...(tools.length > 0 ? { tools } : {}),
           ...savedContext(m.context),
+          ...(m.memorySaves?.length ? { memorySaves: m.memorySaves } : {}),
+          ...(m.agentMentions?.length ? { agentMentions: m.agentMentions } : {}),
+          ...(index === messages.length - 1 && Object.keys(chatStates).length > 0
+            ? { chatStates }
+            : {}),
         };
         // A message ending in a literal hidden line gets an empty one after it, so loading keeps that text.
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/906
@@ -406,8 +466,12 @@ export class AgentChatPersistenceManager {
       .join("\n\n");
   }
 
-  private parseChatBody(body: string, conversationEpoch?: number): AgentChatMessage[] {
+  private parseChatBody(
+    body: string,
+    conversationEpoch?: number
+  ): { messages: AgentChatMessage[]; chatStates?: SavedChatStates } {
     const messages: AgentChatMessage[] = [];
+    let chatStates: SavedChatStates | undefined;
     const pattern = /\*\*(user|ai)\*\*: ([\s\S]*?)(?=(?:\n\*\*(?:user|ai)\*\*: )|$)/g;
 
     let match: RegExpExecArray | null;
@@ -435,6 +499,9 @@ export class AgentChatPersistenceManager {
         ? data.tools.filter((tool) => typeof tool === "string")
         : [];
       const context = loadedContext(data, this.app);
+      const memorySaves = loadedMemorySaves(data.memorySaves);
+      const agentMentions = restoreAgentMentions(data.agentMentions);
+      chatStates = isRecord(data.chatStates) ? data.chatStates : undefined;
 
       let timestamp: FormattedDateTime | null = null;
       if (timestampStr !== "Unknown time") {
@@ -464,17 +531,20 @@ export class AgentChatPersistenceManager {
         timestamp,
         ...(tools.length > 0 ? { toolsUsed: tools } : {}),
         ...(context ? { context } : {}),
+        ...(memorySaves.length > 0 ? { memorySaves } : {}),
+        ...(agentMentions.length > 0 ? { agentMentions } : {}),
       });
     }
-    return messages;
+    return { messages, chatStates };
   }
 
   private splitFrontmatter(content: string): {
     frontmatter: Record<string, string>;
+    yaml: string;
     body: string;
   } {
     const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
-    if (!match) return { frontmatter: {}, body: content };
+    if (!match) return { frontmatter: {}, yaml: "", body: content };
     const frontmatter: Record<string, string> = {};
     for (const line of match[1].split("\n")) {
       const m = line.match(/^(\w+):\s*(.+)/);
@@ -490,7 +560,7 @@ export class AgentChatPersistenceManager {
       }
       frontmatter[m[1]] = value;
     }
-    return { frontmatter, body: content.slice(match[0].length).trim() };
+    return { frontmatter, yaml: match[1], body: content.slice(match[0].length).trim() };
   }
 
   private generateFileName(
@@ -569,6 +639,7 @@ export class AgentChatPersistenceManager {
     usage?: SessionUsage;
     carriedMessages?: number;
     continuedFrom?: readonly string[];
+    agent?: string | null;
   }): FrontmatterUpdates {
     const projectId = coerceProjectId(args.projectId);
     const quoted = (key: string, value: string | null | undefined) =>
@@ -582,6 +653,7 @@ export class AgentChatPersistenceManager {
       ["projectId", projectId === GLOBAL_SCOPE ? null : quoted("projectId", projectId)],
       ["sessionId", quoted("sessionId", args.sessionId)],
       ["topic", quoted("topic", args.label)],
+      ["agent", quoted("agent", args.agent)],
       ["model", args.model ? `model: '${JSON.stringify(args.model)}'` : undefined],
       ["usage", args.usage ? `usage: '${JSON.stringify(args.usage)}'` : undefined],
       [

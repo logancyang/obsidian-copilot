@@ -17,7 +17,7 @@ import { AgentTasksProvider } from "@/agentMode/ui/AgentTasksContext";
 import { QueuedMessageList } from "@/agentMode/ui/QueuedMessageList";
 import { RunningTasksIndicator } from "@/agentMode/ui/RunningTasksIndicator";
 import { TaskDetailView } from "@/agentMode/ui/TaskDetailView";
-import { taskDisplayStatus } from "@/agentMode/ui/taskDisplay";
+import { runningTasks, taskDisplayStatus } from "@/agentMode/ui/taskDisplay";
 import { AgentHomeReleaseUpdate } from "@/components/release-update/AgentHomeReleaseUpdate";
 import { RelevantNotes } from "@/components/chat-components/RelevantNotes";
 import { CopilotBrandIcon } from "@/components/ui/CopilotBrandIcon";
@@ -52,6 +52,46 @@ import { useAgentModelPicker } from "@/agentMode/ui/useAgentModelPicker";
 import { useAgentModePicker } from "@/agentMode/ui/useAgentModePicker";
 import { useSessionBackendDescriptor } from "@/agentMode/ui/useBackendDescriptor";
 import { pickRandomGreeting } from "@/agentMode/ui/landingGreetings";
+import { backendRegistry, listBackendDescriptors } from "@/agentMode/backends/registry";
+import { buildAgentModelChoices } from "@/agentMode/ui/agentModelPickerHelpers";
+import {
+  agentBackend,
+  agentSetupReason,
+  agentToSetUpBeforeChat,
+  startCustomAgentChat,
+} from "@/agents/agentMode/agentChats";
+import { AgentProfile } from "@/agents/agentMode/ui/AgentProfile";
+import { findRun } from "@/agents/agentMode/agentRelays";
+import { ChatAskedAgentView } from "@/agents/agentMode/ui/AskedAgentView";
+import { chatRunningAgents } from "@/agents/agentMode/ui/RunningAgents";
+import { useCustomAgentsGate } from "@/agents/customAgentsGate";
+import type { CustomAgent } from "@/agents/CustomAgentStore";
+import { AgentIdentityBar } from "@/agents/ui/AgentIdentityBar";
+import {
+  ChatAgentsContext,
+  ChatRunsContext,
+  useChatAgentsValue,
+  type RunRef,
+} from "@/agents/ui/chatAgents";
+import { AgentProfileCover, useAgentProfileRoute } from "@/agents/ui/AgentProfileCover";
+import { AgentRoster } from "@/agents/ui/AgentRoster";
+import { CreateAgentModal } from "@/agents/ui/CreateAgentModal";
+import {
+  dismissFirstAgentBanner,
+  FirstAgentBanner,
+  useFirstAgentBannerVisible,
+} from "@/agents/ui/FirstAgentBanner";
+import {
+  LockedAgentChat,
+  LockedHomeNote,
+  unlockCustomAgents,
+  useReadOnlyChatAgent,
+} from "@/agents/ui/LockedAgentNotices";
+import { openLockedAgentProfile, renderNewAgentButton } from "@/agents/ui/lockedCustomAgents";
+import { agentComposerHint, useAgentHomeSelection } from "@/agents/ui/useAgentHomeSelection";
+import { CustomAgentStoreContext, useCustomAgents } from "@/agents/ui/useCustomAgents";
+import { useAgentSetupProblems } from "@/agents/agentMode/useAgentSetupProblems";
+import { useAgentRecentChats } from "@/agents/ui/useAgentRecentChats";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { GLOBAL_SCOPE } from "@/agentMode/session/scope";
@@ -59,7 +99,7 @@ import { type ProjectConfig } from "@/aiParams";
 import { createProjectAndEnter } from "@/projects/ui/AgentProjectCreateForm";
 import { TruncatedText } from "@/components/TruncatedText";
 import { AppContext } from "@/context";
-import { ChatInputProvider } from "@/context/ChatInputContext";
+import { ChatInputProvider, useChatInput } from "@/context/ChatInputContext";
 import { useChatFileDrop } from "@/hooks/useChatFileDrop";
 import { cn } from "@/lib/utils";
 import { logError, logWarn } from "@/logger";
@@ -73,7 +113,7 @@ import {
   useArchivedProjects,
   useProjects,
 } from "@/projects/state";
-import { useSettingsValue } from "@/settings/model";
+import { getSettings, useSettingsValue } from "@/settings/model";
 import { FileSearch, Files, Folder, MessageSquare } from "lucide-react";
 import { Notice } from "obsidian";
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
@@ -142,10 +182,17 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     openedTask?.sessionId === sessionId
       ? tasks.find((task) => task.toolCallId === openedTask.toolCallId)
       : undefined;
-  const markTaskViewClosedByUser = useComposerFocusAfterTaskView(detailTask !== undefined);
+  const [openedRun, setOpenedRun] = useState<{ sessionId: string; run: RunRef } | null>(null);
+  const handleOpenRun = useCallback((run: RunRef) => setOpenedRun({ sessionId, run }), [sessionId]);
+  const detailRun =
+    openedRun?.sessionId === sessionId ? findRun(messages, openedRun.run) : undefined;
+  const hasRun = useCallback((run: RunRef) => findRun(messages, run) !== undefined, [messages]);
+  const detailOpen = detailTask !== undefined || detailRun !== undefined;
+  const markTaskViewClosedByUser = useComposerFocusAfterTaskView(detailOpen);
   const handleCloseTask = useCallback(() => {
     markTaskViewClosedByUser();
     setOpenedTask(null);
+    setOpenedRun(null);
   }, [markTaskViewClosedByUser]);
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
@@ -378,6 +425,110 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
 
   const isLanding = !manager.getActiveSession()?.hasUserVisibleMessages();
   const isProjectLanding = isLanding && isProjectScope;
+
+  const switchLandingAgent = useCallback(
+    async (agent: CustomAgent | null) => {
+      const landing = manager.getActiveSession();
+      if (!landing) return;
+      const { backendId, seed } = agent ? agentBackend(manager, agent) : {};
+      const chat = await manager.replaceSessionInPlace(landing.internalId, backendId, {
+        seedSelection: seed,
+        agentSlug: agent?.slug ?? null,
+      });
+      await chat.ready;
+    },
+    [manager]
+  );
+  const needsSetup = useAgentSetupProblems(plugin, useCustomAgents(plugin.customAgents));
+  const agentHome = useAgentHomeSelection(
+    plugin.customAgents,
+    {
+      sessionId,
+      chatInputId,
+      agentSlug: manager.getSession(sessionId)?.agentSlug ?? null,
+      isLanding,
+    },
+    switchLandingAgent,
+    needsSetup
+  );
+  const recentChats = useAgentRecentChats(chatHistoryItems, agentHome.agents, agentHome.selected);
+  const customAgentsGate = useCustomAgentsGate();
+  const { focusInput, insertTextWithPills } = useChatInput();
+  const selectAgent = agentHome.select;
+  const getAgentModelChoices = useCallback(
+    () =>
+      buildAgentModelChoices({
+        manager,
+        descriptors: listBackendDescriptors(),
+        settings: getSettings(),
+      }),
+    [manager]
+  );
+  const openCreateAgentDialog = useCallback(() => {
+    const store = plugin.customAgents;
+    if (!store) return;
+    new CreateAgentModal(app, {
+      store,
+      models: getAgentModelChoices(),
+      onCreated: (slug) => void selectAgent(slug).then(focusInput),
+      onAskCopilot: (message) =>
+        void selectAgent(null).then(() => {
+          focusInput();
+          insertTextWithPills(message);
+        }),
+    }).open();
+  }, [app, plugin, getAgentModelChoices, selectAgent, focusInput, insertTextWithPills]);
+  const newAgentButton = renderNewAgentButton(customAgentsGate, {
+    emphasized: agentHome.agents.length === 0,
+    onCreate: openCreateAgentDialog,
+  });
+  const firstAgentBannerVisible = useFirstAgentBannerVisible(agentHome.agents.length);
+  // A new chat rebuilt in place, as when the agent's model changes from this profile, keeps its chat input, so the profile stays open over it.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/940
+  const profile = useAgentProfileRoute(agentHome.agents, chatInputId);
+  const markProfileClosedByUser = useComposerFocusAfterTaskView(profile.agent !== null);
+  const { close: closeProfile, open: openProfile } = profile;
+  const chatAgents = useChatAgentsValue(plugin.customAgents, agentHome.selected?.slug ?? null, {
+    openRun: handleOpenRun,
+    needsSetup,
+    openProfile,
+  });
+  const openLockedProfile = useCallback(
+    (slug: string) => void openLockedAgentProfile(app, () => openProfile(slug)),
+    [app, openProfile]
+  );
+  const openSavedChat = useCallback(
+    async (id: string) => {
+      const chat = chatHistoryItems.find((item) => item.id === id);
+      const slug = chat && agentToSetUpBeforeChat(chat, needsSetup);
+      if (slug) openProfile(slug);
+      else await handleLoadChat(id);
+    },
+    [chatHistoryItems, needsSetup, openProfile, handleLoadChat]
+  );
+  const leaveProfile = useCallback(() => {
+    markProfileClosedByUser();
+    closeProfile();
+  }, [markProfileClosedByUser, closeProfile]);
+  const selectedSlug = agentHome.selected?.slug ?? null;
+  const startChatFromProfile = useCallback(
+    (agent: CustomAgent) => {
+      // The new chat page already has the agent picked, so its new chat is that page.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/940
+      // An agent unlocked from its profile was never picked, so the new chat page picks it now.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/962
+      if (isLanding) {
+        leaveProfile();
+        if (selectedSlug !== agent.slug) void selectAgent(agent.slug);
+        return;
+      }
+      startCustomAgentChat(manager, agent).catch((e: unknown) => {
+        logError("[AgentMode] new chat from an agent's profile failed", e);
+        new Notice(`Couldn't start a chat with ${agent.name}. Please try again.`);
+      });
+    },
+    [isLanding, leaveProfile, selectedSlug, selectAgent, manager]
+  );
   const dropOverlay = isDragActive && (
     <div className="tw-pointer-events-none tw-absolute tw-inset-0 tw-z-modal tw-flex tw-items-center tw-justify-center tw-rounded-md tw-border tw-border-dashed tw-bg-primary tw-opacity-80">
       <span>Drop files here...</span>
@@ -433,9 +584,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const projectPlacement = placementRef.current;
   const isProjectContextInline = projectPlacement?.standalone === true;
 
-  const mainAgentId =
-    manager.getActiveSession()?.backendId ?? manager.getStartingBackendId() ?? null;
-
   // eslint-disable-next-line react-hooks/exhaustive-deps -- sessionId intentionally re-rolls the otherwise argument-free greeting factory
   const greeting = useMemo(() => pickRandomGreeting(), [sessionId]);
 
@@ -454,8 +602,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
         title: "Recent chats",
         renderBody: () => (
           <GlobalRecentChatsSection
-            items={chatHistoryItems}
-            onLoadChat={handleLoadChat}
+            {...recentChats}
+            onLoadChat={openSavedChat}
             onUpdateTitle={handleUpdateChatTitle}
             onDeleteChat={handleDeleteChat}
             onCloseSession={handleCloseSession}
@@ -514,13 +662,13 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     [
       activeProjects,
       projectNamesById,
-      chatHistoryItems,
+      recentChats,
       app,
       projectUsageManager,
       handleSelectProject,
       handleCreateProject,
       handleProjectDeleted,
-      handleLoadChat,
+      openSavedChat,
       handleUpdateChatTitle,
       handleDeleteChat,
       handleDeleteChats,
@@ -557,9 +705,9 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
         title: "Recent chats",
         renderBody: () => (
           <GlobalRecentChatsSection
-            items={chatHistoryItems}
+            {...recentChats}
             variant="project"
-            onLoadChat={handleLoadChat}
+            onLoadChat={openSavedChat}
             onUpdateTitle={handleUpdateChatTitle}
             onDeleteChat={handleDeleteChat}
             onCloseSession={handleCloseSession}
@@ -582,9 +730,9 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       },
     ],
     [
-      chatHistoryItems,
+      recentChats,
       activeProjectId,
-      handleLoadChat,
+      openSavedChat,
       handleUpdateChatTitle,
       handleDeleteChat,
       handleDeleteChats,
@@ -622,28 +770,34 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   );
 
   const composerNode = (
-    <AgentChatInput
-      backend={backend}
-      plugin={plugin}
-      chatInputId={chatInputId}
-      draft={draft}
-      app={app}
-      mainAgentId={mainAgentId}
-      updateUserMessageHistory={updateUserMessageHistory}
-      isStarting={isStarting}
-      isLoading={isLoading}
-      isReplyRunning={replyRunning}
-      queuedPrompts={queuedPrompts}
-      acceptsMidTurnMessages={backend.acceptsMidTurnMessages()}
-      hasPendingPlanPermission={hasPendingPlanPermission}
-      modelPickerOverride={modelPickerOverride ?? undefined}
-      modePickerOverride={modePickerOverride ?? undefined}
-      onCycleMode={handleCycleMode}
-      disabled={isOrphanedProject}
-      projectFolderPath={projectFolderPath}
-      hasChatMovedFrom={hasChatMovedFrom}
-    />
+    <ChatAgentsContext.Provider value={chatAgents}>
+      <AgentChatInput
+        backend={backend}
+        chatInputId={chatInputId}
+        draft={draft}
+        app={app}
+        updateUserMessageHistory={updateUserMessageHistory}
+        // A message sent while a picked agent's chat is still starting would reach the chat it replaces, so it waits for the agent the home shows.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/588
+        isStarting={isStarting || agentHome.switching}
+        isLoading={isLoading}
+        isReplyRunning={replyRunning}
+        queuedPrompts={queuedPrompts}
+        acceptsMidTurnMessages={backend.acceptsMidTurnMessages()}
+        hasPendingPlanPermission={hasPendingPlanPermission}
+        modelPickerOverride={modelPickerOverride ?? undefined}
+        modePickerOverride={modePickerOverride ?? undefined}
+        onCycleMode={handleCycleMode}
+        disabled={isOrphanedProject}
+        projectFolderPath={projectFolderPath}
+        hasChatMovedFrom={hasChatMovedFrom}
+        placeholder={agentComposerHint(agentHome.selected)}
+      />
+    </ChatAgentsContext.Provider>
   );
+
+  const chatSetupProblem = agentHome.selected && needsSetup.get(agentHome.selected.slug);
+  const lockedChatAgent = useReadOnlyChatAgent(agentHome.selected, isLoading, !!chatSetupProblem);
 
   const { queue: heldMessages, setQueue: setHeldMessages } = draft;
   const handleRemoveHeldMessage = useCallback(
@@ -674,18 +828,47 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const showProjectHero = isProjectLanding && !isOrphanedProject;
   const heroText = showProjectHero ? `Chat in ${projectName}` : greeting;
   const hero = (
-    <div className="tw-flex tw-min-w-0 tw-items-center tw-justify-center tw-gap-3">
-      <CopilotBrandIcon className="tw-size-6 tw-shrink-0 tw-text-normal" />
-      <TruncatedText
-        className="tw-min-w-0 tw-text-3xl tw-font-[330] tw-text-normal"
-        tooltipContent={heroText}
-      >
-        {heroText}
-      </TruncatedText>
-    </div>
+    <AgentRoster
+      agents={agentHome.agents}
+      selectedSlug={agentHome.selected?.slug ?? null}
+      onSelect={(slug) => void agentHome.select(slug)}
+      newAgentButton={newAgentButton}
+      onOpenProfile={profile.open}
+      needsSetup={needsSetup}
+      locked={
+        customAgentsGate === "locked"
+          ? {
+              onOpen: openLockedProfile,
+              note: (
+                <LockedHomeNote onUnlock={(ownerWindow) => unlockCustomAgents(app, ownerWindow)} />
+              ),
+            }
+          : undefined
+      }
+      emptyHero={
+        <div className="tw-flex tw-min-w-0 tw-items-center tw-justify-center tw-gap-3">
+          {!newAgentButton && <CopilotBrandIcon className="tw-size-6 tw-shrink-0 tw-text-normal" />}
+          <TruncatedText
+            className="tw-min-w-0 tw-text-3xl tw-font-[330] tw-text-normal"
+            tooltipContent={heroText}
+          >
+            {heroText}
+          </TruncatedText>
+        </div>
+      }
+    />
   );
 
   const activeSession = manager.getSession(sessionId);
+  const runningAgents = chatRunningAgents({
+    messages,
+    chat: activeSession,
+    hiddenChats: plugin.hiddenAgentChats,
+    agents: chatAgents.agents,
+    taskCount: runningTasks(tasks).length,
+    onOpen: (run) => handleOpenRun({ runId: run.id }),
+    gate: customAgentsGate,
+  });
   const getActiveChatBookmarkState = useCallback(
     () => getChatBookmarkState(manager.getSessionSourcePath(sessionId)),
     [getChatBookmarkState, manager, sessionId]
@@ -755,7 +938,12 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
           />
         </div>
       </div>
-      <AgentTabStrip manager={manager} onOpenSidebar={handleOpenSessionsSidebar} />
+      <AgentTabStrip
+        manager={manager}
+        onOpenSidebar={handleOpenSessionsSidebar}
+        agents={agentHome.agents}
+        onTabClick={profile.agent ? leaveProfile : undefined}
+      />
       {createAnchor && (
         <CreateProjectPanel
           anchorEl={createAnchor}
@@ -763,7 +951,39 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
           onSave={persistCreateProject}
         />
       )}
-      <div className="tw-min-h-0 tw-flex-1">
+      <AgentProfileCover
+        header={
+          // A new chat's row of faces already shows who it is with; the bar takes over once the chat has a message.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/938
+          // A task's or an asked agent's view names who it shows in its own header, which takes the bar's place.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/967
+          !isLanding &&
+          !detailOpen &&
+          agentHome.selected && (
+            <AgentIdentityBar agent={agentHome.selected} onOpenProfile={profile.open} />
+          )
+        }
+        profile={
+          profile.agent &&
+          plugin.customAgents && (
+            <AgentProfile
+              agent={profile.agent}
+              app={app}
+              manager={manager}
+              store={plugin.customAgents}
+              hiddenChats={plugin.hiddenAgentChats}
+              hostSessionId={sessionId}
+              getModels={getAgentModelChoices}
+              onBack={leaveProfile}
+              onNewChat={startChatFromProfile}
+              setupProblem={
+                customAgentsGate === "full" ? needsSetup.get(profile.agent.slug) : undefined
+              }
+              onSetUp={(backendId) => backendRegistry[backendId].openInstallUI(plugin)}
+            />
+          )
+        }
+      >
         <div ref={chatContainerRef} className="tw-flex tw-size-full tw-flex-col tw-overflow-hidden">
           <div className="tw-h-full">
             <div className="tw-relative tw-flex tw-h-full tw-flex-col">
@@ -798,7 +1018,15 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                             {dropOverlay}
                           </div>
                         ) : (
-                          composerNode
+                          <>
+                            {composerNode}
+                            {customAgentsGate === "full" && firstAgentBannerVisible && (
+                              <FirstAgentBanner
+                                onCreate={openCreateAgentDialog}
+                                onDismiss={dismissFirstAgentBanner}
+                              />
+                            )}
+                          </>
                         )}
                       </>
                     }
@@ -834,27 +1062,41 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                           pendingToolPermissions.length > 0 || pendingAskUserQuestions.length > 0
                         }
                       />
+                    ) : detailRun ? (
+                      <ChatAskedAgentView
+                        run={detailRun}
+                        chat={activeSession}
+                        hiddenChats={plugin.hiddenAgentChats}
+                        messages={messages}
+                        agents={chatAgents.agents}
+                        app={app}
+                        onBack={handleCloseTask}
+                      />
                     ) : null}
                     {/* The chat stays laid out, invisible, under a task's view: hiding it with display none collapses its scroller, which then jumps to the end on Back. https://github.com/Brevilabs/obsidian-copilot-private/issues/749 */}
                     <div
                       className={cn(
                         "tw-flex tw-min-h-0 tw-flex-1 tw-flex-col",
-                        detailTask && "tw-invisible tw-absolute tw-inset-0"
+                        detailOpen && "tw-invisible tw-absolute tw-inset-0"
                       )}
                     >
-                      <AgentChatMessages
-                        sourcePath={activeSourcePath}
-                        key={sessionId}
-                        messages={messages}
-                        plugin={plugin}
-                        currentPlan={currentPlan}
-                        pendingToolPermissions={pendingToolPermissions}
-                        pendingAskUserQuestions={pendingAskUserQuestions}
-                        chatBackend={backend}
-                        isLoading={isLoading}
-                        chatStates={chatStates}
-                        onContinueFrom={handleContinueFrom}
-                      />
+                      <ChatAgentsContext.Provider value={chatAgents}>
+                        <ChatRunsContext.Provider value={hasRun}>
+                          <AgentChatMessages
+                            sourcePath={activeSourcePath}
+                            key={sessionId}
+                            messages={messages}
+                            plugin={plugin}
+                            currentPlan={currentPlan}
+                            pendingToolPermissions={pendingToolPermissions}
+                            pendingAskUserQuestions={pendingAskUserQuestions}
+                            chatBackend={backend}
+                            isLoading={isLoading}
+                            chatStates={chatStates}
+                            onContinueFrom={handleContinueFrom}
+                          />
+                        </ChatRunsContext.Provider>
+                      </ChatAgentsContext.Provider>
                       {queuedMessagesNode}
                       <AgentChatControls
                         onCopyChatLink={
@@ -872,7 +1114,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                         onSaveAsNote={handleSaveAsNote}
                         chatHistoryItems={chatHistoryItems}
                         onLoadHistory={handleLoadChatHistory}
-                        onLoadChat={handleLoadChat}
+                        onLoadChat={openSavedChat}
                         onUpdateChatTitle={handleUpdateChatTitle}
                         onDeleteChat={handleDeleteChat}
                         onCloseSession={handleCloseSession}
@@ -887,10 +1129,27 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                             onOpenTask={handleOpenTask}
                             onStopTask={backend.canStopTasks() ? handleStopTask : undefined}
                             container={rootEl}
+                            runs={runningAgents}
                           />
                         }
                       />
-                      {composerNode}
+                      {lockedChatAgent ? (
+                        <LockedAgentChat
+                          name={lockedChatAgent.name}
+                          onNewChat={handleNewChat}
+                          onUnlock={(ownerWindow) => unlockCustomAgents(app, ownerWindow)}
+                          setup={
+                            customAgentsGate !== "locked" && chatSetupProblem
+                              ? {
+                                  reason: agentSetupReason(lockedChatAgent.name, chatSetupProblem),
+                                  onOpenProfile: () => openProfile(lockedChatAgent.slug),
+                                }
+                              : undefined
+                          }
+                        />
+                      ) : (
+                        composerNode
+                      )}
                     </div>
                   </AgentTasksProvider>
                 )}
@@ -898,7 +1157,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
             </div>
           </div>
         </div>
-      </div>
+      </AgentProfileCover>
     </div>
   );
 };
@@ -906,7 +1165,9 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
 export const AgentHome: React.FC<AgentHomeProps> = (props) => {
   return (
     <ChatInputProvider>
-      <AgentHomeInternal {...props} />
+      <CustomAgentStoreContext.Provider value={props.plugin.customAgents}>
+        <AgentHomeInternal {...props} />
+      </CustomAgentStoreContext.Provider>
     </ChatInputProvider>
   );
 };
