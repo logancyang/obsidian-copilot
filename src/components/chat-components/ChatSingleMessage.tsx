@@ -939,9 +939,9 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
               renderMessageContent()
             )}
           </div>
-
-          {isUserMessage ? null : footer}
         </div>
+        {/* A reply's row sits outside its content's clipping box, which would cut off and scroll the phone's larger menu button. https://github.com/Brevilabs/obsidian-copilot-private/issues/971 */}
+        {isUserMessage || !footer ? null : <div className="tw-mt-2">{footer}</div>}
       </div>
       {isUserMessage && footer ? (
         // The user's time and buttons float over the gap below the bubble while it is pointed at, so the bubble keeps no space for them; a phone has no pointer, so they stay in view there.
