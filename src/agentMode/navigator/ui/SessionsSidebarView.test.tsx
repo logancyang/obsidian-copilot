@@ -1,5 +1,6 @@
 import { revealSessionsSidebar } from "@/agentMode/navigator/revealSessionsSidebar";
 import SessionsSidebarView from "@/agentMode/navigator/ui/SessionsSidebarView";
+import type { CustomAgentStore } from "@/agents/CustomAgentStore";
 import { SESSIONS_SIDEBAR_VIEWTYPE } from "@/constants";
 import type CopilotPlugin from "@/main";
 import {
@@ -16,24 +17,26 @@ jest.mock("@/agentMode/navigator/revealSessionsSidebar", () => ({
 }));
 
 const mockSidebarMounts = jest.fn();
+const mockSidebarProps = jest.fn();
 jest.mock("@/agentMode/navigator/ui/SessionsSidebar", () => {
   const React = jest.requireActual<typeof import("react")>("react");
   return {
-    SessionsSidebar: () => {
+    SessionsSidebar: (props: object) => {
+      mockSidebarProps(props);
       React.useEffect(() => mockSidebarMounts(), []);
       return React.createElement("button", { type: "button" }, "Sidebar content");
     },
   };
 });
 
-function makeView(agentSessionManager: object | undefined) {
+function makeView(agentSessionManager: object | undefined, customAgents?: CustomAgentStore) {
   const plugin = {
     app: {},
     agentSessionManager,
     register: jest.fn(),
   } as unknown as CopilotPlugin;
   const leaf = { app: plugin.app, detach: jest.fn() } as unknown as WorkspaceLeaf;
-  const view = new SessionsSidebarView(leaf, plugin);
+  const view = new SessionsSidebarView(leaf, plugin, customAgents);
   const stopMigrationWatch = jest.fn();
   view.containerEl.onWindowMigrated = jest.fn(() => stopMigrationWatch);
   document.body.appendChild(view.containerEl);
@@ -65,6 +68,17 @@ describe("SessionsSidebarView", () => {
       await act(() => view.onClose());
       expect(screen.queryByRole("button", { name: "Sidebar content" })).toBeNull();
       expect(stopMigrationWatch).toHaveBeenCalledTimes(1);
+    });
+
+    it("hands the sessions sidebar the custom agent store it was given, which the plugin no longer holds, so chats show their agents' faces (https://github.com/Brevilabs/obsidian-copilot-private/issues/984)", async () => {
+      const customAgents = {} as CustomAgentStore;
+      const { view } = makeView({}, customAgents);
+
+      await act(() => view.onOpen());
+      await screen.findByRole("button", { name: "Sidebar content" });
+
+      expect(mockSidebarProps).toHaveBeenLastCalledWith(expect.objectContaining({ customAgents }));
+      await act(() => view.onClose());
     });
 
     it("renders nothing while Agent Chat has no session manager for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {

@@ -142,7 +142,6 @@ function renderSidebar(
       loadLocalStorage: localStorage.loadLocalStorage,
       saveLocalStorage: localStorage.saveLocalStorage,
     },
-    customAgents,
     openChatSourceFile: jest.fn(async () => {}),
     loadChatById: jest.fn(async () => {}),
     activateAgentView: jest.fn(async () => {
@@ -155,6 +154,7 @@ function renderSidebar(
       <SessionsSidebar
         manager={manager as unknown as AgentSessionManager}
         plugin={plugin as unknown as CopilotPlugin}
+        customAgents={customAgents}
       />
     </AppContext.Provider>
   );

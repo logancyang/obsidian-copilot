@@ -186,8 +186,6 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
   customConnectors?: CustomConnectors;
   openArtifactsPublisher!: OpenArtifactsPublisher;
   skills?: SkillManager;
-  customAgents?: CustomAgentStore;
-  hiddenAgentChats?: HiddenAgentChats;
   private CopilotAgentView?: typeof import("@/agentMode").CopilotAgentView;
   private PlanPreviewView?: typeof import("@/agentMode").PlanPreviewView;
   private TurnDiffView?: typeof import("@/agentMode").TurnDiffView;
@@ -386,6 +384,8 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
     this.openArtifactsPublisher = openArtifactsPublisher;
     this.register(() => openArtifactsPublisher.dispose());
 
+    let customAgents: CustomAgentStore | undefined;
+    let hiddenAgentChats: HiddenAgentChats | undefined;
     if (agentMode) {
       const [
         {
@@ -458,11 +458,12 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
       this.register(() => connectionManager.dispose());
       void connectionManager.checkStatus();
 
-      const agentSessionManager = createAgentSessionManager(this.app, this);
+      customAgents = new CustomAgentStore(this.app);
+      const agentChat = createAgentSessionManager(this.app, this, customAgents);
+      const agentSessionManager = agentChat.manager;
+      hiddenAgentChats = agentChat.hiddenAgentChats;
       this.agentSessionManager = agentSessionManager;
       this.skills = SkillManager.getInstance();
-      const customAgents = new CustomAgentStore(this.app);
-      this.customAgents = customAgents;
       this.register(runCustomAgentStoreWhileEnabled(customAgents));
       this.register(
         registerStartAgentChatCommand(this, customAgents, async (agent) => {
@@ -530,10 +531,13 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
       const SidebarView = this.SessionsSidebarView;
       const PreviewView = this.PlanPreviewView;
       const DiffView = this.TurnDiffView;
-      this.startedViewCreators.set(CHAT_AGENT_VIEWTYPE, (leaf) => new AgentView(leaf, this));
+      this.startedViewCreators.set(
+        CHAT_AGENT_VIEWTYPE,
+        (leaf) => new AgentView(leaf, this, customAgents, hiddenAgentChats)
+      );
       this.startedViewCreators.set(
         SESSIONS_SIDEBAR_VIEWTYPE,
-        (leaf) => new SidebarView(leaf, this)
+        (leaf) => new SidebarView(leaf, this, customAgents)
       );
       this.startedViewCreators.set(PLAN_PREVIEW_VIEW_TYPE, (leaf) => new PreviewView(leaf));
       this.startedViewCreators.set(TURN_DIFF_VIEW_TYPE, (leaf) => new DiffView(leaf));

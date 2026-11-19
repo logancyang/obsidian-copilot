@@ -9,10 +9,12 @@ import {
   type AgentDraft,
   type AgentDraftCard as AgentDraftCardState,
 } from "@/agents/agentMode/agentDraftCard";
+import type { CustomAgentStore } from "@/agents/CustomAgentStore";
 import { NEUTRAL_FACE_SRC } from "@/agents/customAgentFiles";
 import { useCustomAgentsGate } from "@/agents/customAgentsGate";
 import { AgentFace } from "@/agents/ui/AgentFace";
 import { CreateAgentModal } from "@/agents/ui/CreateAgentModal";
+import { CustomAgentStoreContext } from "@/agents/ui/useCustomAgents";
 import { Button } from "@/components/ui/button";
 import { ClampedContent } from "@/components/ui/clamped-content";
 import { USER_SENDER } from "@/constants";
@@ -22,7 +24,7 @@ import type CopilotPlugin from "@/main";
 import { getSettings } from "@/settings/model";
 import { UserPlus } from "lucide-react";
 import { Notice } from "obsidian";
-import React from "react";
+import React, { useContext } from "react";
 
 export interface AgentDraftCardProps {
   draft: AgentDraft;
@@ -80,12 +82,13 @@ interface AgentDraftChatCardProps {
 
 function AgentDraftChatCard({ card, plugin, chat }: AgentDraftChatCardProps) {
   const { focusInput } = useChatInput();
+  const store = useContext(CustomAgentStoreContext);
   if (useCustomAgentsGate() !== "full") return null;
   return (
     <AgentDraftCard
       draft={card.draft}
       onDismiss={() => dismissAgentDraft(chat)}
-      onReview={() => openAgentDraft(plugin, chat, card, focusInput)}
+      onReview={() => openAgentDraft(plugin, store, chat, card, focusInput)}
     />
   );
 }
@@ -94,11 +97,11 @@ function AgentDraftChatCard({ card, plugin, chat }: AgentDraftChatCardProps) {
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/941
 function openAgentDraft(
   plugin: CopilotPlugin,
+  store: CustomAgentStore | undefined,
   chat: ChatStateHost,
   { draft, draftedBy }: AgentDraftCardState,
   focusInput: () => void
 ) {
-  const store = plugin.customAgents;
   const manager = plugin.agentSessionManager;
   if (!store || !manager) return;
   const drafter = store.getAgents().find((agent) => agent.slug === draftedBy);

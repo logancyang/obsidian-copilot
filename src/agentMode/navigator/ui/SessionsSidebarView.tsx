@@ -2,6 +2,7 @@ import { useIsNavigatorEnabled } from "@/agentMode/navigator/navigatorEntitlemen
 import { openNavigatorWhenUnlocked } from "@/agentMode/navigator/openSessionsSidebar";
 import { NavigatorBlockedNotice } from "@/agentMode/navigator/ui/NavigatorUpsell";
 import { SessionsSidebar } from "@/agentMode/navigator/ui/SessionsSidebar";
+import type { CustomAgentStore } from "@/agents/CustomAgentStore";
 import { SESSIONS_SIDEBAR_VIEWTYPE } from "@/constants";
 import type CopilotPlugin from "@/main";
 import { mountPluginViewRoot, type PluginViewRootHandle } from "@/utils/react/mountPluginViewRoot";
@@ -27,7 +28,8 @@ export default class SessionsSidebarView extends ItemView {
 
   constructor(
     leaf: WorkspaceLeaf,
-    private plugin: CopilotPlugin
+    private plugin: CopilotPlugin,
+    private readonly customAgents: CustomAgentStore | undefined
   ) {
     super(leaf);
   }
@@ -54,6 +56,7 @@ export default class SessionsSidebarView extends ItemView {
       <PreviewSessionsSidebar
         manager={manager}
         plugin={this.plugin}
+        customAgents={this.customAgents}
         onClose={() => this.leaf.detach()}
       />
     ) : null;
