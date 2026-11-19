@@ -1,5 +1,6 @@
 import type {
   BackendProcess,
+  CopilotMode,
   BackendState,
   OpenSessionInput,
   PromptInput,
@@ -14,6 +15,7 @@ export interface FakeAgentBackend {
   newSession: jest.Mock<Promise<{ sessionId: SessionId; state: BackendState }>, [OpenSessionInput]>;
   cancel: jest.Mock;
   closeSession: jest.Mock;
+  setSessionMode: jest.Mock;
   prompts: PromptInput[];
   promptsTo(sessionId: SessionId): string[];
   untilPrompt(sessionId: SessionId, count?: number): Promise<string>;
@@ -49,6 +51,10 @@ export function createFakeAgentBackend(state: BackendState = { model: null, mode
     emit(sessionId, { sessionUpdate: "turn_ended", turnId, stopReason: "cancelled" });
   });
   const closeSession = jest.fn(async (_params: { sessionId: SessionId }) => undefined);
+  const setSessionMode = jest.fn(
+    async ({ modeId }: { sessionId: SessionId; modeId: string }): Promise<BackendState> =>
+      state.mode ? { ...state, mode: { ...state.mode, current: modeId as CopilotMode } } : state
+  );
   const backend: BackendProcess = {
     isRunning: () => true,
     onExit: () => () => {},
@@ -71,7 +77,7 @@ export function createFakeAgentBackend(state: BackendState = { model: null, mode
     closeSession,
     setSessionModel: async () => state,
     isSetSessionModelSupported: () => true,
-    setSessionMode: async () => state,
+    setSessionMode,
     isSetSessionModeSupported: () => true,
     setSessionConfigOption: async () => state,
     isSetSessionConfigOptionSupported: () => true,
@@ -85,6 +91,7 @@ export function createFakeAgentBackend(state: BackendState = { model: null, mode
     newSession,
     cancel,
     closeSession,
+    setSessionMode,
     prompts,
     promptsTo,
     untilPrompt: (sessionId, count = 1) =>

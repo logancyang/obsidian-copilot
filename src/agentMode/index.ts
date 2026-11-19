@@ -260,6 +260,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
       });
     },
   });
+  plugin.register(() => hiddenAgentChats.dispose());
   const copilotMcpServer = createCopilotMcpServer(
     (toolName) => isCopilotToolOn(toolName, getSettings(), app),
     [

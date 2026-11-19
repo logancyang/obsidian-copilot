@@ -71,6 +71,8 @@ function resultText(result: AskAgentResult): string {
         : "There are no other custom agents to ask.";
     case "self":
       return `You are ${result.agent.name}; you can't ask yourself. Answer the user directly.`;
+    case "busy":
+      return `${result.agent.name} is still working on the earlier request from this chat. Tell the user you'll bring back the reply when ${result.agent.name} is done, and that they can ask again after that.`;
   }
 }
 

@@ -158,7 +158,10 @@ beforeEach(async () => {
   });
 });
 
-afterEach(() => store.stop());
+afterEach(() => {
+  chats.dispose();
+  store.stop();
+});
 
 describe("hiddenAgentChats", () => {
   describe("HiddenAgentChats", () => {
@@ -246,18 +249,74 @@ describe("hiddenAgentChats", () => {
         );
       });
 
-      it(`closes the asked agent's chat once its reply comes back, and starts a new one for the next ask (${ISSUE})`, async () => {
+      it(`continues the same chat when the same chat asks the agent again after it finished (${ISSUE})`, async () => {
         const coco = await openChat({ agentSlug: "coco" });
-        const first = await askedAndPrompted(coco, "First question.");
-
-        answer(first, "First answer.");
+        const maya = await askedAndPrompted(coco, "First question.");
+        answer(maya, "First answer.");
         await fake.untilPrompt(sessionIdOf(coco));
-
-        await untilStatus(first, (status) => status === "closed");
-        expect(fake.closeSession).toHaveBeenCalledWith({ sessionId: sessionIdOf(first) });
         fake.endTurn(sessionIdOf(coco));
-        chats.ask(coco, "Maya", "Second question.");
-        expect(await untilAgentChatStarted(2)).not.toBe(first);
+        await untilStatus(maya, (status) => status === "idle");
+
+        expect(chats.ask(coco, "Maya", "Second question.")).toEqual(
+          expect.objectContaining({ kind: "asked" })
+        );
+
+        expect(await fake.untilPrompt(sessionIdOf(maya), 2)).toContain("Second question.");
+        expect(startChat).toHaveBeenCalledTimes(1);
+      });
+
+      it(`switches a continued chat to the mode the asking chat is in now (${ISSUE})`, async () => {
+        fake = createFakeAgentBackend({
+          model: null,
+          mode: {
+            current: "default",
+            options: [],
+            apply: { auto: { kind: "setMode", nativeId: "auto" } },
+          },
+        });
+        let parentMode: BackendState = {
+          model: null,
+          mode: { current: "default", options: [], apply: {} },
+        };
+        const coco = await openChat({ agentSlug: "coco" });
+        jest.spyOn(coco, "getState").mockImplementation(() => parentMode);
+        const maya = await askedAndPrompted(coco, "First question.");
+        answer(maya, "First answer.");
+        await fake.untilPrompt(sessionIdOf(coco));
+        fake.endTurn(sessionIdOf(coco));
+        await untilStatus(maya, (status) => status === "idle");
+        expect(fake.setSessionMode).not.toHaveBeenCalled();
+
+        parentMode = AUTO_MODE;
+        chats.ask(coco, "Maya", "Now edit the plan.");
+        await fake.untilPrompt(sessionIdOf(maya), 2);
+
+        expect(fake.setSessionMode).toHaveBeenCalledWith({
+          sessionId: sessionIdOf(maya),
+          modeId: "auto",
+        });
+        expect(maya.getState()?.mode?.current).toBe("auto");
+      });
+
+      it(`turns down asking the same agent again while it still works on the first request (${ISSUE})`, async () => {
+        const coco = await openChat({ agentSlug: "coco" });
+        const maya = await askedAndPrompted(coco, "First question.");
+
+        expect(chats.ask(coco, "Maya", "Second question.")).toEqual(
+          expect.objectContaining({ kind: "busy" })
+        );
+        expect(fake.promptsTo(sessionIdOf(maya))).toHaveLength(1);
+      });
+
+      it(`starts one chat per asking chat and agent, so another chat asking the same agent gets its own (${ISSUE})`, async () => {
+        const coco = await openChat({ agentSlug: "coco" });
+        const copilot = await openChat();
+
+        chats.ask(coco, "Maya", "From Coco.");
+        chats.ask(copilot, "Maya", "From Copilot.");
+
+        await untilAgentChatStarted(2);
+        expect(started[0]).not.toBe(started[1]);
       });
 
       it(`waits for the turn that reports a background task before it relays, leaving the task's own text out (${ISSUE})`, async () => {
@@ -278,6 +337,9 @@ describe("hiddenAgentChats", () => {
           "tool-1"
         );
 
+        expect(chats.ask(coco, "Maya", "Again?")).toEqual(
+          expect.objectContaining({ kind: "busy" })
+        );
         expect(fake.promptsTo(sessionIdOf(coco))).toEqual([]);
 
         fake.emit(id, { sessionUpdate: "task_ended", taskId: "task-1", status: "completed" });
@@ -302,6 +364,17 @@ describe("hiddenAgentChats", () => {
         expect(await fake.untilPrompt(sessionIdOf(coco))).toContain(
           "Maya didn't finish (Claude stopped unexpectedly.). Tell the user how far Maya got and why."
         );
+      });
+
+      it(`starts a new chat for the next ask after the earlier one closed, as when its process died (${ISSUE})`, async () => {
+        const coco = await openChat({ agentSlug: "coco" });
+        const first = await askedAndPrompted(coco, "First question.");
+        await first.dispose();
+        await fake.untilPrompt(sessionIdOf(coco));
+
+        chats.ask(coco, "Maya", "Second question.");
+
+        expect(await untilAgentChatStarted(2)).not.toBe(first);
       });
 
       it(`relays that the agent didn't finish when its chat closes mid-run, as when its Codex or OpenCode process exits (${ISSUE})`, async () => {
@@ -341,6 +414,7 @@ describe("hiddenAgentChats", () => {
       });
 
       it(`relays that the agent didn't finish when its files can't be read to start its chat (${ISSUE})`, async () => {
+        chats.dispose();
         chats = new HiddenAgentChats({
           store: () => store,
           vaultBase: () => null,
@@ -355,17 +429,6 @@ describe("hiddenAgentChats", () => {
           "Maya didn't finish (Maya couldn't be loaded.)."
         );
         expect(startChat).not.toHaveBeenCalled();
-      });
-
-      it(`relays nothing when custom agents stop being available before the agent finishes (${ISSUE})`, async () => {
-        const coco = await openChat({ agentSlug: "coco" });
-        const maya = await askedAndPrompted(coco);
-        await setCustomAgentsAccess("free");
-
-        answer(maya, "Too many features.");
-        await untilStatus(maya, (status) => status === "closed");
-
-        expect(coco.store.getDisplayMessages()).toEqual([]);
       });
 
       it(`finds the agent by its name when its folder has another name (${ISSUE})`, async () => {
@@ -440,6 +503,60 @@ describe("hiddenAgentChats", () => {
         await setCustomAgentsAccess("free");
 
         expect(chats.ask(coco, "Maya", "Review.")).toEqual({ kind: "unavailable" });
+      });
+
+      it(`stops each asked agent's chat when the chat that asked closes for good (${ISSUE})`, async () => {
+        const coco = await openChat({ agentSlug: "coco" });
+        const maya = await askedAndPrompted(coco);
+
+        await coco.dispose();
+
+        await untilStatus(maya, (status) => status === "closed");
+        expect(fake.closeSession).toHaveBeenCalledWith({ sessionId: sessionIdOf(maya) });
+      });
+
+      it(`stops every asked agent's chat and relays nothing when custom agents stop being available before it finishes (${ISSUE})`, async () => {
+        const coco = await openChat({ agentSlug: "coco" });
+        const maya = await askedAndPrompted(coco);
+
+        await setCustomAgentsAccess("free");
+
+        await untilStatus(maya, (status) => status === "closed");
+        expect(coco.store.getDisplayMessages()).toEqual([]);
+      });
+    });
+
+    describe("dispose()", () => {
+      it(`stops and closes each asked agent's chat on unload, and relays nothing (${ISSUE})`, async () => {
+        const coco = await openChat({ agentSlug: "coco" });
+        const maya = await askedAndPrompted(coco);
+
+        chats.dispose();
+
+        await untilStatus(maya, (status) => status === "closed");
+        expect(fake.cancel).toHaveBeenCalledWith(
+          expect.objectContaining({ sessionId: sessionIdOf(maya) })
+        );
+        expect(fake.closeSession).toHaveBeenCalledWith({ sessionId: sessionIdOf(maya) });
+        expect(fake.promptsTo(sessionIdOf(coco))).toEqual([]);
+      });
+
+      it(`relays nothing for an asked agent whose chat fails to start after unload stopped it (${ISSUE})`, async () => {
+        const coco = await openChat({ agentSlug: "coco" });
+        const startCalled = new Promise<(error: Error) => void>((resolve) =>
+          startChat.mockImplementationOnce(() => new Promise((_, reject) => resolve(reject)))
+        );
+        chats.ask(coco, "Maya", "What do you think of this plan?");
+        const failStart = await startCalled;
+
+        chats.dispose();
+        failStart(new Error("AgentSessionManager was shut down during session creation"));
+
+        const maya = await askedAndPrompted(coco, "And the intro?");
+        const handed = coco.untilHanded();
+        answer(maya, "Cut it.");
+        await handed;
+        expect(fake.promptsTo(sessionIdOf(coco))).toEqual([expect.stringContaining("Cut it.")]);
       });
     });
   });
