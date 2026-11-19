@@ -732,6 +732,16 @@ describe("agentMode", () => {
       expect(plugin.register).toHaveBeenCalledWith(expect.any(Function));
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/945 offers stop_agent and hands the profile's delete the asked agents' chats to stop", () => {
+      createAgentSessionManager({} as App, plugin);
+
+      const hosted = jest.mocked(createCopilotMcpServer).mock.calls[0][1];
+      expect(hosted.map(({ definition }) => definition.name)).toContain("stop_agent");
+      expect(plugin.hiddenAgentChats).toEqual(
+        expect.objectContaining({ stopAgent: expect.any(Function) })
+      );
+    });
+
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/941 offers draft_agent only to a custom agent's chat the user sees, refuses a hidden chat's call, and keeps the draft card with the chat", async () => {
       const coco = Object.assign(fakeChat(), { agentSlug: "coco" });
       const copilot = Object.assign(fakeChat(), { agentSlug: null });

@@ -892,6 +892,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
               app={app}
               manager={manager}
               store={plugin.customAgents}
+              hiddenChats={plugin.hiddenAgentChats}
               hostSessionId={sessionId}
               getModels={getAgentModelChoices}
               onBack={leaveProfile}

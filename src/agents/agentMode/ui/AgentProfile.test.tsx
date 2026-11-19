@@ -1,3 +1,4 @@
+import type { HiddenAgentChats } from "@/agents/agentMode/hiddenAgentChats";
 import { AgentProfile, agentDeleteNotice } from "@/agents/agentMode/ui/AgentProfile";
 import { CustomAgentStore, type CustomAgent } from "@/agents/CustomAgentStore";
 import { PRESET_FACES_URL } from "@/agents/presetFaces";
@@ -66,6 +67,10 @@ interface ProfileHarnessProps {
 }
 
 const deletedChats = jest.fn(async (_id: string, _options?: unknown) => {});
+const hiddenChats = {
+  workingIn: jest.fn((_slug: string): string | null => "Maya"),
+  stopAgent: jest.fn((_slug: string) => {}),
+} as unknown as HiddenAgentChats;
 
 function ProfileHarness({ store, app, handlers }: ProfileHarnessProps) {
   const coco = useCustomAgents(store).find((agent) => agent.slug === "coco");
@@ -84,6 +89,7 @@ function ProfileHarness({ store, app, handlers }: ProfileHarnessProps) {
       app={app}
       manager={manager}
       store={store}
+      hiddenChats={hiddenChats}
       hostSessionId="host"
       getModels={() => MODELS}
       {...handlers}
@@ -266,8 +272,19 @@ describe("AgentProfile", () => {
       confirm();
 
       await waitFor(() => expect(obsidian.Notice).toHaveBeenCalledWith("Deleted Coco and 1 chat."));
+      expect(hiddenChats.stopAgent).toHaveBeenCalledWith("coco");
       expect(deletedChats.mock.calls.map(([id]) => id)).toEqual(["a.md"]);
       expect(vault.trashedPaths).toEqual([FOLDER]);
+    });
+
+    it(`tells the delete dialog which chat the agent is working in when an @ runs it (https://github.com/Brevilabs/obsidian-copilot-private/issues/945)`, async () => {
+      await setup();
+
+      fireEvent.click(screen.getByRole("button", { name: "Delete Coco…" }));
+      await waitFor(() => expect(AgentDeleteModal).toHaveBeenCalledTimes(1));
+
+      expect(hiddenChats.workingIn).toHaveBeenCalledWith("coco");
+      expect(jest.mocked(AgentDeleteModal).mock.calls[0][1]).toMatchObject({ workingIn: "Maya" });
     });
   });
 

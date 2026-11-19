@@ -36,13 +36,26 @@ export interface HiddenAgentChatsHost {
   startChat: (start: HiddenChatStart) => Promise<AgentSession>;
 }
 
-export type AskAgentResult =
-  | { kind: "asked"; agent: CustomAgent }
+export type AgentRefusal =
   | { kind: "unavailable" }
   | { kind: "not_from_here" }
   | { kind: "unknown_agent"; roster: readonly CustomAgent[] }
-  | { kind: "self"; agent: CustomAgent }
-  | { kind: "busy"; agent: CustomAgent };
+  | { kind: "self"; agent: CustomAgent };
+
+export type AskAgentResult = { kind: "asked" | "busy"; agent: CustomAgent } | AgentRefusal;
+
+export type StopAgentResult =
+  | { kind: "stopped" | "not_working" | "not_asked"; agent: CustomAgent }
+  | AgentRefusal;
+
+type StopReason = "stopped_by_user" | "agent_deleted";
+
+interface AskingChat {
+  parent: AgentSession;
+  agent: CustomAgent;
+  agents: readonly CustomAgent[];
+  store: CustomAgentStore;
+}
 
 interface HiddenRunEnd {
   reply: string;
@@ -57,6 +70,7 @@ interface HiddenRun {
   reply: string;
   sawTurn: boolean;
   denied: string[];
+  stopped: StopReason | null;
   completion: AnswerCompletion;
   finish: (end: AnswerEnd) => void;
 }
@@ -95,19 +109,9 @@ export class HiddenAgentChats {
   }
 
   ask(chat: ChatStateHost | null, agentName: string, message: string): AskAgentResult {
-    const store = this.host.store();
-    if (getCustomAgentsGate() !== "full" || !store) return { kind: "unavailable" };
-    const parent = chat ? this.host.listedChat(chat) : null;
-    if (!parent) return { kind: "not_from_here" };
-    const agents = store.getAgents();
-    const agent = findAgent(agents, agentName);
-    if (!agent) {
-      return {
-        kind: "unknown_agent",
-        roster: agents.filter((other) => other.slug !== parent.agentSlug),
-      };
-    }
-    if (agent.slug === parent.agentSlug) return { kind: "self", agent };
+    const asking = this.resolve(chat, agentName);
+    if ("kind" in asking) return asking;
+    const { parent, agent, agents, store } = asking;
     const key = chatKey(parent, agent.slug);
     const existing = this.chats.get(key);
     if (existing?.run) return { kind: "busy", agent };
@@ -119,6 +123,37 @@ export class HiddenAgentChats {
     this.chats.set(key, hidden);
     void this.run(hidden, message);
     return { kind: "asked", agent };
+  }
+
+  // The user stops an agent from the chat that asked it, by telling its agent or from the running agents list; its changes stay and its chat stays open to continue.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/945
+  stop(chat: ChatStateHost | null, agentName: string): StopAgentResult {
+    const asking = this.resolve(chat, agentName);
+    if ("kind" in asking) return asking;
+    const hidden = this.chats.get(chatKey(asking.parent, asking.agent.slug));
+    const kind = !hidden
+      ? "not_asked"
+      : this.stopRun(hidden, "stopped_by_user")
+        ? "stopped"
+        : "not_working";
+    return { kind, agent: asking.agent };
+  }
+
+  // An agent deleted while it works stops at once, and the chats it was asked into go with it.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/945
+  stopAgent(slug: string): void {
+    for (const [key, hidden] of Array.from(this.chats)) {
+      if (hidden.agent.slug !== slug || this.stopRun(hidden, "agent_deleted")) continue;
+      this.chats.delete(key);
+      void hidden.session.then(stopSession, () => undefined);
+    }
+  }
+
+  workingIn(slug: string): string | null {
+    return (
+      Array.from(this.chats.values()).find((hidden) => hidden.agent.slug === slug && hidden.run)
+        ?.from ?? null
+    );
   }
 
   answerPermission(request: PermissionPrompt): Promise<PermissionDecision> | null {
@@ -141,6 +176,34 @@ export class HiddenAgentChats {
   dispose(): void {
     this.unsubscribeGate();
     this.stopAll();
+  }
+
+  private resolve(chat: ChatStateHost | null, agentName: string): AskingChat | AgentRefusal {
+    const store = this.host.store();
+    if (getCustomAgentsGate() !== "full" || !store) return { kind: "unavailable" };
+    const parent = chat ? this.host.listedChat(chat) : null;
+    if (!parent) return { kind: "not_from_here" };
+    const agents = store.getAgents();
+    const agent = findAgent(agents, agentName);
+    if (!agent) {
+      return {
+        kind: "unknown_agent",
+        roster: agents.filter((other) => other.slug !== parent.agentSlug),
+      };
+    }
+    if (agent.slug === parent.agentSlug) return { kind: "self", agent };
+    return { parent, agent, agents, store };
+  }
+
+  private stopRun(hidden: HiddenChat, reason: StopReason): boolean {
+    const run = hidden.run;
+    if (!run) return false;
+    run.stopped = reason;
+    run.finish({ error: undefined });
+    void hidden.started
+      ?.cancel()
+      .catch((error) => logWarn("[Custom agents] stopping an asked agent's turn failed", error));
+    return true;
   }
 
   private open(
@@ -194,6 +257,7 @@ export class HiddenAgentChats {
       reply: "",
       sawTurn: false,
       denied: [],
+      stopped: null,
       completion: new AnswerCompletion((text) => (run.reply += text)),
       finish: () => {},
     };
@@ -249,6 +313,7 @@ export class HiddenAgentChats {
       // A continued chat follows the mode the asking chat is in now, not the one it started in.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
       await replayPersistedMode(session, hidden.parent.getState()?.mode?.current ?? null);
+      if (run.stopped) return { reply: "", files: [], denied: run.denied };
       const { userMessageId, turn } = session.sendPrompt(hiddenJobText(hidden, message));
       turn.then(
         () => {
@@ -258,6 +323,7 @@ export class HiddenAgentChats {
       );
       const { error } = await answer;
       if (!error) await untilSettled(session);
+      if (run.stopped) await untilReplyClosed(session);
       const messages = session.store.getDisplayMessages();
       const asked = messages.findIndex((m) => m.id === userMessageId);
       return {
@@ -274,16 +340,23 @@ export class HiddenAgentChats {
   private finishRun(hidden: HiddenChat, run: HiddenRun, end: HiddenRunEnd): void {
     // A stopped chat leaves the map, so a run that ends after its stop, as when its start fails on unload, records and relays nothing.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
-    if (this.chats.get(chatKey(hidden.parent, hidden.agent.slug)) !== hidden) return;
+    const key = chatKey(hidden.parent, hidden.agent.slug);
+    if (this.chats.get(key) !== hidden) return;
     if (getCustomAgentsGate() !== "full") return;
     record(hidden.parent, run, {
-      status: end.error || end.denied.length > 0 ? "didnt_finish" : "finished",
+      status: run.stopped
+        ? "stopped"
+        : end.error || end.denied.length > 0
+          ? "didnt_finish"
+          : "finished",
       endedAt: Date.now(),
-      ...(end.error
-        ? { end: { kind: "error", message: end.error.message } }
-        : end.denied.length > 0
-          ? { end: { kind: "permission_denied", requests: end.denied } }
-          : {}),
+      ...(run.stopped
+        ? { end: { kind: run.stopped } }
+        : end.error
+          ? { end: { kind: "error", message: end.error.message } }
+          : end.denied.length > 0
+            ? { end: { kind: "permission_denied", requests: end.denied } }
+            : {}),
     });
     void relay(
       hidden.parent,
@@ -295,9 +368,13 @@ export class HiddenAgentChats {
         denied: end.denied,
         changed: end.files.map((change) => change.path),
         error: end.error?.message,
+        stopped: run.stopped ?? undefined,
       }),
       end.files
     );
+    if (run.stopped !== "agent_deleted") return;
+    this.chats.delete(key);
+    void hidden.session.then(stopSession, () => undefined);
   }
 
   private watchParent(parent: AgentSession): void {
@@ -443,6 +520,29 @@ function nextStatus(session: AgentSession): Promise<void> {
         resolve();
       },
     });
+  });
+}
+
+// A stopped turn records the files it changed after its chat goes idle, and the stop relay carries them.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/945
+function untilReplyClosed(session: AgentSession): Promise<void> {
+  const closed = () => {
+    const last = session.store.getDisplayMessages().at(-1);
+    return (
+      session.getStatus() === "closed" ||
+      !last ||
+      last.sender === USER_SENDER ||
+      last.turnStopReason !== undefined
+    );
+  };
+  if (closed()) return Promise.resolve();
+  return new Promise((resolve) => {
+    const check = () => {
+      if (!closed()) return;
+      unsubscribe();
+      resolve();
+    };
+    const unsubscribe = session.subscribe({ onMessagesChanged: check, onStatusChanged: check });
   });
 }
 

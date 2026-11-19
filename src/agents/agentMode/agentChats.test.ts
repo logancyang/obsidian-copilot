@@ -11,6 +11,7 @@ import { getSettings, resetSettings, setSettings } from "@/settings/model";
 import type { ProjectFileRecord } from "@/projects/type";
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/940";
+const STOP_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/945";
 
 function chat(id: string, agent?: string): ChatHistoryItem {
   return { id, title: id, agent, createdAt: new Date(0), lastAccessedAt: new Date(0) };
@@ -150,9 +151,21 @@ describe("agentChats", () => {
           }
         ),
       } as unknown as AgentSessionManager;
+      const hiddenChats = {
+        stopAgent: jest.fn((slug: string): void => {
+          steps.push(`stop ${slug}`);
+        }),
+      };
       const remove = () =>
-        deleteAgentWithChats({ app, manager, store, slug: "coco", hostSessionId: "host" });
-      return { vault, store, steps, remove };
+        deleteAgentWithChats({
+          app,
+          manager,
+          store,
+          slug: "coco",
+          hostSessionId: "host",
+          hiddenChats,
+        });
+      return { vault, store, steps, remove, hiddenChats, manager };
     }
 
     it(`trashes only the agent's folder and deletes only the chats recorded with its slug (${ISSUE})`, async () => {
@@ -232,6 +245,32 @@ describe("agentChats", () => {
       expect(result).toEqual({ deletedChats: 1, failedChats: 1, agentDeleted: false });
       expect(vault.trashedPaths).toEqual([]);
       expect(vault.listPaths()).toContain("copilot/agents/coco/instructions.md");
+    });
+
+    it(`stops the agent wherever an @ runs it once its chats are deleted and before its folder goes to the trash (${STOP_ISSUE})`, async () => {
+      const { vault, steps, remove, hiddenChats } = await setup();
+      hiddenChats.stopAgent.mockImplementation((slug: string) => {
+        steps.push(`stop ${slug}`);
+        expect(vault.trashedPaths).toEqual([]);
+      });
+
+      await remove();
+
+      expect(steps.slice(-2)).toEqual(["delete native:claude:s1", "stop coco"]);
+      expect(vault.trashedPaths).toEqual(["copilot/agents/coco"]);
+    });
+
+    it(`leaves the agent working when the delete keeps it, so its @ is never reported as deleted (${STOP_ISSUE})`, async () => {
+      const kept = await setup({ failingChat: "coco-1.md" });
+      await kept.remove();
+      expect(kept.hiddenChats.stopAgent).not.toHaveBeenCalled();
+
+      const noNewChat = await setup();
+      (noNewChat.manager.startNewChatInPlace as jest.Mock).mockRejectedValueOnce(
+        new Error("OpenCode isn't installed")
+      );
+      await expect(noNewChat.remove()).rejects.toThrow("OpenCode isn't installed");
+      expect(noNewChat.hiddenChats.stopAgent).not.toHaveBeenCalled();
     });
 
     it(`deletes nothing when the agent's folder is already gone at confirm (${ISSUE})`, async () => {

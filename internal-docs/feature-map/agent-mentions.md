@@ -11,6 +11,8 @@ Asking another custom agent from a chat with `@`: that agent works in the backgr
 - mention-reply-row: the turn starts with `<name>'s reply` and the other agent's own words set off by a bar, then a Files changed card for the files it changed; each row opens its diff.
 - mention-continue: mentioning the same agent again in the same chat continues its conversation, so it remembers the earlier exchange. Mentioning it while it still works gets a reply that it is still working.
 - mention-denied: in a mode that asks before changes, the mentioned agent can't change files; the chat's agent says what it couldn't do.
+- mention-stop: telling the chat's agent to stop the other agent, such as "Tell Maya to stop.", stops it at once. Its changes stay, and the chat's agent says how far it got, with a Files changed card for what it changed. Mentioning it again continues the same conversation.
+- mention-delete-while-working: deleting an agent from its profile while it works for another chat stops it. The delete dialog says so in an orange line, such as "Maya is working in Coco's chat. Deleting stops it."; the chat's agent then says how far it got.
 - mention-cant-remember: asked through a mention to remember something, the mentioned agent saves nothing; the chat's agent says it can't save rules from a chat it was asked into, and to tell it in its own chat.
 - mention-no-self: an agent never asks itself; its own name is plain text in its chat.
 
@@ -29,6 +31,8 @@ All of these need a license that includes custom agents and at least two agents 
 - Continue: after the relay, send `@Maya and the intro?`. Her answer builds on the first exchange.
 - From a Copilot chat: in a chat with no agent, send `@Maya is this too long?`. The same one line, then the relay.
 - Denied: in `Default` mode, send `@Maya add one line to <note>`. The note does not change, and the relay says Maya couldn't edit it.
+- Stop: send `@Maya check every claim in <note>, one by one`, then `Tell Maya to stop.` while she works. The chat's agent stops her, then says how far she got; the note keeps any change she made.
+- Delete while working: send `@Maya …` with a long job, open Maya's profile, and choose Delete. The dialog shows `Maya is working in <agent>'s chat. Deleting stops it.` in orange. After Delete, the chat's agent says Maya was deleted and how far she got.
 - Can't remember: send `@Maya from now on, flag video length first.` The relay says Maya can't save rules from a chat she was asked into; her `MEMORY.md` does not change.
 - Itself: in Maya's own chat, send `@Maya hello`. Maya answers directly.
 
@@ -39,6 +43,7 @@ All of these need a license that includes custom agents and at least two agents 
 - The mentioned agent works in a chat no list shows: not in the [chat tabs](chat-tabs.md), Recent chats or the [Copilot Navigator](copilot-navigator.md).
 - A chat can mention agents only if it was opened while custom agents were available: a chat keeps the tools it started with.
 - Closing Obsidian, shutting the chat down, or losing the license stops the mentioned agent; its reply never comes back.
+- The chat's note saves a stopped mention as stopped, and one stopped by deleting the agent as stopped because it was deleted.
 - A settings change that restarts the chat's agent also stops the mentioned agent, and its reply never comes back.
 - Stopping the chat's own reply doesn't drop a mentioned agent's reply that is waiting; it comes back after the stop. Stopping the turn that passes the reply on ends it there.
 - On Codex models, a Copilot chat with no agent usually answers an `@`-mention itself: Codex finds the tool only through its own tool search, and only an agent's chat names the tool in its prompt.

@@ -25,6 +25,10 @@ export default meta;
 
 export const AgentWithMemoryAndChats: StoryObj<AgentDeleteFormProps> = {};
 
+export const WorkingInAnotherChat: StoryObj<AgentDeleteFormProps> = {
+  args: { workingIn: "Maya" },
+};
+
 export const NewAgentWithNoMemory: StoryObj<AgentDeleteFormProps> = {
   args: {
     agent: { ...KAI, ...files("kai") },

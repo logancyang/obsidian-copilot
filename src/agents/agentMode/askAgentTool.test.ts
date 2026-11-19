@@ -1,6 +1,15 @@
 import type { ChatStateHost } from "@/agentMode/session/chatExtension";
-import { ASK_AGENT_TOOL_NAME, createAskAgentTool } from "@/agents/agentMode/askAgentTool";
-import type { AskAgentResult, HiddenAgentChats } from "@/agents/agentMode/hiddenAgentChats";
+import {
+  ASK_AGENT_TOOL_NAME,
+  createAskAgentTool,
+  createStopAgentTool,
+  STOP_AGENT_TOOL_NAME,
+} from "@/agents/agentMode/askAgentTool";
+import type {
+  AskAgentResult,
+  HiddenAgentChats,
+  StopAgentResult,
+} from "@/agents/agentMode/hiddenAgentChats";
 import { RELAY_PRINCIPLE } from "@/agents/agentReply";
 import type { CustomAgent } from "@/agents/CustomAgentStore";
 import { setCustomAgentsAccess } from "@/agents/testing/customAgentsAccess";
@@ -8,6 +17,7 @@ import { setCustomAgentsAccess } from "@/agents/testing/customAgentsAccess";
 jest.mock("@/entitlement");
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/944";
+const CONTROL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/945";
 const COCO = { slug: "coco", name: "Coco", title: "Keeps the whole vault in view" } as CustomAgent;
 const MAYA = { slug: "maya", name: "Maya", title: "Product critic" } as CustomAgent;
 const LEO = { slug: "leo", name: "Leo", title: "" } as CustomAgent;
@@ -29,6 +39,12 @@ function buildTool(
   });
   return { tool, ask };
 }
+
+const HOST = {
+  agents: () => [COCO, MAYA, LEO],
+  isUnlistedChat: (key: string) => key.startsWith("hidden"),
+  agentOfChat: () => null,
+};
 
 function descriptionFor(
   tool: ReturnType<typeof buildTool>["tool"],
@@ -122,16 +138,17 @@ describe("askAgentTool", () => {
 
       await expect(tool.call({ agent: "Maya", message: "Hi" }, CHAT)).resolves.toEqual({
         text: "You are Maya; you can't ask yourself. Answer the user directly.",
-        isError: false,
+        isError: true,
       });
     });
 
-    it(`tells the agent to wait for the earlier reply when the agent is still working (${ISSUE})`, async () => {
+    it(`tells the agent to wait for the earlier reply when the agent is still working, and fails the call so the chat doesn't show it as asked (${CONTROL})`, async () => {
       const { tool } = buildTool({ asked: { kind: "busy", agent: MAYA } });
 
-      const { text } = await tool.call({ agent: "Maya", message: "Hi" }, CHAT);
+      const { text, isError } = await tool.call({ agent: "Maya", message: "Hi" }, CHAT);
 
       expect(text).toContain("Maya is still working on the earlier request from this chat.");
+      expect(isError).toBe(true);
     });
 
     it("rejects a call without an agent or a message", async () => {
@@ -143,6 +160,68 @@ describe("askAgentTool", () => {
       });
       expect(ask).not.toHaveBeenCalled();
       expect(tool.definition.name).toBe(ASK_AGENT_TOOL_NAME);
+    });
+  });
+
+  describe("createStopAgentTool()", () => {
+    function buildStop(result: StopAgentResult) {
+      const stop = jest.fn(() => result);
+      return { tool: createStopAgentTool({ stop } as unknown as HiddenAgentChats, HOST), stop };
+    }
+
+    it(`lists the stop tool for the chats that can ask, and leaves it out of an asked agent's own chat (${CONTROL})`, () => {
+      const { tool } = buildStop({ kind: "stopped", agent: MAYA });
+
+      expect(tool.listedAs?.({ sessionKey: "chat-1", backendId: "claude" })?.name).toBe(
+        STOP_AGENT_TOOL_NAME
+      );
+      expect(tool.listedAs?.({ sessionKey: "hidden-1", backendId: "claude" })).toBeNull();
+    });
+
+    it(`stops the named agent for the calling chat and tells the agent to end its turn until the report comes back (${CONTROL})`, async () => {
+      const { tool, stop } = buildStop({ kind: "stopped", agent: MAYA });
+
+      const result = await tool.call({ agent: "Maya" }, CHAT);
+
+      expect(stop).toHaveBeenCalledWith(CHAT, "Maya");
+      expect(result).toEqual({
+        text: "Stopped Maya. Maya's changes stay. End your turn now; Maya's report comes next, and then you tell the user how far Maya got and what changed.",
+        isError: false,
+      });
+    });
+
+    it(`says there is nothing to stop when the agent isn't working, and that it isn't working when no run from this chat is known, as after a reload, and fails the call so the chat doesn't show it as stopped (${CONTROL})`, async () => {
+      await expect(
+        buildStop({ kind: "not_working", agent: MAYA }).tool.call({ agent: "Maya" }, CHAT)
+      ).resolves.toEqual({
+        text: "Maya isn't working on anything from this chat, so there is nothing to stop.",
+        isError: true,
+      });
+      await expect(
+        buildStop({ kind: "not_asked", agent: MAYA }).tool.call({ agent: "Maya" }, CHAT)
+      ).resolves.toEqual({
+        text: "Maya isn't working on anything from this chat now.",
+        isError: true,
+      });
+    });
+
+    it(`turns down a call from a chat no list shows, such as an asked agent's own chat (${CONTROL})`, async () => {
+      const { tool } = buildStop({ kind: "not_from_here" });
+
+      await expect(tool.call({ agent: "Maya" }, CHAT)).resolves.toEqual({
+        text: "You can't ask another agent from this chat. Don't call stop_agent again.",
+        isError: true,
+      });
+    });
+
+    it("rejects a call without an agent", async () => {
+      const { tool, stop } = buildStop({ kind: "stopped", agent: MAYA });
+
+      await expect(tool.call({ agent: " " }, CHAT)).resolves.toEqual({
+        text: "agent must be a non-empty string.",
+        isError: true,
+      });
+      expect(stop).not.toHaveBeenCalled();
     });
   });
 });

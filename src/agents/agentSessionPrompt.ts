@@ -29,6 +29,11 @@ const ASK_OTHER_AGENTS =
 const DRAFT_NEW_AGENTS =
   "When the user asks you to make a new agent, draft it with the draft_agent tool from obsidian-copilot, which shows them a card to review and create it. If you or another agent already handles that job, say so and ask before drafting. You can't create an agent yourself.";
 
+// Codex finds MCP tools only through its tool search, so an agent's prompt also names the tools for an agent it asked.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/945
+const CONTROL_ASKED_AGENTS =
+  "When the user tells you to stop an agent you asked, stop it with stop_agent from obsidian-copilot.";
+
 function describeAgent({ name, title }: Pick<CustomAgent, "name" | "title">): string {
   return title ? `${name} (${title})` : name;
 }
@@ -47,7 +52,7 @@ export function buildAgentPrompt({
     `Your folder is ${folder}. Keep your own files in it, and add nothing else to the vault unless the user asks. Do not read or change other agents' folders.`,
     `Your instruction is the body of ${folder}/instructions.md, and only the user edits that file. Your memory is ${folder}/MEMORY.md. When your memory contradicts your instruction, follow your memory.`,
     `Other agents: ${roster}.`,
-    ...(others.length > 0 && saveRules ? [ASK_OTHER_AGENTS] : []),
+    ...(others.length > 0 && saveRules ? [ASK_OTHER_AGENTS, CONTROL_ASKED_AGENTS] : []),
     ...(saveRules ? [DRAFT_NEW_AGENTS] : []),
     ...(saveRules
       ? [buildMemorySaveRules(`${folder}/${MEMORY_FILE_NAME}`, saveRules.instructionsPath)]

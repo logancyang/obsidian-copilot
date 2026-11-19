@@ -1,7 +1,7 @@
 import { startReleaseUpdateCheck } from "@/services/releaseUpdateNotice";
 import { releaseCursorAssociation } from "@/editor/releaseCursorAssociation";
 import { registerNoteHeaderAction } from "@/editor/registerNoteHeaderAction";
-import type { AgentSessionManager, SkillManager } from "@/agentMode";
+import type { AgentSessionManager, HiddenAgentChats, SkillManager } from "@/agentMode";
 import { CustomAgentStore, runCustomAgentStoreWhileEnabled } from "@/agents/CustomAgentStore";
 import { registerStartAgentChatCommand } from "@/agents/startAgentChatCommand";
 import { isNativeChatId, parseNativeChatId } from "@/utils/nativeChatId";
@@ -187,6 +187,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
   openArtifactsPublisher!: OpenArtifactsPublisher;
   skills?: SkillManager;
   customAgents?: CustomAgentStore;
+  hiddenAgentChats?: HiddenAgentChats;
   private CopilotAgentView?: typeof import("@/agentMode").CopilotAgentView;
   private PlanPreviewView?: typeof import("@/agentMode").PlanPreviewView;
   private TurnDiffView?: typeof import("@/agentMode").TurnDiffView;

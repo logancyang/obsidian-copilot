@@ -59,7 +59,7 @@ import { loadAgentSessionPrompt } from "@/agents/agentSessionPrompt";
 import type { CustomAgent } from "@/agents/CustomAgentStore";
 import { agentBackend } from "@/agents/agentMode/agentChats";
 import { AGENT_DRAFT_CARD_EXTENSION } from "@/agents/agentMode/agentDraftCard";
-import { createAskAgentTool } from "@/agents/agentMode/askAgentTool";
+import { createAskAgentTool, createStopAgentTool } from "@/agents/agentMode/askAgentTool";
 import { createDraftAgentTool } from "@/agents/agentMode/draftAgentTool";
 import { HiddenAgentChats } from "@/agents/agentMode/hiddenAgentChats";
 import { SkillManager } from "./skills";
@@ -85,6 +85,7 @@ export { openSessionsSidebar } from "./navigator/openSessionsSidebar";
 export { default as SessionsSidebarView } from "./navigator/ui/SessionsSidebarView";
 export { useBackendInstallState, useManagedInstallActionState } from "./ui/useBackendDescriptor";
 export type { AgentSessionManager } from "./session/AgentSessionManager";
+export type { HiddenAgentChats } from "@/agents/agentMode/hiddenAgentChats";
 export type {
   ApprovedRule,
   ApprovedRuleStore,
@@ -247,6 +248,12 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     },
   });
   plugin.register(() => hiddenAgentChats.dispose());
+  plugin.hiddenAgentChats = hiddenAgentChats;
+  const askingChatsHost = {
+    agents: () => plugin.customAgents?.getAgents() ?? NO_CUSTOM_AGENTS,
+    isUnlistedChat: (sessionKey: string) => managerRef?.isUnlistedSession(sessionKey) ?? false,
+    agentOfChat: (sessionKey: string) => managerRef?.getSession(sessionKey)?.agentSlug ?? null,
+  };
   const copilotMcpServer = createCopilotMcpServer(
     (toolName) => isCopilotToolOn(toolName, getSettings(), app),
     [
@@ -290,11 +297,8 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
           run: runInRunningObsidian,
         }),
       },
-      createAskAgentTool(hiddenAgentChats, {
-        agents: () => plugin.customAgents?.getAgents() ?? NO_CUSTOM_AGENTS,
-        isUnlistedChat: (sessionKey) => managerRef?.isUnlistedSession(sessionKey) ?? false,
-        agentOfChat: (sessionKey) => managerRef?.getSession(sessionKey)?.agentSlug ?? null,
-      }),
+      createAskAgentTool(hiddenAgentChats, askingChatsHost),
+      createStopAgentTool(hiddenAgentChats, askingChatsHost),
       createDraftAgentTool({
         isUnlistedChat: (sessionKey) => managerRef?.isUnlistedSession(sessionKey) ?? false,
         isCopilotChat: (sessionKey) => managerRef?.getSession(sessionKey)?.agentSlug === null,

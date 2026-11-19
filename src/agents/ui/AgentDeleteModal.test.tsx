@@ -64,6 +64,19 @@ describe("AgentDeleteModal", () => {
       expect(screen.getByText("What Coco handles")).not.toBeNull();
     });
 
+    it(`says in orange which chat the agent is working in and that deleting stops it, only while it works there (https://github.com/Brevilabs/obsidian-copilot-private/issues/945)`, () => {
+      renderForm({ workingIn: "Maya" });
+
+      const line = screen.getByText("Coco is working in Maya's chat. Deleting stops it.");
+      expect(line.className).toContain("tw-text-warning");
+    });
+
+    it(`says nothing about a run when the agent isn't working in another chat (https://github.com/Brevilabs/obsidian-copilot-private/issues/945)`, () => {
+      renderForm({ workingIn: null });
+
+      expect(screen.queryByText(/is working in/)).toBeNull();
+    });
+
     it(`puts the keyboard on Cancel, so Enter does not delete, and names the agent on the delete button (${ISSUE})`, () => {
       const { onDelete, onCancel } = renderForm();
 
