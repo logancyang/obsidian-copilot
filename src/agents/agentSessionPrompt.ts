@@ -2,6 +2,7 @@ import type { CustomAgent, CustomAgentStore } from "@/agents/CustomAgentStore";
 import { getCustomAgentsGate } from "@/agents/customAgentsGate";
 import { MEMORY_FILE_NAME } from "@/agents/customAgentFiles";
 import { buildMemorySaveRules } from "@/agents/memorySaveRules";
+import { getEffectiveConversationsFolder } from "@/settings/copilotFolder";
 import { logWarn } from "@/logger";
 
 export interface AgentSessionPrompt {
@@ -18,6 +19,7 @@ export interface AgentPromptInput {
   instruction: string;
   memory: string;
   saveRules?: { instructionsPath: string };
+  chatsFolder?: string;
 }
 
 // Codex lists MCP tools only on search, so an agent learns from its own prompt that it can ask the others; a chat it was asked into, the one kind without save rules, has no ask_agent.
@@ -34,8 +36,21 @@ const DRAFT_NEW_AGENTS =
 const CONTROL_ASKED_AGENTS =
   "When the user asks how an agent you asked is doing, check with check_agent; when the user answers its question, pass the answer with answer_agent; when the user gives it a new instruction while it works, send that with ask_agent; when the user tells you to stop it, use stop_agent. All are in obsidian-copilot.";
 
+// Codex lists MCP tools only on search, so the agent's own chat names list_chats; another agent's or a Copilot chat's note in the same folder would answer for the wrong chat.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/959
+function recallEarlierChats(chatsFolder: string): string {
+  return `When the user asks what you and they worked on, discussed or decided before, list your earlier chats with list_chats from obsidian-copilot and read a listed note when you need what was said. For that answer use only those chats: never search ${chatsFolder} for it, even within a wider search, and never read a note there that list_chats didn't list, unless the user names it. If none of them covers it, say you haven't discussed it.`;
+}
+
 function describeAgent({ name, title }: Pick<CustomAgent, "name" | "title">): string {
   return title ? `${name} (${title})` : name;
+}
+
+// A Copilot chat asked about earlier work read every chat note, agents' included, so it lists its own with list_chats too; the shared prompt is the one prompt a Copilot chat has on every backend, and a line that limited the tool to Copilot chats stopped agents from using it.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/959
+export function buildCopilotChatRecall(): string | null {
+  if (getCustomAgentsGate() !== "full") return null;
+  return "In a chat without a custom agent, when the user asks what you and they worked on, discussed or decided before, list your earlier chats with list_chats from obsidian-copilot and read a listed note when you need what was said.";
 }
 
 export function buildAgentPrompt({
@@ -45,6 +60,7 @@ export function buildAgentPrompt({
   instruction,
   memory,
   saveRules,
+  chatsFolder,
 }: AgentPromptInput): string {
   const roster = others.length > 0 ? others.map(describeAgent).join("; ") : "none";
   return [
@@ -54,6 +70,7 @@ export function buildAgentPrompt({
     `Other agents: ${roster}.`,
     ...(others.length > 0 && saveRules ? [ASK_OTHER_AGENTS, CONTROL_ASKED_AGENTS] : []),
     ...(saveRules ? [DRAFT_NEW_AGENTS] : []),
+    ...(chatsFolder ? [recallEarlierChats(chatsFolder)] : []),
     ...(saveRules
       ? [buildMemorySaveRules(`${folder}/${MEMORY_FILE_NAME}`, saveRules.instructionsPath)]
       : []),
@@ -92,7 +109,12 @@ export async function loadAgentSessionPrompt(
       others: agents.filter((other) => other !== agent),
       instruction: files.instruction,
       memory: files.memory,
-      ...(saveRules ? { saveRules: { instructionsPath: agent.instructionsPath } } : {}),
+      ...(saveRules
+        ? {
+            saveRules: { instructionsPath: agent.instructionsPath },
+            chatsFolder: `${vaultBase}/${getEffectiveConversationsFolder()}`,
+          }
+        : {}),
     }),
     ...(saveRules ? { memoryPath: `${vaultBase}/${agent.memoryPath}` } : {}),
   };

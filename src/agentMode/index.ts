@@ -55,6 +55,7 @@ import { createExcalidrawTools, EXCALIDRAW_TOOL_NAMES } from "@/excalidraw/excal
 import { OpenArtifactsClient } from "@/openArtifacts/OpenArtifactsClient";
 import { createOpenArtifactsTools } from "@/openArtifacts/openArtifactsTools";
 import { getVaultBase } from "@/utils/vaultPath";
+import { buildNativeChatId } from "@/utils/nativeChatId";
 import { loadAgentSessionPrompt } from "@/agents/agentSessionPrompt";
 import type { CustomAgent } from "@/agents/CustomAgentStore";
 import { agentBackend } from "@/agents/agentMode/agentChats";
@@ -67,6 +68,8 @@ import {
   createStopAgentTool,
 } from "@/agents/agentMode/askAgentTool";
 import { createDraftAgentTool } from "@/agents/agentMode/draftAgentTool";
+import { createListChatsTool } from "@/agents/agentMode/listChatsTool";
+import { subscribeToCustomAgentsGate } from "@/agents/customAgentsGate";
 import { HiddenAgentChats } from "@/agents/agentMode/hiddenAgentChats";
 import { SkillManager } from "./skills";
 import {
@@ -316,6 +319,23 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
         agentOfCaller: (chat) =>
           managerRef?.getSessions().find((session) => session === chat)?.agentSlug ?? null,
       }),
+      createListChatsTool({
+        earlierChats: async (chat) => {
+          const manager = requireManager();
+          const session = manager.getSessions().find((candidate) => candidate === chat);
+          if (!session) return null;
+          const sessionId = session.getBackendSessionId();
+          const own = new Set([
+            manager.getSessionSourcePath(session.internalId),
+            sessionId && buildNativeChatId(session.backendId, sessionId),
+          ]);
+          return {
+            agent: session.agentSlug,
+            chats: (await manager.getChatHistoryItems()).filter((item) => !own.has(item.id)),
+          };
+        },
+        vaultBase: () => getVaultBase(app) ?? "",
+      }),
       ...(connectionManager
         ? [
             createSuggestConnectorTool({
@@ -459,6 +479,9 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     }
   };
   subscribeToSystemPromptChange(refreshSystemPromptAffected);
+  // The shared prompt's earlier-chats line follows the custom agents gate, which a stored license reaches only after Agent Chat is created; re-checking on the change keeps the warm Codex and OpenCode probes from being spawned twice at every start.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/959
+  subscribeToCustomAgentsGate(refreshSystemPromptAffected);
   // Codex and OpenCode bake the feedback pointer into their prompt at spawn, so toggling cards must reach a running backend.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
   subscribeToSettingsChange((prev, next) => {
