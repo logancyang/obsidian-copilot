@@ -41,6 +41,11 @@ export interface CreateAgentInitialValues {
   instruction?: string;
 }
 
+export interface DraftedBy {
+  name: string;
+  faceSrc: string;
+}
+
 export class CreateAgentCloseGuard {
   hasInput = false;
   name = "";
@@ -53,6 +58,7 @@ export interface CreateAgentFormProps {
   models: AgentModelChoices;
   presetFaces: PresetFacesState;
   initialValues?: CreateAgentInitialValues;
+  draftedBy?: DraftedBy;
   closeGuard: CreateAgentCloseGuard;
   onCreate: (agent: NewCustomAgent) => Promise<void>;
   onClose: () => void;
@@ -65,6 +71,7 @@ export function CreateAgentForm({
   models,
   presetFaces,
   initialValues,
+  draftedBy,
   closeGuard,
   onCreate,
   onClose,
@@ -133,6 +140,15 @@ export function CreateAgentForm({
         void create();
       }}
     >
+      {draftedBy && (
+        <div className="tw-flex tw-items-center tw-gap-2 tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-modifier-hover tw-px-2.5 tw-py-2 tw-text-ui-small tw-text-muted">
+          <AgentFace src={draftedBy.faceSrc} size="s" />
+          <span>
+            <span className="tw-font-semibold tw-text-normal">Drafted by {draftedBy.name}.</span>{" "}
+            Check it, pick a face and a model, then create.
+          </span>
+        </div>
+      )}
       <div className="tw-flex tw-items-start tw-gap-4">
         <Popover open={facePickerOpen} onOpenChange={setFacePickerOpen}>
           <PopoverTrigger asChild>

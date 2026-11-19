@@ -17,10 +17,12 @@ The `New agent` dialog that makes a custom agent: its face, name, optional title
 - create-close: with nothing typed, Esc, the close button, `Cancel`, or a click outside closes the dialog. With text typed, a click outside does nothing, and Esc, the close button, or `Cancel` ask "Discard Kai?" with `Keep editing` and `Discard`.
 - create-agent: `Create` writes the agent's folder with its instructions and face, and no memory file. The dialog closes and the [start screen](agent-home.md) shows the new agent selected, with the cursor in the chat input.
 - create-failed: when the agent cannot be written, the dialog stays open with everything typed and says why: "Couldn't create Kai. …"
+- create-drafted: opened from an agent's draft card, the dialog is filled with the draft's name, title, and instruction, under a first line with the drafting agent's face: "Drafted by Coco. Check it, pick a face and a model, then create." Everything else works as for **New**: a drafted name already on the team, an empty instruction, or one past 4,000 characters gets the usual notes. After `Create`, the start screen opens with the new agent selected and the cursor in the chat input.
 
 ## How to get to it
 
 - **New** (**+**) in the row of faces on the [start screen](agent-home.md), and on a [project](projects.md)'s start screen.
+- `Review and create…` on a custom agent's draft card in its chat ([agent replies](agent-replies.md)).
 
 It needs a license that includes custom agents (a team license until launch).
 
@@ -38,6 +40,7 @@ It needs a license that includes custom agents (a team license until launch).
 - Close: with nothing typed, click outside: the dialog closes. Type a name, click outside: nothing happens. Press Esc: "Discard <name>?" shows; Esc again or `Keep editing` returns to the form; `Discard` closes it.
 - Create: fill a name and instruction and choose `Create`. The start screen shows the agent selected and "Ask <name> anything"; the agent's folder holds its instructions and face and no memory file. The first message starts a chat that follows the instruction.
 - Failed: lose the license while the dialog is open and choose `Create`. The dialog stays open with the text and shows why.
+- Drafted: in Coco's chat, ask for a family logistics agent and choose `Review and create…` on the card. The dialog opens filled in with "Drafted by Coco." and Coco's face at the top. Change the title, pick a face and a model, and choose `Create`: the start screen shows the new agent selected with the cursor in the chat input, and its `instructions.md` holds the instruction as approved.
 
 ## Gotchas
 

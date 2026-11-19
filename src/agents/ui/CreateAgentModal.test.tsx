@@ -92,6 +92,28 @@ describe("CreateAgentModal", () => {
         expect(screen.getByText("Saved in copilot/agents/")).not.toBeNull();
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/941 shows a drafted agent's values under a Drafted by line naming the agent that drafted it", () => {
+        const modal = new CreateAgentModal(createFakeAgentVault().app, {
+          store: fakeStore(jest.fn()),
+          models: MODELS,
+          initialValues: {
+            name: "Nora",
+            title: "Family logistics",
+            instruction: "You plan pickups.",
+          },
+          draftedBy: { name: "Coco", faceSrc: "app://coco.webp" },
+          onCreated: jest.fn(),
+        }) as OpenedModal;
+        act(() => modal.open());
+        openedModals.push(modal);
+
+        expect(screen.getByText("Drafted by Coco.")).not.toBeNull();
+        expect(screen.getByLabelText<HTMLInputElement>("Name").value).toBe("Nora");
+        expect(screen.getByLabelText<HTMLTextAreaElement>("What Nora handles").value).toBe(
+          "You plan pickups."
+        );
+      });
+
       it(`downloads nothing from the CDN until the dialog opens, then the preset face list (${ISSUE})`, async () => {
         requestUrl.mockRejectedValueOnce(new Error("Request failed, status 404"));
         const { modal } = newDialog();

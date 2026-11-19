@@ -1,5 +1,8 @@
-import type { CustomAgentStore } from "@/agents/CustomAgentStore";
+import type { CustomAgent, CustomAgentStore } from "@/agents/CustomAgentStore";
+import { findBackendForModel } from "@/agentMode/backends/registry";
+import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
+import type { BackendId, ModelSelection } from "@/agentMode/session/types";
 import { GLOBAL_SCOPE } from "@/agentMode/session/scope";
 import { deleteChatAndBookmark } from "@/agentMode/ui/hooks/useAgentHistoryControls";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
@@ -8,6 +11,23 @@ import { getCachedProjectRecords } from "@/projects/state";
 import { getEffectiveConversationsFolder } from "@/settings/copilotFolder";
 import { getSettings, setSettings } from "@/settings/model";
 import { TFile, type App } from "obsidian";
+
+export function agentBackend(
+  manager: AgentSessionManager,
+  model: CustomAgent["model"]
+): { backendId?: BackendId; seed?: ModelSelection } {
+  const backendId = model && findBackendForModel(getSettings(), model.baseModelId)?.id;
+  if (!backendId) return {};
+  return { backendId, seed: manager.getSeedSelection(backendId, model) ?? undefined };
+}
+
+export function startCustomAgentChat(
+  manager: AgentSessionManager,
+  { slug, model }: Pick<CustomAgent, "slug" | "model">
+): Promise<AgentSession> {
+  const { backendId, seed } = agentBackend(manager, model);
+  return manager.createSession(backendId, undefined, seed, undefined, slug);
+}
 
 export async function listAgentChats(
   manager: AgentSessionManager,

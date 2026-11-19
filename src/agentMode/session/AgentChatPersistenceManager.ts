@@ -25,6 +25,7 @@ import {
   trashFile,
 } from "@/utils/vaultAdapterUtils";
 import { formatChatNoteMessage } from "@/utils/chatHistoryUtils";
+import { isRecord } from "@/utils/obsidianInternals";
 import { joinPosix } from "@/utils/pathUtils";
 import { getVaultBase } from "@/utils/vaultPath";
 import { parseYaml, TFile, type App } from "obsidian";
@@ -36,6 +37,7 @@ import {
   unescapeYamlString,
 } from "./agentChatYaml";
 import { sanitizeModel } from "./AgentSessionIndex";
+import { NO_SAVED_CHAT_STATES, type SavedChatStates } from "./chatExtension";
 import type { MemorySave } from "@/agents/memorySaves";
 import { restoreAgentMentions, type AgentMention } from "@/agents/agentMentions";
 import { GLOBAL_SCOPE } from "./scope";
@@ -64,6 +66,9 @@ interface SavedMessageData {
   // Each @-mentioned agent's run comes back with the chat only from its note; master and a build without custom agents ignore the key.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
   agentMentions?: readonly AgentMention[];
+  // A card the user can still act on comes back with the chat only from its note, kept on the last message; master and a build without the card's feature ignore the key.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/941
+  chatStates?: SavedChatStates;
 }
 
 function loadedMemorySaves(saved: unknown): MemorySave[] {
@@ -176,6 +181,7 @@ export interface LoadedAgentChat {
   carriedMessages?: number;
   continuedFrom?: string[];
   agent?: string;
+  chatStates?: SavedChatStates;
 }
 
 export class AgentChatPersistenceManager {
@@ -207,6 +213,7 @@ export class AgentChatPersistenceManager {
       carriedMessages?: number;
       continuedFrom?: readonly string[];
       agent?: string | null;
+      chatStates?: SavedChatStates;
     }
   ): Promise<{ path: string } | null> {
     if (messages.length === 0) return null;
@@ -238,7 +245,7 @@ export class AgentChatPersistenceManager {
           : "",
         preferredFileName
       );
-      const chatContent = this.formatChatContent(preparedMessages);
+      const chatContent = this.formatChatContent(preparedMessages, options?.chatStates);
 
       const updates = this.frontmatterUpdates({
         firstMessageEpoch,
@@ -320,7 +327,10 @@ export class AgentChatPersistenceManager {
     const carriedMessages = Number(frontmatter.carriedMessages) || undefined;
     const continuedFrom = parseContinuedFrom(frontmatter.continuedFrom);
     const agent = parseAgentSlug(yaml);
-    const messages = this.parseChatBody(body, parseLinkableEpoch(frontmatter.epoch));
+    const { messages, chatStates } = this.parseChatBody(
+      body,
+      parseLinkableEpoch(frontmatter.epoch)
+    );
 
     logInfo(
       `[AgentChatPersistenceManager] Loaded ${messages.length} messages from ${file.path} (backend=${backendId}, sessionId=${sessionId ?? "none"}, projectId=${projectId})`
@@ -336,6 +346,7 @@ export class AgentChatPersistenceManager {
       carriedMessages,
       continuedFrom,
       agent,
+      chatStates,
     };
   }
 
@@ -417,9 +428,12 @@ export class AgentChatPersistenceManager {
     return file instanceof TFile ? file : null;
   }
 
-  private formatChatContent(messages: AgentChatMessage[]): string {
+  private formatChatContent(
+    messages: AgentChatMessage[],
+    chatStates: SavedChatStates = NO_SAVED_CHAT_STATES
+  ): string {
     return messages
-      .map((m) => {
+      .map((m, index) => {
         const ts = m.timestamp ? m.timestamp.display : "Unknown time";
         const body = m.message;
         const tools = toolsUsedLines(m, getVaultBase(this.app));
@@ -428,6 +442,9 @@ export class AgentChatPersistenceManager {
           ...savedContext(m.context),
           ...(m.memorySaves?.length ? { memorySaves: m.memorySaves } : {}),
           ...(m.agentMentions?.length ? { agentMentions: m.agentMentions } : {}),
+          ...(index === messages.length - 1 && Object.keys(chatStates).length > 0
+            ? { chatStates }
+            : {}),
         };
         // A message ending in a literal hidden line gets an empty one after it, so loading keeps that text.
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/906
@@ -440,8 +457,12 @@ export class AgentChatPersistenceManager {
       .join("\n\n");
   }
 
-  private parseChatBody(body: string, conversationEpoch?: number): AgentChatMessage[] {
+  private parseChatBody(
+    body: string,
+    conversationEpoch?: number
+  ): { messages: AgentChatMessage[]; chatStates?: SavedChatStates } {
     const messages: AgentChatMessage[] = [];
+    let chatStates: SavedChatStates | undefined;
     const pattern = /\*\*(user|ai)\*\*: ([\s\S]*?)(?=(?:\n\*\*(?:user|ai)\*\*: )|$)/g;
 
     let match: RegExpExecArray | null;
@@ -471,6 +492,7 @@ export class AgentChatPersistenceManager {
       const context = loadedContext(data, this.app);
       const memorySaves = loadedMemorySaves(data.memorySaves);
       const agentMentions = restoreAgentMentions(data.agentMentions);
+      chatStates = isRecord(data.chatStates) ? data.chatStates : undefined;
 
       let timestamp: FormattedDateTime | null = null;
       if (timestampStr !== "Unknown time") {
@@ -504,7 +526,7 @@ export class AgentChatPersistenceManager {
         ...(agentMentions.length > 0 ? { agentMentions } : {}),
       });
     }
-    return messages;
+    return { messages, chatStates };
   }
 
   private splitFrontmatter(content: string): {

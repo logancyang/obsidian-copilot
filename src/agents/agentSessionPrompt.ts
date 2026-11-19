@@ -24,6 +24,10 @@ export interface AgentPromptInput {
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
 const ASK_OTHER_AGENTS =
   "When the user's message @-mentions one of them by name or clearly points to one, ask that agent with the ask_agent tool from obsidian-copilot; never otherwise.";
+// Codex lists MCP tools only on search, so an agent learns from its own prompt that it drafts a new agent as a card for the user to create, never creating one itself.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/941
+const DRAFT_NEW_AGENTS =
+  "When the user asks you to make a new agent, draft it with the draft_agent tool from obsidian-copilot, which shows them a card to review and create it. If you or another agent already handles that job, say so and ask before drafting. You can't create an agent yourself.";
 
 function describeAgent({ name, title }: Pick<CustomAgent, "name" | "title">): string {
   return title ? `${name} (${title})` : name;
@@ -44,6 +48,7 @@ export function buildAgentPrompt({
     `Your instruction is the body of ${folder}/instructions.md, and only the user edits that file. Your memory is ${folder}/MEMORY.md. When your memory contradicts your instruction, follow your memory.`,
     `Other agents: ${roster}.`,
     ...(others.length > 0 && saveRules ? [ASK_OTHER_AGENTS] : []),
+    ...(saveRules ? [DRAFT_NEW_AGENTS] : []),
     ...(saveRules
       ? [buildMemorySaveRules(`${folder}/${MEMORY_FILE_NAME}`, saveRules.instructionsPath)]
       : []),

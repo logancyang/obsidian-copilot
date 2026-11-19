@@ -7,7 +7,11 @@ import type {
   BackendState,
   SessionUsage,
 } from "@/agentMode/session/types";
-import type { ChatExtension } from "@/agentMode/session/chatExtension";
+import {
+  NO_SAVED_CHAT_STATES,
+  type ChatExtension,
+  type SavedChatStates,
+} from "@/agentMode/session/chatExtension";
 import type { CopilotMcpServer, FindCallingChat } from "@/agentMode/session/copilotMcpServer";
 import { refreshLatestVersion } from "@/hooks/useLatestVersion";
 import { resolveEffort } from "@/lib/model-effort";
@@ -2228,6 +2232,7 @@ export class AgentSessionManager {
       }
     }
     session.seedSessionUsage(loaded.usage);
+    session.restoreNoteChatStates(loaded.chatStates ?? NO_SAVED_CHAT_STATES);
     state.source = file;
     state.savedLabel = loaded.label;
     // A fresh session has no transcript until its first prompt; saving it earlier repoints the note away from the session
@@ -2243,7 +2248,8 @@ export class AgentSessionManager {
       loaded.label ?? null,
       state.withholdsSessionId ? null : (loaded.sessionId ?? null),
       loaded.messages,
-      loaded.usage ?? null
+      loaded.usage ?? null,
+      session.getNoteChatStates()
     );
   }
 
@@ -2697,7 +2703,8 @@ export class AgentSessionManager {
     const label = session.getLabel();
     const sessionId = state.withholdsSessionId ? null : session.getBackendSessionId();
     const usage = session.getSessionUsage();
-    const signature = this.saveSignature(label, sessionId, messages, usage);
+    const chatStates = session.getNoteChatStates();
+    const signature = this.saveSignature(label, sessionId, messages, usage, chatStates);
     if (state.signature === signature) {
       return state.source ?? null;
     }
@@ -2711,6 +2718,7 @@ export class AgentSessionManager {
       model: session.getState()?.model?.current,
       carriedMessages: state.withholdsSessionId ? undefined : state.carriedMessages,
       agent: session.agentSlug,
+      chatStates,
     });
     if (result) {
       state.source = this.app.vault.getAbstractFileByPath(result.path) ?? result;
@@ -2729,7 +2737,8 @@ export class AgentSessionManager {
     label: string | null,
     sessionId: string | null,
     messages: readonly AgentChatMessage[],
-    usage: SessionUsage | null
+    usage: SessionUsage | null,
+    chatStates: SavedChatStates
   ): string {
     const last = messages[messages.length - 1];
     // The note lists each reply's tools, so a tool call that adds no text still needs a save.
@@ -2740,9 +2749,11 @@ export class AgentSessionManager {
     // An @-mentioned agent's run changes on the message that asked it, which later messages may follow.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
     const mentionsSig = JSON.stringify(messages.flatMap((m) => m.agentMentions ?? []));
+    // Dismissing a card changes only the state the note keeps for it, which still needs a save.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/941
     return `${label ?? ""}-${sessionId ?? ""}-${messages.length}-${
       last?.message ?? ""
-    }-${toolsSig}-${last?.memorySaves?.length ?? 0}-${mentionsSig}-${usage?.updatedAt ?? ""}`;
+    }-${toolsSig}-${last?.memorySaves?.length ?? 0}-${mentionsSig}-${usage?.updatedAt ?? ""}-${JSON.stringify(chatStates)}`;
   }
 
   private async drainAutoSave(session: AgentSession): Promise<void> {

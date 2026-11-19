@@ -7,12 +7,13 @@ import {
 } from "@/agents/ui/CreateAgentForm";
 import type { PresetFacesState } from "@/agents/ui/usePresetFaces";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
 
 jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError: jest.fn() }));
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/939";
+const DRAFT_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/941";
 const NAMES_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/936";
 
 const MODELS: AgentModelChoices = {
@@ -402,6 +403,55 @@ describe("CreateAgentForm", () => {
         "You plan pickups."
       );
       expect(createButton().disabled).toBe(false);
+    });
+
+    it(`opens a drafted agent with "Drafted by" and the drafting agent's face as its first line, and nothing above the fields otherwise (${DRAFT_ISSUE})`, () => {
+      renderForm({
+        initialValues: {
+          name: "Nora",
+          title: "Family logistics",
+          instruction: "You plan pickups.",
+        },
+        draftedBy: { name: "Coco", faceSrc: "app://coco.webp" },
+      });
+
+      const banner = document.querySelector("form")?.firstElementChild as HTMLElement;
+      expect(banner.textContent).toBe(
+        "Drafted by Coco. Check it, pick a face and a model, then create."
+      );
+      expect(banner.querySelector("img")?.getAttribute("src")).toBe("app://coco.webp");
+      cleanup();
+
+      renderForm();
+      expect(screen.queryByText(/Drafted by/)).toBeNull();
+    });
+
+    it(`lets the dialog's own checks handle a drafted name already on the team and a drafted empty instruction (${DRAFT_ISSUE})`, async () => {
+      renderForm({
+        initialValues: { name: "leo", title: "", instruction: "" },
+        draftedBy: { name: "Coco", faceSrc: "app://coco.webp" },
+      });
+
+      expect(screen.getByText("Leo is already on your team. Pick another name.")).not.toBeNull();
+      expect(createButton().disabled).toBe(true);
+      type("Name", "Nora");
+      expect(await createButtonHint()).toBe("Write what Nora handles first");
+    });
+
+    it(`keeps a drafted instruction past 4,000 characters whole and creates it, with the count orange (${DRAFT_ISSUE})`, async () => {
+      const long = "Plan pickups. ".repeat(400).trim();
+      const { onCreate } = renderForm({
+        initialValues: { name: "Nora", title: "", instruction: long },
+        draftedBy: { name: "Coco", faceSrc: "app://coco.webp" },
+      });
+
+      expect(screen.getByLabelText<HTMLTextAreaElement>("What Nora handles").value).toBe(long);
+      expect(screen.getByText("5,599 / 4,000").className).toContain("tw-text-warning");
+      fireEvent.click(createButton());
+
+      await waitFor(() =>
+        expect(onCreate).toHaveBeenCalledWith(expect.objectContaining({ instruction: long }))
+      );
     });
   });
 });

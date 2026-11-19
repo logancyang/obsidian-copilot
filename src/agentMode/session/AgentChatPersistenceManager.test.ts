@@ -809,6 +809,66 @@ describe("AgentChatPersistenceManager", () => {
       expect(file.contents).toBe(before);
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/941 keeps a chat's card states on its last message only and reads them back, leaving each message's text as written", async () => {
+      const chatStates = {
+        "agent-draft": {
+          draft: { name: "Nora", title: "Family", instruction: "You plan pickups.\nBe brief -->" },
+          draftedBy: "coco",
+          afterUserTurn: 1,
+        },
+      };
+      const saved = await manager.saveSession(
+        [
+          makeMessage(USER_SENDER, "Make me a family agent."),
+          makeMessage(AI_SENDER, "Here's a draft.", 1735732800001),
+        ],
+        "claude",
+        { chatStates }
+      );
+      const file = app.files.get(saved!.path)!;
+
+      expect(file.contents).toContain(
+        '**ai**: Here\'s a draft.\n<!-- copilot-message {"chatStates":{"agent-draft":{"draft":{"name":"Nora","title":"Family","instruction":"You plan pickups.\\nBe brief --\\u003e"},"draftedBy":"coco","afterUserTurn":1}}} -->\n'
+      );
+      expect(file.contents?.match(/copilot-message/g)).toHaveLength(1);
+      const loaded = await manager.loadFile(file as unknown as TFile);
+      expect(loaded.messages.map(({ message }) => message)).toEqual([
+        "Make me a family agent.",
+        "Here's a draft.",
+      ]);
+      expect(loaded.chatStates).toEqual(chatStates);
+
+      const before = file.contents;
+      await manager.saveSession(loaded.messages, "claude", {
+        existingPath: saved!.path,
+        chatStates: loaded.chatStates,
+      });
+      expect(file.contents).toBe(before);
+    });
+
+    it("reads no card states from a note whose last message keeps none", async () => {
+      const file = addNote(app, "copilot/copilot-conversations/agent__earlier.md");
+      Object.assign(file, {
+        contents: [
+          "---",
+          "backendId: claude",
+          "---",
+          "",
+          "**user**: Hi",
+          '<!-- copilot-message {"chatStates":{"agent-draft":{"draftedBy":"coco"}}} -->',
+          "[Timestamp: 2026/01/01 12:00:00]",
+          "",
+          "**ai**: Hello.",
+          "[Timestamp: 2026/01/01 12:00:01]",
+        ].join("\n"),
+      });
+
+      const loaded = await manager.loadFile(file);
+
+      expect(loaded.messages.map(({ message }) => message)).toEqual(["Hi", "Hello."]);
+      expect(loaded.chatStates).toBeUndefined();
+    });
+
     it("restores each @-mentioned agent's run, with its hidden chat, from the message that asked it, keeping the note the same across saves (https://github.com/Brevilabs/obsidian-copilot-private/issues/944)", async () => {
       const agentMentions = [
         {
