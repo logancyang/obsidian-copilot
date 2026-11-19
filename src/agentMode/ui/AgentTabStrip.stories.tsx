@@ -1,6 +1,7 @@
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import type { AgentSessionStatus } from "@/agentMode/session/AgentSession";
 import { AgentTabStrip } from "@/agentMode/ui/AgentTabStrip";
+import { COCO, LEO, MAYA, NORA } from "@/agents/ui/testing/rosterFixtures";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { Meta, StoryObj } from "@/lib/story";
 import React from "react";
@@ -11,12 +12,14 @@ interface StoryChat {
   label: string;
   status?: AgentSessionStatus;
   needsAttention?: boolean;
+  agentSlug?: string;
 }
 
 function makeManager(chats: StoryChat[], activeIndex = 0): AgentSessionManager {
   const sessions = chats.map((chat, index) => ({
     internalId: `chat-${index}`,
     backendId: "claude",
+    agentSlug: chat.agentSlug ?? null,
     subscribe: () => () => {},
     getLabel: () => chat.label,
     getStatus: () => chat.status ?? "idle",
@@ -60,6 +63,31 @@ export const EveryStatus: StoryObj<AgentTabStripProps> = {
       { label: "Clean up duplicate project notes", status: "error" },
       { label: "Plan the garden renovation" },
       { label: "Review the weekly template" },
+    ]),
+  },
+};
+
+export const AgentAndCopilotChats: StoryObj<AgentTabStripProps> = {
+  render: WithTooltips,
+  args: {
+    agents: [COCO, LEO, MAYA, NORA],
+    manager: makeManager([
+      { label: "Launch video plan", agentSlug: "coco" },
+      { label: "October books", agentSlug: "leo", status: "running" },
+      { label: "What to cut from the launch video", agentSlug: "maya", needsAttention: true },
+      { label: "Winter break schedule", agentSlug: "nora" },
+      { label: "Release notes 4.0.21" },
+    ]),
+  },
+};
+
+export const RunningAgentChat: StoryObj<AgentTabStripProps> = {
+  render: WithTooltips,
+  args: {
+    agents: [COCO, LEO],
+    manager: makeManager([
+      { label: "October books", agentSlug: "leo", status: "running" },
+      { label: "Release notes 4.0.21", status: "running" },
     ]),
   },
 };

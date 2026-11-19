@@ -1,5 +1,7 @@
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import type { RecentChatActions } from "@/agentMode/ui/RecentChatMenu";
+import { useAgentChatIcon } from "@/agents/ui/useAgentRecentChats";
+import { useCustomAgents } from "@/agents/ui/useCustomAgents";
 import { createProjectAndEnter } from "@/projects/ui/AgentProjectCreateForm";
 import { leaveDeletedProject } from "@/projects/ui/AgentProjectRowActions";
 import { ArchivedChatsModal, createProjectArchiveActions } from "@/agentMode/ui/ArchivedChatsModal";
@@ -41,6 +43,7 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({ manager, plugi
     setChatBookmarked,
   } = useAgentHistoryControls(manager, plugin);
   const { app } = plugin;
+  const getChatIcon = useAgentChatIcon(useCustomAgents(plugin.customAgents));
   const openChatIds = useManagerSetSnapshot(manager, (m) => m.getOpenChatIds());
   const runningChatIds = useRunningChatIds(manager);
   const waitingChatIds = useManagerSetSnapshot(manager, (m) => m.getWaitingChatIds());
@@ -184,6 +187,7 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({ manager, plugi
   return (
     <SessionsSidebarPanel
       items={chatHistoryItems}
+      getIcon={getChatIcon}
       projects={projects}
       expandedProjectIds={expandedProjectIds}
       projectOrder={projectOrder}

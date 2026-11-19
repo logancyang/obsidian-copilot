@@ -1,5 +1,5 @@
 import type { CustomAgent } from "@/agents/CustomAgentStore";
-import { useAgentRecentChats } from "@/agents/ui/useAgentRecentChats";
+import { useAgentChatIcon, useAgentRecentChats } from "@/agents/ui/useAgentRecentChats";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { render, renderHook, screen } from "@testing-library/react";
 import React from "react";
@@ -58,6 +58,35 @@ describe("useAgentRecentChats", () => {
 
       expect(result.current.items).toBe(CHATS);
       expect(result.current.getIcon).toBeUndefined();
+    });
+  });
+
+  describe("useAgentChatIcon()", () => {
+    const NAVIGATOR_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/938";
+
+    it(`gives an agent chat its agent's face and leaves a Copilot chat or a chat whose agent is gone to the usual icon (${NAVIGATOR_ISSUE})`, () => {
+      const { result } = renderHook(() => useAgentChatIcon([COCO, NORA]));
+
+      expect(renderIcon(result.current?.(CHATS[0]))?.getAttribute("src")).toBe("face:coco");
+      expect(result.current?.(CHATS[1])).toBeUndefined();
+      expect(result.current?.(CHATS[2])).toBeUndefined();
+    });
+
+    it(`draws the face at 16px even where the list draws its icons smaller, as the Navigator does (${NAVIGATOR_ISSUE})`, () => {
+      const { result } = renderHook(() => useAgentChatIcon([COCO]));
+      const Face = result.current?.(CHATS[0]);
+      if (!Face) throw new Error("No icon");
+
+      const face = render(<Face className="tw-size-3.5" />).container.querySelector("img");
+
+      expect(face?.className).toContain("tw-size-4");
+      expect(face?.className).not.toContain("tw-size-3.5");
+    });
+
+    it("gives no icons while no agents are listed", () => {
+      const { result } = renderHook(() => useAgentChatIcon([]));
+
+      expect(result.current).toBeUndefined();
     });
   });
 });
