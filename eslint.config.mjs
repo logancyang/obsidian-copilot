@@ -520,6 +520,7 @@ export default [
         { type: "miyoAgent", pattern: "src/miyo/agentMode" },
         { type: "excalidrawAgent", pattern: "src/excalidraw/agentMode" },
         { type: "connectorsAgent", pattern: "src/connectors/agentMode" },
+        { type: "customAgentsAgent", pattern: "src/agents/agentMode" },
         { type: "projectsUi", pattern: ["src/projects/ui", "src/projects/hooks"] },
         { type: "host", pattern: "src/**" },
       ],
@@ -555,6 +556,7 @@ export default [
                     "miyoAgent",
                     "excalidrawAgent",
                     "connectorsAgent",
+                    "customAgentsAgent",
                     "projectsUi",
                     "host",
                   ],
@@ -576,6 +578,10 @@ export default [
             {
               from: { type: "connectorsAgent" },
               allow: { to: { type: ["connectorsAgent", "ui", "session", "host"] } },
+            },
+            {
+              from: { type: "customAgentsAgent" },
+              allow: { to: { type: ["customAgentsAgent", "ui", "session", "host"] } },
             },
             {
               from: { type: "projectsUi" },

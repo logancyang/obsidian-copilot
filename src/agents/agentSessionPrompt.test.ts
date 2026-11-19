@@ -115,6 +115,7 @@ describe("agentSessionPrompt", () => {
 
       expect(loaded).toEqual({
         slug: "coco",
+        name: "Coco",
         prompt: buildAgentPrompt({
           agent: COCO,
           folder: "/vault/copilot/agents/coco",
@@ -136,6 +137,7 @@ describe("agentSessionPrompt", () => {
 
       expect(loaded).toEqual({
         slug: "coco",
+        name: "Coco",
         prompt: buildAgentPrompt({
           agent: COCO,
           folder: "/vault/copilot/agents/coco",

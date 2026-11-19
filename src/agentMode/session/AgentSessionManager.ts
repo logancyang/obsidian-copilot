@@ -2344,6 +2344,7 @@ export class AgentSessionManager {
       getApp: () => this.app,
       chatExtensions: this.opts.chatExtensions,
       agentSlug,
+      agent,
       ...(projectId !== GLOBAL_SCOPE
         ? {
             getProjectContextUpdates: () => this.getProjectContextUpdates(internalId, projectId),
@@ -2641,9 +2642,11 @@ export class AgentSessionManager {
     // The note lists each reply's tools, so a tool call that adds no text still needs a save.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/906
     const toolsSig = last ? toolsUsedLines(last, getVaultBase(this.app)).join("|") : "";
+    // A custom agent's saves reach the reply when its turn ends, after its text and tools.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/942
     return `${label ?? ""}-${sessionId ?? ""}-${messages.length}-${
       last?.message ?? ""
-    }-${toolsSig}-${usage?.updatedAt ?? ""}`;
+    }-${toolsSig}-${last?.memorySaves?.length ?? 0}-${usage?.updatedAt ?? ""}`;
   }
 
   private async drainAutoSave(session: AgentSession): Promise<void> {

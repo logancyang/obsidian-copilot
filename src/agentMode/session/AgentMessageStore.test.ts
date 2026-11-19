@@ -9,6 +9,12 @@ jest.mock("@/logger", () => ({
   logError: jest.fn(),
 }));
 
+const MEMORY_SAVE = {
+  agentName: "Coco",
+  memoryPath: "copilot/agents/coco/MEMORY.md",
+  rule: "Launch videos lead with user value, not the feature list.",
+};
+
 describe("AgentMessageStore", () => {
   afterEach(() => {
     jest.useRealTimers();
@@ -669,6 +675,23 @@ describe("AgentMessageStore", () => {
       expect(store.getDisplayMessages()[0].toolsUsed).toEqual(["Read a.md (read): notes/a.md"]);
     });
 
+    it("keeps the rules a custom agent saved in a loaded reply (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", () => {
+      const store = new AgentMessageStore();
+
+      store.loadMessages([
+        {
+          id: "a1",
+          sender: AI_SENDER,
+          message: "Got it.",
+          timestamp: null,
+          isVisible: true,
+          memorySaves: [MEMORY_SAVE],
+        },
+      ]);
+
+      expect(store.getDisplayMessages()[0].memorySaves).toEqual([MEMORY_SAVE]);
+    });
+
     it("drops file changes from a loaded chat so a reopened turn shows none", () => {
       const store = new AgentMessageStore();
       const id = store.addMessage(placeholder());
@@ -760,6 +783,19 @@ describe("AgentMessageStore", () => {
       const [reply] = store.getDisplayMessages();
       expect(reply.toolsUsed).toEqual(["Read (read): a.md"]);
       expect(reply.parts?.map((p) => p.kind)).toEqual(["tool_call", "text"]);
+    });
+
+    it("gives a replayed reply the rules its note says the custom agent saved (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", () => {
+      const store = new AgentMessageStore();
+      store.addMessage(replayed(USER_SENDER, "q"));
+      store.addMessage(replayed(AI_SENDER, "a"));
+
+      store.adoptNoteRows([
+        noteRow(USER_SENDER, "q"),
+        noteRow(AI_SENDER, "a", { memorySaves: [MEMORY_SAVE] }),
+      ]);
+
+      expect(store.getDisplayMessages()[1].memorySaves).toEqual([MEMORY_SAVE]);
     });
 
     it(`${issue} leaves messages unchanged from the first position where the note's sender differs`, () => {
@@ -985,6 +1021,24 @@ describe("AgentMessageStore", () => {
     it("returns false for an unknown message", () => {
       const store = new AgentMessageStore();
       expect(store.setFileChanges("nope", [change("notes/a.md")])).toBe(false);
+    });
+
+    it("publishes the rules a custom agent saved in the turn beside its file changes (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", () => {
+      const store = new AgentMessageStore();
+      const id = store.addMessage(placeholder());
+
+      store.setFileChanges(id, [change("copilot/agents/coco/MEMORY.md")], [MEMORY_SAVE]);
+
+      expect(store.getMessage(id)?.memorySaves).toEqual([MEMORY_SAVE]);
+    });
+
+    it("publishes no saved rules for a turn that saved none", () => {
+      const store = new AgentMessageStore();
+      const id = store.addMessage(placeholder());
+
+      store.setFileChanges(id, [change("notes/a.md")], []);
+
+      expect(store.getMessage(id)?.memorySaves).toBeUndefined();
     });
   });
 });

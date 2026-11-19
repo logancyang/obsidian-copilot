@@ -5349,6 +5349,34 @@ describe("AgentSessionManager", () => {
         await mgr.shutdown();
       });
 
+      it("saves again when the last reply gains the rules a custom agent saved after its text, so its note keeps the save lines (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", async () => {
+        const { mgr, saveSession } = savedNoteFixture();
+        const session = await mgr.createSession();
+        const handle = getSessionTestHandle(session);
+        handle.setMessages([{ message: "Remember this." }, { message: "Got it." }]);
+        await mgr.saveActiveSession();
+        const withSave = [
+          { message: "Remember this." },
+          {
+            message: "Got it.",
+            memorySaves: [
+              { agentName: "Coco", memoryPath: "copilot/agents/coco/MEMORY.md", rule: "Be brief." },
+            ],
+          },
+        ];
+        handle.setMessages(withSave);
+
+        await mgr.saveActiveSession();
+
+        expect(saveSession).toHaveBeenCalledTimes(2);
+        expect(saveSession).toHaveBeenLastCalledWith(
+          withSave,
+          session.backendId,
+          expect.anything()
+        );
+        await mgr.shutdown();
+      });
+
       it("persists changes during the first manual save for https://github.com/logancyang/obsidian-copilot/issues/3225", async () => {
         const { mgr, saveSession } = savedNoteFixture();
         let finishSave!: (result: { path: string }) => void;

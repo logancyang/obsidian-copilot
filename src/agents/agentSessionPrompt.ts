@@ -7,6 +7,7 @@ import { logWarn } from "@/logger";
 export interface AgentSessionPrompt {
   slug: string;
   prompt: string;
+  name: string;
   memoryPath?: string;
 }
 
@@ -68,6 +69,7 @@ export async function loadAgentSessionPrompt(
   const folder = `${vaultBase}/${agent.folderPath}`;
   return {
     slug,
+    name: agent.name,
     prompt: buildAgentPrompt({
       agent,
       folder,

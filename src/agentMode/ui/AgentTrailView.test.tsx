@@ -757,6 +757,49 @@ describe("AgentTrail", () => {
     expect(screen.getByTestId("agent-md").getAttribute("data-miyo-paths")).toBe("v/a.md|v/b.md");
   });
 
+  it("shows a custom agent's saved rule in place of the edit that wrote it, in the turn's order (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", () => {
+    const save = toolCall("save", {
+      vendorToolName: "Edit",
+      toolKind: "edit",
+      title: "Edit MEMORY.md",
+      locations: [{ path: "copilot/agents/coco/MEMORY.md" }],
+    });
+    const { container } = renderTrail({
+      parts: [READ_A, save, text("Reworked the outline.")],
+      memorySaves: {
+        anchorId: "save",
+        saves: [
+          {
+            agentName: "Coco",
+            memoryPath: "copilot/agents/coco/MEMORY.md",
+            rule: "Launch videos lead with user value.",
+          },
+        ],
+      },
+    });
+
+    const shown = container.textContent ?? "";
+    expect(shown).not.toContain("MEMORY.md");
+    expect(shown.indexOf("Coco remembered")).toBeGreaterThan(-1);
+    expect(shown.indexOf("Coco remembered")).toBeLessThan(shown.indexOf("Reworked the outline."));
+  });
+
+  it("keeps the edit card of a save whose rule is not known yet, as while its turn runs", () => {
+    const save = toolCall("save", {
+      vendorToolName: "Edit",
+      toolKind: "edit",
+      title: "Edit MEMORY.md",
+      locations: [{ path: "copilot/agents/coco/MEMORY.md" }],
+    });
+    const { container } = renderTrail({
+      parts: [save, text("Reworked the outline.")],
+      memorySaves: null,
+    });
+
+    expect(container.textContent).toContain("MEMORY.md");
+    expect(screen.queryByText("Coco remembered")).toBeNull();
+  });
+
   it("renders an Excalidraw write as a Copilot card between grouped work and opens the drawing in a new tab (https://github.com/Brevilabs/obsidian-copilot-private/issues/787)", () => {
     const openLinkText = jest.fn();
     const app = {

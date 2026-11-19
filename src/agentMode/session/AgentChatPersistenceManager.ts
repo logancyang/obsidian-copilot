@@ -36,6 +36,7 @@ import {
   unescapeYamlString,
 } from "./agentChatYaml";
 import { sanitizeModel } from "./AgentSessionIndex";
+import type { MemorySave } from "@/agents/memorySaves";
 import { GLOBAL_SCOPE } from "./scope";
 import type { AgentChatMessage, BackendId, ModelSelection, SessionUsage } from "./types";
 
@@ -56,6 +57,21 @@ interface SavedMessageData {
   notes?: string[];
   folders?: string[];
   webTabs?: { url: string; title?: string }[];
+  // A custom agent's save lines come back with the chat only from its note; a build without custom agents ignores the key and shows the reply as ordinary text.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/942
+  memorySaves?: readonly MemorySave[];
+}
+
+function loadedMemorySaves(saved: unknown): MemorySave[] {
+  if (!Array.isArray(saved)) return [];
+  return saved.filter((entry: unknown): entry is MemorySave => {
+    const save = entry as Partial<Record<keyof MemorySave, unknown>> | null;
+    return (
+      typeof save?.rule === "string" &&
+      typeof save.agentName === "string" &&
+      typeof save.memoryPath === "string"
+    );
+  });
 }
 
 function readMessageData(json: string): SavedMessageData {
@@ -406,6 +422,7 @@ export class AgentChatPersistenceManager {
         const data: SavedMessageData = {
           ...(tools.length > 0 ? { tools } : {}),
           ...savedContext(m.context),
+          ...(m.memorySaves?.length ? { memorySaves: m.memorySaves } : {}),
         };
         // A message ending in a literal hidden line gets an empty one after it, so loading keeps that text.
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/906
@@ -447,6 +464,7 @@ export class AgentChatPersistenceManager {
         ? data.tools.filter((tool) => typeof tool === "string")
         : [];
       const context = loadedContext(data, this.app);
+      const memorySaves = loadedMemorySaves(data.memorySaves);
 
       let timestamp: FormattedDateTime | null = null;
       if (timestampStr !== "Unknown time") {
@@ -476,6 +494,7 @@ export class AgentChatPersistenceManager {
         timestamp,
         ...(tools.length > 0 ? { toolsUsed: tools } : {}),
         ...(context ? { context } : {}),
+        ...(memorySaves.length > 0 ? { memorySaves } : {}),
       });
     }
     return messages;
