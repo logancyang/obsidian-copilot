@@ -3,10 +3,12 @@ import { useCustomAgentsGate } from "@/agents/customAgentsGate";
 import { useCustomAgents } from "@/agents/ui/useCustomAgents";
 import { createContext, useContext, useMemo } from "react";
 
+export type RunRef = { runId: string } | { callId: string; agent: string };
+
 export interface ChatAgents {
   agents: readonly CustomAgent[];
   self: string | null;
-  openRun?: (runId: string) => void;
+  openRun?: (run: RunRef) => void;
 }
 
 const NO_AGENTS: readonly CustomAgent[] = Object.freeze([]);
@@ -18,7 +20,7 @@ export const ChatAgentsContext = createContext<ChatAgents>(
 export function useChatAgentsValue(
   store: CustomAgentStore | undefined,
   self: string | null,
-  openRun?: (runId: string) => void
+  openRun?: (run: RunRef) => void
 ): ChatAgents {
   const agents = useCustomAgents(store);
   return useMemo(() => ({ agents, self, openRun }), [agents, self, openRun]);

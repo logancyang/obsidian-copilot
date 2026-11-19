@@ -20,13 +20,14 @@ import { setCustomAgentsAccess } from "@/agents/testing/customAgentsAccess";
 import { createFakeAgentVault } from "@/agents/testing/fakeAgentVault";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { setSettings } from "@/settings/model";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 
 jest.mock("@/entitlement");
 jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError: jest.fn() }));
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/948";
+const CARDS = "https://github.com/Brevilabs/obsidian-copilot-private/issues/967";
 const NOW = Date.parse("2026-11-16T10:05:12Z");
 
 function run(change: Partial<AgentMention> = {}): AgentMention {
@@ -66,25 +67,20 @@ describe("RunningAgents", () => {
     (window as unknown as { activeDocument: Document }).activeDocument = window.document;
   });
 
-  afterEach(() => jest.useRealTimers());
-
   describe("runningAgentsSlot()", () => {
     const onOpen = jest.fn();
     it(`gives nothing to draw when no asked agent runs (${ISSUE})`, () => {
       expect(runningAgentsSlot({ runs: [], taskCount: 1, onOpen })).toBeUndefined();
     });
 
-    it(`says the one working agent is working with a clock that counts, and lists it with what it was asked (${ISSUE})`, () => {
-      jest.useFakeTimers({ now: NOW });
+    it(`says the one working agent is working, with no clock on the line or its row, and lists it with what it was asked (${CARDS})`, () => {
       renderLine(runningAgentsSlot({ runs: [asked()], taskCount: 0, onOpen }));
 
-      const line = screen.getByRole("button", { name: /Leo is working/ });
-      expect(line.textContent).toBe("Leo is working · 3:12");
-      act(() => jest.advanceTimersByTime(2_000));
-      expect(line.textContent).toBe("Leo is working · 3:14");
-
+      expect(screen.getByRole("button", { name: "Leo is working" }).textContent).toBe(
+        "Leo is working"
+      );
       const row = screen.getByText("Reconcile October").closest("li")!;
-      expect(row.textContent).toBe("Leo Reconcile October3:14");
+      expect(row.textContent).toBe("Leo Reconcile October");
     });
 
     it(`puts the waiting agent first in orange, face and words, and its row says it waits instead of a clock (${ISSUE})`, () => {
@@ -288,7 +284,7 @@ describe("RunningAgents", () => {
       );
       expect(relayed).toContain("Matched 120 of 214.");
       expect(coco.store.getDisplayMessages()[0].agentMentions?.[0]).toEqual(
-        expect.objectContaining({ status: "stopped", end: { kind: "stopped_by_user" } })
+        expect.objectContaining({ status: "stopped" })
       );
     });
 

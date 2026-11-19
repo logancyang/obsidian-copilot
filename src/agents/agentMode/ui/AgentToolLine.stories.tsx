@@ -1,96 +1,77 @@
+import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
 import type { AgentToolCall } from "@/agents/agentMode/agentToolCalls";
 import { AgentToolLine } from "@/agents/agentMode/ui/AgentToolLine";
 import { ChatAgentsContext } from "@/agents/ui/chatAgents";
 import { FIVE_AGENTS, LONG_NAMED_AGENT } from "@/agents/ui/testing/rosterFixtures";
-import { useApp } from "@/context";
 import type { Meta, StoryObj } from "@/lib/story";
-import React, { useState } from "react";
+import React from "react";
 
-interface ToolLineProps {
-  calls: AgentToolCall[];
-  initiallyOpen?: boolean;
+interface ToolLine extends AgentToolCall {
+  status?: ToolCallPart["status"];
 }
 
-const CHAT_AGENTS = { agents: [...FIVE_AGENTS, LONG_NAMED_AGENT], self: "coco" };
+interface ToolLinesProps {
+  lines: ToolLine[];
+}
 
-function ToolLine({ calls, initiallyOpen = false }: ToolLineProps) {
-  const app = useApp();
-  const [open, setOpen] = useState(initiallyOpen);
+const CHAT_AGENTS = {
+  agents: [...FIVE_AGENTS, LONG_NAMED_AGENT],
+  self: "coco",
+  openRun: () => {},
+};
+
+function ToolLines({ lines }: ToolLinesProps) {
   return (
     <ChatAgentsContext.Provider value={CHAT_AGENTS}>
-      <AgentToolLine
-        calls={calls}
-        app={app}
-        open={open}
-        onToggle={() => setOpen((was) => !was)}
-        ordinaryRow={null}
-      />
+      {lines.map(({ status = "completed", ...call }, index) => (
+        <AgentToolLine
+          key={`${call.tool}-${call.agent}`}
+          call={call}
+          part={{ kind: "tool_call", id: `call-${index}`, title: call.tool, status }}
+          ordinaryRow={null}
+        />
+      ))}
     </ChatAgentsContext.Provider>
   );
 }
 
-const SENT =
-  "Zero is planning the custom agents launch video and wants your blunt read.\n\nThe plan is in [[Launch video plan]]: a 20-second intro, then six 10-second feature shots.\n\nTheir words: “what do you think of this plan? Be blunt.”";
-
 const meta = {
   title: "Custom Agents/Mention Tool Line",
-  component: ToolLine,
+  component: ToolLines,
   parameters: { gallery: { host: "leaf", layout: "padded" } },
-} satisfies Meta<ToolLineProps>;
+} satisfies Meta<ToolLinesProps>;
 export default meta;
 
-export const Asked: StoryObj<ToolLineProps> = {
-  args: { calls: [{ tool: "ask_agent", agent: "Maya", message: SENT }] },
+export const Asking: StoryObj<ToolLinesProps> = {
+  args: { lines: [{ tool: "ask_agent", agent: "Leo", status: "in_progress" }] },
 };
 
-export const AskedOpen: StoryObj<ToolLineProps> = {
-  args: { calls: [{ tool: "ask_agent", agent: "Maya", message: SENT }], initiallyOpen: true },
+export const Messaged: StoryObj<ToolLinesProps> = {
+  args: { lines: [{ tool: "ask_agent", agent: "Leo" }] },
 };
 
-export const CheckedProgress: StoryObj<ToolLineProps> = {
-  args: { calls: [{ tool: "check_agent", agent: "Leo", message: null }] },
-};
-
-export const PassedAnswer: StoryObj<ToolLineProps> = {
-  args: { calls: [{ tool: "answer_agent", agent: "Leo", message: null }] },
-};
-
-export const Stopped: StoryObj<ToolLineProps> = {
-  args: { calls: [{ tool: "stop_agent", agent: "Leo", message: null }] },
-};
-
-const BUDGET =
-  "Zero asks whether the $8k launch budget holds up. The budget is in [[Launch budget]].";
-
-export const AskedSeveral: StoryObj<ToolLineProps> = {
+export const MessagedSeveralAgents: StoryObj<ToolLinesProps> = {
   args: {
-    calls: [
-      { tool: "ask_agent", agent: "Maya", message: BUDGET },
-      { tool: "ask_agent", agent: "Leo", message: BUDGET },
+    lines: [
+      { tool: "ask_agent", agent: "Maya" },
+      { tool: "ask_agent", agent: "Leo" },
+      { tool: "ask_agent", agent: "Nora", status: "in_progress" },
     ],
   },
 };
 
-export const AskedSeveralOpen: StoryObj<ToolLineProps> = {
-  args: {
-    calls: [
-      { tool: "ask_agent", agent: "Maya", message: BUDGET },
-      {
-        tool: "ask_agent",
-        agent: "Leo",
-        message: "Check the Q4 marketing line in [[Launch budget]].",
-      },
-    ],
-    initiallyOpen: true,
-  },
+export const MessagedLongName: StoryObj<ToolLinesProps> = {
+  args: { lines: [{ tool: "ask_agent", agent: LONG_NAMED_AGENT.name }] },
 };
 
-export const AskedFiveLongNames: StoryObj<ToolLineProps> = {
-  args: {
-    calls: ["Maya", "Leo", "Nora", "Kai", LONG_NAMED_AGENT.name].map((agent) => ({
-      tool: "ask_agent",
-      agent,
-      message: BUDGET,
-    })),
-  },
+export const CheckedProgress: StoryObj<ToolLinesProps> = {
+  args: { lines: [{ tool: "check_agent", agent: "Leo" }] },
+};
+
+export const PassedAnswer: StoryObj<ToolLinesProps> = {
+  args: { lines: [{ tool: "answer_agent", agent: "Leo" }] },
+};
+
+export const Stopped: StoryObj<ToolLinesProps> = {
+  args: { lines: [{ tool: "stop_agent", agent: "Leo" }] },
 };

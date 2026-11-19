@@ -2,11 +2,22 @@ import { restoreAgentMentions, withoutAgentChats } from "@/agents/agentMentions"
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/944";
 const CONTROL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/945";
+const CARDS = "https://github.com/Brevilabs/obsidian-copilot-private/issues/967";
 const CHAT = { backendId: "codex", sessionId: "thread-1" };
 
 describe("agentMentions", () => {
   describe("restoreAgentMentions()", () => {
-    it(`keeps a finished, stopped or unfinished run as it was saved, with its hidden chat and reason (${ISSUE})`, () => {
+    it(`keeps a finished, stopped or unfinished run as it was saved, with its hidden chat (${ISSUE})`, () => {
+      const saved = [
+        { id: "a", agent: "maya", name: "Maya", status: "finished", startedAt: 1, chat: CHAT },
+        { id: "b", agent: "leo", name: "Leo", status: "stopped", startedAt: 1 },
+        { id: "c", agent: "nora", name: "Nora", status: "didnt_finish", startedAt: 1 },
+      ];
+
+      expect(restoreAgentMentions(saved)).toEqual(saved);
+    });
+
+    it(`still reads a run saved with the end time and reason the chat no longer shows (${CARDS})`, () => {
       const saved = [
         {
           id: "a",
@@ -52,9 +63,7 @@ describe("agentMentions", () => {
         }))
       );
 
-      expect(restored.map(({ status, end }) => ({ status, end }))).toEqual(
-        Array(3).fill({ status: "didnt_finish", end: { kind: "obsidian_closed" } })
-      );
+      expect(restored.map(({ status }) => status)).toEqual(Array(3).fill("didnt_finish"));
       expect(restored[0].chat).toEqual(CHAT);
     });
 
@@ -73,21 +82,15 @@ describe("agentMentions", () => {
       expect(restoreAgentMentions(undefined)).toEqual([]);
     });
 
-    it(`drops a run whose end time, reason or hidden chat a hand edit left in the wrong shape (${ISSUE})`, () => {
+    it(`drops a run whose hidden chat a hand edit left in the wrong shape (${ISSUE})`, () => {
       const run = { id: "a", agent: "maya", name: "Maya", status: "stopped", startedAt: 1 };
 
       expect(
         restoreAgentMentions([
-          { ...run, endedAt: "later" },
-          { ...run, end: null },
-          { ...run, end: { kind: "fell_asleep" } },
-          { ...run, end: { kind: "error" } },
-          { ...run, end: { kind: "permission_denied", requests: "Edit plan.md" } },
           { ...run, chat: null },
           { ...run, chat: { backendId: "claude" } },
         ])
       ).toEqual([]);
-      expect(restoreAgentMentions([{ ...run, end: { kind: "stopped_by_user" } }])).toHaveLength(1);
     });
   });
 

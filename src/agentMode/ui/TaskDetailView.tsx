@@ -27,10 +27,10 @@ export interface TaskDetailViewProps {
 }
 
 export interface TaskDetailFrameProps {
-  icon: React.ReactNode;
+  icon?: React.ReactNode;
   title: React.ReactNode;
-  subtitle: React.ReactNode;
-  status: React.ReactNode;
+  subtitle?: React.ReactNode;
+  status?: React.ReactNode;
   onBack: () => void;
   backLabel?: string;
   banner?: { text: string; action: string } | null;
@@ -61,7 +61,8 @@ export const TaskDetailFrame: React.FC<TaskDetailFrameProps> = ({
       {icon}
       <div className="tw-flex tw-min-w-0 tw-flex-1 tw-flex-col">
         <span className="tw-truncate tw-text-sm tw-font-medium tw-text-normal">{title}</span>
-        <span className="tw-truncate tw-text-xs tw-text-muted">{subtitle}</span>
+        {/* An asked agent's conversation heads with one row naming both agents, with no subtitle. https://github.com/Brevilabs/obsidian-copilot-private/issues/967 */}
+        {subtitle ? <span className="tw-truncate tw-text-xs tw-text-muted">{subtitle}</span> : null}
       </div>
       {status}
     </div>
@@ -194,17 +195,23 @@ const CommandDetail: React.FC<{ task: AgentTask }> = ({ task }) => {
 export function useStickToBottom() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const endRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const el = scrollRef.current;
     const content = contentRef.current;
     if (!el || !content) return;
+    // An asked agent's conversation opened from an earlier run rests at that run's end, where its reply is, instead of the latest run's. https://github.com/Brevilabs/obsidian-copilot-private/issues/967
+    const belowView = () =>
+      endRef.current
+        ? endRef.current.getBoundingClientRect().top - el.getBoundingClientRect().bottom
+        : el.scrollHeight - el.scrollTop - el.clientHeight;
     let atBottom = true;
     const onScroll = () => {
-      atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < STICK_TO_BOTTOM_PX;
+      atBottom = Math.abs(belowView()) < STICK_TO_BOTTOM_PX;
     };
     // Markdown renders after React commits, so the view follows the content's size, not its data. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
     const resizes = new ResizeObserver(() => {
-      if (atBottom) el.scrollTop = el.scrollHeight;
+      if (atBottom) el.scrollTop += belowView();
     });
     el.addEventListener("scroll", onScroll);
     resizes.observe(content);
@@ -213,5 +220,5 @@ export function useStickToBottom() {
       resizes.disconnect();
     };
   }, []);
-  return { scrollRef, contentRef };
+  return { scrollRef, contentRef, endRef };
 }

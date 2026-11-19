@@ -21,7 +21,6 @@ const MAYA_MENTION = Object.freeze({
   name: "Maya",
   status: "finished" as const,
   startedAt: 1,
-  endedAt: 2,
   chat: { backendId: "claude", sessionId: "hidden-1" },
 });
 

@@ -3,13 +3,15 @@ import { ChevronRight, type LucideIcon } from "lucide-react";
 import React, { useId } from "react";
 
 export interface AgentActivityCardProps {
-  icon: LucideIcon | React.ReactElement;
+  icon?: LucideIcon | React.ReactElement;
   label: React.ReactNode;
   trailing?: React.ReactNode;
   secondary?: React.ReactNode;
   expandable?: boolean;
   open?: boolean;
   onToggle?: () => void;
+  onOpen?: () => void;
+  ariaLabel?: string;
   children?: React.ReactNode;
 }
 
@@ -21,10 +23,13 @@ export const AgentActivityCard: React.FC<AgentActivityCardProps> = ({
   expandable = false,
   open = false,
   onToggle,
+  onOpen,
+  ariaLabel,
   children,
 }) => {
   const bodyId = useId();
   const canToggle = expandable && onToggle !== undefined;
+  const activate = canToggle ? onToggle : onOpen;
 
   return (
     <div className="tw-my-1 tw-flex tw-w-full tw-flex-col tw-gap-0.5">
@@ -32,28 +37,31 @@ export const AgentActivityCard: React.FC<AgentActivityCardProps> = ({
         data-agent-activity-card-header
         className={cn(
           "tw-flex tw-w-full tw-items-center tw-gap-1.5 tw-pl-1 tw-text-left tw-text-sm tw-text-faint",
-          canToggle
+          activate
             ? "tw-cursor-pointer hover:tw-text-normal focus-visible:tw-text-normal"
             : "tw-cursor-default"
         )}
-        role={canToggle ? "button" : undefined}
-        tabIndex={canToggle ? 0 : undefined}
+        role={activate ? "button" : undefined}
+        tabIndex={activate ? 0 : undefined}
+        aria-label={ariaLabel}
         aria-expanded={canToggle ? open : undefined}
         aria-controls={canToggle ? bodyId : undefined}
-        onClick={canToggle ? onToggle : undefined}
+        onClick={activate}
         onKeyDown={
-          canToggle
+          activate
             ? (event) => {
                 if (event.key !== "Enter" && event.key !== " ") return;
                 event.preventDefault();
-                onToggle();
+                activate();
               }
             : undefined
         }
       >
-        <span className="tw-flex tw-h-3.5 tw-min-w-3.5 tw-shrink-0 tw-items-center tw-justify-center">
-          {"props" in Icon ? Icon : <Icon className="tw-size-3.5 tw-text-normal" />}
-        </span>
+        {Icon ? (
+          <span className="tw-flex tw-h-3.5 tw-min-w-3.5 tw-shrink-0 tw-items-center tw-justify-center">
+            {"props" in Icon ? Icon : <Icon className="tw-size-3.5 tw-text-normal" />}
+          </span>
+        ) : null}
         <div className="tw-flex tw-min-w-0 tw-flex-1 tw-items-center tw-gap-1 tw-truncate tw-font-medium">
           {label}
         </div>

@@ -1,6 +1,6 @@
 import type { AgentChatMessage } from "@/agentMode/session/types";
 import type { AgentMention } from "@/agents/agentMentions";
-import { relayRuns, useRelayRuns } from "@/agents/agentMode/agentRelays";
+import { findRun, relayRuns, useRelayRuns } from "@/agents/agentMode/agentRelays";
 import { formatAgentReply } from "@/agents/agentReply";
 import { setCustomAgentsAccess } from "@/agents/testing/customAgentsAccess";
 import { setCustomAgentsLaunched } from "@/agents/testing/customAgentsLaunched";
@@ -12,6 +12,7 @@ jest.mock("@/entitlement");
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/947";
 const SEVERAL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/949";
+const CARDS = "https://github.com/Brevilabs/obsidian-copilot-private/issues/967";
 
 const LEO_RUN: AgentMention = {
   id: "run-1",
@@ -19,7 +20,6 @@ const LEO_RUN: AgentMention = {
   name: "Leo",
   status: "finished",
   startedAt: 1,
-  endedAt: 2,
 };
 
 function message(
@@ -59,15 +59,14 @@ describe("agentRelays", () => {
       expect(relayRuns(CHAT).get("report")).toEqual({
         relay: { marker: LEO_MARKER, reply: "October reconciles." },
         run: LEO_RUN,
-        followedUp: false,
+      });
+      expect(relayRuns(CHAT).get("question")).toEqual({
+        relay: { marker: LEO_MARKER, reply: "October or November?" },
+        run: LEO_RUN,
       });
     });
 
-    it(`marks a relay followed by another for the same run, which was the agent's question (${ISSUE})`, () => {
-      expect(relayRuns(CHAT).get("question")).toMatchObject({ run: LEO_RUN, followedUp: true });
-    });
-
-    it(`keeps each agent's question apart when two agents asked in one message relay in turn (${SEVERAL})`, () => {
+    it(`finds each agent's run when two agents asked in one message relay in turn (${SEVERAL})`, () => {
       const mayaRun: AgentMention = { ...LEO_RUN, id: "run-2", agent: "maya", name: "Maya" };
       const maya = (id: string, reply: string) =>
         message(
@@ -83,16 +82,14 @@ describe("agentRelays", () => {
       const runs = relayRuns([
         message("ask", "@Leo @Maya does the budget hold?", { agentMentions: [LEO_RUN, mayaRun] }),
         maya("maya-question", "Count the shoot?"),
-        relay("leo-question", "October or November?"),
         relay("leo-report", "The line has $6,200 left."),
         maya("maya-report", "Drop the paid ads."),
       ]);
 
-      expect([...runs].map(([id, { run, followedUp }]) => [id, run?.agent, followedUp])).toEqual([
-        ["maya-question", "maya", true],
-        ["leo-question", "leo", true],
-        ["leo-report", "leo", false],
-        ["maya-report", "maya", false],
+      expect([...runs].map(([id, { run }]) => [id, run?.agent])).toEqual([
+        ["maya-question", "maya"],
+        ["leo-report", "leo"],
+        ["maya-report", "maya"],
       ]);
     });
 
@@ -107,6 +104,37 @@ describe("agentRelays", () => {
 
       expect([...runs.keys()]).toEqual(["question", "report"]);
       expect(runs.get("report")?.run).toBeUndefined();
+    });
+  });
+
+  describe("findRun()", () => {
+    const mayaRun: AgentMention = { ...LEO_RUN, id: "run-2", agent: "maya", name: "Maya" };
+    const askCall = (id: string): AgentChatMessage["parts"] => [
+      { kind: "tool_call", id, title: "ask_agent", status: "completed" },
+    ];
+    const ASKS = [
+      message("ask", "@Leo @Maya does the budget hold?", { agentMentions: [LEO_RUN, mayaRun] }),
+      message("asking", "", { sender: AI_SENDER, parts: askCall("call-leo") }),
+      message("more", "Tell Leo to skip Adobe."),
+      message("sent", "", { sender: AI_SENDER, parts: askCall("call-more") }),
+    ];
+
+    it(`finds a run by its id, as the running agents list and a reply card open it (${CARDS})`, () => {
+      expect(findRun(ASKS, { runId: "run-2" })).toBe(mayaRun);
+    });
+
+    it(`finds the run an ask started on the last message before its call, for that agent (${CARDS})`, () => {
+      expect(findRun(ASKS, { callId: "call-leo", agent: "leo" })).toBe(LEO_RUN);
+      expect(findRun(ASKS, { callId: "call-leo", agent: "maya" })).toBe(mayaRun);
+    });
+
+    it(`finds the run a later message to an agent already working went to, saved on an earlier message (${CARDS})`, () => {
+      expect(findRun(ASKS, { callId: "call-more", agent: "leo" })).toBe(LEO_RUN);
+    });
+
+    it("finds nothing for a call or run the chat doesn't hold", () => {
+      expect(findRun(ASKS, { callId: "call-gone", agent: "leo" })).toBeUndefined();
+      expect(findRun(ASKS, { runId: "run-gone" })).toBeUndefined();
     });
   });
 

@@ -14,7 +14,6 @@ import { openTurnDiff } from "@/agentMode/ui/TurnDiffView";
 import { MemorySaveLines } from "@/agents/agentMode/memorySaveCards";
 import { useMemorySaveTrail } from "@/agents/agentMode/useMemorySaveTrail";
 import { AgentReplyMessage } from "@/agents/agentMode/ui/AgentReplyMessage";
-import { AgentMentionStatusLines } from "@/agents/agentMode/ui/AgentMentionStatus";
 import { useRelayRuns } from "@/agents/agentMode/agentRelays";
 import type { AgentReply } from "@/agents/agentReply";
 import type { AgentMention } from "@/agents/agentMentions";
@@ -94,7 +93,6 @@ interface AgentMessageRowProps {
   onContinueFrom?: (messageId: string) => void;
   agentReply?: AgentReply;
   relayRun?: AgentMention;
-  relayFollowedUp?: boolean;
 }
 
 // Completed messages retain their object identity across streaming updates, so
@@ -110,7 +108,6 @@ const AgentMessageRow = memo(function AgentMessageRow({
   onContinueFrom,
   agentReply,
   relayRun,
-  relayFollowedUp,
 }: AgentMessageRowProps) {
   const adaptedMessage = toChatMessageView(message);
   const isAssistant = message.sender !== USER_SENDER;
@@ -179,7 +176,6 @@ const AgentMessageRow = memo(function AgentMessageRow({
           marker={agentReply.marker}
           reply={agentReply.reply}
           run={relayRun}
-          followedUp={relayFollowedUp}
           fileChanges={message.fileChanges}
           onOpenFileChange={openFileChange}
         />
@@ -196,7 +192,6 @@ const AgentMessageRow = memo(function AgentMessageRow({
           {runningTurnDuration ? <div className="tw-px-3">{runningTurnDuration}</div> : null}
         </>
       )}
-      <AgentMentionStatusLines mentions={message.agentMentions} />
       {trailingCard}
     </div>
   );
@@ -343,7 +338,6 @@ const AgentChatMessages = memo(
                 onContinueFrom={continueFrom}
                 agentReply={relays.get(message.id)?.relay}
                 relayRun={relays.get(message.id)?.run}
-                relayFollowedUp={relays.get(message.id)?.followedUp}
               />
             );
           })}

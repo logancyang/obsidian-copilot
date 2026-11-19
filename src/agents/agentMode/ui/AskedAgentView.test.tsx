@@ -14,6 +14,12 @@ import type { App } from "obsidian";
 import React from "react";
 
 jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError: jest.fn() }));
+jest.mock("@/components/chat-components/ChatSingleMessage", () => ({
+  __esModule: true,
+  default: ({ message }: { message: { sender: string; message: string } }) => (
+    <div data-testid={`message-${message.sender}`}>{message.message}</div>
+  ),
+}));
 jest.mock("@/agentMode/ui/AgentTrailView", () => ({
   AgentTrail: ({
     parts,
@@ -30,6 +36,7 @@ jest.mock("@/agentMode/ui/AgentTrailView", () => ({
 }));
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/948";
+const CARDS = "https://github.com/Brevilabs/obsidian-copilot-private/issues/967";
 const STARTED = new Date(2026, 10, 16, 10, 2).getTime();
 const APP = {} as App;
 const SONNET: BackendState = {
@@ -88,7 +95,6 @@ function renderView(
   chat: AskedAgentChat | null = { session: leo, continuedAt: new Map() }
 ) {
   const onBack = jest.fn();
-  jest.useFakeTimers({ now: STARTED + 3 * 60_000 + 12_000 });
   render(
     <AppContext.Provider value={APP}>
       <AskedAgentView
@@ -105,9 +111,33 @@ function renderView(
   return { onBack };
 }
 
+const resizeCallbacks: ResizeObserverCallback[] = [];
+
+function contentResized() {
+  act(() => resizeCallbacks.forEach((callback) => callback([], {} as ResizeObserver)));
+}
+
+function fakeLayout(scroller: HTMLElement, viewBottom: number, scrollHeight: number) {
+  let scrollTop = 0;
+  Object.defineProperties(scroller, {
+    scrollHeight: { get: () => scrollHeight },
+    clientHeight: { get: () => viewBottom },
+    scrollTop: {
+      get: () => scrollTop,
+      set: (value: number) => (scrollTop = Math.min(value, scrollHeight - viewBottom)),
+    },
+  });
+  scroller.getBoundingClientRect = () => ({ bottom: viewBottom }) as DOMRect;
+  return () => scrollTop;
+}
+
 describe("AskedAgentView", () => {
   beforeEach(async () => {
+    resizeCallbacks.length = 0;
     window.ResizeObserver = class {
+      constructor(callback: ResizeObserverCallback) {
+        resizeCallbacks.push(callback);
+      }
       observe() {}
       disconnect() {}
     } as unknown as typeof ResizeObserver;
@@ -116,31 +146,32 @@ describe("AskedAgentView", () => {
   });
 
   afterEach(() => {
-    jest.useRealTimers();
     delete (window as { ResizeObserver?: unknown }).ResizeObserver;
   });
 
   describe("AskedAgentView()", () => {
-    it(`heads the view with the agent, who sent it and its model, and the run's state with its clock, and gives no place to type (${ISSUE})`, async () => {
+    it(`heads the view with one row, Back then the asking agent and the asked agent with their faces, no model, state or clock, and gives no place to type (${CARDS})`, async () => {
       await turn(job("Reconcile October."), "Matching by date.");
       renderView();
 
-      expect(screen.getByText("Leo")).toBeTruthy();
-      expect(screen.getByText("Sent by Coco · Sonnet 5.5")).toBeTruthy();
-      expect(screen.getByText("Working · 3:12")).toBeTruthy();
-      expect(screen.getByRole("button", { name: "Back to Coco" })).toBeTruthy();
+      const header = screen.getByRole("button", { name: "Back to Coco" }).parentElement!;
+      expect(header.textContent).toBe("CocoLeo");
+      expect([...header.querySelectorAll("img")].map((img) => img.getAttribute("src"))).toEqual([
+        COCO.faceSrc,
+        LEO.faceSrc,
+      ]);
+      expect(screen.queryByText(/Sent by|Working|Sonnet|\d:\d\d/)).toBeNull();
       expect(screen.queryByRole("textbox")).toBeNull();
       expect(
         screen.getByText("You can only watch here. To tell Leo something, tell Coco.")
       ).toBeTruthy();
     });
 
-    it(`shows what the asking agent sent in its own words, then the agent's steps (${ISSUE})`, async () => {
+    it(`shows what the asking agent sent in its own words as a user's message, then the agent's steps (${CARDS})`, async () => {
       await turn(job("Reconcile October."), "Matching by date.");
       renderView();
 
-      expect(screen.getByText(/^Coco asked Leo · \d+:\d\d$/)).toBeTruthy();
-      expect(screen.getByText("Reconcile October.")).toBeTruthy();
+      expect(screen.getByTestId("message-user").textContent).toBe("Reconcile October.");
       expect(screen.queryByText(/asked you this for the user/)).toBeNull();
       expect(screen.getByText("Matching by date.")).toBeTruthy();
     });
@@ -153,8 +184,11 @@ describe("AskedAgentView", () => {
       );
       renderView();
 
-      expect(screen.getByText(/^Coco passed on your answer · /)).toBeTruthy();
-      expect(screen.getByText("October.")).toBeTruthy();
+      expect(screen.getByText("Coco passed on your answer")).toBeTruthy();
+      expect(screen.getAllByTestId("message-user").map((bubble) => bubble.textContent)).toEqual([
+        "Reconcile October.",
+        "October.",
+      ]);
     });
 
     it(`divides the earlier work from a later run with the time the agent was sent back (${ISSUE})`, async () => {
@@ -177,16 +211,78 @@ describe("AskedAgentView", () => {
       ]);
     });
 
+    it(`writes the divider's hour with two digits, so a time after midnight doesn't read as how long a run took (${CARDS})`, async () => {
+      const first = await turn(job("Reconcile October."), "Matched 182 of 214.");
+      const second = await turn(job("Send Leo back to it."), "Picking up at 183.");
+      renderView(
+        {},
+        {
+          session: leo,
+          continuedAt: new Map([
+            [first, STARTED],
+            [second, new Date(2026, 10, 17, 0, 34).getTime()],
+          ]),
+        }
+      );
+
+      expect(screen.getByText(/^Continued at/).textContent).toBe("Continued at 00:34");
+    });
+
+    it(`opened for an earlier run, rests where that run ends, above the next run's divider, so its reply is in view (${CARDS})`, async () => {
+      const first = await turn(job("Reconcile October."), "Matched 182 of 214.");
+      const second = await turn(job("Send Leo back to it."), "Picking up at 183.");
+      renderView(
+        {},
+        {
+          session: leo,
+          continuedAt: new Map([
+            [first, STARTED],
+            [second, STARTED + 60_000],
+          ]),
+        }
+      );
+      const divider = screen.getByText(/^Continued at/);
+      const scrollTop = fakeLayout(divider.closest<HTMLElement>(".tw-overflow-y-auto")!, 300, 1000);
+      divider.getBoundingClientRect = () => ({ top: 500 - scrollTop() }) as DOMRect;
+
+      contentResized();
+
+      expect(scrollTop()).toBe(200);
+    });
+
+    it(`opened for the latest run, rests at the end of the conversation (${CARDS})`, async () => {
+      const first = await turn(job("Reconcile October."), "Matched 182 of 214.");
+      const second = await turn(job("Send Leo back to it."), "Picking up at 183.");
+      renderView(
+        { startedAt: STARTED + 60_000 },
+        {
+          session: leo,
+          continuedAt: new Map([
+            [first, STARTED],
+            [second, STARTED + 60_000],
+          ]),
+        }
+      );
+      const scrollTop = fakeLayout(
+        screen.getByText(/^Continued at/).closest<HTMLElement>(".tw-overflow-y-auto")!,
+        300,
+        1000
+      );
+
+      contentResized();
+
+      expect(scrollTop()).toBe(700);
+    });
+
     it.each([
-      ["question", "Waiting for you", "Leo asked a question in Coco's chat."],
-      ["permission", "Needs your OK", "Leo needs your OK in Coco's chat."],
+      ["question", "Leo asked a question in Coco's chat."],
+      ["permission", "Leo needs your OK in Coco's chat."],
     ] as const)(
-      `says a run waiting on a %s waits, without a clock it doesn't know, and points back to the asking chat to answer (${ISSUE})`,
-      async (status, state, banner) => {
+      `points back to the asking chat to answer a run waiting on a %s (${ISSUE})`,
+      async (status, banner) => {
         await turn(job("Reconcile October."), "Which month?");
         const { onBack } = renderView({ status });
 
-        expect(screen.getByText(state)).toBeTruthy();
         expect(screen.getByText(banner)).toBeTruthy();
         fireEvent.click(screen.getByRole("button", { name: "Answer there" }));
         expect(onBack).toHaveBeenCalled();
@@ -205,17 +301,16 @@ describe("AskedAgentView", () => {
         deletions: 0,
       });
       leo.store.setFileChanges(reply.id, [change("Finance/Figma.md"), change("Finance/AWS.md")]);
-      renderView({ status: "finished", endedAt: STARTED + 60_000 });
+      renderView({ status: "finished" });
 
       expect(screen.getByText("Files changed (2)")).toBeTruthy();
       expect(screen.getByText("Figma.md")).toBeTruthy();
     });
 
-    it(`says how a finished run ended, with how long it took and no banner (${ISSUE})`, async () => {
+    it(`shows no banner once the run finished (${ISSUE})`, async () => {
       await turn(job("Reconcile October."), "Done.");
-      renderView({ status: "finished", endedAt: STARTED + 12 * 60_000 + 4_000 });
+      renderView({ status: "finished" });
 
-      expect(screen.getByText("Finished · 12:04")).toBeTruthy();
       expect(screen.queryByRole("button", { name: "Answer there" })).toBeNull();
     });
 
@@ -225,37 +320,31 @@ describe("AskedAgentView", () => {
       failed.catch(() => undefined);
       await fake.untilPrompt(sessionId);
       act(() => fake.endTurn(sessionId, { error: new Error("The model is overloaded.") }));
-      renderView({
-        status: "didnt_finish",
-        end: { kind: "error", message: "The model is overloaded." },
-      });
+      renderView({ status: "didnt_finish" });
 
       expect(screen.getByText(/The model is overloaded\./)).toBeTruthy();
     });
 
-    it(`says a run's steps are no longer available when its chat is gone, as after a restart, and still shows how it ended (${ISSUE})`, () => {
-      renderView({ status: "didnt_finish", end: { kind: "obsidian_closed" } }, null);
+    it(`says a run's steps are no longer available when its chat is gone, as after a restart (${ISSUE})`, () => {
+      renderView({ status: "didnt_finish" }, null);
 
       expect(screen.getByText("Leo's steps from this run are no longer available.")).toBeTruthy();
-      expect(screen.getByText("Didn't finish")).toBeTruthy();
-      expect(screen.getByText("Sent by Coco")).toBeTruthy();
     });
 
     it(`says the agent is starting while its chat opens (${ISSUE})`, () => {
       renderView({}, null);
 
       expect(screen.getByText("Starting…")).toBeTruthy();
-      expect(screen.getByText("Sent by Coco")).toBeTruthy();
     });
   });
 
   describe("ChatAskedAgentView()", () => {
     it.each([
-      ["coco", "Sent by Coco · Sonnet 5.5"],
-      [null, "Sent by Copilot · Sonnet 5.5"],
+      ["coco", "Back to Coco", "CocoLeo"],
+      [null, "Back to Copilot", "CopilotLeo"],
     ])(
-      `names the asking chat's agent, or Copilot for a chat without one, and shows the run's chat (${ISSUE})`,
-      async (agentSlug, sentBy) => {
+      `names the asking chat's agent, or Copilot for a chat without one, and shows the run's chat (${CARDS})`,
+      async (agentSlug, back, names) => {
         await turn(job("Reconcile October."), "Matching by date.");
         const asking = { agentSlug } as AgentSession;
         const askedChat = jest.fn(() => ({ session: leo, continuedAt: new Map() }));
@@ -271,7 +360,7 @@ describe("AskedAgentView", () => {
           />
         );
 
-        expect(screen.getByText(sentBy)).toBeTruthy();
+        expect(screen.getByRole("button", { name: back }).parentElement?.textContent).toBe(names);
         expect(askedChat).toHaveBeenCalledWith(asking, run());
         expect(screen.getByText("Matching by date.")).toBeTruthy();
       }
