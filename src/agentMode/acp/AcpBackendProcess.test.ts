@@ -1219,6 +1219,36 @@ describe("AcpBackendProcess", () => {
         readOnlyToolNames: [],
       };
 
+      it("appends a custom agent's part to the system prompt on session/new when the agent takes a system prompt", async () => {
+        mockInitializeResult = {
+          protocolVersion: 1,
+          agentCapabilities: { sessionCapabilities: { systemPrompt: {} } },
+        };
+        const backend = await startBackend();
+
+        await backend.newSession({
+          cwd: "/vault",
+          agent: { slug: "coco", prompt: "You are Coco." },
+        });
+
+        expect(mockNewSession.mock.calls[0][0]).toMatchObject({
+          cwd: "/vault",
+          systemPrompt: { mode: "append", content: [{ type: "text", text: "You are Coco." }] },
+        });
+      });
+
+      it("sends no system prompt for a Copilot chat", async () => {
+        mockInitializeResult = {
+          protocolVersion: 1,
+          agentCapabilities: { sessionCapabilities: { systemPrompt: {} } },
+        };
+        const backend = await startBackend();
+
+        await backend.newSession({ cwd: "/vault" });
+
+        expect(mockNewSession.mock.calls[0][0]).not.toHaveProperty("systemPrompt");
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/937 refuses a custom agent chat, without opening a session, and says the backend needs an update when it cannot take the agent's part", async () => {
         const backend = new AcpBackendProcess(
           buildApp(),
@@ -1232,6 +1262,168 @@ describe("AcpBackendProcess", () => {
           backend.newSession({ cwd: "/vault", agent: { slug: "coco", prompt: "You are Coco." } })
         ).rejects.toThrow("Codex needs an update to run custom agents.");
         expect(mockNewSession).not.toHaveBeenCalled();
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/937 runs a custom agent chat as the backend's own agent for it, chosen through a session config option right after session/new", async () => {
+        const modeOptions = [
+          {
+            id: "mode",
+            type: "select",
+            currentValue: "copilot-build",
+            options: [
+              { value: "copilot-build", name: "Copilot" },
+              { value: "copilot-agent-coco/default", name: "Coco" },
+            ],
+          },
+        ];
+        mockNewSession.mockResolvedValueOnce({
+          sessionId: "test-session",
+          configOptions: modeOptions,
+        } as never);
+        const agent = { slug: "coco", prompt: "You are Coco." };
+        const selectAgentMode = jest.fn(async () => ({
+          configId: "mode",
+          value: "copilot-agent-coco/default",
+        }));
+        const backend = new AcpBackendProcess(
+          buildApp(),
+          buildStubBackend({ selectAgentMode }),
+          "1.0.0",
+          modelDescriptor()
+        );
+        await backend.start();
+
+        await backend.newSession({ cwd: "/vault", agent });
+
+        expect(selectAgentMode).toHaveBeenCalledWith(agent, [
+          expect.objectContaining({ id: "mode", currentValue: "copilot-build" }),
+        ]);
+        expect(mockSetSessionConfigOption).toHaveBeenCalledWith({
+          sessionId: "test-session",
+          configId: "mode",
+          value: "copilot-agent-coco/default",
+        });
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/937 waits for a later config update to offer the custom agent's mode before choosing it", async () => {
+        const modeOption = (values: string[]) => [
+          {
+            id: "mode",
+            type: "select",
+            currentValue: "copilot-build",
+            options: values.map((value) => ({ value, name: value })),
+          },
+        ];
+        mockNewSession.mockResolvedValueOnce({
+          sessionId: "test-session",
+          configOptions: modeOption(["copilot-build"]),
+        } as never);
+        let markSelected!: () => void;
+        const selected = new Promise<void>((resolve) => (markSelected = resolve));
+        const backend = new AcpBackendProcess(
+          buildApp(),
+          buildStubBackend({
+            selectAgentMode: async () => {
+              markSelected();
+              return { configId: "mode", value: "copilot-agent-coco/default" };
+            },
+          }),
+          "1.0.0",
+          modelDescriptor()
+        );
+        await backend.start();
+
+        const opening = backend.newSession({
+          cwd: "/vault",
+          agent: { slug: "coco", prompt: "You are Coco." },
+        });
+        await selected;
+        const chosenBeforeUpdate = mockSetSessionConfigOption.mock.calls.length;
+        await (
+          getVaultClient(backend) as unknown as { sessionUpdate: (n: unknown) => Promise<void> }
+        ).sessionUpdate({
+          sessionId: "test-session",
+          update: {
+            sessionUpdate: "config_option_update",
+            configOptions: modeOption(["copilot-build", "copilot-agent-coco/default"]),
+          },
+        });
+        await opening;
+
+        expect(chosenBeforeUpdate).toBe(0);
+        expect(mockSetSessionConfigOption).toHaveBeenCalledWith(
+          expect.objectContaining({ configId: "mode", value: "copilot-agent-coco/default" })
+        );
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/937 still tries the custom agent's mode, so the chat fails instead of hanging, when no update ever offers it", async () => {
+        const backend = new AcpBackendProcess(
+          buildApp(),
+          buildStubBackend({
+            selectAgentMode: async () => ({
+              configId: "mode",
+              value: "copilot-agent-coco/default",
+            }),
+          }),
+          "1.0.0",
+          modelDescriptor()
+        );
+        await backend.start();
+        mockSetSessionConfigOption.mockRejectedValueOnce(
+          new Error("Invalid params: mode not found: copilot-agent-coco/default")
+        );
+        jest.useFakeTimers();
+        try {
+          const opening = backend.newSession({
+            cwd: "/vault",
+            agent: { slug: "coco", prompt: "You are Coco." },
+          });
+          const failed = expect(opening).rejects.toThrow("mode not found");
+          await jest.advanceTimersByTimeAsync(10_000);
+          await failed;
+        } finally {
+          jest.useRealTimers();
+        }
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/937 closes the just-opened session when the custom agent cannot be chosen, so no empty session is left behind", async () => {
+        mockInitializeResult = {
+          protocolVersion: 1,
+          agentCapabilities: { sessionCapabilities: { close: {} } },
+        };
+        mockNewSession.mockResolvedValueOnce({ sessionId: "orphan" });
+        const backend = new AcpBackendProcess(
+          buildApp(),
+          buildStubBackend({
+            selectAgentMode: async () => {
+              throw new Error("Custom agents can't run on OpenCode while OPENCODE_CONFIG is set.");
+            },
+          }),
+          "1.0.0",
+          modelDescriptor()
+        );
+        await backend.start();
+
+        await expect(
+          backend.newSession({ cwd: "/vault", agent: { slug: "coco", prompt: "You are Coco." } })
+        ).rejects.toThrow("Custom agents can't run on OpenCode while OPENCODE_CONFIG is set.");
+        expect(mockCloseSession).toHaveBeenCalledWith({ sessionId: "orphan" });
+      });
+
+      it("leaves a Copilot chat's mode alone when the backend picks no agent of its own for it", async () => {
+        const selectAgentMode = jest.fn(async () => null);
+        const backend = new AcpBackendProcess(
+          buildApp(),
+          buildStubBackend({ selectAgentMode }),
+          "1.0.0",
+          buildStubDescriptor()
+        );
+        await backend.start();
+
+        await backend.newSession({ cwd: "/vault" });
+
+        expect(selectAgentMode).toHaveBeenCalledWith(null, null);
+        expect(mockSetSessionConfigOption).not.toHaveBeenCalled();
       });
 
       it("passes Copilot's MCP servers to session/new as HTTP servers when the agent advertises HTTP MCP", async () => {
@@ -1347,6 +1539,24 @@ describe("AcpBackendProcess", () => {
         ]);
       });
 
+      it("appends the custom agent's part again when it resumes an agent chat, so the agent outlasts compaction after the resume", async () => {
+        mockInitializeResult = {
+          protocolVersion: 1,
+          agentCapabilities: { sessionCapabilities: { resume: {}, systemPrompt: {} } },
+        };
+        const backend = await startBackend();
+
+        await backend.resumeSession({
+          sessionId: "s1",
+          cwd: "/vault",
+          agent: { slug: "coco", prompt: "You are Coco." },
+        });
+
+        expect(mockResumeSession.mock.calls[0][0]).toMatchObject({
+          systemPrompt: { mode: "append", content: [{ type: "text", text: "You are Coco." }] },
+        });
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/937 refuses to resume a chat as its custom agent when the backend cannot take the agent's part", async () => {
         mockInitializeResult = {
           protocolVersion: 1,
@@ -1423,6 +1633,24 @@ describe("AcpBackendProcess", () => {
         ]);
       });
 
+      it("appends the custom agent's part again when it loads an agent chat", async () => {
+        mockInitializeResult = {
+          protocolVersion: 1,
+          agentCapabilities: { loadSession: true, sessionCapabilities: { systemPrompt: {} } },
+        };
+        const backend = await startBackend();
+
+        await backend.loadSession({
+          sessionId: "ses_load",
+          cwd: "/vault",
+          agent: { slug: "coco", prompt: "You are Coco." },
+        });
+
+        expect(mockLoadSession.mock.calls[0][0]).toMatchObject({
+          systemPrompt: { mode: "append", content: [{ type: "text", text: "You are Coco." }] },
+        });
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/937 refuses to load a chat as its custom agent when the backend cannot take the agent's part", async () => {
         const backend = await startLoadCapableBackend();
 
@@ -1434,6 +1662,39 @@ describe("AcpBackendProcess", () => {
           })
         ).rejects.toThrow("opencode needs an update to run custom agents.");
         expect(mockLoadSession).not.toHaveBeenCalled();
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/937 moves a reopened chat to the mode the backend picks for it, such as off a custom agent that can no longer load", async () => {
+        mockInitializeResult = { protocolVersion: 1, agentCapabilities: { loadSession: true } };
+        mockLoadSession.mockResolvedValueOnce({
+          configOptions: [
+            {
+              id: "mode",
+              type: "select",
+              currentValue: "copilot-agent-coco/default",
+              options: [{ value: "copilot-build", name: "Copilot" }],
+            },
+          ],
+        });
+        const selectAgentMode = jest.fn(async () => ({ configId: "mode", value: "copilot-build" }));
+        const backend = new AcpBackendProcess(
+          buildApp(),
+          buildStubBackend({ selectAgentMode }),
+          "1.0.0",
+          modelDescriptor()
+        );
+        await backend.start();
+
+        await backend.loadSession({ sessionId: "ses_load", cwd: "/vault" });
+
+        expect(selectAgentMode).toHaveBeenCalledWith(null, [
+          expect.objectContaining({ currentValue: "copilot-agent-coco/default" }),
+        ]);
+        expect(mockSetSessionConfigOption).toHaveBeenCalledWith({
+          sessionId: "ses_load",
+          configId: "mode",
+          value: "copilot-build",
+        });
       });
 
       it("returns the session id and the state the agent reports", async () => {
