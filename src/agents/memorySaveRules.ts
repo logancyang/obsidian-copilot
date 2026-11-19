@@ -2,7 +2,7 @@ const MEMORY_HEADINGS = Object.freeze(["How to work", "Where to find things"] as
 
 export const CONTRADICTS_INSTRUCTION_MARKER = "Contradicts instruction:";
 
-export const REPLACES_MARKER = "Replaces";
+const REPLACES_MARKER = "Replaces";
 
 export function buildMemorySaveRules(memoryFile: string, instructionsPath: string): string {
   return [

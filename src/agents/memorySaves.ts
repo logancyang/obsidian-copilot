@@ -1,4 +1,4 @@
-import { CONTRADICTS_INSTRUCTION_MARKER, REPLACES_MARKER } from "@/agents/memorySaveRules";
+import { CONTRADICTS_INSTRUCTION_MARKER } from "@/agents/memorySaveRules";
 
 export interface MemoryRule {
   rule: string;
@@ -58,23 +58,21 @@ export function readMemorySaves(before: string | null, after: string | null): Sa
   const next = readMemoryRules(after ?? "");
   const oldRules = new Set(old.map(({ rule }) => sameRule(rule)));
   const nextRules = new Set(next.map(({ rule }) => sameRule(rule)));
-  let removed = old.filter(({ rule }) => !nextRules.has(sameRule(rule)));
-  return next
-    .filter(({ rule }) => !oldRules.has(sameRule(rule)))
-    .map(({ rule, context }) => {
-      // The agent quotes the rule it replaces; when it paraphrases, the rule it removed is the one replaced.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/942
-      const replaced = context.includes(REPLACES_MARKER)
-        ? (removed.find((old) => context.includes(old.rule)) ?? removed[0])
-        : undefined;
-      removed = removed.filter((old) => old !== replaced);
-      const contradicts = contradiction(context);
-      return {
-        rule,
-        ...(replaced ? { replaced: replaced.rule } : {}),
-        ...(contradicts ? { contradicts } : {}),
-      };
-    });
+  const removed = old.filter(({ rule }) => !nextRules.has(sameRule(rule)));
+  const added = next.filter(({ rule }) => !oldRules.has(sameRule(rule)));
+  const quoted = added.map(({ context }) => removed.find((old) => context.includes(old.rule)));
+  const unquoted = removed.filter((old) => !quoted.includes(old));
+  return added.map(({ rule, context }, index) => {
+    // The rules forbid rewriting other lines, so a rule removed in the same save is the one replaced, even when a
+    // small model leaves out the Replaces marker. https://github.com/Brevilabs/obsidian-copilot-private/issues/767
+    const replaced = quoted[index] ?? unquoted.shift();
+    const contradicts = contradiction(context);
+    return {
+      rule,
+      ...(replaced ? { replaced: replaced.rule } : {}),
+      ...(contradicts ? { contradicts } : {}),
+    };
+  });
 }
 
 export interface MemoryOwner {

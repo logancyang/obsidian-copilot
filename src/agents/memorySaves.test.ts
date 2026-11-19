@@ -92,6 +92,48 @@ describe("memorySaves", () => {
       ]);
     });
 
+    it("reads a rule written in place of a removed one as a replacement when its context line has no Replaces marker (https://github.com/Brevilabs/obsidian-copilot-private/issues/767)", () => {
+      const before = memory([
+        `${LAUNCH}\n${LAUNCH_CONTEXT}`,
+        "Summarize as bullet points.\n2026-11-03 · Asked for bullets",
+      ]);
+      const after = memory([
+        `${LAUNCH}\n${LAUNCH_CONTEXT}`,
+        "Write summaries as short paragraphs.\n2026-11-17 · User asked to stop using bullets and use short paragraphs instead.",
+      ]);
+
+      expect(readMemorySaves(before, after)).toEqual([
+        { rule: "Write summaries as short paragraphs.", replaced: "Summarize as bullet points." },
+      ]);
+    });
+
+    it("pairs a replacement without the marker with the removed rule its context line quotes when the turn removed two rules (https://github.com/Brevilabs/obsidian-copilot-private/issues/767)", () => {
+      const before = memory([
+        `${LAUNCH}\n${LAUNCH_CONTEXT}`,
+        "Summarize as bullet points.\n2026-11-03 · Asked for bullets",
+      ]);
+      const after = memory([
+        'Write summaries as short paragraphs.\n2026-11-17 · Asked to stop using bullets; replaces "Summarize as bullet points." (2026-11-03).',
+      ]);
+
+      expect(readMemorySaves(before, after)).toEqual([
+        { rule: "Write summaries as short paragraphs.", replaced: "Summarize as bullet points." },
+      ]);
+    });
+
+    it("pairs a replacement with the rule it quotes and reads a rule added above it in the same turn as remembered (https://github.com/Brevilabs/obsidian-copilot-private/issues/767)", () => {
+      const before = memory([`${LAUNCH}\n${LAUNCH_CONTEXT}`], [`${MEETINGS}\n${MEETINGS_CONTEXT}`]);
+      const after = memory(
+        [`${LAUNCH}\n${LAUNCH_CONTEXT}`, `${LINKS}\n${LINKS_CONTEXT}`],
+        [`Meeting notes are in meetings/.\n2026-11-17 · Replaces "${MEETINGS}" (2026-10-21)`]
+      );
+
+      expect(readMemorySaves(before, after)).toEqual([
+        { rule: LINKS },
+        { rule: "Meeting notes are in meetings/.", replaced: MEETINGS },
+      ]);
+    });
+
     it("reads each rule of several edits in one turn, pairing only the replacement with the rule it removed", () => {
       const before = memory(["Summarize as bullet points.\n2026-11-03 · Asked for bullets"]);
       const after = memory(
