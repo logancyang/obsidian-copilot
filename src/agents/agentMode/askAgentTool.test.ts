@@ -126,6 +126,14 @@ describe("askAgentTool", () => {
       });
     });
 
+    it(`tells the agent to wait for the earlier reply when the agent is still working (${ISSUE})`, async () => {
+      const { tool } = buildTool({ asked: { kind: "busy", agent: MAYA } });
+
+      const { text } = await tool.call({ agent: "Maya", message: "Hi" }, CHAT);
+
+      expect(text).toContain("Maya is still working on the earlier request from this chat.");
+    });
+
     it("rejects a call without an agent or a message", async () => {
       const { tool, ask } = buildTool();
 

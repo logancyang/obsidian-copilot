@@ -206,6 +206,7 @@ describe("agentMode", () => {
       mockSettings = settingsWith({ reasoning: true });
       plugin = {
         manifest: { id: "copilot" },
+        register: jest.fn(),
         modelManagement: {
           providerRegistry: { subscribe: jest.fn() },
           backendConfigRegistry: new BackendConfigRegistry(
@@ -720,11 +721,12 @@ describe("agentMode", () => {
       expect(connectorCardsExtension()).toBeUndefined();
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/944 offers ask_agent among Copilot's tools", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/944 offers ask_agent among Copilot's tools and stops the agents it asked when the plugin unloads", () => {
       createAgentSessionManager({} as App, plugin);
 
       const hosted = jest.mocked(createCopilotMcpServer).mock.calls[0][1];
       expect(hosted.map(({ definition }) => definition.name)).toContain("ask_agent");
+      expect(plugin.register).toHaveBeenCalledWith(expect.any(Function));
     });
 
     it(`retains only previously ready agents during compatibility checks ${ISSUE}`, async () => {
