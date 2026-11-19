@@ -1761,6 +1761,60 @@ describe("AgentSessionManager", () => {
         expect(mockSessionDispose).toHaveBeenCalledTimes(1);
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/945 carries on an asked agent's saved conversation, keeping it out of Recent chats", async () => {
+        const loadSession = jest.fn(async ({ sessionId }: { sessionId: string }) => ({
+          sessionId,
+          state: { model: null, mode: null },
+        }));
+        const sessionIndex = { deleteSession: jest.fn(async () => undefined) };
+        const mgr = buildManager({
+          descriptor: buildDescriptor({
+            createBackendProcess: () => ({ ...makeMockBackendProcess(), loadSession }),
+          }),
+          sessionIndex: sessionIndex as unknown as AgentSessionIndex,
+        });
+
+        const session = await mgr.startUnlistedSession({
+          projectId: GLOBAL_SCOPE,
+          mode: null,
+          agent: MAYA,
+          observeSessionEvent,
+          resumeSessionId: "maya-earlier",
+        });
+
+        expect(loadSession).toHaveBeenCalledWith(
+          expect.objectContaining({ sessionId: "maya-earlier", agent: MAYA })
+        );
+        expect(session.getBackendSessionId()).toBe("maya-earlier");
+        expect(sessionCreateSpy).not.toHaveBeenCalled();
+        expect(mgr.isUnlistedSession(session.internalId)).toBe(true);
+        expect(sessionIndex.deleteSession).toHaveBeenCalledWith("opencode", "maya-earlier");
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/945 starts a new chat for an asked agent whose saved conversation its agent no longer has", async () => {
+        const mgr = buildManager({
+          descriptor: buildDescriptor({
+            createBackendProcess: () => ({
+              ...makeMockBackendProcess(),
+              loadSession: jest.fn(async () => {
+                throw new Error("Session not found");
+              }),
+            }),
+          }),
+        });
+
+        const session = await mgr.startUnlistedSession({
+          projectId: GLOBAL_SCOPE,
+          mode: null,
+          agent: MAYA,
+          observeSessionEvent,
+          resumeSessionId: "maya-gone",
+        });
+
+        expect(sessionCreateSpy).toHaveBeenCalledTimes(1);
+        expect(session.getBackendSessionId()).not.toBe("maya-gone");
+      });
+
       it(`closes the chat it started when the chat fails to start, and passes the failure on (${ISSUE_944})`, async () => {
         const mgr = buildManager();
         sessionCreateSpy.mockImplementationOnce((opts) =>
@@ -4618,6 +4672,109 @@ describe("AgentSessionManager", () => {
         expect(replacement?.getBackendSessionId()).not.toBe(first.getBackendSessionId());
         expect(replacement?.chatInputId).toBe(chatInputId);
         expect(mgr.getSessions()).toHaveLength(1);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/945 waits for an asked agent's working turn before restarting its agent, then restarts", async () => {
+        const mgr = buildManager();
+        const asked = await mgr.startUnlistedSession({
+          projectId: GLOBAL_SCOPE,
+          mode: null,
+          agent: { slug: "maya", prompt: "Maya" },
+          observeSessionEvent: jest.fn(),
+        });
+        getSessionTestHandle(asked).setStatus("running");
+
+        await mgr.restartBackend("opencode", "skills changed");
+        expect(mockBackendShutdown).not.toHaveBeenCalled();
+        expect(mgr.isBackendRestartPending("opencode")).toBe(true);
+
+        const shutDown = new Promise<void>((resolve) =>
+          mockBackendShutdown.mockImplementationOnce(async () => {
+            resolve();
+            return undefined;
+          })
+        );
+        getSessionTestHandle(asked).setStatus("idle");
+        await shutDown;
+
+        expect(mockBackendShutdown).toHaveBeenCalledTimes(1);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/945 restarts the asking chat's agent only after the asking chat's turn that passes the asked agent's reply on, not when the asked agent goes idle", async () => {
+        const mgr = buildManager();
+        const asking = await mgr.createSession("opencode");
+        const asked = await mgr.startUnlistedSession({
+          projectId: GLOBAL_SCOPE,
+          mode: null,
+          agent: { slug: "maya", prompt: "Maya" },
+          observeSessionEvent: jest.fn(),
+          askedFrom: "opencode",
+        });
+        getSessionTestHandle(asked).setStatus("running");
+        await mgr.restartBackend("opencode", "skills changed");
+        const restartNow = jest.spyOn(
+          mgr as unknown as { restartBackendNow: () => Promise<void> },
+          "restartBackendNow"
+        );
+
+        getSessionTestHandle(asked).setStatus("idle");
+        expect(restartNow).not.toHaveBeenCalled();
+        const shutDown = new Promise<void>((resolve) =>
+          mockBackendShutdown.mockImplementationOnce(async () => {
+            resolve();
+            return undefined;
+          })
+        );
+        getSessionTestHandle(asking).setStatus("running");
+        getSessionTestHandle(asking).setStatus("idle");
+        await shutDown;
+
+        expect(restartNow).toHaveBeenCalledTimes(1);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/945 waits for an asked agent's working turn before restarting the agent of the chat that asked it", async () => {
+        const mgr = buildManager({ otherDescriptors: [buildDescriptor({ id: "codex" })] });
+        await mgr.createSession("opencode");
+        const asked = await mgr.startUnlistedSession({
+          backendId: "codex",
+          projectId: GLOBAL_SCOPE,
+          mode: null,
+          agent: { slug: "maya", prompt: "Maya" },
+          observeSessionEvent: jest.fn(),
+          askedFrom: "opencode",
+        });
+        getSessionTestHandle(asked).setStatus("running");
+
+        await mgr.restartBackend("opencode", "skills changed");
+
+        expect(mgr.isBackendRestartPending("opencode")).toBe(true);
+        expect(mockBackendShutdown).not.toHaveBeenCalled();
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/945 restarts the asking chat's agent once a working asked agent's chat closes without a reply to pass on, as when the asking chat's tab closes", async () => {
+        const mgr = buildManager({ otherDescriptors: [buildDescriptor({ id: "codex" })] });
+        await mgr.createSession("opencode");
+        const asked = await mgr.startUnlistedSession({
+          backendId: "codex",
+          projectId: GLOBAL_SCOPE,
+          mode: null,
+          agent: { slug: "maya", prompt: "Maya" },
+          observeSessionEvent: jest.fn(),
+          askedFrom: "opencode",
+        });
+        getSessionTestHandle(asked).setStatus("running");
+        await mgr.restartBackend("opencode", "skills changed");
+        const shutDown = new Promise<void>((resolve) =>
+          mockBackendShutdown.mockImplementationOnce(async () => {
+            resolve();
+            return undefined;
+          })
+        );
+
+        getSessionTestHandle(asked).setStatus("closed");
+        await shutDown;
+
+        expect(mockBackendShutdown).toHaveBeenCalledTimes(1);
       });
 
       it("defers restart until an active turn leaves running", async () => {

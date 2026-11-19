@@ -445,6 +445,75 @@ describe("hiddenAgentChats", () => {
         );
       });
 
+      it(`carries on the agent's earlier conversation saved on the asking chat when no chat with it is open, as after a restart (${CONTROL})`, async () => {
+        const coco = await openChat({ agentSlug: "coco" });
+        coco.sendPrompt("@Maya what do you think?");
+        await fake.untilPrompt(sessionIdOf(coco));
+        const asked = coco.store.getDisplayMessages()[0];
+        coco.setAgentMentions(asked.id, [
+          {
+            id: "earlier",
+            agent: "maya",
+            name: "Maya",
+            status: "didnt_finish",
+            startedAt: 1,
+            end: { kind: "obsidian_closed" },
+            chat: { backendId: "claude", sessionId: "maya-earlier" },
+          },
+        ]);
+
+        chats.ask(coco, "Maya", "And now?");
+        await untilAgentChatStarted();
+
+        expect(starts[0]).toEqual(
+          expect.objectContaining({
+            resume: { backendId: "claude", sessionId: "maya-earlier" },
+            askedFrom: "fake",
+          })
+        );
+      });
+
+      it(`starts a new conversation when the asking chat never asked the agent (${CONTROL})`, async () => {
+        const coco = await openChat({ agentSlug: "coco" });
+
+        chats.ask(coco, "Maya", "Review the plan.");
+        await untilAgentChatStarted();
+
+        expect(starts[0].resume).toBeUndefined();
+      });
+
+      it(`leaves the history a carried-on chat replays as it opens out of the run's reply (${CONTROL})`, async () => {
+        startChat.mockImplementationOnce(async (start) => {
+          const session = AgentSession.start({
+            backend: fake.backend,
+            cwd: "/vault",
+            internalId: "hidden-resumed",
+            backendId: "fake",
+            agent: start.prompt,
+            observeSessionEvent: start.observeSessionEvent,
+          });
+          await session.ready;
+          start.observeSessionEvent({
+            sessionId: session.getBackendSessionId()!,
+            update: {
+              sessionUpdate: "agent_message_chunk",
+              content: { type: "text", text: "An old reply." },
+            },
+          });
+          started.push(session);
+          startWaiters.forEach((wake) => wake());
+          return session;
+        });
+        const coco = await openChat({ agentSlug: "coco" });
+        const maya = await askedAndPrompted(coco);
+
+        answer(maya, "A new reply.");
+
+        const relayed = await fake.untilPrompt(sessionIdOf(coco));
+        expect(relayed).toContain("A new reply.");
+        expect(relayed).not.toContain("An old reply.");
+      });
+
       it(`starts one chat per asking chat and agent, so another chat asking the same agent gets its own (${ISSUE})`, async () => {
         const coco = await openChat({ agentSlug: "coco" });
         const copilot = await openChat();

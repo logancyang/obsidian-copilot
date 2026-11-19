@@ -5,6 +5,7 @@ import { replayPersistedMode } from "@/agentMode/session/replayPersistedMode";
 import type { ProjectScopeId } from "@/agentMode/session/scope";
 import { buildChatFileChanges } from "@/agentMode/session/turnFileChanges";
 import type {
+  BackendId,
   CopilotMode,
   PermissionDecision,
   PermissionPrompt,
@@ -27,6 +28,8 @@ export interface HiddenChatStart {
   projectId: ProjectScopeId;
   mode: CopilotMode | null;
   observeSessionEvent: (event: SessionEvent) => void;
+  askedFrom: BackendId;
+  resume: AgentMention["chat"];
 }
 
 export interface HiddenAgentChatsHost {
@@ -299,7 +302,9 @@ export class HiddenAgentChats {
       run: null,
       session: this.startSession(parent, agent, store, (event) => {
         const run = hidden.run;
-        if (!run) return;
+        // A chat carried on from before replays its history as it opens, which is not this run's work.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/945
+        if (!run || !hidden.started) return;
         if (event.update.sessionUpdate === "turn_started") run.sawTurn = true;
         const end = run.completion.handle(event);
         if (end) run.finish(end);
@@ -325,6 +330,8 @@ export class HiddenAgentChats {
       projectId: parent.projectId,
       mode: parent.getState()?.mode?.current ?? null,
       observeSessionEvent,
+      askedFrom: parent.backendId,
+      resume: savedChat(parent, agent.slug),
     });
   }
 
@@ -560,6 +567,11 @@ async function stopSession(session: AgentSession): Promise<void> {
   } finally {
     await session.dispose();
   }
+}
+
+function savedChat(parent: AgentSession, slug: string): AgentMention["chat"] {
+  const runs = parent.store.getDisplayMessages().flatMap((message) => message.agentMentions ?? []);
+  return runs.filter((run) => run.agent === slug && run.chat).at(-1)?.chat;
 }
 
 function lastUserMessageId(parent: AgentSession): string | null {
