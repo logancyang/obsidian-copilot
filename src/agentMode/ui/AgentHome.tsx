@@ -59,6 +59,11 @@ import type { CustomAgent } from "@/agents/CustomAgentStore";
 import { AgentIdentityBar } from "@/agents/ui/AgentIdentityBar";
 import { AgentRoster, NewAgentButton } from "@/agents/ui/AgentRoster";
 import { CreateAgentModal } from "@/agents/ui/CreateAgentModal";
+import {
+  dismissFirstAgentBanner,
+  FirstAgentBanner,
+  useFirstAgentBannerVisible,
+} from "@/agents/ui/FirstAgentBanner";
 import { agentComposerHint, useAgentHomeSelection } from "@/agents/ui/useAgentHomeSelection";
 import { useAgentRecentChats } from "@/agents/ui/useAgentRecentChats";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
@@ -433,6 +438,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     customAgentsGate === "full" && plugin.customAgents ? (
       <NewAgentButton emphasized={agentHome.agents.length === 0} onClick={openCreateAgentDialog} />
     ) : undefined;
+  const firstAgentBannerVisible = useFirstAgentBannerVisible(agentHome.agents.length);
   const dropOverlay = isDragActive && (
     <div className="tw-pointer-events-none tw-absolute tw-inset-0 tw-z-modal tw-flex tw-items-center tw-justify-center tw-rounded-md tw-border tw-border-dashed tw-bg-primary tw-opacity-80">
       <span>Drop files here...</span>
@@ -866,7 +872,15 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                             {dropOverlay}
                           </div>
                         ) : (
-                          composerNode
+                          <>
+                            {composerNode}
+                            {newAgentButton && firstAgentBannerVisible && (
+                              <FirstAgentBanner
+                                onCreate={openCreateAgentDialog}
+                                onDismiss={dismissFirstAgentBanner}
+                              />
+                            )}
+                          </>
                         )}
                       </>
                     }

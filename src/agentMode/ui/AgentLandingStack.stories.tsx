@@ -1,5 +1,6 @@
 import type { CustomAgent } from "@/agents/CustomAgentStore";
-import { AgentRoster } from "@/agents/ui/AgentRoster";
+import { AgentRoster, NewAgentButton } from "@/agents/ui/AgentRoster";
+import { FirstAgentBanner } from "@/agents/ui/FirstAgentBanner";
 import { FIVE_AGENTS, RECENT_CHATS } from "@/agents/ui/testing/rosterFixtures";
 import { useAgentRecentChats } from "@/agents/ui/useAgentRecentChats";
 import { AgentHomeShelf, type AgentHomeShelfSection } from "@/agentMode/ui/AgentHomeShelf";
@@ -226,6 +227,7 @@ function AgentHomeCanvas({
   initialSlug: string | null;
   project?: boolean;
 }) {
+  const [bannerDismissed, setBannerDismissed] = useState(false);
   const [selectedSlug, setSelectedSlug] = useState(initialSlug);
   const selected = agents.find((agent) => agent.slug === selectedSlug) ?? null;
   const recentChats = useAgentRecentChats(RECENT_CHATS, agents, selected);
@@ -269,15 +271,30 @@ function AgentHomeCanvas({
                 agents={agents}
                 selectedSlug={selected?.slug ?? null}
                 onSelect={setSelectedSlug}
-                emptyHero={null}
+                emptyHero={
+                  <span className="tw-text-3xl tw-font-[330] tw-text-normal">
+                    What are you working on?
+                  </span>
+                }
+                newAgentButton={
+                  <NewAgentButton emphasized={agents.length === 0} onClick={() => {}} />
+                }
               />
             }
             composer={
-              <div className="tw-truncate tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-primary tw-p-4 tw-text-ui-small tw-text-muted">
-                {selected
-                  ? `Ask ${selected.name} anything • @ to add context • / for commands`
-                  : "Ask anything • @ to add context • / for commands"}
-              </div>
+              <>
+                <div className="tw-truncate tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-primary tw-p-4 tw-text-ui-small tw-text-muted">
+                  {selected
+                    ? `Ask ${selected.name} anything • @ to add context • / for commands`
+                    : "Ask anything • @ to add context • / for commands"}
+                </div>
+                {agents.length === 0 && !project && !bannerDismissed && (
+                  <FirstAgentBanner
+                    onCreate={() => {}}
+                    onDismiss={() => setBannerDismissed(true)}
+                  />
+                )}
+              </>
             }
             shelf={
               <AgentHomeShelf
@@ -306,6 +323,10 @@ export const AgentHomeCopilotSelected: StoryObj<AgentLandingStackProps> = {
 
 export const AgentHomeAgentWithoutChats: StoryObj<AgentLandingStackProps> = {
   render: () => <AgentHomeCanvas agents={FIVE_AGENTS} initialSlug="kai" />,
+};
+
+export const AgentHomeFirstAgentBanner: StoryObj<AgentLandingStackProps> = {
+  render: () => <AgentHomeCanvas agents={[]} initialSlug={null} />,
 };
 
 export const ProjectHomeAgentSelected: StoryObj<AgentLandingStackProps> = {
