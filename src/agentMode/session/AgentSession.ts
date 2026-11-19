@@ -1217,6 +1217,10 @@ export class AgentSession implements ChatStateHost, ChatView {
     this.requests.resolveToolPermission(toolCallId, optionId);
   }
 
+  rejectToolRequestsFrom(requester: PermissionRequester): void {
+    this.requests.rejectToolRequestsFrom(requester);
+  }
+
   getPendingToolPermissions(): PermissionPrompt[] {
     return this.requests.getPendingToolPermissions();
   }
@@ -1666,6 +1670,9 @@ export class AgentSession implements ChatStateHost, ChatView {
   // A subagent's edits belong to its own capture, never to the card of the main-agent run open beside it. https://github.com/Brevilabs/obsidian-copilot-private/issues/669
   private filesOf(requester: PermissionRequester): FileCaptures | undefined {
     if (requester === "main") return this.turns.getTurnFiles();
+    // An @-mentioned agent edits from its own chat, and its reply carries the change, so it is never this chat's.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/946
+    if ("agent" in requester) return undefined;
     const toolCallId = this.taskWithId(requester.taskId)?.toolCallId;
     return toolCallId === undefined ? undefined : this.filesOfTask(toolCallId);
   }

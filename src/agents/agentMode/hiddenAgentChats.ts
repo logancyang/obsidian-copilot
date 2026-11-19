@@ -4,11 +4,13 @@ import type { ChatStateHost } from "@/agentMode/session/chatExtension";
 import { replayPersistedMode } from "@/agentMode/session/replayPersistedMode";
 import type { ProjectScopeId } from "@/agentMode/session/scope";
 import { buildChatFileChanges } from "@/agentMode/session/turnFileChanges";
+import { PERMISSION_REJECT_KINDS } from "@/agentMode/session/types";
 import type {
   BackendId,
   CopilotMode,
   PermissionDecision,
   PermissionPrompt,
+  PermissionRequester,
   SessionAgent,
   SessionEvent,
   TurnFileChange,
@@ -75,7 +77,6 @@ interface AskingChat {
 interface HiddenRunEnd {
   reply: string;
   files: readonly TurnFileChange[];
-  denied: readonly string[];
   error?: Error;
 }
 
@@ -86,7 +87,8 @@ interface HiddenRun {
   since: string | null;
   reply: string;
   sawTurn: boolean;
-  denied: string[];
+  waiting: number;
+  declined: boolean;
   stopped: StopReason | null;
   question: string | null;
   completion: AnswerCompletion;
@@ -112,8 +114,6 @@ const BUSY_STATUSES: ReadonlySet<AgentSessionStatus> = new Set([
   "awaiting_permission",
 ]);
 
-// A request the user can't answer from a chat they never see is turned down, and the agent says what it couldn't do.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/944
 export const HIDDEN_CHAT_DENY_MESSAGE =
   "Copilot turned this down: you're working in a chat another agent started, and the user can't approve changes from here. Don't try again. Say in your reply what you would have changed.";
 
@@ -222,21 +222,44 @@ export class HiddenAgentChats {
     );
   }
 
+  // The user never sees an asked agent's chat, so its request shows as a card in the chat that asked, from that agent, and the answer goes straight back.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/946
   answerPermission(request: PermissionPrompt): Promise<PermissionDecision> | null {
     const hidden = Array.from(this.chats.values()).find(
       (chat) => chat.started?.getBackendSessionId() === request.sessionId
     );
     if (!hidden) return null;
-    hidden.run?.denied.push(request.toolCall.title);
-    const reject = request.options.find((option) => option.kind === "reject_once");
-    return Promise.resolve(
-      reject
-        ? {
-            outcome: { outcome: "selected", optionId: reject.optionId },
-            denyMessage: HIDDEN_CHAT_DENY_MESSAGE,
-          }
-        : { outcome: { outcome: "cancelled" } }
-    );
+    const { parent, started, run } = hidden;
+    // An asked agent changes nothing while the chat that asked is in Plan mode, and a request after its run ended has no card to answer it, so both are turned down and the agent says what it couldn't do.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/946
+    if (!run || [parent, started].some((chat) => chat?.getState()?.mode?.current === "plan")) {
+      const reject = request.options.find((option) => option.kind === "reject_once");
+      return Promise.resolve(
+        reject
+          ? {
+              outcome: { outcome: "selected", optionId: reject.optionId },
+              denyMessage: HIDDEN_CHAT_DENY_MESSAGE,
+            }
+          : { outcome: { outcome: "cancelled" } }
+      );
+    }
+    run.waiting++;
+    record(parent, run, { status: "permission" });
+    return parent
+      .handleToolPermission({ ...request, requester: requesterOf(hidden) })
+      .then((decision) => {
+        run.waiting--;
+        if (hidden.run !== run || run.stopped) return decision;
+        // Codex and OpenCode end the turn on a turned-down request without a word, so the relay says the user turned it down.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/946
+        if (decision.outcome.outcome === "selected") {
+          const { optionId } = decision.outcome;
+          const kind = request.options.find((option) => option.optionId === optionId)?.kind;
+          if (kind && PERMISSION_REJECT_KINDS.includes(kind)) run.declined = true;
+        }
+        if (run.waiting === 0) record(parent, run, { status: "working" });
+        return decision;
+      });
   }
 
   dispose(): void {
@@ -280,6 +303,7 @@ export class HiddenAgentChats {
     const run = hidden.run;
     if (!run) return false;
     run.stopped = reason;
+    hidden.parent.rejectToolRequestsFrom(requesterOf(hidden));
     run.finish({ error: undefined });
     void hidden.started
       ?.cancel()
@@ -343,7 +367,8 @@ export class HiddenAgentChats {
       since: null,
       reply: "",
       sawTurn: false,
-      denied: [],
+      waiting: 0,
+      declined: false,
       stopped: null,
       question: null,
       completion: new AnswerCompletion((text) => (run.reply += text)),
@@ -366,9 +391,12 @@ export class HiddenAgentChats {
         record(hidden.parent, run, { chat: { backendId: session.backendId, sessionId } });
       end = await this.runTurn(hidden, run, answer, session, message);
     } catch (error) {
-      end = { reply: run.reply.trim(), files: [], denied: run.denied, error: asError(error) };
+      end = { reply: run.reply.trim(), files: [], error: asError(error) };
     } finally {
       hidden.run = null;
+      // A card never outlives the run that raised it.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/946
+      hidden.parent.rejectToolRequestsFrom(requesterOf(hidden));
     }
     this.finishRun(hidden, run, end);
   }
@@ -394,7 +422,7 @@ export class HiddenAgentChats {
       // A continued chat follows the mode the asking chat is in now, not the one it started in.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
       await replayPersistedMode(session, hidden.parent.getState()?.mode?.current ?? null);
-      if (run.stopped) return { reply: "", files: [], denied: run.denied };
+      if (run.stopped) return { reply: "", files: [] };
       const { userMessageId, turn } = session.sendPrompt(hiddenJobText(hidden, message));
       run.since = userMessageId;
       turn.then(
@@ -422,7 +450,6 @@ export class HiddenAgentChats {
             name: hidden.agent.name,
             mention: run.id,
             reply: run.question,
-            denied: [],
             changed: [],
             question: true,
           }),
@@ -434,7 +461,6 @@ export class HiddenAgentChats {
       return {
         reply: run.reply.trim(),
         files: buildChatFileChanges(messages.slice(asked + 1)),
-        denied: run.denied,
         ...(error ? { error } : {}),
       };
     } finally {
@@ -449,19 +475,13 @@ export class HiddenAgentChats {
     if (this.chats.get(key) !== hidden) return;
     if (getCustomAgentsGate() !== "full") return;
     record(hidden.parent, run, {
-      status: run.stopped
-        ? "stopped"
-        : end.error || end.denied.length > 0
-          ? "didnt_finish"
-          : "finished",
+      status: run.stopped ? "stopped" : end.error ? "didnt_finish" : "finished",
       endedAt: Date.now(),
       ...(run.stopped
         ? { end: { kind: run.stopped } }
         : end.error
           ? { end: { kind: "error", message: end.error.message } }
-          : end.denied.length > 0
-            ? { end: { kind: "permission_denied", requests: end.denied } }
-            : {}),
+          : {}),
     });
     void relay(
       hidden.parent,
@@ -470,10 +490,10 @@ export class HiddenAgentChats {
         name: hidden.agent.name,
         mention: run.id,
         reply: end.reply,
-        denied: end.denied,
         changed: end.files.map((change) => change.path),
         error: end.error?.message,
         stopped: run.stopped ?? undefined,
+        declined: run.declined,
       }),
       end.files
     );
@@ -569,6 +589,10 @@ async function stopSession(session: AgentSession): Promise<void> {
   }
 }
 
+function requesterOf({ agent }: HiddenChat): PermissionRequester {
+  return { agent: { slug: agent.slug, name: agent.name, faceSrc: agent.faceSrc } };
+}
+
 function savedChat(parent: AgentSession, slug: string): AgentMention["chat"] {
   const runs = parent.store.getDisplayMessages().flatMap((message) => message.agentMentions ?? []);
   return runs.filter((run) => run.agent === slug && run.chat).at(-1)?.chat;
@@ -642,7 +666,9 @@ function describeProgress({ agent: { name }, run, started }: HiddenChat): string
   return [
     run.question !== null
       ? `${name} is waiting for the user to answer this question:\n${run.question}`
-      : `${name} has been working for ${minutes < 1 ? "under a minute" : `${minutes} min`}.`,
+      : run.waiting > 0
+        ? `${name} is waiting for the user's OK on a permission card in this chat.`
+        : `${name} has been working for ${minutes < 1 ? "under a minute" : `${minutes} min`}.`,
     written
       ? `The end of what ${name} has written so far:\n${written}`
       : `${name} hasn't written anything yet.`,

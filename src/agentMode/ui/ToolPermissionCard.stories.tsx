@@ -1,7 +1,9 @@
 import type { PermissionPrompt, SessionId } from "@/agentMode/session/types";
 import { ToolPermissionCard } from "@/agentMode/ui/ToolPermissionCard";
+import { AskedAgentRequester } from "@/agents/agentMode/ui/AskedAgentRequester";
+import { LEO } from "@/agents/ui/testing/rosterFixtures";
 import type { Meta, StoryObj } from "@/lib/story";
-import type * as React from "react";
+import * as React from "react";
 
 type ToolPermissionCardProps = React.ComponentProps<typeof ToolPermissionCard>;
 
@@ -140,6 +142,21 @@ export const SubagentRequester: StoryObj<ToolPermissionCardProps> = {
         title: "Bash: wc -w Projects/Launch brief.md",
         kind: "execute",
         rawInput: { command: "wc -w 'Projects/Launch brief.md'" },
+      },
+    },
+  },
+};
+
+export const AskedAgentRequesterCard: StoryObj<ToolPermissionCardProps> = {
+  args: {
+    requester: <AskedAgentRequester agent={LEO} />,
+    request: {
+      ...request,
+      toolCall: {
+        ...request.toolCall,
+        title: "Edit Finance/October books.md",
+        kind: "edit",
+        rawInput: { file_path: "Finance/October books.md" },
       },
     },
   },

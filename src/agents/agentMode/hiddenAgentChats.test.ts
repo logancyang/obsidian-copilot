@@ -24,7 +24,9 @@ jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError:
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/944";
 const CONTROL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/945";
+const PERMISSION = "https://github.com/Brevilabs/obsidian-copilot-private/issues/946";
 const AUTO_MODE: BackendState = { model: null, mode: { current: "auto", options: [], apply: {} } };
+const PLAN: BackendState = { model: null, mode: { current: "plan", options: [], apply: {} } };
 const PLAN_CHANGE = Object.freeze({
   path: "Plans/Launch plan.md",
   status: "modified" as const,
@@ -157,6 +159,15 @@ async function waitingOnQuestion(): Promise<{ coco: ObservedChat; maya: AgentSes
   await fake.untilPrompt(sessionIdOf(coco), 2);
   fake.endTurn(sessionIdOf(coco));
   return { coco, maya };
+}
+
+function requestFrom(maya: AgentSession, toolCallId = "tc-write"): PermissionPrompt {
+  const request = writePermissionRequest();
+  return {
+    ...request,
+    sessionId: sessionIdOf(maya),
+    toolCall: { ...request.toolCall, toolCallId },
+  };
 }
 
 function answer(maya: AgentSession, text: string): void {
@@ -799,23 +810,6 @@ describe("hiddenAgentChats", () => {
         expect(finished.endedAt).toBeGreaterThanOrEqual(working.startedAt);
       });
 
-      it(`saves that the agent didn't finish because Copilot turned a request down (${ISSUE})`, async () => {
-        const { coco, maya } = await askFromMessage();
-        const request = { ...writePermissionRequest(), sessionId: sessionIdOf(maya) };
-        await chats.answerPermission(request);
-
-        answer(maya, "I couldn't add the line.");
-        fake.endTurn(sessionIdOf(coco));
-        await fake.untilPrompt(sessionIdOf(coco), 2);
-
-        expect(mentionsOn(coco)?.[0]).toEqual(
-          expect.objectContaining({
-            status: "didnt_finish",
-            end: { kind: "permission_denied", requests: [request.toolCall.title] },
-          })
-        );
-      });
-
       it(`saves that the agent didn't finish, and why, when its chat disconnects (${ISSUE})`, async () => {
         const { coco, maya } = await askFromMessage();
 
@@ -865,32 +859,170 @@ describe("hiddenAgentChats", () => {
     });
 
     describe("answerPermission()", () => {
-      it(`turns down a request from an asked agent's chat with the reason, and leaves other chats' requests alone (${ISSUE})`, async () => {
-        const coco = await openChat({ agentSlug: "coco" });
-        const maya = await askedAndPrompted(coco);
-        const request: PermissionPrompt = {
-          ...writePermissionRequest(),
-          sessionId: sessionIdOf(maya),
-        };
+      it(`shows an asked agent's request in the chat that asked, as from that agent with its face, and leaves other chats' requests alone (${PERMISSION})`, async () => {
+        const { coco, maya } = await askFromMessage();
+        fake.endTurn(sessionIdOf(coco));
 
-        await expect(chats.answerPermission(request)).resolves.toEqual({
+        void chats.answerPermission(requestFrom(maya));
+
+        expect(coco.getPendingToolPermissions()).toEqual([
+          {
+            ...requestFrom(maya),
+            requester: {
+              agent: { slug: "maya", name: "Maya", faceSrc: agentNamed("Maya")!.faceSrc },
+            },
+          },
+        ]);
+        expect(chats.answerPermission({ ...requestFrom(maya), sessionId: sessionIdOf(coco) })).toBe(
+          null
+        );
+      });
+
+      it(`passes the user's answer back to the asked agent, and the asking agent runs no turn for it (${PERMISSION})`, async () => {
+        const { coco, maya } = await askFromMessage();
+        fake.endTurn(sessionIdOf(coco));
+        const decision = chats.answerPermission(requestFrom(maya));
+
+        coco.resolveToolPermission("tc-write", "allow_once");
+
+        await expect(decision).resolves.toEqual({
+          outcome: { outcome: "selected", optionId: "allow_once" },
+        });
+        expect(fake.promptsTo(sessionIdOf(coco))).toHaveLength(1);
+        expect(coco.getPendingToolPermissions()).toHaveLength(0);
+        answer(maya, "Added.");
+        expect(await fake.untilPrompt(sessionIdOf(coco), 2)).not.toContain("turned down");
+      });
+
+      it(`passes an "always" answer to an OpenCode-shaped request back as the agent's own option, so the agent saves the same rule its own card saves, and withdraws as the agent's own reject (${PERMISSION})`, async () => {
+        const { coco, maya } = await askFromMessage();
+        const openCodeRequest = (toolCallId: string): PermissionPrompt => ({
+          sessionId: sessionIdOf(maya),
+          toolCall: {
+            toolCallId,
+            title: "Plans/Launch plan.md",
+            kind: "edit",
+            status: "pending",
+            locations: [{ path: "/vault/Plans/Launch plan.md" }],
+          },
+          options: [
+            { optionId: "once", name: "Allow once", kind: "allow_once" },
+            { optionId: "always", name: "Always allow", kind: "allow_always" },
+            { optionId: "reject", name: "Reject", kind: "reject_once" },
+          ],
+        });
+        const always = chats.answerPermission(openCodeRequest("oc-1"));
+        coco.resolveToolPermission("oc-1", "always");
+        await expect(always).resolves.toEqual({
+          outcome: { outcome: "selected", optionId: "always" },
+        });
+
+        const withdrawn = chats.answerPermission(openCodeRequest("oc-2"));
+        chats.stop(coco, "Maya");
+
+        await expect(withdrawn).resolves.toEqual({
+          outcome: { outcome: "selected", optionId: "reject" },
+        });
+      });
+
+      it(`saves the run as waiting for the user's OK until every request is answered, then as working (${PERMISSION})`, async () => {
+        const { coco, maya } = await askFromMessage();
+        const first = chats.answerPermission(requestFrom(maya, "tc-first"));
+        const second = chats.answerPermission(requestFrom(maya, "tc-second"));
+        expect(mentionsOn(coco)?.[0]).toEqual(expect.objectContaining({ status: "permission" }));
+
+        coco.resolveToolPermission("tc-first", "allow_once");
+        await first;
+        expect(mentionsOn(coco)?.[0]).toEqual(expect.objectContaining({ status: "permission" }));
+        coco.resolveToolPermission("tc-second", "allow_once");
+        await second;
+
+        expect(mentionsOn(coco)?.[0]).toEqual(expect.objectContaining({ status: "working" }));
+      });
+
+      it(`passes a rejection back to the asked agent, whose reply is relayed as a finished run (${PERMISSION})`, async () => {
+        const { coco, maya } = await askFromMessage();
+        const decision = chats.answerPermission(requestFrom(maya));
+        coco.resolveToolPermission("tc-write", "reject_once");
+        await expect(decision).resolves.toEqual({
+          outcome: { outcome: "selected", optionId: "reject_once" },
+        });
+
+        answer(maya, "You said no, so the plan is unchanged.");
+        fake.endTurn(sessionIdOf(coco));
+
+        const relayed = await fake.untilPrompt(sessionIdOf(coco), 2);
+        expect(relayed).toContain("Maya replied. Pass the reply on to the user now.");
+        expect(relayed).toContain("The user turned down a request from Maya");
+        expect(relayed).toContain("You said no, so the plan is unchanged.");
+        expect(mentionsOn(coco)?.[0]).toEqual(expect.objectContaining({ status: "finished" }));
+        expect(mentionsOn(coco)?.[0].end).toBeUndefined();
+      });
+
+      it(`still says the user turned a request down in the final relay when the agent then asked a question and got its answer (${PERMISSION})`, async () => {
+        const { coco, maya } = await askFromMessage();
+        const decision = chats.answerPermission(requestFrom(maya));
+        coco.resolveToolPermission("tc-write", "reject_once");
+        await decision;
+        chats.askUser(maya, "Which month, then?");
+        fake.endTurn(sessionIdOf(maya));
+        fake.endTurn(sessionIdOf(coco));
+        await fake.untilPrompt(sessionIdOf(coco), 2);
+        fake.endTurn(sessionIdOf(coco));
+
+        chats.answer(coco, "Maya", "October.");
+        await fake.untilPrompt(sessionIdOf(maya), 2);
+        answer(maya, "October left as it was.");
+
+        const relayed = await fake.untilPrompt(sessionIdOf(coco), 3);
+        expect(relayed).toContain("Maya replied.");
+        expect(relayed).toContain("The user turned down a request from Maya");
+      });
+
+      it(`turns a request down with the reason and shows no card while the chat that asked is in Plan mode (${PERMISSION})`, async () => {
+        const coco = await openChat({ agentSlug: "coco", backend: createFakeAgentBackend(PLAN) });
+        const maya = await askedAndPrompted(coco);
+
+        await expect(chats.answerPermission(requestFrom(maya))).resolves.toEqual({
           outcome: { outcome: "selected", optionId: "reject_once" },
           denyMessage: HIDDEN_CHAT_DENY_MESSAGE,
         });
-        expect(chats.answerPermission({ ...request, sessionId: sessionIdOf(coco) })).toBeNull();
+        expect(coco.getPendingToolPermissions()).toHaveLength(0);
       });
 
-      it(`reports each turned-down request to the chat that asked when the agent's reply comes back (${ISSUE})`, async () => {
+      it(`turns a request down without a card when it comes after the agent's run ended, as right after a stop (${PERMISSION})`, async () => {
         const coco = await openChat({ agentSlug: "coco" });
         const maya = await askedAndPrompted(coco);
-        const request = { ...writePermissionRequest(), sessionId: sessionIdOf(maya) };
-        await chats.answerPermission(request);
+        answer(maya, "Done.");
+        await fake.untilPrompt(sessionIdOf(coco));
 
-        answer(maya, "I couldn't add the line.");
-
-        expect(await fake.untilPrompt(sessionIdOf(coco))).toContain(
-          `<turned-down from="Maya">\n${request.toolCall.title}\n</turned-down>`
+        await expect(chats.answerPermission(requestFrom(maya))).resolves.toEqual(
+          expect.objectContaining({ outcome: { outcome: "selected", optionId: "reject_once" } })
         );
+        expect(coco.getPendingToolPermissions()).toHaveLength(0);
+      });
+
+      it(`withdraws a waiting card as rejected when the asked agent's chat closes before it is answered (${PERMISSION})`, async () => {
+        const { coco, maya } = await askFromMessage();
+        const decision = chats.answerPermission(requestFrom(maya));
+
+        await maya.dispose();
+
+        await expect(decision).resolves.toEqual({
+          outcome: { outcome: "selected", optionId: "reject_once" },
+        });
+        expect(coco.getPendingToolPermissions()).toHaveLength(0);
+      });
+
+      it(`answers a waiting request as rejected when the chat that asked closes, so the asked agent never waits forever (${PERMISSION})`, async () => {
+        const { coco, maya } = await askFromMessage();
+        const decision = chats.answerPermission(requestFrom(maya));
+
+        await coco.dispose();
+
+        await expect(decision).resolves.toEqual({
+          outcome: { outcome: "selected", optionId: "reject_once" },
+        });
       });
     });
 
@@ -1052,6 +1184,17 @@ describe("hiddenAgentChats", () => {
         expect(progress.length).toBeLessThan(2500);
       });
 
+      it(`says the agent is waiting for the user's OK while its request waits in the chat (${PERMISSION})`, async () => {
+        const { coco, maya } = await askFromMessage();
+        void chats.answerPermission(requestFrom(maya));
+
+        const result = chats.check(coco, "Maya");
+
+        expect(result.kind === "progress" ? result.progress : "").toContain(
+          "Maya is waiting for the user's OK on a permission card in this chat."
+        );
+      });
+
       it(`says the agent isn't working when it finished, and that the chat never asked it otherwise (${CONTROL})`, async () => {
         const coco = await openChat({ agentSlug: "coco" });
         const other = await openChat();
@@ -1166,6 +1309,23 @@ describe("hiddenAgentChats", () => {
         );
         expect(startChat).toHaveBeenCalledTimes(1);
         expect(maya.getStatus()).not.toBe("closed");
+      });
+
+      it(`withdraws the agent's waiting card at once, answering its request as rejected, since the agent ends its turn only once answered, and the stop's relay does not say the user turned it down (${PERMISSION})`, async () => {
+        const { coco, maya } = await askFromMessage();
+        const decision = chats.answerPermission(requestFrom(maya));
+        fake.cancel.mockImplementationOnce(async () => undefined);
+
+        chats.stop(coco, "Maya");
+
+        expect(coco.getPendingToolPermissions()).toHaveLength(0);
+        await expect(decision).resolves.toEqual({
+          outcome: { outcome: "selected", optionId: "reject_once" },
+        });
+        expect(coco.getPendingToolPermissions()).toHaveLength(0);
+        fake.endTurn(sessionIdOf(maya));
+        fake.endTurn(sessionIdOf(coco));
+        expect(await fake.untilPrompt(sessionIdOf(coco), 2)).not.toContain("turned down");
       });
 
       it(`stops the run with the agent's slug, as the chat's running agents list does (${CONTROL})`, async () => {

@@ -135,12 +135,12 @@ jest.mock("@/agentMode/ui/ToolPermissionCard", () => ({
   }: {
     request: PermissionPrompt;
     toolName?: string;
-    requester?: string;
+    requester?: React.ReactNode;
   }) => (
     <div title={request.toolCall.title}>
       Permission {request.toolCall.toolCallId}
       {toolName ? ` via ${toolName}` : ""}
-      {requester ? ` from ${requester}` : ""}
+      {requester ? <> from {requester}</> : null}
     </div>
   ),
 }));
@@ -741,6 +741,19 @@ describe("AgentChatMessages", () => {
       );
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/946 labels a permission request from an @-mentioned agent with that agent's face and name", () => {
+      const request = {
+        ...permission("leo-edit"),
+        requester: { agent: { slug: "leo", name: "Leo", faceSrc: "data:image/webp;base64,leo" } },
+      };
+
+      renderMessages([], true, { pendingToolPermissions: [request] });
+
+      const rail = screen.getByRole("region", { name: "Pending agent actions" });
+      expect(rail.textContent).toBe("Permission leo-edit from Leo");
+      expect(rail.querySelector("img")?.getAttribute("src")).toBe("data:image/webp;base64,leo");
+    });
+
     it("bounds and scrolls a tall action rail so controls remain reachable for https://github.com/logancyang/obsidian-copilot/issues/2948", () => {
       renderMessages([], false, {
         pendingAskUserQuestions: [question("empty-chat-question")],
@@ -768,7 +781,6 @@ describe("AgentChatMessages", () => {
         name: "Maya",
         mention: "mention-1",
         reply: "BIGGEST RISK: the intro is too slow.",
-        denied: [],
         changed: ["Plans/Launch plan.md"],
       });
       const relayMessage = {
