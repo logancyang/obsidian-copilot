@@ -7,6 +7,7 @@ jest.mock("@/logger", () => ({
 }));
 
 const INDEX_PATH = "config/plugins/copilot/agent-chat-index.json";
+const ISSUE_977 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/977";
 
 function makeStorage(initial?: Record<string, string>): AgentSessionIndexStorage & {
   files: Map<string, string>;
@@ -63,90 +64,11 @@ describe("AgentSessionIndex", () => {
       });
     });
 
-    it("clears a tombstone — live activity reflects fresh intent", async () => {
-      const index = new AgentSessionIndex(makeStorage(), INDEX_PATH);
-      await index.deleteSession("opencode", "s1");
-      await index.recordSession(entry());
-      expect(await index.isTombstoned("opencode", "s1")).toBe(false);
-      expect(await index.getEntries()).toHaveLength(1);
-    });
-
-    it("keeps a user-sourced label across later discovered-session merges", async () => {
-      const index = new AgentSessionIndex(makeStorage(), INDEX_PATH);
-      await index.recordSession(entry({ title: "Tab rename", titleSource: "user" }));
-      await index.mergeDiscoveredSessions([entry({ title: "Agent original" })]);
-      expect((await index.getEntry("opencode", "s1"))?.title).toBe("Tab rename");
-    });
-
     it("keeps the model a chat last ran when a later record names none (https://github.com/logancyang/obsidian-copilot/issues/4274)", async () => {
       const index = new AgentSessionIndex(makeStorage(), INDEX_PATH);
       await index.recordSession(entry({ model: { baseModelId: "sonnet", effort: "high" } }));
       await index.recordSession(entry({ model: { baseModelId: "opus", effort: "high" } }));
       await index.recordSession(entry({ lastAccessedAtMs: 9_000 }));
-      expect((await index.getEntry("opencode", "s1"))?.model).toEqual({
-        baseModelId: "opus",
-        effort: "high",
-      });
-    });
-  });
-
-  describe("mergeDiscoveredSessions()", () => {
-    it("keeps the custom agent a chat runs as when a sweep rediscovers the chat", async () => {
-      const index = new AgentSessionIndex(makeStorage(), INDEX_PATH);
-      await index.recordSession(entry({ agent: "coco" }));
-      await index.mergeDiscoveredSessions([entry({ title: "Renamed by the agent" })]);
-      expect((await index.getEntry("opencode", "s1"))?.agent).toBe("coco");
-    });
-
-    it("never moves lastAccessed backwards", async () => {
-      const index = new AgentSessionIndex(makeStorage(), INDEX_PATH);
-      await index.recordSession(entry({ lastAccessedAtMs: 9_000 }));
-      await index.mergeDiscoveredSessions([
-        entry({ title: "Agent generated title", lastAccessedAtMs: 4_000 }),
-      ]);
-      expect(await index.getEntry("opencode", "s1")).toMatchObject({
-        title: "Agent generated title",
-        lastAccessedAtMs: 9_000,
-      });
-    });
-
-    it("keeps a user rename across discovered-session merges while agent titles stay refreshable", async () => {
-      const index = new AgentSessionIndex(makeStorage(), INDEX_PATH);
-      await index.recordSession(entry({ title: "Agent title", titleSource: "agent" }));
-      await index.setTitle("opencode", "s1", "My rename");
-      await index.mergeDiscoveredSessions([entry({ title: "Agent title v2" })]);
-      expect(await index.getEntry("opencode", "s1")).toMatchObject({
-        title: "My rename",
-        titleSource: "user",
-      });
-
-      await index.recordSession(
-        entry({ sessionId: "s2", title: "Agent title", titleSource: "agent" })
-      );
-      await index.mergeDiscoveredSessions([entry({ sessionId: "s2", title: "Agent title v2" })]);
-      expect((await index.getEntry("opencode", "s2"))?.title).toBe("Agent title v2");
-    });
-
-    it("fills a missing project scope from a sweep but never strips a known one", async () => {
-      const index = new AgentSessionIndex(makeStorage(), INDEX_PATH);
-      await index.recordSession(entry({ projectId: "proj-1" }));
-      await index.mergeDiscoveredSessions([
-        entry({ title: "Sweep title", lastAccessedAtMs: 9_000 }),
-      ]);
-      expect((await index.getEntry("opencode", "s1"))?.projectId).toBe("proj-1");
-
-      await index.mergeDiscoveredSessions([
-        entry({ sessionId: "s2", projectId: "proj-2", lastAccessedAtMs: 9_000 }),
-      ]);
-      expect((await index.getEntry("opencode", "s2"))?.projectId).toBe("proj-2");
-    });
-
-    it("keeps a chat's recorded model when a sweep rediscovers the chat (https://github.com/logancyang/obsidian-copilot/issues/4274)", async () => {
-      const index = new AgentSessionIndex(makeStorage(), INDEX_PATH);
-      await index.recordSession(entry({ model: { baseModelId: "opus", effort: "high" } }));
-      await index.mergeDiscoveredSessions([
-        entry({ title: "Sweep title", lastAccessedAtMs: 9_000 }),
-      ]);
       expect((await index.getEntry("opencode", "s1"))?.model).toEqual({
         baseModelId: "opus",
         effort: "high",
@@ -173,41 +95,59 @@ describe("AgentSessionIndex", () => {
   });
 
   describe("deleteSession()", () => {
-    it("tombstones the key so discovered sessions stay suppressed", async () => {
-      const index = new AgentSessionIndex(makeStorage(), INDEX_PATH);
+    it(`removes the chat, which stays off the list after the index is reloaded from disk (${ISSUE_977})`, async () => {
+      const storage = makeStorage();
+      const index = new AgentSessionIndex(storage, INDEX_PATH);
       await index.recordSession(entry());
+      await index.recordSession(entry({ sessionId: "kept" }));
       await index.deleteSession("opencode", "s1");
-      expect(await index.getEntries()).toHaveLength(0);
-      expect(await index.isTombstoned("opencode", "s1")).toBe(true);
+      await index.flushOrThrow();
+      expect((await index.getEntries()).map((e) => e.sessionId)).toEqual(["kept"]);
 
-      await index.mergeDiscoveredSessions([entry()]);
-      expect(await index.getEntries()).toHaveLength(0);
+      const reloaded = new AgentSessionIndex(storage, INDEX_PATH);
+      expect((await reloaded.getEntries()).map((e) => e.sessionId)).toEqual(["kept"]);
     });
   });
 
   describe("flush()", () => {
-    it("persists entries and tombstones across instances", async () => {
+    it("persists entries across instances", async () => {
       const storage = makeStorage();
       const first = new AgentSessionIndex(storage, INDEX_PATH);
       await first.recordSession(entry());
-      await first.deleteSession("codex", "gone");
       await first.flush();
       expect(storage.files.get(INDEX_PATH)).toContain("s1");
 
       const second = new AgentSessionIndex(storage, INDEX_PATH);
       expect(await second.getEntry("opencode", "s1")).toMatchObject({ sessionId: "s1" });
-      expect(await second.isTombstoned("codex", "gone")).toBe(true);
     });
 
-    it("restores the user title marker after reload so later merges keep the rename", async () => {
+    it("restores a user rename and its source after reload", async () => {
       const storage = makeStorage();
       const first = new AgentSessionIndex(storage, INDEX_PATH);
       await first.recordSession(entry());
       await first.setTitle("opencode", "s1", "My rename");
       await first.flush();
       const second = new AgentSessionIndex(storage, INDEX_PATH);
-      await second.mergeDiscoveredSessions([entry({ title: "Agent original" })]);
-      expect((await second.getEntry("opencode", "s1"))?.title).toBe("My rename");
+      expect(await second.getEntry("opencode", "s1")).toMatchObject({
+        title: "My rename",
+        titleSource: "user",
+      });
+    });
+
+    it("keeps only the 500 most recently opened chats, dropping the least recently opened", async () => {
+      const storage = makeStorage();
+      const first = new AgentSessionIndex(storage, INDEX_PATH);
+      for (let i = 1; i <= 501; i++) {
+        await first.recordSession(
+          entry({ sessionId: `chat-${i}`, createdAtMs: i, lastAccessedAtMs: i })
+        );
+      }
+      await first.flush();
+      const second = new AgentSessionIndex(storage, INDEX_PATH);
+      expect(await second.getEntries()).toHaveLength(500);
+      expect(await second.getEntry("opencode", "chat-1")).toBeNull();
+      expect(await second.getEntry("opencode", "chat-2")).not.toBeNull();
+      expect(await second.getEntry("opencode", "chat-501")).not.toBeNull();
     });
 
     it("restores project scope after reload and leaves unscoped chats unscoped", async () => {
@@ -257,10 +197,7 @@ describe("AgentSessionIndex", () => {
       await index.recordSession(entry());
       await index.deleteSession("opencode", "s1");
       await index.flushOrThrow();
-      expect(JSON.parse(storage.files.get(INDEX_PATH)!)).toMatchObject({
-        entries: [],
-        tombstones: { "opencode:s1": expect.any(Number) },
-      });
+      expect(JSON.parse(storage.files.get(INDEX_PATH)!)).toEqual({ version: 1, entries: [] });
     });
 
     it("rejects with the storage error when the write fails", async () => {
@@ -293,12 +230,57 @@ describe("AgentSessionIndex", () => {
             { backendId: "codex", sessionId: "y" },
             "garbage",
           ],
-          tombstones: { "codex:z": "not-a-number" },
         }),
       });
       const index = new AgentSessionIndex(storage, INDEX_PATH);
       expect(await index.getEntries()).toHaveLength(1);
-      expect(await index.isTombstoned("codex", "z")).toBe(false);
+    });
+
+    it(`lists the chats of an index file that still holds deleted-chat markers, and drops the markers on the next write (${ISSUE_977})`, async () => {
+      const storage = makeStorage({
+        [INDEX_PATH]: JSON.stringify(
+          {
+            version: 1,
+            entries: [
+              {
+                backendId: "opencode",
+                sessionId: "ses_1f2e3d4c5b6aFFeeDdCcBbAa99",
+                title: "Plan the garden beds",
+                titleSource: "agent",
+                createdAtMs: 1_763_500_000_000,
+                lastAccessedAtMs: 1_763_500_600_000,
+                model: { baseModelId: "opencode/deepseek-v4.1-flash-free", effort: null },
+              },
+              {
+                backendId: "claude",
+                sessionId: "0b8f6c1e-4d2a-4f7e-9c3b-2a1d5e6f7a8b",
+                title: "Summarize the reading list",
+                createdAtMs: 1_763_400_000_000,
+                lastAccessedAtMs: 1_763_400_300_000,
+                projectId: "reading",
+                agent: "maya",
+              },
+            ],
+            tombstones: {
+              "opencode:ses_0a9b8c7d6e5fAAbbCcDdEeFf11": 1_763_500_100_000,
+              "opencode:ses_1f2e3d4c5b6aFFeeDdCcBbAa99": 1_763_400_100_000,
+            },
+          },
+          null,
+          2
+        ),
+      });
+      const index = new AgentSessionIndex(storage, INDEX_PATH);
+      expect((await index.getEntries()).map((e) => [e.sessionId, e.title])).toEqual([
+        ["ses_1f2e3d4c5b6aFFeeDdCcBbAa99", "Plan the garden beds"],
+        ["0b8f6c1e-4d2a-4f7e-9c3b-2a1d5e6f7a8b", "Summarize the reading list"],
+      ]);
+
+      await index.touch("claude", "0b8f6c1e-4d2a-4f7e-9c3b-2a1d5e6f7a8b");
+      await index.flushOrThrow();
+      const written = JSON.parse(storage.files.get(INDEX_PATH)!);
+      expect(written).not.toHaveProperty("tombstones");
+      expect(written.entries).toHaveLength(2);
     });
   });
 });

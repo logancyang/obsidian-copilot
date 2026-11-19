@@ -17,7 +17,7 @@ The start screen of a new chat in Agent Chat: a greeting, the [chat input](chat-
 - home-agent-chat: the first message starts a chat with the selected agent, on its model; with Copilot selected, a Copilot chat.
 - home-first-message: sending the first message turns the start screen into the conversation, with the [chat controls](chat-controls.md) above the chat input.
 - home-shelf: the shelf's `Recent chats`, `Relevant Notes`, and `Projects` tabs, with the project count on `Projects`; the last tab chosen stays selected for every new chat.
-- home-recent-chats: `Recent chats` lists past chats as [chat rows](chat-rows.md), pinned chats first, filtered by `Search chats...`.
+- home-recent-chats: `Recent chats` lists past chats as [chat rows](chat-rows.md), pinned chats first, filtered by `Search chats...`. It lists only chats had in Copilot, on every coding agent; a session started with a coding agent outside Copilot does not show.
 - home-recent-agent-chats: with custom agents, each agent chat in `Recent chats` shows its agent's face. With an agent selected, the list holds only that agent's chats and the search reads `Search chats with <name>...`; an agent with no chats yet shows "No chats with <name> yet."
 - home-archived: `View archived` under Recent chats lists archived chats and projects, each with `Unarchive`.
 - home-relevant-notes: the `Relevant Notes` tab shows [Relevant Notes](relevant-notes.md); it is hidden while the Relevant Notes pane is open.
@@ -47,6 +47,7 @@ The start screen of a new chat in Agent Chat: a greeting, the [chat input](chat-
 - Default agent: start a chat with an agent, then open a new chat, or reload Copilot and open one. That agent is selected. Delete its folder and open a new chat: Copilot is selected.
 - First message: send a message from the start screen. The greeting and shelf give way to the conversation, with `New chat`, `Chat history`, and `More actions` above the chat input.
 - Shelf tab: choose `Projects`, close Agent Chat, and open it again. The shelf opens on `Projects`.
+- Recent chats: in the vault folder, start an OpenCode session outside Copilot, then send a message in a new OpenCode chat in Copilot. `Recent chats` lists the Copilot chat and not the outside session. Delete the Copilot chat and reload Copilot: it stays gone.
 - Search: in `Recent chats`, type part of a chat title into `Search chats...`. Only matching chats remain; clearing the box brings the rest back.
 - Agent chats: with custom agents and Copilot selected, `Recent chats` shows every chat, agent chats with their agent's face. Choose an agent: only its chats remain. Choose an agent with no chats: "No chats with <name> yet."
 - Archived: choose `View archived`. A list of archived chats and projects opens; `Unarchive` on a project returns it to `Projects` and raises the count.
@@ -65,5 +66,6 @@ The start screen of a new chat in Agent Chat: a greeting, the [chat input](chat-
 - Choosing a face before the first message changes nothing in the vault; only the first message starts the agent's chat.
 - When an agent's chat cannot start, as on a Codex that needs an update, choosing its face shows a notice with the reason and the new chat stays on Copilot.
 - Opening a project's chat from Recent chats or another list outside the project enters that project.
+- A chat with no chat note stays in `Recent chats` only while it is among the 500 chats most recently used on this device.
 - The release update card and the first agent banner show only on the start screen outside a project.
 - Outside a project, the shelf is the same whether or not the Navigator is open, so `Recent chats` and `Projects` repeat what the Navigator lists.

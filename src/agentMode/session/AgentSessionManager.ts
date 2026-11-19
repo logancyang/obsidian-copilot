@@ -41,7 +41,7 @@ import {
 import { readFrontmatterViaAdapter } from "@/utils/vaultAdapterUtils";
 import { App, FileSystemAdapter, Notice, Platform, TFile } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
-import { AgentSession, ATTENTION_TRIGGER_STATUSES, DEFAULT_TITLE_PREFIX } from "./AgentSession";
+import { AgentSession, ATTENTION_TRIGGER_STATUSES } from "./AgentSession";
 import type { AgentChatPersistenceManager, LoadedAgentChat } from "./AgentChatPersistenceManager";
 import type { AgentModelPreloader } from "./AgentModelPreloader";
 import { buildNativeChatId, parseNativeChatId } from "@/utils/nativeChatId";
@@ -58,12 +58,7 @@ import { replayPersistedMode } from "./replayPersistedMode";
 import { applyModeSpec } from "./modeApply";
 import { modelCatalogSignature } from "./translateBackendState";
 import { GLOBAL_SCOPE, type ProjectScopeId } from "./scope";
-import {
-  OrphanedProjectError,
-  pickScopeNeighbor,
-  resolveProjectIdForCwd,
-  resolveScopeCwd,
-} from "./sessionScope";
+import { OrphanedProjectError, pickScopeNeighbor, resolveScopeCwd } from "./sessionScope";
 import {
   getCachedProjectRecordById,
   getCachedProjectRecords,
@@ -101,23 +96,6 @@ import type {
 } from "./types";
 
 const AUTOSAVE_DEBOUNCE_MS = 500;
-const LIST_SESSIONS_TIMEOUT_MS = 1_500;
-
-function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
-  return new Promise<T>((resolve) => {
-    const timer = window.setTimeout(() => resolve(fallback), ms);
-    promise.then(
-      (value) => {
-        window.clearTimeout(timer);
-        resolve(value);
-      },
-      () => {
-        window.clearTimeout(timer);
-        resolve(fallback);
-      }
-    );
-  });
-}
 
 function sessionRefFromFrontmatter(
   frontmatter: Record<string, unknown> | undefined
@@ -126,11 +104,6 @@ function sessionRefFromFrontmatter(
   const sessionId = typeof frontmatter?.sessionId === "string" ? frontmatter.sessionId.trim() : "";
   if (!backendId || !sessionId) return null;
   return { backendId, sessionId };
-}
-
-function isSameCwd(a: string, b: string): boolean {
-  const norm = (p: string) => p.replace(/[/\\]+$/, "");
-  return norm(a) === norm(b);
 }
 
 const EMPTY_SESSIONS = Object.freeze([]) as unknown as AgentSession[];
@@ -470,7 +443,6 @@ export class AgentSessionManager {
         const items = scopedMarkdown.map((e) => e.item);
         return items.length === 0 ? EMPTY_HISTORY_ITEMS : items;
       }
-      await this.refreshNativeSessionsFromBackends();
       const scopedNative = (await index.getEntries()).filter((e) => e.projectId === scope);
       const merged = mergeChatHistoryItems(scopedMarkdown, scopedNative);
       return merged.length === 0 ? EMPTY_HISTORY_ITEMS : merged;
@@ -478,7 +450,6 @@ export class AgentSessionManager {
 
     if (!index) return this.hideArchivedProjectChats(markdownEntries.map((e) => e.item));
 
-    await this.refreshNativeSessionsFromBackends();
     const nativeEntries = await index.getEntries();
     return this.hideArchivedProjectChats(mergeChatHistoryItems(markdownEntries, nativeEntries));
   }
@@ -766,77 +737,6 @@ export class AgentSessionManager {
     }
   }
 
-  private async refreshNativeSessionsFromBackends(): Promise<void> {
-    const index = this.opts.sessionIndex;
-    if (!index) return;
-    const adapter = this.app.vault.adapter;
-    if (!(adapter instanceof FileSystemAdapter)) return;
-    const vaultBasePath = adapter.getBasePath();
-    const procs = this.getRunningProcsByBackend();
-    if (procs.size === 0) return;
-    const sweeps = Array.from(procs, ([backendId, proc]) =>
-      this.sweepNativeSessions(backendId, proc, vaultBasePath)
-    );
-    await withTimeout(
-      Promise.allSettled(sweeps).then(() => undefined),
-      LIST_SESSIONS_TIMEOUT_MS,
-      undefined
-    );
-  }
-
-  private getRunningProcsByBackend(): Map<BackendId, BackendProcess> {
-    const procs = new Map<BackendId, BackendProcess>();
-    for (const { backendId, proc } of this.preloader.getWarmProcs()) {
-      if (proc.isRunning()) procs.set(backendId, proc);
-    }
-    for (const [backendId, proc] of this.backends) {
-      if (proc.isRunning()) procs.set(backendId, proc);
-    }
-    return procs;
-  }
-
-  private async sweepNativeSessions(
-    backendId: BackendId,
-    proc: BackendProcess,
-    vaultBasePath: string
-  ): Promise<void> {
-    const index = this.opts.sessionIndex;
-    if (!index) return;
-    const descriptor = this.opts.resolveDescriptor(backendId);
-    if (!descriptor?.summarizesSessionTitle) return;
-    let sessions;
-    try {
-      ({ sessions } = await proc.listSessions({ cwd: vaultBasePath }));
-    } catch (err) {
-      if (!(err instanceof MethodUnsupportedError)) {
-        logWarn(`[AgentMode] listSessions sweep failed for ${backendId}`, err);
-      }
-      return;
-    }
-    const probeSessionId = descriptor.getProbeSessionId?.(getSettings());
-    const now = Date.now();
-    const discovered = [];
-    for (const s of sessions) {
-      const inVaultRoot = isSameCwd(s.cwd, vaultBasePath);
-      const projectId = inVaultRoot ? undefined : resolveProjectIdForCwd(vaultBasePath, s.cwd);
-      if (!inVaultRoot && !projectId) continue;
-      if (probeSessionId && s.sessionId === probeSessionId) continue;
-      const title = s.title?.trim();
-      if (!title || title.startsWith(DEFAULT_TITLE_PREFIX)) continue;
-      const updatedAtMs = s.updatedAt ? Date.parse(s.updatedAt) : NaN;
-      const timestamp = Number.isFinite(updatedAtMs) && updatedAtMs > 0 ? updatedAtMs : now;
-      discovered.push({
-        backendId,
-        sessionId: s.sessionId,
-        title,
-        createdAtMs: timestamp,
-        lastAccessedAtMs: timestamp,
-        projectId,
-      });
-    }
-    if (discovered.length > 0) await index.mergeDiscoveredSessions(discovered);
-  }
-
   async getOrCreateActiveSession(): Promise<AgentSession> {
     if (this.disposed) {
       throw new Error("AgentSessionManager has been shut down");
@@ -1074,10 +974,6 @@ export class AgentSessionManager {
         .applyInitialSessionConfig?.(session, getSettings(), seed)
         .catch((e) => logWarn(`[AgentMode] applyInitialSessionConfig failed for ${resolvedId}`, e));
       await replayPersistedMode(session, mode);
-      // OpenCode and Codex list every session in the folder, and Recent chats adds what they list unless the index tombstones it.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
-      const sessionId = session.getBackendSessionId();
-      if (sessionId) await this.opts.sessionIndex?.deleteSession(resolvedId, sessionId);
     } catch (error) {
       await session.dispose();
       throw error;

@@ -72,13 +72,6 @@ export class AgentModelPreloader {
     return entry;
   }
 
-  getWarmProcs(): Array<{ backendId: BackendId; proc: BackendProcess }> {
-    return Array.from(this.warm.entries(), ([backendId, entry]) => ({
-      backendId,
-      proc: entry.proc,
-    }));
-  }
-
   preload(backendId: BackendId): Promise<void> {
     if (this.disposed) return Promise.resolve();
     const existing = this.inflight.get(backendId);

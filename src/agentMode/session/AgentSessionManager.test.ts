@@ -497,7 +497,6 @@ function buildManager(options: ManagerOptions = {}): AgentSessionManager {
         shutdown: jest.fn(),
         clearCached: jest.fn(),
         takeWarm: jest.fn(() => null),
-        getWarmProcs: jest.fn(() => []),
         ...options.preloader,
       } as unknown as ManagerDeps["modelPreloader"],
       persistenceManager: options.persistence as ManagerDeps["persistenceManager"],
@@ -898,10 +897,7 @@ function buildHistoryHarness(opts?: {
   files?: Record<string, FakeFrontmatter>;
   hiddenFiles?: Record<string, string>;
   listSessions?: jest.Mock;
-  warmListSessions?: jest.Mock;
   indexStorage?: ReturnType<typeof makeIndexStorage>;
-  probeSessionId?: string;
-  summarizesSessionTitle?: boolean;
   backendId?: BackendId;
   installState?: InstallState;
   createBackendProcess?: jest.Mock;
@@ -961,8 +957,6 @@ function buildHistoryHarness(opts?: {
   const descriptor = buildDescriptor({
     id: backendId,
     getInstallState: jest.fn(() => opts?.installState ?? { kind: "ready", source: "custom" }),
-    summarizesSessionTitle: opts?.summarizesSessionTitle ?? true,
-    getProbeSessionId: jest.fn(() => opts?.probeSessionId),
     applyInitialSessionConfig: opts?.applyInitialSessionConfig,
     applySelection: opts?.applySelection,
     ...(opts?.createBackendProcess
@@ -984,12 +978,6 @@ function buildHistoryHarness(opts?: {
     sessionIndex: index,
     onChatReopened: opts?.onChatReopened,
     preloader: {
-      getWarmProcs: jest.fn(() => {
-        if (!opts?.warmListSessions) return [];
-        const proc: Record<string, unknown> = { ...makeMockBackendProcess() };
-        if (opts.warmListSessions) proc.listSessions = opts.warmListSessions;
-        return [{ backendId, proc }];
-      }),
       refresh: jest.fn(async () => undefined),
     },
   });
@@ -997,6 +985,7 @@ function buildHistoryHarness(opts?: {
 }
 
 const HISTORY_PROJECT_ID = "proj-1";
+const ISSUE_977 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/977";
 
 describe("AgentSessionManager", () => {
   describe("AgentSessionManager", () => {
@@ -1787,21 +1776,39 @@ describe("AgentSessionManager", () => {
         expect(mockValidateLicenseKey.mock.calls[0][1]).toEqual({ trigger: "custom_agents" });
       });
 
-      it(`tombstones an asked agent's chat in the chat index so a sweep of the agent's sessions never lists it in Recent chats (${ISSUE_944})`, async () => {
-        const sessionIndex = { deleteSession: jest.fn(async () => undefined) };
-        const mgr = buildManager({ sessionIndex: sessionIndex as unknown as AgentSessionIndex });
-
-        const session = await mgr.startUnlistedSession({
+      it(`never records an asked agent's chat, so Recent chats leaves it out even when the chat index is lost and OpenCode still lists it (${ISSUE_977})`, async () => {
+        jest.useFakeTimers();
+        const indexStorage = makeIndexStorage();
+        const { manager, index } = buildHistoryHarness({ indexStorage });
+        const listed = await manager.createSession("opencode");
+        const asked = await manager.startUnlistedSession({
           projectId: GLOBAL_SCOPE,
           mode: null,
           agent: MAYA,
           observeSessionEvent,
         });
+        const askedId = asked.getBackendSessionId()!;
 
-        expect(sessionIndex.deleteSession).toHaveBeenCalledWith(
-          "opencode",
-          session.getBackendSessionId()
-        );
+        for (const session of [listed, asked]) {
+          getSessionTestHandle(session).sendPrompt();
+          getSessionTestHandle(session).setMessages([{ message: "Draft the release notes" }], true);
+        }
+        await jest.advanceTimersByTimeAsync(2000);
+        await index.flushOrThrow();
+
+        expect((await index.getEntries()).map((e) => e.sessionId)).toEqual([
+          listed.getBackendSessionId(),
+        ]);
+
+        const listSessions = jest.fn(async () => ({
+          sessions: [
+            { sessionId: askedId, cwd: "/vault", title: "Release notes", updatedAt: null },
+          ],
+        }));
+        const afterIndexLost = buildHistoryHarness({ listSessions });
+        await afterIndexLost.manager.createSession("opencode");
+
+        expect(await afterIndexLost.manager.getChatHistoryItems()).toEqual([]);
       });
 
       it(`forgets an asked agent's chat and its Copilot tools when the chat closes (${ISSUE_944})`, async () => {
@@ -1835,17 +1842,15 @@ describe("AgentSessionManager", () => {
         expect(mockSessionDispose).toHaveBeenCalledTimes(1);
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/945 carries on an asked agent's saved conversation, keeping it out of Recent chats", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/945 carries on an asked agent's saved conversation in a chat that stays unlisted", async () => {
         const loadSession = jest.fn(async ({ sessionId }: { sessionId: string }) => ({
           sessionId,
           state: { model: null, mode: null },
         }));
-        const sessionIndex = { deleteSession: jest.fn(async () => undefined) };
         const mgr = buildManager({
           descriptor: buildDescriptor({
             createBackendProcess: () => ({ ...makeMockBackendProcess(), loadSession }),
           }),
-          sessionIndex: sessionIndex as unknown as AgentSessionIndex,
         });
 
         const session = await mgr.startUnlistedSession({
@@ -1862,7 +1867,6 @@ describe("AgentSessionManager", () => {
         expect(session.getBackendSessionId()).toBe("maya-earlier");
         expect(sessionCreateSpy).not.toHaveBeenCalled();
         expect(mgr.isUnlistedSession(session.internalId)).toBe(true);
-        expect(sessionIndex.deleteSession).toHaveBeenCalledWith("opencode", "maya-earlier");
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/945 starts a new chat for an asked agent whose saved conversation its agent no longer has", async () => {
@@ -6301,83 +6305,36 @@ describe("AgentSessionManager", () => {
         expect(await manager.getChatHistoryItems()).toHaveLength(0);
       });
 
-      it("sweeps the preloader's warm probe procs before any chat starts a backend", async () => {
-        const warmListSessions = jest.fn(async () => ({
-          sessions: [
-            {
-              sessionId: "pre-existing",
-              cwd: "/vault",
-              title: "Chat from before this app session",
-              updatedAt: new Date(6_000).toISOString(),
-            },
-          ],
-        }));
-        const { manager } = buildHistoryHarness({ warmListSessions });
-        const items = await manager.getChatHistoryItems();
-        expect(warmListSessions).toHaveBeenCalledWith({ cwd: "/vault" });
-        expect(items).toHaveLength(1);
-        expect(items[0]?.id).toBe(buildNativeChatId("opencode", "pre-existing"));
-      });
-
-      it("sweeps running backends' listSessions into history, scoped to the vault cwd", async () => {
+      it(`lists only the chats Copilot recorded, leaving out the other OpenCode sessions in the vault folder (${ISSUE_977})`, async () => {
         const listSessions = jest.fn(async () => ({
           sessions: [
+            { sessionId: "recorded", cwd: "/vault", title: "Recorded chat", updatedAt: null },
             {
-              sessionId: "in-vault",
+              sessionId: "outside-copilot",
               cwd: "/vault",
-              title: "Real chat",
+              title: "Started in a terminal",
               updatedAt: new Date(7_000).toISOString(),
             },
-            {
-              sessionId: "other-vault",
-              cwd: "/elsewhere",
-              title: "Foreign chat",
-              updatedAt: null,
-            },
-            { sessionId: "untitled", cwd: "/vault", title: null, updatedAt: null },
-            {
-              sessionId: "placeholder",
-              cwd: "/vault",
-              title: "New session - 1",
-              updatedAt: null,
-            },
-            { sessionId: "probe-1", cwd: "/vault", title: "Probe", updatedAt: null },
           ],
         }));
-        const { manager } = buildHistoryHarness({ listSessions, probeSessionId: "probe-1" });
+        const { manager, index } = buildHistoryHarness({ listSessions });
+        await index.recordSession({
+          backendId: "opencode",
+          sessionId: "recorded",
+          title: "Recorded chat",
+          createdAtMs: 1_000,
+          lastAccessedAtMs: 2_000,
+        });
         await manager.createSession("opencode");
 
-        const items = await manager.getChatHistoryItems();
-        expect(listSessions).toHaveBeenCalledWith({ cwd: "/vault" });
-        const native = items.filter((i) => i.id.startsWith("copilot-agent-session://"));
-        expect(native).toHaveLength(1);
-        expect(native[0]?.id).toBe(buildNativeChatId("opencode", "in-vault"));
-        expect(native[0]?.title).toBe("Real chat");
-        expect(native[0]?.lastAccessedAt.getTime()).toBe(7_000);
-      });
-
-      it("skips native title discovery for non-summarizing backends (codex)", async () => {
-        const listSessions = jest.fn(async () => ({
-          sessions: [
-            {
-              sessionId: "ctx-leak",
-              cwd: "/vault",
-              title: "<copilot-context> The user attached the following vault items",
-              updatedAt: null,
-            },
-          ],
-        }));
-        const { manager } = buildHistoryHarness({ listSessions, summarizesSessionTitle: false });
-        await manager.createSession("opencode");
-
-        const items = await manager.getChatHistoryItems();
-        expect(listSessions).not.toHaveBeenCalled();
-        expect(items.filter((i) => i.id.startsWith("copilot-agent-session://"))).toHaveLength(0);
+        expect((await manager.getChatHistoryItems()).map((i) => i.id)).toEqual([
+          buildNativeChatId("opencode", "recorded"),
+        ]);
       });
     });
 
     describe("deleteChatHistory()", () => {
-      it("tombstones a native entry without touching persistence", async () => {
+      it("removes a native entry without touching persistence", async () => {
         const { manager, index, persistence } = buildHistoryHarness();
         await index.recordSession({
           backendId: "opencode",
@@ -6388,11 +6345,32 @@ describe("AgentSessionManager", () => {
         });
         await manager.deleteChatHistory(buildNativeChatId("opencode", "s1"));
         expect(await manager.getChatHistoryItems()).toHaveLength(0);
-        expect(await index.isTombstoned("opencode", "s1")).toBe(true);
+        expect(await index.getEntry("opencode", "s1")).toBeNull();
         expect(persistence.deleteFile).not.toHaveBeenCalled();
       });
 
-      it("deletes a markdown chat and also tombstones its native twin", async () => {
+      it(`keeps a deleted chat off the list after a reload while OpenCode still has the session (${ISSUE_977})`, async () => {
+        const indexStorage = makeIndexStorage();
+        const { manager, index } = buildHistoryHarness({ indexStorage });
+        await index.recordSession({
+          backendId: "opencode",
+          sessionId: "s1",
+          title: "Doomed",
+          createdAtMs: 1_000,
+          lastAccessedAtMs: 2_000,
+        });
+        await manager.deleteChatHistory(buildNativeChatId("opencode", "s1"));
+
+        const listSessions = jest.fn(async () => ({
+          sessions: [{ sessionId: "s1", cwd: "/vault", title: "Doomed", updatedAt: null }],
+        }));
+        const reloaded = buildHistoryHarness({ indexStorage, listSessions });
+        await reloaded.manager.createSession("opencode");
+
+        expect(await reloaded.manager.getChatHistoryItems()).toEqual([]);
+      });
+
+      it("deletes a markdown chat and also removes its native twin", async () => {
         const { manager, index, persistence } = buildHistoryHarness({
           files: {
             "chats/agent__a.md": {
@@ -6411,7 +6389,7 @@ describe("AgentSessionManager", () => {
         });
         await manager.deleteChatHistory("chats/agent__a.md");
         expect(persistence.deleteFile).toHaveBeenCalledWith("chats/agent__a.md");
-        expect(await index.isTombstoned("opencode", "s1")).toBe(true);
+        expect(await index.getEntry("opencode", "s1")).toBeNull();
       });
 
       it("https://github.com/logancyang/obsidian-copilot/issues/2888 touches only Copilot's own copy of the chat", async () => {
@@ -6490,17 +6468,17 @@ describe("AgentSessionManager", () => {
         expect((await manager.getChatHistoryItems()).map((item) => item.id)).toContain(notePath);
 
         const reloaded = reload();
-        expect(await reloaded.index.isTombstoned("opencode", "s1")).toBe(false);
+        expect(await reloaded.index.getEntry("opencode", "s1")).not.toBeNull();
         expect((await reloaded.manager.getChatHistoryItems()).map((item) => item.id)).toContain(
           notePath
         );
         await reloaded.manager.deleteChatHistory(notePath);
         expect(notes[notePath]).toBeUndefined();
         expect(await reload().manager.getChatHistoryItems()).toEqual([]);
-        expect(await reload().index.isTombstoned("opencode", "s1")).toBe(true);
+        expect(await reload().index.getEntry("opencode", "s1")).toBeNull();
       });
 
-      it("https://github.com/logancyang/obsidian-copilot/issues/2888 keeps a note visible after file-removal failure and reload despite its persisted marker, and allows retry", async () => {
+      it("https://github.com/logancyang/obsidian-copilot/issues/2888 keeps a note visible after file-removal failure and reload despite its removed index entry, and allows retry", async () => {
         const { manager, persistence, notePath, content, notes, reload } =
           await persistedNoteFixture();
         persistence.deleteFile.mockRejectedValueOnce(new Error("locked"));
@@ -6509,7 +6487,7 @@ describe("AgentSessionManager", () => {
         expect(notes[notePath]).toBe(content);
         expect((await manager.getChatHistoryItems()).map((item) => item.id)).toContain(notePath);
         const reloaded = reload();
-        expect(await reloaded.index.isTombstoned("opencode", "s1")).toBe(true);
+        expect(await reloaded.index.getEntry("opencode", "s1")).toBeNull();
         expect((await reloaded.manager.getChatHistoryItems()).map((item) => item.id)).toContain(
           notePath
         );
@@ -6547,7 +6525,7 @@ describe("AgentSessionManager", () => {
           await manager.deleteChatHistory(chatId);
 
           expect(manager.getSessions()).toEqual([]);
-          expect(await index.isTombstoned("opencode", sessionId)).toBe(true);
+          expect(await index.getEntry("opencode", sessionId)).toBeNull();
         });
 
         it.each(["a held autosave", "a held earlier autosave", "a held manual save"])(
@@ -7495,7 +7473,6 @@ describe("AgentSessionManager", () => {
           expect((await index.getEntries()).map((e) => e.sessionId)).toEqual([
             session.getBackendSessionId(),
           ]);
-          expect(await index.isTombstoned("opencode", "gone-1")).toBe(true);
           expect((await manager.getChatHistoryItems()).map((i) => i.id)).toEqual([NOTE]);
         });
 

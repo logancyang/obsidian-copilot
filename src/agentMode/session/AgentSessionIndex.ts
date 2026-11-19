@@ -16,7 +16,6 @@ export interface AgentSessionIndexEntry {
 interface AgentSessionIndexFile {
   version: 1;
   entries: AgentSessionIndexEntry[];
-  tombstones: Record<string, number>;
 }
 
 export interface AgentSessionIndexStorage {
@@ -27,7 +26,6 @@ export interface AgentSessionIndexStorage {
 
 const SAVE_DEBOUNCE_MS = 500;
 const MAX_ENTRIES = 500;
-const MAX_TOMBSTONES = 500;
 
 function entryKey(backendId: string, sessionId: string): string {
   return `${backendId}:${sessionId}`;
@@ -66,7 +64,6 @@ export function sanitizeModel(raw: unknown): ModelSelection | undefined {
 
 export class AgentSessionIndex {
   private entries = new Map<string, AgentSessionIndexEntry>();
-  private tombstones = new Map<string, number>();
   private loadPromise: Promise<void> | null = null;
   private saveTimer: number | null = null;
   private writeChain: Promise<void> = Promise.resolve();
@@ -89,7 +86,6 @@ export class AgentSessionIndex {
   async recordSession(entry: AgentSessionIndexEntry): Promise<void> {
     await this.ensureLoaded();
     const key = entryKey(entry.backendId, entry.sessionId);
-    this.tombstones.delete(key);
     const existing = this.entries.get(key);
     const keepExistingTitle = entry.title == null;
     this.entries.set(key, {
@@ -107,42 +103,6 @@ export class AgentSessionIndex {
       agent: entry.agent ?? existing?.agent,
     });
     this.scheduleSave();
-  }
-
-  async mergeDiscoveredSessions(entries: AgentSessionIndexEntry[]): Promise<void> {
-    await this.ensureLoaded();
-    let changed = false;
-    for (const entry of entries) {
-      const key = entryKey(entry.backendId, entry.sessionId);
-      if (this.tombstones.has(key)) continue;
-      const existing = this.entries.get(key);
-      const keepExistingTitle = existing?.titleSource === "user" || entry.title == null;
-      const next: AgentSessionIndexEntry = {
-        backendId: entry.backendId,
-        sessionId: entry.sessionId,
-        title: keepExistingTitle ? (existing?.title ?? null) : entry.title,
-        titleSource: keepExistingTitle ? existing?.titleSource : "agent",
-        createdAtMs: Math.min(entry.createdAtMs, existing?.createdAtMs ?? entry.createdAtMs),
-        lastAccessedAtMs: Math.max(
-          entry.lastAccessedAtMs,
-          existing?.lastAccessedAtMs ?? entry.lastAccessedAtMs
-        ),
-        projectId: existing?.projectId ?? entry.projectId,
-        model: existing?.model,
-        agent: existing?.agent,
-      };
-      if (
-        !existing ||
-        existing.title !== next.title ||
-        existing.createdAtMs !== next.createdAtMs ||
-        existing.lastAccessedAtMs !== next.lastAccessedAtMs ||
-        existing.projectId !== next.projectId
-      ) {
-        this.entries.set(key, next);
-        changed = true;
-      }
-    }
-    if (changed) this.scheduleSave();
   }
 
   async setTitle(backendId: BackendId, sessionId: string, title: string): Promise<void> {
@@ -170,15 +130,8 @@ export class AgentSessionIndex {
 
   async deleteSession(backendId: BackendId, sessionId: string): Promise<void> {
     await this.ensureLoaded();
-    const key = entryKey(backendId, sessionId);
-    this.entries.delete(key);
-    this.tombstones.set(key, Date.now());
+    this.entries.delete(entryKey(backendId, sessionId));
     this.scheduleSave();
-  }
-
-  async isTombstoned(backendId: BackendId, sessionId: string): Promise<boolean> {
-    await this.ensureLoaded();
-    return this.tombstones.has(entryKey(backendId, sessionId));
   }
 
   async flush(): Promise<void> {
@@ -216,11 +169,6 @@ export class AgentSessionIndex {
         const entry = sanitizeEntry(candidate);
         if (entry) this.entries.set(entryKey(entry.backendId, entry.sessionId), entry);
       }
-      if (raw.tombstones && typeof raw.tombstones === "object") {
-        for (const [key, value] of Object.entries(raw.tombstones)) {
-          if (typeof value === "number" && value > 0) this.tombstones.set(key, value);
-        }
-      }
     } catch (e) {
       logWarn(`[AgentMode] failed to load agent session index at ${this.filePath}`, e);
     }
@@ -251,16 +199,7 @@ export class AgentSessionIndex {
         .slice(0, MAX_ENTRIES);
       this.entries = new Map(entries.map((e) => [entryKey(e.backendId, e.sessionId), e]));
     }
-    let tombstonePairs = Array.from(this.tombstones.entries());
-    if (tombstonePairs.length > MAX_TOMBSTONES) {
-      tombstonePairs = tombstonePairs.sort((a, b) => b[1] - a[1]).slice(0, MAX_TOMBSTONES);
-      this.tombstones = new Map(tombstonePairs);
-    }
-    const file: AgentSessionIndexFile = {
-      version: 1,
-      entries,
-      tombstones: Object.fromEntries(tombstonePairs),
-    };
+    const file: AgentSessionIndexFile = { version: 1, entries };
     return JSON.stringify(file, null, 2);
   }
 }
