@@ -569,7 +569,7 @@ describe("AgentTrail", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: /read 1 file/i }));
-    expect(screen.getByRole("link", { name: "notes/a.md" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "a.md" })).toBeTruthy();
 
     rerenderTrail({
       parts: [READ_A, LINT, READ_B],
@@ -579,7 +579,7 @@ describe("AgentTrail", () => {
 
     const grown = screen.getByRole("button", { name: /read 2 files/i });
     expect(grown.getAttribute("aria-expanded")).toBe("true");
-    expect(screen.getByRole("link", { name: "notes/b.md" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "b.md" })).toBeTruthy();
   });
 
   it("groups a sub-agent's children too", () => {
@@ -629,7 +629,7 @@ describe("AgentTrail", () => {
       turnStopReason: undefined,
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /Read notes\/a.md/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Read a\.md/ }));
     expect(screen.getByText("file contents")).toBeTruthy();
 
     rerenderTrail({

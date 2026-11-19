@@ -6,10 +6,16 @@ import { toolUseLabel } from "@/agentMode/session/copilotToolCalls";
 import { formatDuration } from "@/lib/duration";
 import { humanizeToolName } from "@/lib/toolName";
 import { diffTargetPaths, primaryEditTargetPath } from "@/agentMode/session/editTargets";
+import { basename } from "@/utils/pathUtils";
 import { isAbsolutePath } from "@/utils/vaultPath";
 
 export interface ToolSummaryContext {
   vaultBase: string | null;
+}
+
+export interface ToolTarget {
+  path: string;
+  label: string;
 }
 
 export interface ToolSummary {
@@ -17,7 +23,7 @@ export interface ToolSummary {
   collapsedLine: (part: ToolCallPart, ctx?: ToolSummaryContext) => string;
   outcome: (part: ToolCallPart) => string | null;
   expandedDetails?: (part: ToolCallPart) => string | null;
-  targetPath?: (part: ToolCallPart, ctx?: ToolSummaryContext) => string | null;
+  target?: (part: ToolCallPart, ctx?: ToolSummaryContext) => ToolTarget | null;
 }
 
 export function lookupToolSummary(part: ToolCallPart): ToolSummary {
@@ -109,18 +115,15 @@ function createsNewFile(part: ToolCallPart): boolean {
   return diffs.length > 0 && diffs.every((o) => o.oldText === null);
 }
 
-function targetFromPath(part: ToolCallPart, vaultBase: string | null): string | null {
-  return primaryEditTargetPath(
+function fileTarget(part: ToolCallPart, ctx?: ToolSummaryContext): ToolTarget | null {
+  const path = primaryEditTargetPath(
     { locations: part.locations, input: part.input, diffPaths: diffTargetPaths(part.output) },
-    vaultBase
+    ctx?.vaultBase ?? null
   );
-}
-
-export function displayTargetFromPath(part: ToolCallPart, vaultBase: string | null): string | null {
-  const path = targetFromPath(part, vaultBase);
-  if (!path || !isAbsolutePath(path)) return path;
-  const leaf = path.replace(/\\/g, "/").replace(/\/+$/, "").split("/").pop();
-  return leaf ? `…/${leaf}` : "…";
+  if (!path) return null;
+  const name = basename(path);
+  if (!isAbsolutePath(path)) return { path, label: name };
+  return { path, label: name ? `…/${name}` : "…" };
 }
 
 function skillNameFromInput(part: ToolCallPart): string | null {
@@ -167,20 +170,20 @@ function approxTokens(part: ToolCallPart): number {
 const READ_SUMMARY: ToolSummary = {
   icon: pickToolIcon({ vendorToolName: "Read" }),
   collapsedLine: (p, ctx) =>
-    `${verb(p, "Reading", "Read")} ${displayTargetFromPath(p, ctx?.vaultBase ?? null) ?? targetFromTitle(p)}`,
+    `${verb(p, "Reading", "Read")} ${fileTarget(p, ctx)?.label ?? targetFromTitle(p)}`,
   outcome: (p) => {
     const t = approxTokens(p);
     return t > 0 ? `~${formatTokens(t)} tokens` : null;
   },
-  targetPath: (p, ctx) => targetFromPath(p, ctx?.vaultBase ?? null),
+  target: fileTarget,
 };
 
 const LIST_SUMMARY: ToolSummary = {
   icon: pickToolIcon({ vendorToolName: "LS" }),
   collapsedLine: (p, ctx) => {
     const v = verb(p, "Listing", "Listed");
-    const path = displayTargetFromPath(p, ctx?.vaultBase ?? null);
-    return path ? `${v} ${path}` : `${v} vault root`;
+    const folder = fileTarget(p, ctx)?.label;
+    return folder ? `${v} ${folder}` : `${v} vault root`;
   },
   outcome: () => null,
 };
@@ -191,9 +194,7 @@ const EDIT_SUMMARY: ToolSummary = {
     const diffPathCount = diffTargetPaths(p.output).length;
     const lead = fileChangeVerb(p, "Editing", "Edited", createsNewFile(p) ? "create" : "edit");
     return `${lead} ${
-      diffPathCount > 1
-        ? pluralize(diffPathCount, "file")
-        : (displayTargetFromPath(p, ctx?.vaultBase ?? null) ?? "files")
+      diffPathCount > 1 ? pluralize(diffPathCount, "file") : (fileTarget(p, ctx)?.label ?? "files")
     }`;
   },
   outcome: (p) => {
@@ -201,8 +202,7 @@ const EDIT_SUMMARY: ToolSummary = {
     if (added === 0 && removed === 0) return null;
     return `+${added} / −${removed} lines`;
   },
-  targetPath: (p, ctx) =>
-    diffTargetPaths(p.output).length > 1 ? null : targetFromPath(p, ctx?.vaultBase ?? null),
+  target: (p, ctx) => (diffTargetPaths(p.output).length > 1 ? null : fileTarget(p, ctx)),
 };
 
 const BASH_SUMMARY: ToolSummary = {
@@ -371,13 +371,13 @@ const KIND_FETCH_SUMMARY: ToolSummary = {
 const KIND_DELETE_SUMMARY: ToolSummary = {
   icon: pickToolIcon({ toolKind: "delete" }),
   collapsedLine: (p, ctx) =>
-    `${fileChangeVerb(p, "Deleting", "Deleted", "delete")} ${displayTargetFromPath(p, ctx?.vaultBase ?? null) ?? targetFromTitle(p)}`,
+    `${fileChangeVerb(p, "Deleting", "Deleted", "delete")} ${fileTarget(p, ctx)?.label ?? targetFromTitle(p)}`,
   outcome: () => null,
 };
 const KIND_MOVE_SUMMARY: ToolSummary = {
   icon: pickToolIcon({ toolKind: "move" }),
   collapsedLine: (p, ctx) =>
-    `${verb(p, "Moving", "Moved")} ${displayTargetFromPath(p, ctx?.vaultBase ?? null) ?? targetFromTitle(p)}`,
+    `${verb(p, "Moving", "Moved")} ${fileTarget(p, ctx)?.label ?? targetFromTitle(p)}`,
   outcome: () => null,
 };
 const KIND_SWITCH_MODE_SUMMARY: ToolSummary = {

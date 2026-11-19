@@ -1,7 +1,6 @@
 import { readCodexCopilotTools } from "@/agentMode/backends/codex/codexCopilotToolCalls";
 import { directCopilotToolUse } from "@/agentMode/session/copilotToolCalls";
 import {
-  displayTargetFromPath,
   lookupToolSummary,
   extractSubAgentInputPrompt,
   extractSubAgentReturnText,
@@ -53,13 +52,18 @@ describe("toolSummaries", () => {
       expect(s.outcome(t)).toMatch(/tokens$/);
     });
 
-    it("renders Read paths relative to the vault root", () => {
+    it("names a read file by its file name and keeps the vault path as the link target", () => {
       const t = tool({
         vendorToolName: "Read",
         title: "read",
         locations: [{ path: "/Users/me/vault/notes/music-theory.md" }],
       });
-      expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("Read notes/music-theory.md");
+      const summary = lookupToolSummary(t);
+      expect(summary.collapsedLine(t, CTX)).toBe("Read music-theory.md");
+      expect(summary.target?.(t, CTX)).toEqual({
+        path: "notes/music-theory.md",
+        label: "music-theory.md",
+      });
     });
 
     it("hides parent directories outside the vault without changing the navigation target", () => {
@@ -70,7 +74,7 @@ describe("toolSummaries", () => {
       });
       const summary = lookupToolSummary(t);
       expect(summary.collapsedLine(t, CTX)).toBe("Read …/passwd");
-      expect(summary.targetPath?.(t, CTX)).toBe("/etc/passwd");
+      expect(summary.target?.(t, CTX)).toEqual({ path: "/etc/passwd", label: "…/passwd" });
     });
 
     it("hides parent directories for ACP read paths without vault context", () => {
@@ -117,12 +121,12 @@ describe("toolSummaries", () => {
       expect(s).toBe(taskEquiv);
     });
 
-    it("maps the LS tool onto the list summary", () => {
+    it("maps the LS tool onto the list summary and names the folder without its parents", () => {
       const list = tool({
         vendorToolName: "LS",
         toolKind: "read",
-        title: "LS Daily",
-        input: { path: "Daily" },
+        title: "LS Journal/Daily",
+        input: { path: "Journal/Daily" },
       });
       expect(lookupToolSummary(list).collapsedLine(list, CTX)).toBe("Listed Daily");
     });
@@ -201,7 +205,7 @@ describe("toolSummaries", () => {
         mcpServer: "srv",
         locations: [{ path: "/Users/me/vault/notes/x.md" }],
       });
-      expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("srv · Read notes/x.md");
+      expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("srv · Read x.md");
     });
 
     it("shows an ACP backend's friendly multi-word title verbatim", () => {
@@ -398,7 +402,7 @@ describe("toolSummaries", () => {
         toolKind: "delete",
         title: "old.md",
         status: "in_progress",
-        input: { filePath: "/Users/me/vault/old.md" },
+        input: { filePath: "/Users/me/vault/archive/old.md" },
       });
       const summary = lookupToolSummary(inflight);
       expect(summary.collapsedLine(inflight, CTX)).toBe("Deleting old.md");
@@ -407,6 +411,20 @@ describe("toolSummaries", () => {
       );
       expect(summary.collapsedLine({ ...inflight, status: "failed" }, CTX)).toBe(
         "Didn't delete old.md"
+      );
+    });
+
+    it("uses Moving and Moved with the moved file's name", () => {
+      const inflight = tool({
+        toolKind: "move",
+        title: "draft.md",
+        status: "in_progress",
+        input: { filePath: "/Users/me/vault/inbox/draft.md" },
+      });
+      const summary = lookupToolSummary(inflight);
+      expect(summary.collapsedLine(inflight, CTX)).toBe("Moving draft.md");
+      expect(summary.collapsedLine({ ...inflight, status: "completed" }, CTX)).toBe(
+        "Moved draft.md"
       );
     });
 
@@ -425,7 +443,7 @@ describe("toolSummaries", () => {
       expect(lookupToolSummary(read).collapsedLine(read, CTX)).toBe("Read plan.md");
     });
 
-    it("uses a single Codex diff path as the edit target", () => {
+    it("names a single edited file by its file name and keeps the vault path as the link target", () => {
       const t = tool({
         toolKind: "edit",
         title: "Editing files",
@@ -440,14 +458,23 @@ describe("toolSummaries", () => {
       });
       const summary = lookupToolSummary(t);
 
-      expect(summary.collapsedLine(t, CTX)).toBe("Edited src/agentMode/ui/toolSummaries.ts");
-      expect(summary.targetPath?.(t, CTX)).toBe("src/agentMode/ui/toolSummaries.ts");
+      expect(summary.collapsedLine(t, CTX)).toBe("Edited toolSummaries.ts");
+      expect(summary.target?.(t, CTX)).toEqual({
+        path: "src/agentMode/ui/toolSummaries.ts",
+        label: "toolSummaries.ts",
+      });
+    });
 
-      const outsideVault = {
-        ...t,
-        output: [{ ...t.output![0], path: "/Users/me/private/draft.md" }],
-      };
-      expect(summary.collapsedLine(outsideVault, CTX)).toBe("Edited …/draft.md");
+    it("marks an edited file outside the vault with a leading ellipsis", () => {
+      const t = tool({
+        toolKind: "edit",
+        title: "Editing files",
+        output: [
+          { type: "diff", path: "/Users/me/private/draft.md", oldText: "before", newText: "after" },
+        ],
+      });
+
+      expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("Edited …/draft.md");
     });
 
     it("counts unique Codex diff paths for multi-file edits", () => {
@@ -466,7 +493,7 @@ describe("toolSummaries", () => {
       expect(summary.collapsedLine(inflight, CTX)).toBe("Editing 2 files");
       const done = { ...inflight, status: "completed" as const };
       expect(summary.collapsedLine(done, CTX)).toBe("Edited 2 files");
-      expect(summary.targetPath?.(done, CTX)).toBeNull();
+      expect(summary.target?.(done, CTX)).toBeNull();
     });
 
     it("preserves OpenCode filePath edit targets", () => {
@@ -557,22 +584,6 @@ describe("toolSummaries", () => {
       expect(lookupToolSummary(read).expandedDetails).toBeUndefined();
       const edit = tool({ vendorToolName: "Edit", title: "edit" });
       expect(lookupToolSummary(edit).expandedDetails).toBeUndefined();
-    });
-  });
-
-  describe("displayTargetFromPath()", () => {
-    it("shows an in-vault target as its vault-relative path", () => {
-      const t = tool({ input: { file_path: "/Users/me/vault/notes/today.md" } });
-      expect(displayTargetFromPath(t, CTX.vaultBase)).toBe("notes/today.md");
-    });
-
-    it("shortens an out-of-vault target to its file name", () => {
-      const t = tool({ input: { file_path: "/Users/me/private/draft.md" } });
-      expect(displayTargetFromPath(t, CTX.vaultBase)).toBe("…/draft.md");
-    });
-
-    it("returns null when the tool call names no path", () => {
-      expect(displayTargetFromPath(tool({ input: {} }), CTX.vaultBase)).toBeNull();
     });
   });
 

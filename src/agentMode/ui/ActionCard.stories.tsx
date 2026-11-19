@@ -36,3 +36,25 @@ export const ImageFileRead: StoryObj<Props> = {
   },
 };
 export const ExpandedImageFileRead: StoryObj<Props> = { args: { open: true } };
+
+const NESTED_NOTE_PATH = "copilot/projects/Launch plan/Pitch for people who already use AI.md";
+const nestedNoteEdit: Props["part"] = {
+  kind: "tool_call",
+  id: "edit-nested-note",
+  title: "Edit",
+  vendorToolName: "Edit",
+  status: "completed",
+  input: { file_path: NESTED_NOTE_PATH },
+  output: [
+    {
+      type: "diff",
+      path: NESTED_NOTE_PATH,
+      oldText: "Copilot answers questions about your notes.",
+      newText: "Copilot keeps your knowledge organized while you write.",
+    },
+  ],
+};
+export const NestedNoteEdit: StoryObj<Props> = { args: { part: nestedNoteEdit } };
+export const ExpandedNestedNoteEdit: StoryObj<Props> = {
+  args: { part: nestedNoteEdit, open: true },
+};

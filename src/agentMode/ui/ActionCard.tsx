@@ -2,7 +2,7 @@ import React, { useMemo } from "react";
 import { CircleStop, Loader2, Check, X } from "lucide-react";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
 import type { AgentToolStatus } from "@/agentMode/session/types";
-import { displayTargetFromPath, lookupToolSummary } from "@/agentMode/ui/toolSummaries";
+import { lookupToolSummary } from "@/agentMode/ui/toolSummaries";
 import { renderDiff } from "@/agentMode/ui/diffRender";
 import { getVaultBase } from "@/utils/vaultPath";
 import { openLinkClickProps, openVaultPath } from "@/utils/openVaultPath";
@@ -25,11 +25,7 @@ export const ActionCard: React.FC<ActionCardProps> = ({ part, open, onToggle }) 
   const outputs = part.output ?? [];
   const details = summary.expandedDetails?.(part) ?? null;
   const expandable = outputs.length > 0 || details !== null;
-  const targetPath =
-    part.status === "completed" ? (summary.targetPath?.(part, summaryCtx) ?? null) : null;
-  const link = targetPath
-    ? { path: targetPath, label: displayTargetFromPath(part, summaryCtx.vaultBase) ?? targetPath }
-    : null;
+  const link = part.status === "completed" ? (summary.target?.(part, summaryCtx) ?? null) : null;
 
   return (
     <AgentActivityCard
