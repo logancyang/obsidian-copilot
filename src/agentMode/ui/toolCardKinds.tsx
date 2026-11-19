@@ -6,6 +6,7 @@ import { TaskCard } from "@/agentMode/ui/TaskCard";
 import { excalidrawCardKind } from "@/excalidraw/agentMode/excalidrawCardKind";
 import { miyoCardKind } from "@/miyo/agentMode/miyoCardKind";
 import { memorySaveCardKind } from "@/agents/agentMode/memorySaveCards";
+import { agentToolLineKind } from "@/agents/agentMode/agentToolLineKind";
 
 function launchedTask(part: ToolCallPart, tasks: AgentTasksContextValue | null) {
   return tasks?.tasks.find((task) => task.toolCallId === part.id);
@@ -42,6 +43,7 @@ const interactiveCardKind: ToolCardKind = {
 
 export const TOOL_CARD_KINDS: readonly ToolCardKind[] = [
   memorySaveCardKind,
+  agentToolLineKind,
   taskLaunchCardKind,
   excalidrawCardKind,
   miyoCardKind,

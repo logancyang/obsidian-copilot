@@ -41,6 +41,7 @@ jest.mock("obsidian", () => {
       register() {}
     },
     App: class {},
+    Modal: class {},
     FileSystemAdapter: class {},
     WorkspaceLeaf: class {},
     Notice: class {},

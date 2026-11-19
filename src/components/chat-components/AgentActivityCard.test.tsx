@@ -13,6 +13,14 @@ describe("AgentActivityCard", () => {
       expect(screen.queryByRole("button")).toBeNull();
     });
 
+    it("shows an element given as its icon, such as an agent's face, in the icon's place (https://github.com/Brevilabs/obsidian-copilot-private/issues/947)", () => {
+      const { container } = render(
+        <AgentActivityCard icon={<img src="face.webp" alt="" />} label="Asked Maya" />
+      );
+
+      expect(container.querySelector("img")?.getAttribute("src")).toBe("face.webp");
+    });
+
     it("toggles on click, Enter, and Space and reveals its details only while open", () => {
       const onToggle = jest.fn();
       const { rerender } = render(

@@ -7,6 +7,7 @@ Asking another custom agent from a chat with `@`: that agent works in the backgr
 - mention-ask: in an agent's chat or a Copilot chat, a message that `@`-mentions a custom agent by name, such as `@Maya what do you think of this plan?`, hands that agent the request.
 - mention-one-line: the chat's agent answers in one line, such as "Maya's reading it. I'll bring back what she says.", and its turn ends. The chat input is free while the other agent works.
 - mention-status: under the message that asked, one line per mentioned agent says where it is: `Maya is working` with a clock counting up, `Maya has a question` and `Maya needs your OK` with the clock held while she waits, `Maya finished` with how long it took and `See reply ↓`, which scrolls to the relayed reply, `Maya stopped` (`Maya stopped · Maya was deleted` when the agent was deleted), or `Maya didn't finish` with the reason: `Obsidian was closed`, or `Something went wrong` with `Details` for the error. A chat opened again shows the same lines.
+- mention-tool-lines: in the chat agent's reply, each thing it does with a mentioned agent is one line with that agent's face: `Asked Maya · <the message it sent>`, which opens to the full message, `Checked Maya's progress`, `Passed your answer to Maya` and `Stopped Maya`. A call that failed or named no agent the chat can ask keeps its ordinary row.
 - mention-keep-chatting: messages sent while the other agent works get their own answers.
 - mention-relay: when the other agent is done, a new turn at the end of the chat passes its reply on, keeping its position as strong as it was, then adding the chat agent's own view.
 - mention-reply-row: the turn starts with `<name>'s reply` and the other agent's own words set off by a bar, then a Files changed card for the files it changed; each row opens its diff.
@@ -32,6 +33,7 @@ All of these need a license that includes custom agents and at least two agents 
 
 - Ask: in a chat with another agent, send `@Maya what do you think of this plan? Six features in 90 seconds.` The agent answers in one line and its turn ends; Send is available again.
 - Status: after sending the mention, the line under the message reads `Maya is working` and its clock counts up each second. When the reply comes back it reads `Maya finished` with the time; `See reply ↓` scrolls to the reply at the end of the chat.
+- Tool line: under the reply that asked, `Asked Maya · ` and the start of the message the chat's agent sent shows with Maya's face. Choose it: the full message opens below.
 - Keep chatting: while Maya works, send an unrelated question. It gets its own answer.
 - Relay: when Maya is done, a new turn at the end of the chat shows `Maya's reply` with her words, then the chat's agent brings back her view. If she disagrees with the plan, the reply says so plainly.
 - Files changed: in `Auto` mode, send `@Maya add one line to <note>`. The relayed turn shows Files changed with that note; its row opens the diff.

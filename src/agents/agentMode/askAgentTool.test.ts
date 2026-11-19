@@ -1,14 +1,16 @@
 import type { ChatStateHost } from "@/agentMode/session/chatExtension";
 import {
   ANSWER_AGENT_TOOL_NAME,
+  CHECK_AGENT_TOOL_NAME,
+  STOP_AGENT_TOOL_NAME,
+} from "@/agents/agentMode/agentToolCalls";
+import {
   ASK_USER_TOOL_NAME,
   createAnswerAgentTool,
   createAskUserTool,
   createAskAgentTool,
-  CHECK_AGENT_TOOL_NAME,
   createCheckAgentTool,
   createStopAgentTool,
-  STOP_AGENT_TOOL_NAME,
 } from "@/agents/agentMode/askAgentTool";
 import type {
   AnswerAgentResult,
