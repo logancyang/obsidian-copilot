@@ -1,6 +1,7 @@
 import { AgentFace } from "@/agents/ui/AgentFace";
 import { ChatAgentsContext, type RunRef } from "@/agents/ui/chatAgents";
 import { AgentActivityCard } from "@/components/chat-components/AgentActivityCard";
+import { MessageSquare } from "lucide-react";
 import React, { useContext } from "react";
 
 export interface AgentMessageCardProps {
@@ -24,6 +25,7 @@ export const AgentMessageCard: React.FC<AgentMessageCardProps> = ({
   const from = agents.find((agent) => agent.slug === self)?.name ?? "Copilot";
   return (
     <AgentActivityCard
+      icon={MessageSquare}
       label={
         <>
           {before ? <span className="tw-shrink-0">{before}</span> : null}

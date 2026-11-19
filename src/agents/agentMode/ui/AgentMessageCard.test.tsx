@@ -30,6 +30,16 @@ describe("AgentMessageCard", () => {
       expect(screen.getByText("Messaged").className).not.toContain("tw-text-normal");
     });
 
+    it(`starts with a message icon in the tool-icon slot before its label, keeping the button's name (${ISSUE})`, () => {
+      render(
+        inChat(<AgentMessageCard before="Messaged" name="Leo" faceSrc={LEO.faceSrc} run={RUN} />)
+      );
+
+      const card = screen.getByRole("button", { name: "Open Coco's conversation with Leo" });
+      expect(card.firstElementChild?.querySelector("svg.lucide-message-square")).toBeTruthy();
+      expect(card.firstElementChild?.textContent).toBe("");
+    });
+
     it(`reads the name first for a label that comes after it, as "Leo stopped" (${ISSUE})`, () => {
       render(inChat(<AgentMessageCard name="Leo" after="stopped" run={RUN} />));
 
