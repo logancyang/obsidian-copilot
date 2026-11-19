@@ -4,8 +4,8 @@ A custom agent's page in the sidebar: its face, name, and title, how many chats 
 
 ## Sub-features
 
-- profile-page: the profile covers the current chat inside its tab, under the [chat tabs](chat-tabs.md), with `Back to chat` at the top. `Back to chat`, Esc, or clicking the chat's tab returns to the same chat, or the same new chat page, with its draft and scroll as they were. Switching to another tab leaves the profile.
-- profile-head: the agent's face, name, and title, with how many chats it has had and since when, such as "23 chats · since Oct 3". An agent with no title shows the first sentence of its instructions.
+- profile-page: the profile covers the current chat inside its tab, under the [chat tabs](chat-tabs.md), with `Back to chat` at the top. It slides in from the right, the same way as an asked agent's conversation in [agent mentions](agent-mentions.md), and stays still when the system asks for reduced motion; it does not slide again while it stays open. `Back to chat`, Esc, or clicking the chat's tab returns at once to the same chat, or the same new chat page, with its draft and scroll as they were. Switching to another tab leaves the profile.
+- profile-head: the agent's face, with no ring around it, its name, and title, with how many chats it has had and since when, such as "23 chats · since Oct 3". An agent with no title shows the first sentence of its instructions.
 - profile-edit-icons: hovering the head of the profile shows a pencil on the face, name, and title; moving the keyboard onto one of them shows its pencil.
 - profile-rename: choosing the name turns it into a box: Enter or a click elsewhere saves, Esc cancels, and "Enter to save · Esc to cancel" shows under it. A name already on the team, in any case, shows "Maya is already on your team. Pick another name." and is not saved. The new name shows on the start screen, the tab, and the identity bar, also for chats from before; the agent's folder keeps its name.
 - profile-title: choosing the title edits it the same way. An empty title shows the first sentence of the instructions in its place.
@@ -30,7 +30,7 @@ It needs a license that includes custom agents (a team license until launch). Wi
 
 ## Driving it
 
-- Page: type a draft in an agent's chat, scroll up, and click the identity bar. The profile covers the chat. Choose `Back to chat`: the same chat shows, at the same scroll position, with the draft. Open the profile again and press Esc, then once more and click the chat's tab: the chat shows again each time.
+- Page: type a draft in an agent's chat, scroll up, and click the identity bar. The profile slides in from the right over the chat. Rename the agent and change its face and model: the profile stays in place. Choose `Back to chat`: the same chat shows, at the same scroll position, with the draft. Open the profile again and press Esc, then once more and click the chat's tab: the chat shows again each time.
 - Head: open the profile of an agent with chats. The face, name, title, and "<n> chats · since <date>" show.
 - Edit icons: hover the head of the profile. Pencils show on the face, name, and title; move away and they go. Click the face twice, or click the name, type a new one and press Enter, then move away: no pencil shows. Press Tab from `Back to chat`: the face's pencil shows, and Tab again moves it to the name.
 - Rename: choose the name, type a new one, and press Enter. The profile, the start screen, the tab, and the identity bar show the new name; the agent's folder name on disk is unchanged. Type another agent's name in lowercase: the red note names that agent and nothing is saved. Press Esc: the old name returns and the profile stays open.

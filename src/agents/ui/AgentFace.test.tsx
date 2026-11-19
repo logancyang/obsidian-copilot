@@ -51,11 +51,11 @@ describe("AgentFace", () => {
       expect(wrapper.querySelector(".lucide-lock")).not.toBeNull();
     });
 
-    it(`rings a selected face in the theme's accent color, 3px wide on a large face (https://github.com/Brevilabs/obsidian-copilot-private/issues/588)`, () => {
-      const { container } = render(<AgentFace src="face:maya" size="xxl" selected />);
+    it(`rings a selected face in the theme's accent color, 3px wide on a picker-sized face (https://github.com/Brevilabs/obsidian-copilot-private/issues/588)`, () => {
+      const { container } = render(<AgentFace src="face:maya" size="l" selected />);
 
       const face = container.querySelector("img") as HTMLImageElement;
-      expect(face.className).toContain("tw-size-[88px]");
+      expect(face.className).toContain("tw-size-9");
       expect(face.className).toContain("tw-outline-[3px]");
       expect(face.className).toContain("tw-outline-[color:var(--interactive-accent)]");
     });

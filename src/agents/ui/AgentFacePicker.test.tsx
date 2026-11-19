@@ -60,6 +60,10 @@ describe("AgentFacePicker", () => {
       expect(coco.getAttribute("aria-pressed")).toBe("false");
       expect(kai.className).not.toContain("tw-opacity-30");
       expect(kai.getAttribute("aria-pressed")).toBe("true");
+      expect(kai.querySelector("img")?.className).toContain(
+        "tw-outline-[color:var(--interactive-accent)]"
+      );
+      expect(coco.querySelector("img")?.className).not.toContain("tw-outline");
       expect(screen.getByText("Faded faces are already on your team.")).not.toBeNull();
     });
 
