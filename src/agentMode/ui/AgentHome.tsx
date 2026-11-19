@@ -52,7 +52,8 @@ import { useAgentModelPicker } from "@/agentMode/ui/useAgentModelPicker";
 import { useAgentModePicker } from "@/agentMode/ui/useAgentModePicker";
 import { useSessionBackendDescriptor } from "@/agentMode/ui/useBackendDescriptor";
 import { pickRandomGreeting } from "@/agentMode/ui/landingGreetings";
-import { findBackendForModel } from "@/agentMode/backends/registry";
+import { findBackendForModel, listBackendDescriptors } from "@/agentMode/backends/registry";
+import { buildAgentModelChoices } from "@/agentMode/ui/agentModelPickerHelpers";
 import { useCustomAgentsGate } from "@/agents/customAgentsGate";
 import type { CustomAgent } from "@/agents/CustomAgentStore";
 import { AgentIdentityBar } from "@/agents/ui/AgentIdentityBar";
@@ -420,9 +421,14 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     if (!store) return;
     new CreateAgentModal(app, {
       store,
+      models: buildAgentModelChoices({
+        manager,
+        descriptors: listBackendDescriptors(),
+        settings: getSettings(),
+      }),
       onCreated: (slug) => void selectAgent(slug).then(focusInput),
     }).open();
-  }, [app, plugin, selectAgent, focusInput]);
+  }, [app, plugin, manager, selectAgent, focusInput]);
   const newAgentButton =
     customAgentsGate === "full" && plugin.customAgents ? (
       <NewAgentButton emphasized={agentHome.agents.length === 0} onClick={openCreateAgentDialog} />

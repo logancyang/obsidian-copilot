@@ -1,13 +1,14 @@
 import { cn } from "@/lib/utils";
 import React from "react";
 
-export type AgentFaceSize = "xs" | "s" | "m" | "l";
+export type AgentFaceSize = "xs" | "s" | "m" | "l" | "xl";
 
 const FACE_SIZE_CLASS: Record<AgentFaceSize, string> = {
   xs: "tw-size-4",
   s: "tw-size-5",
   m: "tw-size-7",
   l: "tw-size-9",
+  xl: "tw-size-16",
 };
 
 export const SELECTED_FACE_CLASS =

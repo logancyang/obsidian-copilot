@@ -33,6 +33,26 @@ describe("ModelEffortPicker", () => {
       expect(commitSelection).toHaveBeenCalledWith("other|agent", null);
     });
 
+    it("opens its model list inside the given container, so a dialog keeps it above its own layer (https://github.com/Brevilabs/obsidian-copilot-private/issues/939)", async () => {
+      const container = document.body.appendChild(document.createElement("div"));
+      render(
+        <ModelEffortPicker
+          override={{
+            models,
+            value: "model|agent",
+            effortOptionsByModelKey: {},
+            commitSelection: jest.fn(),
+          }}
+          container={container}
+        />
+      );
+
+      fireEvent.click(screen.getByTitle("Model · effort"));
+
+      expect(within(container).getByRole("listbox", { name: "Model" })).not.toBeNull();
+      container.remove();
+    });
+
     it.each(["row", "icon", "keyboard", "Tab", "Shift+Tab", "middle-click"])(
       "preserves native pricing navigation and discards pending edits after %s interaction with a locked row (https://github.com/Brevilabs/obsidian-copilot-private/issues/476)",
       async (action) => {
