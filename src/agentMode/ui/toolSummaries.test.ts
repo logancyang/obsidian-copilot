@@ -70,7 +70,7 @@ describe("toolSummaries", () => {
       });
       const summary = lookupToolSummary(t);
       expect(summary.collapsedLine(t, CTX)).toBe("Read …/passwd");
-      expect(summary.targetPath?.(t, CTX)).toBe("/etc/passwd");
+      expect(summary.target?.(t, CTX)).toEqual({ path: "/etc/passwd", label: "…/passwd" });
     });
 
     it("hides parent directories for ACP read paths without vault context", () => {
@@ -425,7 +425,7 @@ describe("toolSummaries", () => {
       expect(lookupToolSummary(read).collapsedLine(read, CTX)).toBe("Read plan.md");
     });
 
-    it("uses a single Codex diff path as the edit target", () => {
+    it("names a single edited file by its file name and keeps the vault path as the link target", () => {
       const t = tool({
         toolKind: "edit",
         title: "Editing files",
@@ -440,14 +440,23 @@ describe("toolSummaries", () => {
       });
       const summary = lookupToolSummary(t);
 
-      expect(summary.collapsedLine(t, CTX)).toBe("Edited src/agentMode/ui/toolSummaries.ts");
-      expect(summary.targetPath?.(t, CTX)).toBe("src/agentMode/ui/toolSummaries.ts");
+      expect(summary.collapsedLine(t, CTX)).toBe("Edited toolSummaries.ts");
+      expect(summary.target?.(t, CTX)).toEqual({
+        path: "src/agentMode/ui/toolSummaries.ts",
+        label: "toolSummaries.ts",
+      });
+    });
 
-      const outsideVault = {
-        ...t,
-        output: [{ ...t.output![0], path: "/Users/me/private/draft.md" }],
-      };
-      expect(summary.collapsedLine(outsideVault, CTX)).toBe("Edited …/draft.md");
+    it("marks an edited file outside the vault with a leading ellipsis", () => {
+      const t = tool({
+        toolKind: "edit",
+        title: "Editing files",
+        output: [
+          { type: "diff", path: "/Users/me/private/draft.md", oldText: "before", newText: "after" },
+        ],
+      });
+
+      expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("Edited …/draft.md");
     });
 
     it("counts unique Codex diff paths for multi-file edits", () => {
@@ -466,7 +475,7 @@ describe("toolSummaries", () => {
       expect(summary.collapsedLine(inflight, CTX)).toBe("Editing 2 files");
       const done = { ...inflight, status: "completed" as const };
       expect(summary.collapsedLine(done, CTX)).toBe("Edited 2 files");
-      expect(summary.targetPath?.(done, CTX)).toBeNull();
+      expect(summary.target?.(done, CTX)).toBeNull();
     });
 
     it("preserves OpenCode filePath edit targets", () => {

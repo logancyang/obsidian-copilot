@@ -12,12 +12,17 @@ export interface ToolSummaryContext {
   vaultBase: string | null;
 }
 
+export interface ToolTarget {
+  path: string;
+  label: string;
+}
+
 export interface ToolSummary {
   icon: LucideIcon;
   collapsedLine: (part: ToolCallPart, ctx?: ToolSummaryContext) => string;
   outcome: (part: ToolCallPart) => string | null;
   expandedDetails?: (part: ToolCallPart) => string | null;
-  targetPath?: (part: ToolCallPart, ctx?: ToolSummaryContext) => string | null;
+  target?: (part: ToolCallPart, ctx?: ToolSummaryContext) => ToolTarget | null;
 }
 
 export function lookupToolSummary(part: ToolCallPart): ToolSummary {
@@ -116,11 +121,26 @@ function targetFromPath(part: ToolCallPart, vaultBase: string | null): string | 
   );
 }
 
+function fileName(path: string): string {
+  return path.replace(/\\/g, "/").replace(/\/+$/, "").split("/").pop() ?? "";
+}
+
+function displayPath(path: string): string {
+  if (!isAbsolutePath(path)) return path;
+  const leaf = fileName(path);
+  return leaf ? `…/${leaf}` : "…";
+}
+
 export function displayTargetFromPath(part: ToolCallPart, vaultBase: string | null): string | null {
   const path = targetFromPath(part, vaultBase);
-  if (!path || !isAbsolutePath(path)) return path;
-  const leaf = path.replace(/\\/g, "/").replace(/\/+$/, "").split("/").pop();
-  return leaf ? `…/${leaf}` : "…";
+  return path ? displayPath(path) : null;
+}
+
+function singleEditTarget(part: ToolCallPart, vaultBase: string | null): ToolTarget | null {
+  if (diffTargetPaths(part.output).length > 1) return null;
+  const path = targetFromPath(part, vaultBase);
+  if (!path) return null;
+  return { path, label: isAbsolutePath(path) ? displayPath(path) : fileName(path) || path };
 }
 
 function skillNameFromInput(part: ToolCallPart): string | null {
@@ -172,7 +192,10 @@ const READ_SUMMARY: ToolSummary = {
     const t = approxTokens(p);
     return t > 0 ? `~${formatTokens(t)} tokens` : null;
   },
-  targetPath: (p, ctx) => targetFromPath(p, ctx?.vaultBase ?? null),
+  target: (p, ctx) => {
+    const path = targetFromPath(p, ctx?.vaultBase ?? null);
+    return path ? { path, label: displayPath(path) } : null;
+  },
 };
 
 const LIST_SUMMARY: ToolSummary = {
@@ -193,7 +216,7 @@ const EDIT_SUMMARY: ToolSummary = {
     return `${lead} ${
       diffPathCount > 1
         ? pluralize(diffPathCount, "file")
-        : (displayTargetFromPath(p, ctx?.vaultBase ?? null) ?? "files")
+        : (singleEditTarget(p, ctx?.vaultBase ?? null)?.label ?? "files")
     }`;
   },
   outcome: (p) => {
@@ -201,8 +224,7 @@ const EDIT_SUMMARY: ToolSummary = {
     if (added === 0 && removed === 0) return null;
     return `+${added} / −${removed} lines`;
   },
-  targetPath: (p, ctx) =>
-    diffTargetPaths(p.output).length > 1 ? null : targetFromPath(p, ctx?.vaultBase ?? null),
+  target: (p, ctx) => singleEditTarget(p, ctx?.vaultBase ?? null),
 };
 
 const BASH_SUMMARY: ToolSummary = {
