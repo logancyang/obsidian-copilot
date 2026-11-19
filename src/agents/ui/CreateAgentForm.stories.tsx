@@ -127,7 +127,7 @@ function uploadFace(form: HTMLElement) {
 }
 
 const meta = {
-  title: "Custom Agents/Create Agent Dialog",
+  title: "Copilot Teammates/Create Agent Dialog",
   component: CreateAgentForm,
   parameters: { gallery: { host: "modal", layout: "padded" } },
 } satisfies Meta<CreateAgentFormProps>;

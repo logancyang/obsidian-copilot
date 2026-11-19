@@ -6,7 +6,7 @@ The tabs across the top of Agent Chat, one per open chat. A tab stays open, and 
 
 - tab-new: `New chat` (**+**) opens a new chat in a new tab; every other tab stays open.
 - tab-switch: click a tab to show its chat; the chat left behind stays open with its agent running.
-- tab-agent-face: a chat with a custom agent shows the agent's face in its tab and in the `Show N more chats` menu, in place of the agent logo; while the chat responds, a ring spins around the face. Copilot chats keep the logo and its spinner. Tabs stay the same width.
+- tab-agent-face: a chat with one of the user's agents shows the agent's face in its tab and in the `Show N more chats` menu, in place of the agent logo; while the chat responds, a ring spins around the face. Copilot chats keep the logo and its spinner. Tabs stay the same width.
 - tab-attention: a dot marks a tab whose chat finished while the user was elsewhere. The dot is orange while the chat, or an agent it [`@`-mentioned](agent-mentions.md), waits on the user (a question or a permission request) and green once the chat is done; the [`@`-mentioned agent's](agent-mentions.md) own work never makes the chat's tab spin, only the chat's turn that passes its question or reply on.
 - tab-overflow-dot: `Show N more chats` carries a dot, orange or green like the tabs, when a chat with a dot sits in its menu.
 - tab-close: close a tab with its `Close tab` (X), a middle click, or right-click → Close. The agent keeps running if the user sent a message or left unsent text in the chat; otherwise it stops. The chat stays in history either way.
@@ -22,7 +22,7 @@ Open Agent Chat from the ribbon icon or the `Open Copilot Agent Chat window` com
 
 - New tab: open a chat from Recent chats on the [start screen](agent-home.md), then choose `New chat` (**+**). Two tabs show: the past chat and an empty new chat. The past chat's row in Recent chats still offers `Shut down`.
 - Switch: choose the past chat's tab. Its conversation shows and both tabs remain.
-- Agent face: start chats with two custom agents from the [start screen](agent-home.md) and one Copilot chat. Each agent chat's tab shows its agent's face and the Copilot tab shows the logo. Send a message in an agent chat: a ring spins around its face until the reply finishes. Open enough tabs that some move into `Show N more chats`: the menu shows the same faces.
+- Agent face: start chats with two of the user's agents from the [start screen](agent-home.md) and one Copilot chat. Each agent chat's tab shows its agent's face and the Copilot tab shows the logo. Send a message in an agent chat: a ring spins around its face until the reply finishes. Open enough tabs that some move into `Show N more chats`: the menu shows the same faces.
 - Attention: send a message, switch tabs before the reply finishes, and wait. The first tab shows a dot until you switch back.
 - Agent dots: in an agent's chat, send `@Leo reconcile the books; before you start, ask me which month` and switch to another tab. When Leo's question comes back, the first tab shows an orange dot; answer it there, switch away again, and when Leo's reply is passed on the tab shows a green dot. While only Leo works, the first tab shows its face without a ring.
 - Overflow dot: with enough tabs that the chat above sits in `Show N more chats`, the button shows the same dot until you open that chat.

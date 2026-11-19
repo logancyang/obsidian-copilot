@@ -55,7 +55,7 @@ const RunningLine: React.FC<LineProps> = ({ runs, taskCount, defaultOpen }) => (
 );
 
 const meta = {
-  title: "Custom Agents/Running Agents",
+  title: "Copilot Teammates/Running Agents",
   component: RunningLine,
   parameters: { gallery: { host: "leaf", layout: "padded" } },
   args: { runs: [asked(MAYA)], taskCount: 0 },

@@ -341,7 +341,7 @@ export const AgentHomeFirstAgentBanner: StoryObj<AgentLandingStackProps> = {
   render: () => <AgentHomeCanvas agents={[]} initialSlug={null} />,
 };
 
-export const AgentHomeWithoutCustomAgents: StoryObj<AgentLandingStackProps> = {
+export const AgentHomeWithoutCopilotTeammates: StoryObj<AgentLandingStackProps> = {
   render: () => <AgentHomeCanvas agents={[]} initialSlug={null} customAgentsAvailable={false} />,
 };
 

@@ -1548,7 +1548,7 @@ describe("OpencodeBackend", () => {
         await backend.buildSpawnDescriptor({ vaultBasePath: "/vault" });
 
         await expect(backend.selectAgentMode(COCO, null)).rejects.toThrow(
-          "Custom agents can't run on OpenCode while OPENCODE_CONFIG is set."
+          "Copilot Teammates can't run on OpenCode while OPENCODE_CONFIG is set."
         );
         expect(fs.existsSync(file)).toBe(false);
       });

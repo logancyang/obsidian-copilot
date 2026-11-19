@@ -1,13 +1,13 @@
 # Agent identity bar
 
-A bar at the top of a chat with a custom agent: the agent's face, its name, and its title, so the user always knows which agent they are talking to.
+A bar at the top of a chat with one of the user's agents: the agent's face, its name, and its title, so the user always knows which agent they are talking to.
 
 ## Sub-features
 
-- identity-bar: a chat with a custom agent shows the agent's face, name, and title under the [chat tabs](chat-tabs.md) and above the messages, with a divider under it. It stays in place while the conversation scrolls. It shows no model and no color. An arrow at its right end shows that the whole bar opens the [agent profile](agent-profile.md); hovering it brightens the bar.
+- identity-bar: a chat with one of the user's agents shows the agent's face, name, and title under the [chat tabs](chat-tabs.md) and above the messages, with a divider under it. It stays in place while the conversation scrolls. It shows no model and no color. An arrow at its right end shows that the whole bar opens the [agent profile](agent-profile.md); hovering it brightens the bar.
 - identity-bar-long: a long name and a long title are each cut to one line.
 - identity-bar-no-title: an agent with no title shows the first sentence of its instructions in the title's place.
-- identity-bar-copilot: a Copilot chat has no bar and looks as it does without custom agents.
+- identity-bar-copilot: a Copilot chat has no bar and looks as it does without Copilot Teammates.
 - identity-bar-gone: a chat whose agent's folder is deleted shows no bar.
 - identity-bar-live: a renamed agent or a new face file shows in the bar without reopening the chat.
 - identity-bar-navigator: the bar stays while the [Copilot Navigator](copilot-navigator.md) hides the tabs.
@@ -15,7 +15,7 @@ A bar at the top of a chat with a custom agent: the agent's face, its name, and 
 
 ## How to get to it
 
-Choose an agent's face on the [start screen](agent-home.md) and send a message (this needs a license that includes custom agents), or open an agent's chat from Recent chats or the Navigator.
+Choose an agent's face on the [start screen](agent-home.md) and send a message (this needs a license that includes Copilot Teammates), or open an agent's chat from Recent chats or the Navigator.
 
 ## Driving it
 
@@ -31,4 +31,4 @@ Choose an agent's face on the [start screen](agent-home.md) and send a message (
 ## Gotchas
 
 - The bar shows once the chat has a message. Before that, the start screen's row of faces shows who the chat is with.
-- Without a license that includes custom agents, an agent's chat still shows the bar, and the bar opens the agent's locked [profile](agent-profile.md).
+- Without a license that includes Copilot Teammates, an agent's chat still shows the bar, and the bar opens the agent's locked [profile](agent-profile.md).

@@ -95,7 +95,7 @@ describe("startAgentChatCommand", () => {
     it("tells the user and logs the cause when the chat cannot start", async () => {
       await setCustomAgentsAccess("team");
       const { plugin, commands } = buildPlugin();
-      const failure = new Error("Codex needs an update to run custom agents.");
+      const failure = new Error("Codex needs an update to run Copilot Teammates.");
       let failed!: () => void;
       const reported = new Promise<void>((resolve) => (failed = resolve));
       jest.mocked(logError).mockImplementationOnce(() => failed());

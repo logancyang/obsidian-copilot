@@ -2,7 +2,7 @@ import { MemorySaveLine, type MemorySaveLineProps } from "@/agents/agentMode/ui/
 import type { Meta, StoryObj } from "@/lib/story";
 
 const meta = {
-  title: "Custom Agents/Memory Save Line",
+  title: "Copilot Teammates/Memory Save Line",
   component: MemorySaveLine,
   parameters: { gallery: { host: "leaf", layout: "padded" } },
   args: {

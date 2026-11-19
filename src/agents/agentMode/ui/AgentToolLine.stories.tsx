@@ -40,7 +40,7 @@ function ToolLines({ lines }: ToolLinesProps) {
 }
 
 const meta = {
-  title: "Custom Agents/Mention Tool Line",
+  title: "Copilot Teammates/Mention Tool Line",
   component: ToolLines,
   parameters: { gallery: { host: "leaf", layout: "padded" } },
 } satisfies Meta<ToolLinesProps>;

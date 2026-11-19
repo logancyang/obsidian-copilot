@@ -698,7 +698,7 @@ export class AcpBackendProcess implements BackendProcess {
   private systemPromptField(agent: SessionAgent | undefined): SystemPromptField {
     if (!agent || this.backend.selectAgentMode) return {};
     if (!this.hasCapability("systemPrompt")) {
-      throw new Error(`${this.descriptor.displayName} needs an update to run custom agents.`);
+      throw new Error(`${this.descriptor.displayName} needs an update to run Copilot Teammates.`);
     }
     return { systemPrompt: { mode: "append", content: [{ type: "text", text: agent.prompt }] } };
   }

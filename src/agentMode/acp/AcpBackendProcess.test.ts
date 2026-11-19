@@ -1445,7 +1445,7 @@ describe("AcpBackendProcess", () => {
 
         await expect(
           backend.newSession({ cwd: "/vault", agent: { slug: "coco", prompt: "You are Coco." } })
-        ).rejects.toThrow("Codex needs an update to run custom agents.");
+        ).rejects.toThrow("Codex needs an update to run Copilot Teammates.");
         expect(mockNewSession).not.toHaveBeenCalled();
       });
 
@@ -1581,7 +1581,9 @@ describe("AcpBackendProcess", () => {
           buildApp(),
           buildStubBackend({
             selectAgentMode: async () => {
-              throw new Error("Custom agents can't run on OpenCode while OPENCODE_CONFIG is set.");
+              throw new Error(
+                "Copilot Teammates can't run on OpenCode while OPENCODE_CONFIG is set."
+              );
             },
           }),
           "1.0.0",
@@ -1591,7 +1593,7 @@ describe("AcpBackendProcess", () => {
 
         await expect(
           backend.newSession({ cwd: "/vault", agent: { slug: "coco", prompt: "You are Coco." } })
-        ).rejects.toThrow("Custom agents can't run on OpenCode while OPENCODE_CONFIG is set.");
+        ).rejects.toThrow("Copilot Teammates can't run on OpenCode while OPENCODE_CONFIG is set.");
         expect(mockCloseSession).toHaveBeenCalledWith({ sessionId: "orphan" });
       });
 
@@ -1755,7 +1757,7 @@ describe("AcpBackendProcess", () => {
             cwd: "/vault",
             agent: { slug: "coco", prompt: "You are Coco." },
           })
-        ).rejects.toThrow("opencode needs an update to run custom agents.");
+        ).rejects.toThrow("opencode needs an update to run Copilot Teammates.");
         expect(mockResumeSession).not.toHaveBeenCalled();
       });
 
@@ -1845,7 +1847,7 @@ describe("AcpBackendProcess", () => {
             cwd: "/vault",
             agent: { slug: "coco", prompt: "You are Coco." },
           })
-        ).rejects.toThrow("opencode needs an update to run custom agents.");
+        ).rejects.toThrow("opencode needs an update to run Copilot Teammates.");
         expect(mockLoadSession).not.toHaveBeenCalled();
       });
 

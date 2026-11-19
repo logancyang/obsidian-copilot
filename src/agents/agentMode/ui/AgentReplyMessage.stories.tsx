@@ -65,7 +65,7 @@ const MAYA_MEMORY = "copilot/agents/maya/MEMORY.md";
 const LEO_MARKER = { agent: "leo", name: "Leo", mention: "m2" };
 
 const meta = {
-  title: "Custom Agents/Agent Reply Message",
+  title: "Copilot Teammates/Agent Reply Message",
   component: ReplyCard,
   parameters: { gallery: { host: "leaf", layout: "padded" } },
   args: {

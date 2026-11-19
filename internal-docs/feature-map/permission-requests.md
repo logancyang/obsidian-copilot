@@ -13,7 +13,7 @@
 ## How to get to it
 
 - Choose `Safe` in `Mode` in the [chat input](chat-input.md), then ask the agent to create or edit a note.
-- Mentioned agent: with a license that includes custom agents, in `Safe` mode, send `@Maya add one line to <note>`. `Permission required` shows Maya's face and "Maya wants to run …". Choose `Allow once`: the note changes and the chat's agent passes on Maya's reply.
+- Mentioned agent: with a license that includes Copilot Teammates, in `Safe` mode, send `@Maya add one line to <note>`. `Permission required` shows Maya's face and "Maya wants to run …". Choose `Allow once`: the note changes and the chat's agent passes on Maya's reply.
 - Task approval: in `Safe` mode, ask the agent to run a background subagent that edits a note. Open the task from its card in the conversation or from `N tasks running` in the [chat controls](chat-controls.md).
 
 ## Driving it

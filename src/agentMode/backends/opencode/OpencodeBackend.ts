@@ -236,7 +236,7 @@ export class OpencodeBackend implements AcpBackend {
     }
     const target = this.#customAgents;
     if (!target) {
-      throw new Error("Custom agents can't run on OpenCode while OPENCODE_CONFIG is set.");
+      throw new Error("Copilot Teammates can't run on OpenCode while OPENCODE_CONFIG is set.");
     }
     const spawnAgents = (JSON.parse(target.configContent) as OpencodeConfig).agents ?? {};
     const define = (baseId: string, auto: boolean) => {

@@ -324,7 +324,7 @@ describe("CustomAgentStore", () => {
         store.stop();
         release();
 
-        await expect(created).rejects.toThrow("Custom agents are not available.");
+        await expect(created).rejects.toThrow("Copilot Teammates is not available.");
         expect(vault.listPaths()).toEqual([]);
       });
 
@@ -336,7 +336,7 @@ describe("CustomAgentStore", () => {
 
         await expect(
           store.createAgent({ name: "Kai", title: "", model: null, instruction: "x" })
-        ).rejects.toThrow("Custom agents are locked.");
+        ).rejects.toThrow("Copilot Teammates is locked.");
 
         expect(vault.listPaths()).toEqual(before);
       });
@@ -419,7 +419,7 @@ describe("CustomAgentStore", () => {
         await store.start();
 
         await expect(store.updateAgent("coco", { name: "Bean" })).rejects.toThrow(
-          "No custom agent at coco."
+          "No agent at coco."
         );
       });
 
@@ -430,7 +430,7 @@ describe("CustomAgentStore", () => {
         await store.start();
 
         await expect(store.updateAgent("coco", { name: "Bean" })).rejects.toThrow(
-          "Custom agents are locked."
+          "Copilot Teammates is locked."
         );
 
         expect(vault.readText("copilot/agents/coco/instructions.md")).toBe(written);
@@ -481,7 +481,7 @@ describe("CustomAgentStore", () => {
         store.stop();
         release();
 
-        await expect(saved).rejects.toThrow("Custom agents are not available.");
+        await expect(saved).rejects.toThrow("Copilot Teammates is not available.");
         expect([...new Uint8Array(vault.readBytes("copilot/agents/coco/face.webp")!)]).toEqual([
           1, 2, 3,
         ]);
@@ -494,7 +494,7 @@ describe("CustomAgentStore", () => {
 
         await expect(
           store.saveFace("coco", { kind: "preset", bytes: bytes(82, 73, 70, 70) })
-        ).rejects.toThrow("Custom agents are locked.");
+        ).rejects.toThrow("Copilot Teammates is locked.");
 
         expect([...new Uint8Array(vault.readBytes("copilot/agents/coco/face.webp")!)]).toEqual([
           1, 2, 3,
@@ -543,7 +543,7 @@ describe("CustomAgentStore", () => {
       it("rejects for an agent whose folder is gone, so the profile can report it", async () => {
         await store.start();
 
-        await expect(store.deleteAgent("coco")).rejects.toThrow("No custom agent at coco.");
+        await expect(store.deleteAgent("coco")).rejects.toThrow("No agent at coco.");
         expect(vault.trashedPaths).toEqual([]);
       });
 
@@ -553,7 +553,7 @@ describe("CustomAgentStore", () => {
           seedAgent(vault, "maya", "Maya");
           await store.start();
 
-          await expect(store.deleteAgent(slug)).rejects.toThrow(`No custom agent at ${slug}.`);
+          await expect(store.deleteAgent(slug)).rejects.toThrow(`No agent at ${slug}.`);
           expect(vault.trashedPaths).toEqual([]);
         }
       );

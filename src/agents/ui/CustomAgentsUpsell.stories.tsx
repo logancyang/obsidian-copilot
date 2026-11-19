@@ -5,7 +5,7 @@ import {
 import type { Meta, StoryObj } from "@/lib/story";
 
 const meta = {
-  title: "Custom Agents/Custom Agent Upsell",
+  title: "Copilot Teammates/Copilot Teammates Upsell",
   component: CustomAgentsUpsellContent,
   args: { medium: "custom_agent_dialog", onClose: () => undefined },
   parameters: { gallery: { host: "modal", layout: "padded" } },

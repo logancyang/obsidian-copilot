@@ -1,6 +1,6 @@
 # Create agent dialog
 
-The `New agent` dialog that makes a custom agent: its face, name, optional title, what it handles, and its model.
+The `New agent` dialog that makes an agent: its face, name, optional title, what it handles, and its model.
 
 ## Sub-features
 
@@ -26,9 +26,9 @@ The `New agent` dialog that makes a custom agent: its face, name, optional title
 
 - **New** (**+**) in the row of faces on the [start screen](agent-home.md), and on a [project](projects.md)'s start screen.
 - `Create your first agent` on the first agent banner on the [start screen](agent-home.md).
-- `Review and create…` on a draft card in a custom agent's chat or a plain Copilot chat ([agent replies](agent-replies.md)).
+- `Review and create…` on a draft card in a chat with one of the user's agents or a plain Copilot chat ([agent replies](agent-replies.md)).
 
-It needs a license that includes custom agents; without one, `New` opens the Supporter preview instead.
+It needs a license that includes Copilot Teammates; without one, `New` opens the Supporter preview instead.
 
 ## Driving it
 

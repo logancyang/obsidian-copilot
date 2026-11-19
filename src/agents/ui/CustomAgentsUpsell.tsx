@@ -56,7 +56,7 @@ export class CustomAgentsUpsellModal extends ReactModal {
     private readonly medium: CustomAgentsUpsellMedium
   ) {
     super(app);
-    this.titleEl.createSpan({ cls: "tw-text-accent", text: "Custom Agent" });
+    this.titleEl.createSpan({ cls: "tw-text-accent", text: "Copilot Teammates" });
     this.titleEl.createSpan({ text: " is a preview for Supporters" });
   }
 

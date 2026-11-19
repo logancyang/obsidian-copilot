@@ -393,7 +393,7 @@ describe("CreateAgentModal", () => {
 
       it(`stays open with everything typed when the store cannot create the agent (${ISSUE})`, async () => {
         const { modal, onCreated } = openDialog(
-          jest.fn().mockRejectedValue(new Error("Custom agents are not available."))
+          jest.fn().mockRejectedValue(new Error("Copilot Teammates is not available."))
         );
         enterName("Kai");
         type("What Kai handles", "You handle marketing.");

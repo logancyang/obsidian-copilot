@@ -88,7 +88,7 @@ function click(label: string) {
 }
 
 const meta = {
-  title: "Custom Agents/Agent Profile",
+  title: "Copilot Teammates/Agent Profile",
   component: SidebarPage,
   args: {
     agent: {

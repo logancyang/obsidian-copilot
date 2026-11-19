@@ -15,7 +15,7 @@ import type { Meta, StoryObj } from "@/lib/story";
 import React, { useEffect, useRef } from "react";
 
 const meta = {
-  title: "Custom Agents/Agent Roster",
+  title: "Copilot Teammates/Agent Roster",
   component: AgentRoster,
   args: {
     agents: THREE_AGENTS,

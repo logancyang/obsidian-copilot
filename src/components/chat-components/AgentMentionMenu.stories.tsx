@@ -61,7 +61,7 @@ function menu(
 }
 
 const meta = {
-  title: "Custom Agents/Mention Menu",
+  title: "Copilot Teammates/Mention Menu",
   component: TypeaheadMenuContent,
   parameters: { gallery: { host: "popover", layout: "centered" } },
 } satisfies Meta<TypeaheadMenuContentProps>;

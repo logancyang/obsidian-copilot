@@ -98,12 +98,12 @@ describe("CustomAgentsUpsell", () => {
 
   describe("CustomAgentsUpsellModal", () => {
     describe("constructor()", () => {
-      it("titles the dialog with Custom Agent highlighted as a preview for Supporters", () => {
+      it("titles the dialog with Copilot Teammates highlighted as a preview for Supporters", () => {
         const modal = new CustomAgentsUpsellModal(new App(), "custom_agent_dialog");
 
-        expect(modal.titleEl.textContent).toBe("Custom Agent is a preview for Supporters");
+        expect(modal.titleEl.textContent).toBe("Copilot Teammates is a preview for Supporters");
         const highlighted = modal.titleEl.querySelector(".tw-text-accent");
-        expect(highlighted?.textContent).toBe("Custom Agent");
+        expect(highlighted?.textContent).toBe("Copilot Teammates");
       });
     });
   });

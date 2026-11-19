@@ -45,7 +45,7 @@ function MentionPills({ message, agents }: MentionPillsProps) {
 }
 
 const meta = {
-  title: "Custom Agents/Mention Pill",
+  title: "Copilot Teammates/Mention Pill",
   component: MentionPills,
   parameters: { gallery: { host: "leaf", layout: "padded" } },
 } satisfies Meta<MentionPillsProps>;

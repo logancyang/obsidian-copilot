@@ -10,7 +10,7 @@ function files(slug: string) {
 }
 
 const meta = {
-  title: "Custom Agents/Delete Agent Dialog",
+  title: "Copilot Teammates/Delete Agent Dialog",
   component: AgentDeleteForm,
   args: {
     agent: { ...COCO, ...files("coco") },

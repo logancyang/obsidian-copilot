@@ -54,7 +54,7 @@ function DraftInChat({ reply, drafts, clickNotNow }: DraftInChatProps) {
 }
 
 const meta = {
-  title: "Custom Agents/Agent Draft Card",
+  title: "Copilot Teammates/Agent Draft Card",
   component: AgentDraftCard,
   parameters: { gallery: { host: "leaf", layout: "padded" } },
   args: { draft: NORA, onDismiss: () => {}, onReview: () => {} },

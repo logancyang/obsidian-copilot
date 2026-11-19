@@ -3,7 +3,7 @@ import { THREE_AGENTS } from "@/agents/ui/testing/rosterFixtures";
 import type { Meta, StoryObj } from "@/lib/story";
 
 const meta = {
-  title: "Custom Agents/First Agent Banner",
+  title: "Copilot Teammates/First Agent Banner",
   component: FirstAgentBannerView,
   args: {
     faces: THREE_AGENTS.map((agent) => agent.faceSrc),

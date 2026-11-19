@@ -47,7 +47,7 @@ const TrailWithSave: React.FC<{ parts: AgentMessagePart[]; memorySaves: MemorySa
 };
 
 const meta = {
-  title: "Custom Agents/Memory Save In Chat",
+  title: "Copilot Teammates/Memory Save In Chat",
   component: AgentTrail,
   parameters: { gallery: { host: "leaf", layout: "padded" } },
 } satisfies Meta<AgentTrailProps>;

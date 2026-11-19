@@ -340,7 +340,7 @@ describe("useAgentHomeSelection", () => {
       const { store } = fakeAgentStore([COCO, MAYA]);
       const switchAgent = jest.fn((agent: CustomAgent | null) =>
         agent
-          ? Promise.reject(new Error("Codex needs an update to run custom agents."))
+          ? Promise.reject(new Error("Codex needs an update to run Copilot Teammates."))
           : Promise.resolve()
       );
       const { result } = renderSelection(store, NEW_CHAT, switchAgent);
@@ -351,7 +351,7 @@ describe("useAgentHomeSelection", () => {
       expect(result.current.selected).toBeNull();
       expect(logError).toHaveBeenCalled();
       expect(Notice).toHaveBeenCalledWith(
-        "Couldn't start a chat with Coco. Codex needs an update to run custom agents."
+        "Couldn't start a chat with Coco. Codex needs an update to run Copilot Teammates."
       );
     });
 

@@ -62,7 +62,7 @@ export class LockedAgentsUpsellModal extends ReactModal {
     private readonly agents: readonly LockedAgent[]
   ) {
     super(app);
-    this.titleEl.setText(`This vault has ${countOf(agents.length, "custom agent")}`);
+    this.titleEl.setText(`This vault has ${countOf(agents.length, "agent")}`);
   }
 
   protected renderContent(close: () => void): React.ReactElement {

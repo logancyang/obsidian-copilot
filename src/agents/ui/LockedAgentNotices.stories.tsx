@@ -2,7 +2,7 @@ import { LockedAgentChat, type LockedAgentChatProps } from "@/agents/ui/LockedAg
 import type { Meta, StoryObj } from "@/lib/story";
 
 const meta = {
-  title: "Custom Agents/Locked Agent Chat",
+  title: "Copilot Teammates/Locked Agent Chat",
   component: LockedAgentChat,
   args: { name: "Coco", onNewChat: () => {}, onUnlock: () => {} },
   parameters: { gallery: { host: "leaf", layout: "padded" } },

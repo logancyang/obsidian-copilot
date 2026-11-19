@@ -130,7 +130,7 @@ export class CustomAgentStore {
   async updateAgent(slug: string, { model, ...text }: Partial<CustomAgentProfile>): Promise<void> {
     assertNotLocked();
     const file = this.app.vault.getAbstractFileByPath(this.pathsFor(slug).instructionsPath);
-    if (!(file instanceof TFile)) throw new Error(`No custom agent at ${slug}.`);
+    if (!(file instanceof TFile)) throw new Error(`No agent at ${slug}.`);
     await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
       Object.assign(frontmatter, text);
       if (model !== undefined) frontmatter.model = serializeModel(model);
@@ -150,7 +150,7 @@ export class CustomAgentStore {
 
   async deleteAgent(slug: string): Promise<void> {
     const folder = this.app.vault.getAbstractFileByPath(this.pathsFor(slug).folderPath);
-    if (!folder) throw new Error(`No custom agent at ${slug}.`);
+    if (!folder) throw new Error(`No agent at ${slug}.`);
     await trashFile(this.app, folder);
     logInfo(`[Custom agents] Moved ${folder.path} to the trash`);
     await this.refresh();
@@ -227,7 +227,7 @@ export class CustomAgentStore {
   private agentsFolder(): string {
     // A surface left open when the license loses custom agents must not read or write the folder.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/936
-    if (!this.eventRefs) throw new Error("Custom agents are not available.");
+    if (!this.eventRefs) throw new Error("Copilot Teammates is not available.");
     return customAgentsFolderPath();
   }
 
@@ -240,7 +240,7 @@ export class CustomAgentStore {
     // An empty or multi-segment slug from a caller would make delete trash the whole agents folder or another path.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/936
     if (!slug || slug === "." || slug === ".." || /[\\/]/.test(slug)) {
-      throw new Error(`No custom agent at ${slug}.`);
+      throw new Error(`No agent at ${slug}.`);
     }
     const folderPath = normalizePath(`${this.agentsFolder()}/${slug}`);
     return {
@@ -255,7 +255,7 @@ export class CustomAgentStore {
 // A vault whose license isn't valid for custom agents shows its agents, and only Delete may change their files.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/950
 function assertNotLocked(): void {
-  if (getCustomAgentsGate() === "locked") throw new Error("Custom agents are locked.");
+  if (getCustomAgentsGate() === "locked") throw new Error("Copilot Teammates is locked.");
 }
 
 export function customAgentsFolderPath(): string {

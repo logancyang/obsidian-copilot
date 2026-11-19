@@ -3,7 +3,7 @@ import { COCO, LONG_NAMED_AGENT, MAYA } from "@/agents/ui/testing/rosterFixtures
 import type { Meta, StoryObj } from "@/lib/story";
 
 const meta = {
-  title: "Custom Agents/Identity Bar",
+  title: "Copilot Teammates/Identity Bar",
   component: AgentIdentityBar,
   args: { agent: COCO },
   parameters: { gallery: { host: "leaf", layout: "fullscreen" } },

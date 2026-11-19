@@ -153,7 +153,7 @@ const View: React.FC<ViewProps> = (props) => (
 );
 
 const meta = {
-  title: "Custom Agents/Asked Agent View",
+  title: "Copilot Teammates/Asked Agent View",
   component: View,
   parameters: { gallery: { host: "leaf", layout: "fullscreen" } },
   args: {

@@ -373,7 +373,9 @@ describe("CreateAgentForm", () => {
     });
 
     it(`keeps everything typed and says why when creating the agent fails (${ISSUE})`, async () => {
-      const onCreate = jest.fn().mockRejectedValue(new Error("Custom agents are not available."));
+      const onCreate = jest
+        .fn()
+        .mockRejectedValue(new Error("Copilot Teammates is not available."));
       renderForm({ onCreate });
       enterName("Kai");
       type("What Kai handles", "You handle marketing.");
@@ -381,7 +383,7 @@ describe("CreateAgentForm", () => {
       fireEvent.click(createButton());
 
       expect((await screen.findByRole("alert")).textContent).toBe(
-        "Couldn't create Kai. Custom agents are not available."
+        "Couldn't create Kai. Copilot Teammates is not available."
       );
       expect(screen.getByLabelText<HTMLInputElement>("Name").value).toBe("Kai");
       expect(screen.getByLabelText<HTMLInputElement>("What Kai handles").value).toBe(

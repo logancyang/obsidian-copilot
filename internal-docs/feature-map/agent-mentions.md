@@ -1,10 +1,10 @@
 # Agent mentions
 
-Asking another custom agent from a chat with `@`: that agent works in the background, and the chat's own agent brings its reply back.
+Asking one of the user's agents from a chat with `@`: that agent works in the background, and the chat's own agent brings its reply back.
 
 ## Sub-features
 
-- mention-ask: in an agent's chat or a Copilot chat, a message that `@`-mentions a custom agent by name, such as `@Maya what do you think of this plan?`, hands that agent the request.
+- mention-ask: in an agent's chat or a Copilot chat, a message that `@`-mentions an agent by name, such as `@Maya what do you think of this plan?`, hands that agent the request.
 - mention-one-line: the chat's agent answers in one line, such as "Maya's reading it. I'll bring back what she says.", and its turn ends. The chat input is free while the other agent works.
 - mention-view: choosing an ask card, a `Message from` card, or the agent's row in the [chat controls](chat-controls.md)' running agents list opens the two agents' conversation in place of the chat, read-only; it slides in from the right, and stays still when the system asks for reduced motion. One row heads it: Back, the asking agent's face and name (Copilot's mark in a Copilot chat), a double arrow, and the asked agent's face and name; it takes the place of the chat's own header. What the chat's agent sent comes first as a user's message; an answer it passed on is marked `Coco passed on your answer`. Below come the asked agent's steps, the files it changed, and its replies, scrolled to the latest; a later run starts below a `Continued at 10:21 AM` divider, its time written as message times are, with the full date and time as its tooltip. While it waits on the user, a banner says so and `Answer there` returns to the chat. There is no chat input: `You can only watch here. To tell Leo something, tell Coco.` Back or Escape returns to the chat.
 - mention-tool-lines: in the chat agent's reply, asking an agent is one card from the moment the chat's agent starts writing to it: `Asking` with the agent's face and name and `…` until the message is sent, then `Messaged` with the face and name. Until the chat's agent has named who it asks, the card reads `Asking …` with a blank face; the face and name then fill in on the same card. It shows no message text; the name is brighter than the label. A message to an agent that already works reads `Messaged` too. The other things the chat's agent does with a mentioned agent are one line each with its face: `Checked Maya's progress`, `Passed your answer to Maya` and `Stopped Maya`, with nothing to open. A call that failed or named no agent the chat can ask shows its ordinary row once it ends.
@@ -32,7 +32,7 @@ Asking another custom agent from a chat with `@`: that agent works in the backgr
 
 ## Driving it
 
-All of these need a license that includes custom agents and at least two agents in the vault, one of them Maya.
+All of these need a license that includes Copilot Teammates and at least two agents in the vault, one of them Maya.
 
 - Ask: in a chat with another agent, send `@Maya what do you think of this plan? Six features in 90 seconds.` The agent answers in one line and its turn ends; Send is available again.
 - Cards: after sending the mention, the chat agent's reply shows `Asking` with Maya's face and name, then `Messaged`. Nothing shows under the message that asked, and no clock shows anywhere. When the reply comes back, the new turn starts with `Message from` and her face and name, with none of her words.
@@ -58,11 +58,11 @@ All of these need a license that includes custom agents and at least two agents 
 
 ## Gotchas
 
-- Without a license that includes custom agents, `@<name>` is plain text for the chat's own agent.
+- Without a license that includes Copilot Teammates, `@<name>` is plain text for the chat's own agent.
 - A mentioned agent never changes its instruction, whatever the mode. A rule it saves applies from its next chat, as in its own chat; mentioning it again in the same chat continues a conversation that started with its earlier memory.
 - A mentioned agent's work can be viewed only while Obsidian keeps its chat open: after a restart, or once the chat that asked it was shut down, the conversation says its steps from that run are no longer available, with what the agent sent back from that run, such as its question and its reply, below the note, until mentioning the agent again continues its conversation. A run that sent nothing back shows the note alone.
 - The mentioned agent works in a chat no list shows: not in the [chat tabs](chat-tabs.md), Recent chats or the [Copilot Navigator](copilot-navigator.md).
-- On Codex models, a chat can mention agents only if it was opened while custom agents were available: it keeps the tools it started with. On Claude and OpenCode models, an open chat gets the tools as soon as custom agents become available, and loses them when they stop being available.
+- On Codex models, a chat can mention agents only if it was opened while Copilot Teammates was available: it keeps the tools it started with. On Claude and OpenCode models, an open chat gets the tools as soon as Copilot Teammates becomes available, and loses them when it stops being available.
 - Closing Obsidian or shutting the chat down stops the mentioned agent; its reply never comes back.
 - A mentioned agent asked while the license was valid keeps working once it is not, and its reply still comes back.
 - The chat's note saves a stopped mention as stopped, whether the user stopped it or its agent was deleted.
