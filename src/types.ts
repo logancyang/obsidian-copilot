@@ -36,6 +36,16 @@ declare module "obsidian" {
     loadLocalStorage(key: string): unknown;
     saveLocalStorage(key: string, data: unknown): void;
   }
+
+  interface FrontMatterInfo {
+    exists: boolean;
+    frontmatter: string;
+    from: number;
+    to: number;
+    contentStart: number;
+  }
+
+  function getFrontMatterInfo(content: string): FrontMatterInfo;
 }
 
 export enum PromptSortStrategy {

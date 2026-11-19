@@ -9,7 +9,7 @@ export type CustomAgentsGate = "pending" | "full" | "locked" | "hidden";
 
 export const launched: boolean = false;
 
-function subscribeToCustomAgentsGate(listener: () => void): () => void {
+export function subscribeToCustomAgentsGate(listener: () => void): () => void {
   return subscribeToEntitlementChange(listener);
 }
 

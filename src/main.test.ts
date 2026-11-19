@@ -125,6 +125,7 @@ import { disposeNotificationSound } from "@/utils/notificationSound";
 import { findChatFileByDeepLinkId } from "@/utils/chatDeepLink";
 import { Notice, TFile, type WorkspaceLeaf } from "obsidian";
 import { ConnectionManager } from "@/connectors/connectionManager";
+import { CustomAgentStore } from "@/agents/CustomAgentStore";
 import { ConnectorTools } from "@/connectors/connectorTools";
 import { CustomConnectors } from "@/connectors/custom/customConnectors";
 
@@ -722,6 +723,23 @@ describe("main", () => {
         expect(custom.dispose).not.toHaveBeenCalled();
         for (const [cleanup] of registrations.register.mock.calls) (cleanup as () => void)();
         expect(custom.dispose).toHaveBeenCalledTimes(1);
+      });
+
+      it("gives the plugin a custom agent store on desktop that never touches the vault while custom agents are hidden (https://github.com/Brevilabs/obsidian-copilot-private/issues/936)", async () => {
+        (isDesktopRuntime as jest.Mock).mockReturnValue(true);
+        (startActiveWebTabTracking as jest.Mock).mockReturnValue({
+          activeLeafRef: {},
+          layoutRef: {},
+        });
+        const { plugin, finishStartup } = createLoadingPlugin();
+
+        plugin.onload();
+        await finishStartup();
+
+        expect(plugin.customAgents).toBeInstanceOf(CustomAgentStore);
+        await expect(plugin.customAgents?.loadForSession("coco")).rejects.toThrow(
+          "Custom agents are not available."
+        );
       });
 
       it("starts no connection manager on mobile, where connector logins cannot run", async () => {

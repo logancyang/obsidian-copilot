@@ -187,6 +187,29 @@ describe("findRelevantNotes", () => {
       expect(result.status).toBe("matches");
     });
 
+    it("drops a custom agent's files under the current Copilot folder even when Miyo indexed that folder (https://github.com/Brevilabs/obsidian-copilot-private/issues/936)", async () => {
+      mockedGetSettings.mockReturnValue({
+        enableMiyo: true,
+        miyoServerUrl: "",
+        debug: false,
+        copilotFolder: "ai",
+      } as CopilotSettings);
+      const files = ["ai/agents/coco/instructions.md", "ai/agents/coco/MEMORY.md", "alpha.md"];
+      const filesByPath = new Map(
+        ["source.md", ...files].map((path) => [path, createMarkdownFile(path)])
+      );
+      (window.app.vault.getAbstractFileByPath as jest.Mock).mockImplementation(
+        (path: string) => filesByPath.get(path) ?? null
+      );
+      mockSearchRelated.mockResolvedValue({
+        results: files.map((path, index) => ({ path: `vault/${path}`, score: 0.9 - index / 10 })),
+      });
+
+      const result = await findRelevantNotes({ app: window.app, filePath: "source.md" });
+
+      expect(result.notes.map((entry) => entry.note.path)).toEqual(["alpha.md"]);
+    });
+
     it("trusts Miyo to apply the requested result limit instead of capping or sorting again (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
       mockSearchRelated.mockResolvedValue({
         results: Array.from({ length: 25 }, (_, index) => ({

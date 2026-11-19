@@ -1,6 +1,7 @@
 import * as customAgentsGate from "@/agents/customAgentsGate";
 import {
   getCustomAgentsGate,
+  subscribeToCustomAgentsGate,
   useCustomAgentsGate,
 } from "@/agents/customAgentsGate";
 import { setCustomAgentsAccess, verifyStoredToken } from "@/agents/testing/customAgentsAccess";
@@ -81,6 +82,22 @@ describe("customAgentsGate", () => {
       await act(() => verifyStoredToken(false));
 
       expect(result.current).toBe("hidden");
+    });
+  });
+
+  describe("subscribeToCustomAgentsGate()", () => {
+    it("notifies on license verification until unsubscribed", async () => {
+      await setCustomAgentsAccess("unverified");
+      const listener = jest.fn();
+      const unsubscribe = subscribeToCustomAgentsGate(listener);
+
+      await verifyStoredToken(false);
+      expect(listener).toHaveBeenCalled();
+      listener.mockClear();
+
+      unsubscribe();
+      await verifyStoredToken(true);
+      expect(listener).not.toHaveBeenCalled();
     });
   });
 });

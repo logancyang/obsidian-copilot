@@ -1,7 +1,11 @@
 import { findChatRelevantNotes } from "@/miyo/findChatRelevantNotes";
 import { MiyoClient, MiyoRequestError } from "@/miyo/MiyoClient";
 import { App, TFile } from "obsidian";
-jest.mock("@/settings/model", () => ({ getSettings: () => ({ plusLicenseKey: "key" }) }));
+jest.mock("@/settings/model", () => ({
+  getSettings: () => ({ plusLicenseKey: "key", copilotFolder: "ai" }),
+  normalizeRootFolders:
+    jest.requireActual<typeof import("@/settings/model")>("@/settings/model").normalizeRootFolders,
+}));
 jest.mock("@/miyo/miyoUtils", () => ({
   getMiyoCustomUrl: () => "url",
   getVaultRelativeMiyoPath: (_app: unknown, path: string) => path.replace(/^Vault\//, ""),
@@ -53,6 +57,23 @@ describe("findChatRelevantNotes", () => {
       expect(result.notes.map((entry) => entry.note.path)).toEqual(["b.md"]);
       expect(result.notes[0].metadata.score).toBe(0.6);
       expect(result.details?.skippedAttachments).toBe(2);
+    });
+    it("drops a custom agent's files under the current Copilot folder even when Miyo indexed that folder (https://github.com/Brevilabs/obsidian-copilot-private/issues/936)", async () => {
+      search.mockResolvedValue({
+        status: "ok",
+        results: [
+          { path: "Vault/ai/agents/coco/instructions.md", score: 0.9 },
+          { path: "Vault/ai/agents/coco/MEMORY.md", score: 0.8 },
+          { path: "Vault/b.md", score: 0.6 },
+        ],
+        skipped_files: [],
+      });
+      const result = await findChatRelevantNotes(app, {
+        id: "a",
+        request: { folder_name: "Vault", draft: "topic" },
+        skippedAttachments: 0,
+      });
+      expect(result.notes.map((entry) => entry.note.path)).toEqual(["b.md"]);
     });
     it("keeps unsupported-only context unavailable without a request (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", async () => {
       const result = await findChatRelevantNotes(app, {
