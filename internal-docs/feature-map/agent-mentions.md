@@ -27,7 +27,7 @@ Asking another custom agent from a chat with `@`: that agent works in the backgr
 
 ## How to get to it
 
-- Type `@` and an agent's name with the request in the chat input of an agent's chat or a Copilot chat, then send.
+- In the chat input of an agent's chat or a Copilot chat, type `@` and the agent's name, or choose `Agents` in the `@` list and pick the agent, then type the request and send.
 
 ## Driving it
 

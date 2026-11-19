@@ -1,4 +1,4 @@
-import { agentMentionOptions } from "@/agents/ui/agentMentionOptions";
+import { AGENTS_MENTION_CATEGORY, agentMentionOptions } from "@/agents/ui/agentMentionOptions";
 import {
   COCO,
   LEO,
@@ -16,8 +16,14 @@ import type { Meta, StoryObj } from "@/lib/story";
 import { FileClock, FileText, Folder, Globe } from "lucide-react";
 import React from "react";
 
-const CONTEXT_CATEGORIES: TypeaheadOption[] = [
-  { key: "active-note", title: "Active Note", icon: <FileClock className="tw-size-4" /> },
+const ACTIVE_NOTE: TypeaheadOption = {
+  key: "active-note",
+  title: "Active Note",
+  icon: <FileClock className="tw-size-4" />,
+};
+
+const CATEGORIES: TypeaheadOption[] = [
+  AGENTS_MENTION_CATEGORY,
   { key: "notes", title: "Notes", icon: <FileText className="tw-size-4" /> },
   { key: "webTabs", title: "Web tabs", icon: <Globe className="tw-size-4" /> },
   { key: "folders", title: "Folders", icon: <Folder className="tw-size-4" /> },
@@ -46,15 +52,12 @@ const NOTE_MATCHES: TypeaheadOption[] = [
 
 const NOOP = () => undefined;
 
-function menu(options: TypeaheadOption[], query = ""): TypeaheadMenuContentProps {
-  return {
-    options,
-    selectedIndex: 0,
-    onSelect: NOOP,
-    onHighlight: NOOP,
-    mode: "category",
-    query,
-  };
+function menu(
+  options: TypeaheadOption[],
+  query = "",
+  mode: TypeaheadMenuContentProps["mode"] = "category"
+): TypeaheadMenuContentProps {
+  return { options, selectedIndex: 0, onSelect: NOOP, onHighlight: NOOP, mode, query };
 }
 
 const meta = {
@@ -64,18 +67,26 @@ const meta = {
 } satisfies Meta<TypeaheadMenuContentProps>;
 export default meta;
 
-export const InAnAgentChat: StoryObj<TypeaheadMenuContentProps> = {
-  args: menu([...agentMentionOptions([MAYA, LEO, NORA], ""), ...CONTEXT_CATEGORIES]),
+export const FirstLevel: StoryObj<TypeaheadMenuContentProps> = {
+  args: menu(CATEGORIES),
 };
 
-export const InACopilotChat: StoryObj<TypeaheadMenuContentProps> = {
-  args: menu([...agentMentionOptions([...THREE_AGENTS, NORA], ""), ...CONTEXT_CATEGORIES]),
+export const FirstLevelWithActiveNote: StoryObj<TypeaheadMenuContentProps> = {
+  args: menu([ACTIVE_NOTE, ...CATEGORIES]),
 };
 
-export const WithAQuery: StoryObj<TypeaheadMenuContentProps> = {
+export const AgentsInAnAgentChat: StoryObj<TypeaheadMenuContentProps> = {
+  args: menu(agentMentionOptions([MAYA, LEO, NORA], ""), "", "search"),
+};
+
+export const AgentsWithAQuery: StoryObj<TypeaheadMenuContentProps> = {
+  args: menu(agentMentionOptions([...THREE_AGENTS, NORA], "o"), "o", "search"),
+};
+
+export const FirstLevelWithAQuery: StoryObj<TypeaheadMenuContentProps> = {
   args: menu([...agentMentionOptions([MAYA, LEO, NORA], "le"), ...NOTE_MATCHES], "le"),
 };
 
 export const LongName: StoryObj<TypeaheadMenuContentProps> = {
-  args: menu([...agentMentionOptions([COCO, LONG_NAMED_AGENT], ""), ...CONTEXT_CATEGORIES]),
+  args: menu(agentMentionOptions([COCO, LONG_NAMED_AGENT], ""), "", "search"),
 };

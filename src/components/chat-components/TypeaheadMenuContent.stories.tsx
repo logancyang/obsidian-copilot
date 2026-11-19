@@ -1,7 +1,7 @@
 import React from "react";
 import type { Meta, StoryObj } from "@/lib/story";
-import { FileText, Folder, Globe, Hash, UserPlus } from "lucide-react";
-import { agentMentionOptions } from "@/agents/ui/agentMentionOptions";
+import { FileText, Folder, Globe, Hash } from "lucide-react";
+import { AGENTS_MENTION_CATEGORY, agentMentionOptions } from "@/agents/ui/agentMentionOptions";
 import { COCO, LEO, MAYA, NORA } from "@/agents/ui/testing/rosterFixtures";
 import { composeSlashMenuItems } from "./plugins/slashMenuItems";
 import { TypeaheadMenuContent, type TypeaheadMenuContentProps } from "./TypeaheadMenuContent";
@@ -78,16 +78,11 @@ const agentMentionCategories = [
   { key: "folders", title: "Folders", icon: <Folder className="tw-size-4" /> },
 ];
 
-const askAnAgent = {
-  key: "locked-custom-agents",
-  title: "Ask an agent",
-  icon: <UserPlus className="tw-size-4" />,
-  lockedNote: "Supporter preview",
-};
+const lockedAgents = { ...AGENTS_MENTION_CATEGORY, lockedNote: "Supporter preview" };
 
 export const AgentMentionMenuWithLockedAgents: StoryObj<TypeaheadMenuContentProps> = {
   args: {
-    options: [...agentMentionCategories, askAnAgent],
+    options: [lockedAgents, ...agentMentionCategories],
     selectedIndex: 0,
     onSelect: () => undefined,
     onHighlight: () => undefined,
@@ -95,15 +90,21 @@ export const AgentMentionMenuWithLockedAgents: StoryObj<TypeaheadMenuContentProp
   },
 };
 
-export const AgentMentionMenuAfterLicenseLapsed: StoryObj<TypeaheadMenuContentProps> = {
+export const AgentMentionSearchAfterLicenseLapsed: StoryObj<TypeaheadMenuContentProps> = {
   args: {
     options: [
-      ...agentMentionOptions([COCO, MAYA, LEO, NORA], "", () => "Supporter preview"),
-      ...agentMentionCategories,
+      ...agentMentionOptions([COCO, MAYA, LEO, NORA], "ma", () => "Supporter preview"),
+      {
+        key: "note-roadmap",
+        title: "Roadmap",
+        subtitle: "Planning/Roadmap.md",
+        icon: <FileText className="tw-size-4" />,
+      },
     ],
     selectedIndex: 0,
     onSelect: () => undefined,
     onHighlight: () => undefined,
     mode: "category",
+    query: "ma",
   },
 };
