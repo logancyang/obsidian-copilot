@@ -758,6 +758,25 @@ describe("agentMode", () => {
       expect(plugin.register).toHaveBeenCalledWith(expect.any(Function));
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/944 has the agents list Copilot's tools again when custom agents turn unavailable or available, so OpenCode's shared listing follows a license entered while it runs", () => {
+      const notifyToolsChanged = jest.fn();
+      const { createCopilotMcpServer: create } = jest.requireActual<
+        typeof import("./session/copilotMcpServer")
+      >("./session/copilotMcpServer");
+      jest
+        .mocked(createCopilotMcpServer)
+        .mockImplementationOnce((...args) => ({ ...create(...args), notifyToolsChanged }));
+      createAgentSessionManager({} as App, plugin);
+
+      mockCustomAgentsGate = "locked";
+      mockGateListeners.forEach((listener) => listener());
+      mockGateListeners.forEach((listener) => listener());
+      mockCustomAgentsGate = "full";
+      mockGateListeners.forEach((listener) => listener());
+
+      expect(notifyToolsChanged).toHaveBeenCalledTimes(2);
+    });
+
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/945 offers check_agent, answer_agent, stop_agent and ask_user and hands the profile's delete the asked agents' chats to stop", () => {
       createAgentSessionManager({} as App, plugin);
 

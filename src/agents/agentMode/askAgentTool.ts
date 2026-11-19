@@ -13,7 +13,6 @@ import type {
   HiddenAgentChats,
   StopAgentResult,
 } from "@/agents/agentMode/hiddenAgentChats";
-import type { CustomAgent } from "@/agents/CustomAgentStore";
 import { ASK_AGENT_TOOL_NAME } from "@/agents/agentMentionPrompt";
 import {
   ANSWER_AGENT_TOOL_NAME,
@@ -21,23 +20,31 @@ import {
   STOP_AGENT_TOOL_NAME,
 } from "@/agents/agentMode/agentToolCalls";
 import { RELAY_PRINCIPLE } from "@/agents/agentReply";
-import { getCustomAgentsGate } from "@/agents/customAgentsGate";
+import { describeAgent } from "@/agents/agentSessionPrompt";
+import { getCustomAgentsGate, subscribeToCustomAgentsGate } from "@/agents/customAgentsGate";
 
 export const ASK_USER_TOOL_NAME = "ask_user";
 const UNAVAILABLE_TEXT = "Custom agents aren't available right now. Tell the user.";
 
 export interface AskAgentToolHost {
-  agents: () => readonly CustomAgent[];
   isUnlistedChat: (sessionKey: string) => boolean;
-  agentOfChat: (sessionKey: string) => string | null;
 }
 
-const ASK_AGENT_TOOL = Object.freeze({
+// OpenCode's Code Mode catalog shows only the first ~120 characters of a description, so the opening carries when to call it.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/944
+const ASK_AGENT_TOOL: McpToolDefinition = Object.freeze({
   name: ASK_AGENT_TOOL_NAME,
+  description: `Ask another custom agent only when the user's message @-mentions it by name or clearly points to it. Never call it otherwise, and never for yourself.
+
+The agents aren't listed here. When the user names an agent without an @, or only describes its job, call this with the name or job they gave: a name no agent has answers with the agents you can ask.
+
+The agent works in the background, in its own chat with its own instruction and memory, and can't see this chat. The call returns at once. Then tell the user in one short line who you asked and that you'll bring back the reply, and end your turn. Don't wait for the reply or check on it. When the reply comes back, pass it on. ${RELAY_PRINCIPLE}
+
+An agent you ask can't save rules to its memory or change its instruction from a chat it was asked into. If the user wants it to remember something, say so when you pass on its reply, and tell them to say it in that agent's own chat, where it will remember.`,
   inputSchema: {
     type: "object",
     properties: {
-      agent: { type: "string", description: "The agent's name, as listed in this description." },
+      agent: { type: "string", description: "The agent's name." },
       message: {
         type: "string",
         description:
@@ -54,24 +61,6 @@ const ASK_AGENT_TOOL = Object.freeze({
   _meta: { "anthropic/alwaysLoad": true },
 });
 
-// OpenCode's Code Mode catalog shows only the first ~120 characters of a description, so the opening carries when to call it.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/944
-function describe(roster: readonly CustomAgent[]): string {
-  return `Ask another custom agent only when the user's message @-mentions it by name or clearly points to it. Never call it otherwise, and never for yourself.
-
-Agents you can ask:
-${roster.map((agent) => `- ${agent.name}${agent.title ? ` (${agent.title})` : ""}`).join("\n")}
-
-The agent works in the background, in its own chat with its own instruction and memory, and can't see this chat. The call returns at once. Then tell the user in one short line who you asked and that you'll bring back the reply, and end your turn. Don't wait for the reply or check on it. When the reply comes back, pass it on. ${RELAY_PRINCIPLE}
-
-An agent you ask can't save rules to its memory or change its instruction from a chat it was asked into. If the user wants it to remember something, say so when you pass on its reply, and tell them to say it in that agent's own chat, where it will remember.`;
-}
-
-function askAgentDefinition(roster: readonly CustomAgent[]): McpToolDefinition {
-  const definition = { ...ASK_AGENT_TOOL, description: describe(roster) };
-  return definition;
-}
-
 function refusalText(result: AgentRefusal, toolName: string): string {
   switch (result.kind) {
     case "unavailable":
@@ -80,7 +69,7 @@ function refusalText(result: AgentRefusal, toolName: string): string {
       return `You can't ask another agent from this chat. Don't call ${toolName} again.`;
     case "unknown_agent":
       return result.roster.length > 0
-        ? `No custom agent has that name. Agents you can ask: ${result.roster.map((agent) => agent.name).join(", ")}.`
+        ? `No custom agent has that name. Agents you can ask: ${result.roster.map(describeAgent).join("; ")}.`
         : "There are no other custom agents to ask.";
     case "self":
       return `You are ${result.agent.name}; you can't ask yourself. Answer the user directly.`;
@@ -133,25 +122,32 @@ function stopResultText(result: StopAgentResult): string {
   }
 }
 
-// Only a chat the user sees can ask, never itself, and only while custom agents are available.
+// Only a chat the user sees can ask, and only while custom agents are available. The listing names no agent, since OpenCode keeps one listing for its whole process; the call finds the agent by name.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
 function listedForAskingChats(
   host: AskAgentToolHost,
-  definition: (roster: readonly CustomAgent[]) => McpToolDefinition
+  definition: McpToolDefinition
 ): HostedTool["listedAs"] {
-  return ({ sessionKey }: ToolListing): McpToolDefinition | null => {
-    if (getCustomAgentsGate() !== "full" || host.isUnlistedChat(sessionKey)) return null;
-    const self = host.agentOfChat(sessionKey);
-    const roster = host.agents().filter((agent) => agent.slug !== self);
-    return roster.length > 0 ? definition(roster) : null;
-  };
+  return ({ sessionKey }: ToolListing): McpToolDefinition | null =>
+    getCustomAgentsGate() === "full" && !host.isUnlistedChat(sessionKey) ? definition : null;
+}
+
+// OpenCode lists a folder's tools once for every chat in it, so a license entered or lapsing while it runs has it list them again.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/944
+export function relistOnCustomAgentsGateChange(relist: () => void): () => void {
+  let full = getCustomAgentsGate() === "full";
+  return subscribeToCustomAgentsGate(() => {
+    if ((getCustomAgentsGate() === "full") === full) return;
+    full = !full;
+    relist();
+  });
 }
 
 export function createAskAgentTool(chats: HiddenAgentChats, host: AskAgentToolHost): HostedTool {
   return {
-    definition: askAgentDefinition([]),
+    definition: ASK_AGENT_TOOL,
     turnedOffText: UNAVAILABLE_TEXT,
-    listedAs: listedForAskingChats(host, askAgentDefinition),
+    listedAs: listedForAskingChats(host, ASK_AGENT_TOOL),
     call: async (args, chat) => {
       const { agent, message } = (args ?? {}) as Record<string, unknown>;
       if (typeof agent !== "string" || typeof message !== "string" || !message.trim()) {
@@ -202,7 +198,7 @@ function askedAgentTool(
   return {
     definition,
     turnedOffText: UNAVAILABLE_TEXT,
-    listedAs: listedForAskingChats(host, () => definition),
+    listedAs: listedForAskingChats(host, definition),
     call: async (args, chat) => {
       const fields = (args ?? {}) as Record<string, unknown>;
       const text = textArgument ? fields[textArgument.name] : "";

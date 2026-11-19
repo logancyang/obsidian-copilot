@@ -1,6 +1,7 @@
 import {
   buildAgentPrompt,
   buildCopilotChatRecall,
+  describeAgent,
   loadAgentSessionPrompt,
 } from "@/agents/agentSessionPrompt";
 import { CustomAgentStore } from "@/agents/CustomAgentStore";
@@ -176,6 +177,15 @@ describe("agentSessionPrompt", () => {
       expect(withRules).toContain(
         `${buildMemorySaveRules("/vault/copilot/agents/coco/MEMORY.md", "copilot/agents/coco/instructions.md")}\n\n<instruction>`
       );
+    });
+  });
+
+  describe("describeAgent()", () => {
+    it("names an agent with its title in parentheses, and by name alone when it has no title", () => {
+      expect([describeAgent(MAYA), describeAgent({ name: "Leo", title: "" })]).toEqual([
+        "Maya (Product critic)",
+        "Leo",
+      ]);
     });
   });
 

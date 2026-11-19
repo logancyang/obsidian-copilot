@@ -524,6 +524,7 @@ function buildCopilotMcpServer({
     connect,
     readOnlyToolNames: jest.fn(async () => []),
     disconnect: jest.fn(),
+    notifyToolsChanged: jest.fn(),
     dispose: jest.fn(),
   };
 }
