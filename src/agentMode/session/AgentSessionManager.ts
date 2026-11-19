@@ -1,4 +1,5 @@
 import { isCompactCommand } from "@/commands/compactCommand";
+import { countAgentChatUse } from "@/agents/agentChatUsage";
 import { toolsUsedLines } from "@/agentMode/session/conversationHistory";
 import { getVaultBase } from "@/utils/vaultPath";
 import type {
@@ -960,6 +961,7 @@ export class AgentSessionManager {
     }
     this.attachAutoSave(session);
     this.attachAttentionTracking(session);
+    if (agent) countAgentChatUse(this.app, session);
     this.notify();
     refreshLatestVersion();
 
@@ -1054,6 +1056,7 @@ export class AgentSessionManager {
         ))) ||
       AgentSession.start({ ...options, mcpServers });
     this.unlistedSessions.set(internalId, { session, backend, askedFrom });
+    countAgentChatUse(this.app, session);
     const unsubscribe = session.subscribe({
       onMessagesChanged: () => {},
       onStatusChanged: (status) => {
@@ -2555,6 +2558,7 @@ export class AgentSessionManager {
     this.detachedFromTabIds.delete(session.internalId);
     this.attachAutoSave(session);
     this.attachAttentionTracking(session);
+    if (agent) countAgentChatUse(this.app, session);
     this.lastError = null;
     this.finishPendingCreate();
     logInfo(

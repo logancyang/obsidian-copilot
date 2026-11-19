@@ -53,6 +53,17 @@ jest.mock("@/logger", () => ({
   logError: jest.fn(),
 }));
 
+const mockValidateLicenseKey = jest.fn(async (..._args: unknown[]) => ({ isValid: undefined }));
+jest.mock("@/LLMProviders/brevilabsClient", () => ({
+  BrevilabsClient: {
+    getInstance: () => ({
+      validateLicenseKey: (...args: unknown[]) => mockValidateLicenseKey(...args),
+    }),
+  },
+}));
+
+const USAGE_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/594";
+
 const settingsChangeCallbacks = new Set<
   (prev: { agentMode: unknown }, next: { agentMode: unknown }) => void
 >();
@@ -1123,6 +1134,44 @@ describe("AgentSessionManager", () => {
         expect(session.agentSlug).toBe("coco");
       });
 
+      it(`counts a custom agent chat with one license check, trigger custom_agents, on its first message and none after (${USAGE_ISSUE})`, async () => {
+        mockValidateLicenseKey.mockClear();
+        const mgr = buildManager();
+        const session = await mgr.createSession(
+          "opencode",
+          GLOBAL_SCOPE,
+          undefined,
+          undefined,
+          "coco"
+        );
+        expect(mockValidateLicenseKey).not.toHaveBeenCalled();
+
+        getSessionTestHandle(session).sendPrompt();
+        getSessionTestHandle(session).sendPrompt();
+
+        expect(mockValidateLicenseKey).toHaveBeenCalledTimes(1);
+        expect(mockValidateLicenseKey.mock.calls[0][1]).toEqual({ trigger: "custom_agents" });
+      });
+
+      it.each([
+        { chat: "a Copilot chat without an agent", slug: undefined },
+        { chat: "a chat whose agent folder is gone", slug: "gone" },
+      ])(`sends no license check for $chat (${USAGE_ISSUE})`, async ({ slug }) => {
+        mockValidateLicenseKey.mockClear();
+        const mgr = buildManager();
+        const session = await mgr.createSession(
+          "opencode",
+          GLOBAL_SCOPE,
+          undefined,
+          undefined,
+          slug
+        );
+
+        getSessionTestHandle(session).sendPrompt();
+
+        expect(mockValidateLicenseKey).not.toHaveBeenCalled();
+      });
+
       it("starts a Copilot chat without asking for any agent when none is named", async () => {
         mockResolveAgent.mockClear();
         const mgr = buildManager();
@@ -1711,6 +1760,24 @@ describe("AgentSessionManager", () => {
         expect(mgr.getRunningChatIds().size).toBe(0);
         expect(mgr.getSessionByBackendId(session.getBackendSessionId()!)).toBeNull();
         expect(listener).not.toHaveBeenCalled();
+      });
+
+      it(`counts an asked agent's chat with one license check, trigger custom_agents, on its first message and none after (${USAGE_ISSUE})`, async () => {
+        mockValidateLicenseKey.mockClear();
+        const mgr = buildManager();
+        const session = await mgr.startUnlistedSession({
+          projectId: GLOBAL_SCOPE,
+          mode: null,
+          agent: MAYA,
+          observeSessionEvent,
+        });
+        expect(mockValidateLicenseKey).not.toHaveBeenCalled();
+
+        getSessionTestHandle(session).sendPrompt();
+        getSessionTestHandle(session).sendPrompt();
+
+        expect(mockValidateLicenseKey).toHaveBeenCalledTimes(1);
+        expect(mockValidateLicenseKey.mock.calls[0][1]).toEqual({ trigger: "custom_agents" });
       });
 
       it(`tombstones an asked agent's chat in the chat index so a sweep of the agent's sessions never lists it in Recent chats (${ISSUE_944})`, async () => {
@@ -6945,6 +7012,31 @@ describe("AgentSessionManager", () => {
           expect.objectContaining({ sessionId: "native-1", agent: COCO_AGENT })
         );
         expect(session.agentSlug).toBe("coco");
+      });
+
+      it(`counts a reopened custom agent chat with one license check on its next message (${USAGE_ISSUE})`, async () => {
+        mockValidateLicenseKey.mockClear();
+        const replay = buildReplayingBackend();
+        const backend = { ...replay.backend, prompt: jest.fn(() => new Promise(() => undefined)) };
+        const session = await buildManager({
+          persistence: {
+            loadFile: jest.fn().mockResolvedValue({
+              backendId: "opencode",
+              sessionId: "native-1",
+              projectId: GLOBAL_SCOPE,
+              messages: savedTurn,
+              agent: "coco",
+            }),
+          },
+          descriptor: buildDescriptor({ createBackendProcess: () => backend }),
+        }).loadSessionFromHistory(mockTFile({ path: "chat/Saved.md" }));
+        expect(mockValidateLicenseKey).not.toHaveBeenCalled();
+
+        session.sendPrompt("one more question");
+        session.sendPrompt("and another");
+
+        expect(mockValidateLicenseKey).toHaveBeenCalledTimes(1);
+        expect(mockValidateLicenseKey.mock.calls[0][1]).toEqual({ trigger: "custom_agents" });
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/941 restores the card states its note keeps, so a card the user can still act on comes back with the chat", async () => {
