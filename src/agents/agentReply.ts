@@ -17,6 +17,7 @@ export interface AgentReplyRelay extends AgentReplyMarker {
   denied: readonly string[];
   changed: readonly string[];
   error?: string;
+  stopped?: "stopped_by_user" | "agent_deleted";
 }
 
 export interface AgentReply {
@@ -36,6 +37,7 @@ export function formatAgentReply({
   denied,
   changed,
   error,
+  stopped,
 }: AgentReplyRelay): string {
   const marker = JSON.stringify({ agent, name, mention }).replace(/>/g, "\\u003e");
   // The reply can quote a note or page written to close the quote early and pass its own text off as Copilot's.
@@ -43,9 +45,11 @@ export function formatAgentReply({
   const quoted = reply.replace(/<\/agent-reply/gi, "&lt;/agent-reply");
   return [
     `<!-- ${AGENT_REPLY_MARKER} ${marker} -->`,
-    error
-      ? `${name} didn't finish (${error.trim()}). Tell the user how far ${name} got and why.`
-      : `${name} replied. Pass the reply on to the user now.`,
+    stopped
+      ? `${name} stopped${stopped === "agent_deleted" ? ` because the user deleted ${name}` : ", as the user asked"}. ${name}'s changes stay. Tell the user how far ${name} got and what ${name} changed; when ${name}'s reply doesn't say, read the files ${name} changed to find out.`
+      : error
+        ? `${name} didn't finish (${error.trim()}). Tell the user how far ${name} got and why.`
+        : `${name} replied. Pass the reply on to the user now.`,
     ...(denied.length > 0
       ? [
           `Copilot turned down the requests ${name} made, quoted below: this chat asks before changes, and ${name} can't get the user's approval from a chat ${name} was asked into. Tell the user what ${name} couldn't do.`,

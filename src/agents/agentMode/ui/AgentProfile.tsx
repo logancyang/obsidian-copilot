@@ -3,6 +3,7 @@ import {
   listAgentChats,
   type DeleteAgentResult,
 } from "@/agents/agentMode/agentChats";
+import type { HiddenAgentChats } from "@/agents/agentMode/hiddenAgentChats";
 import { openAgentFile } from "@/agents/agentMode/memorySaveCards";
 import { useAgentProfileFacts } from "@/agents/agentMode/ui/useAgentProfileFacts";
 import type { CustomAgent, CustomAgentStore } from "@/agents/CustomAgentStore";
@@ -23,6 +24,7 @@ export interface AgentProfileProps {
   app: App;
   manager: AgentSessionManager;
   store: CustomAgentStore;
+  hiddenChats?: HiddenAgentChats;
   hostSessionId: string;
   getModels: () => AgentModelChoices;
   onBack: () => void;
@@ -51,6 +53,7 @@ export function AgentProfile({
   app,
   manager,
   store,
+  hiddenChats,
   hostSessionId,
   getModels,
   onBack,
@@ -68,13 +71,25 @@ export function AgentProfile({
     const chats = await listAgentChats(manager, slug);
     new AgentDeleteModal(
       app,
-      { agent, memoryRules: facts.memory?.rules ?? null, chatCount: chats.length },
+      {
+        agent,
+        memoryRules: facts.memory?.rules ?? null,
+        chatCount: chats.length,
+        workingIn: hiddenChats?.workingIn(slug) ?? null,
+      },
       () => void deleteAgent()
     ).open();
   };
   const deleteAgent = async () => {
     try {
-      const result = await deleteAgentWithChats({ app, manager, store, slug, hostSessionId });
+      const result = await deleteAgentWithChats({
+        app,
+        manager,
+        store,
+        slug,
+        hostSessionId,
+        hiddenChats,
+      });
       new Notice(agentDeleteNotice(name, result));
     } catch (error) {
       logError(`[Custom agents] Deleting ${slug} failed`, error);

@@ -11,6 +11,7 @@ export interface AgentDeleteFormProps {
   agent: Pick<CustomAgent, "name" | "instructionsPath" | "memoryPath" | "faceSrc">;
   memoryRules: number | null;
   chatCount: number;
+  workingIn?: string | null;
   onDelete: () => void;
   onCancel: () => void;
 }
@@ -21,6 +22,7 @@ export function AgentDeleteForm({
   agent,
   memoryRules,
   chatCount,
+  workingIn,
   onDelete,
   onCancel,
 }: AgentDeleteFormProps): React.ReactElement {
@@ -31,6 +33,11 @@ export function AgentDeleteForm({
         <AlertTriangle className="tw-mt-0.5 tw-size-3.5 tw-shrink-0 tw-text-error" />
         <span>This deletes {name} and everything below. You can&apos;t undo it.</span>
       </div>
+      {workingIn && (
+        <p className="tw-m-0 tw-px-1 tw-text-ui-small tw-text-warning">
+          {name} is working in {workingIn}&apos;s chat. Deleting stops it.
+        </p>
+      )}
       <ul className="tw-m-0 tw-list-none tw-divide-x-0 tw-divide-y tw-divide-solid tw-divide-border tw-rounded-md tw-border tw-border-solid tw-border-border tw-p-0">
         <DeleteItem icon={<FileText className={ICON_CLASS} />} title={`What ${name} handles`}>
           <FilePath>{agent.instructionsPath}</FilePath>

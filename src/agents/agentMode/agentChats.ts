@@ -1,3 +1,4 @@
+import type { HiddenAgentChats } from "@/agents/agentMode/hiddenAgentChats";
 import type { CustomAgent, CustomAgentStore } from "@/agents/CustomAgentStore";
 import { findBackendForModel } from "@/agentMode/backends/registry";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
@@ -58,6 +59,7 @@ export interface DeleteAgentRequest {
   store: CustomAgentStore;
   slug: string;
   hostSessionId: string;
+  hiddenChats?: Pick<HiddenAgentChats, "stopAgent">;
 }
 
 export interface DeleteAgentResult {
@@ -78,6 +80,7 @@ export async function deleteAgentWithChats({
   store,
   slug,
   hostSessionId,
+  hiddenChats,
 }: DeleteAgentRequest): Promise<DeleteAgentResult> {
   // A confirm that lands after the agent's folder is gone or custom agents stopped must not delete its chats on their own.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/940
@@ -110,6 +113,9 @@ export async function deleteAgentWithChats({
   // An agent deleted while some of its chats stay would leave them recorded with an agent nobody can open or delete them from.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/940
   if (failedChats > 0) return { deletedChats, failedChats, agentDeleted: false };
+  // An agent the delete keeps keeps working, so its run is stopped and reported as deleted only once nothing is left to keep it.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/945
+  hiddenChats?.stopAgent(slug);
   try {
     await store.deleteAgent(slug);
   } catch (error) {

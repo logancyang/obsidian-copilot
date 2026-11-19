@@ -3,12 +3,18 @@ import type {
   McpToolDefinition,
   ToolListing,
 } from "@/agentMode/session/copilotMcpServer";
-import type { AskAgentResult, HiddenAgentChats } from "@/agents/agentMode/hiddenAgentChats";
+import type {
+  AgentRefusal,
+  AskAgentResult,
+  HiddenAgentChats,
+  StopAgentResult,
+} from "@/agents/agentMode/hiddenAgentChats";
 import type { CustomAgent } from "@/agents/CustomAgentStore";
 import { RELAY_PRINCIPLE } from "@/agents/agentReply";
 import { getCustomAgentsGate } from "@/agents/customAgentsGate";
 
 export const ASK_AGENT_TOOL_NAME = "ask_agent";
+export const STOP_AGENT_TOOL_NAME = "stop_agent";
 const UNAVAILABLE_TEXT = "Custom agents aren't available right now. Tell the user.";
 
 export interface AskAgentToolHost {
@@ -57,47 +63,109 @@ function askAgentDefinition(roster: readonly CustomAgent[]): McpToolDefinition {
   return definition;
 }
 
-function resultText(result: AskAgentResult): string {
+function refusalText(result: AgentRefusal, toolName: string): string {
   switch (result.kind) {
-    case "asked":
-      return `${result.agent.name} is working on it in the background. Tell the user in one short line that you asked ${result.agent.name} and will bring back the reply, then end your turn.`;
     case "unavailable":
       return UNAVAILABLE_TEXT;
     case "not_from_here":
-      return `You can't ask another agent from this chat. Don't call ${ASK_AGENT_TOOL_NAME} again.`;
+      return `You can't ask another agent from this chat. Don't call ${toolName} again.`;
     case "unknown_agent":
       return result.roster.length > 0
         ? `No custom agent has that name. Agents you can ask: ${result.roster.map((agent) => agent.name).join(", ")}.`
         : "There are no other custom agents to ask.";
     case "self":
       return `You are ${result.agent.name}; you can't ask yourself. Answer the user directly.`;
-    case "busy":
-      return `${result.agent.name} is still working on the earlier request from this chat. Tell the user you'll bring back the reply when ${result.agent.name} is done, and that they can ask again after that.`;
   }
 }
+
+function resultText(result: AskAgentResult): string {
+  switch (result.kind) {
+    case "asked":
+      return `${result.agent.name} is working on it in the background. Tell the user in one short line that you asked ${result.agent.name} and will bring back the reply, then end your turn.`;
+    case "busy":
+      return `${result.agent.name} is still working on the earlier request from this chat. Tell the user you'll bring back the reply when ${result.agent.name} is done, and that they can ask again after that.`;
+    default:
+      return refusalText(result, ASK_AGENT_TOOL_NAME);
+  }
+}
+
+function stopResultText(result: StopAgentResult): string {
+  switch (result.kind) {
+    case "stopped":
+      return `Stopped ${result.agent.name}. ${result.agent.name}'s changes stay. End your turn now; ${result.agent.name}'s report comes next, and then you tell the user how far ${result.agent.name} got and what changed.`;
+    case "not_working":
+      return `${result.agent.name} isn't working on anything from this chat, so there is nothing to stop.`;
+    case "not_asked":
+      return `${result.agent.name} isn't working on anything from this chat now.`;
+    default:
+      return refusalText(result, STOP_AGENT_TOOL_NAME);
+  }
+}
+
+// Only a chat the user sees can ask, never itself, and only while custom agents are available.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/944
+function listedForAskingChats(
+  host: AskAgentToolHost,
+  definition: (roster: readonly CustomAgent[]) => McpToolDefinition
+): HostedTool["listedAs"] {
+  return ({ sessionKey }: ToolListing): McpToolDefinition | null => {
+    if (getCustomAgentsGate() !== "full" || host.isUnlistedChat(sessionKey)) return null;
+    const self = host.agentOfChat(sessionKey);
+    const roster = host.agents().filter((agent) => agent.slug !== self);
+    return roster.length > 0 ? definition(roster) : null;
+  };
+}
+
+const AGENT_ARGUMENT = Object.freeze({
+  type: "string",
+  description: "The name of an agent you asked from this chat.",
+});
 
 export function createAskAgentTool(chats: HiddenAgentChats, host: AskAgentToolHost): HostedTool {
   return {
     definition: askAgentDefinition([]),
     turnedOffText: UNAVAILABLE_TEXT,
-    // Only a chat the user sees can ask, never itself, and only while custom agents are available.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
-    listedAs: ({ sessionKey }: ToolListing): McpToolDefinition | null => {
-      if (getCustomAgentsGate() !== "full" || host.isUnlistedChat(sessionKey)) return null;
-      const self = host.agentOfChat(sessionKey);
-      const roster = host.agents().filter((agent) => agent.slug !== self);
-      return roster.length > 0 ? askAgentDefinition(roster) : null;
-    },
+    listedAs: listedForAskingChats(host, askAgentDefinition),
     call: async (args, chat) => {
       const { agent, message } = (args ?? {}) as Record<string, unknown>;
       if (typeof agent !== "string" || typeof message !== "string" || !message.trim()) {
         return { text: "agent and message must be non-empty strings.", isError: true };
       }
       const result = chats.ask(chat, agent, message);
-      return {
-        text: resultText(result),
-        isError: result.kind === "unknown_agent",
-      };
+      // The chat draws a call's line from its error flag, so a call that asked no one fails.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/945
+      return { text: resultText(result), isError: result.kind !== "asked" };
+    },
+  };
+}
+
+const STOP_AGENT_TOOL: McpToolDefinition = Object.freeze({
+  name: STOP_AGENT_TOOL_NAME,
+  description:
+    "Stop an agent you asked from this chat, when the user tells you to stop it. It stops at once and its changes stay. Then end your turn: its report comes back next, with how far it got and what it changed, and you pass that on.",
+  inputSchema: {
+    type: "object",
+    properties: { agent: AGENT_ARGUMENT },
+    required: ["agent"],
+  },
+  // Stopping changes no file, and Codex asks the user before any tool that isn't read-only.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/945
+  annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+  _meta: { "anthropic/alwaysLoad": true },
+});
+
+export function createStopAgentTool(chats: HiddenAgentChats, host: AskAgentToolHost): HostedTool {
+  return {
+    definition: STOP_AGENT_TOOL,
+    turnedOffText: UNAVAILABLE_TEXT,
+    listedAs: listedForAskingChats(host, () => STOP_AGENT_TOOL),
+    call: async (args, chat) => {
+      const { agent } = (args ?? {}) as Record<string, unknown>;
+      if (typeof agent !== "string" || !agent.trim()) {
+        return { text: "agent must be a non-empty string.", isError: true };
+      }
+      const result = chats.stop(chat, agent);
+      return { text: stopResultText(result), isError: result.kind !== "stopped" };
     },
   };
 }

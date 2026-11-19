@@ -49,6 +49,29 @@ describe("agentReply", () => {
       expect(text).not.toContain("Maya replied.");
     });
 
+    it(`says the agent stopped, whether the user asked or deleted it, that its changes stay, and asks how far it got (https://github.com/Brevilabs/obsidian-copilot-private/issues/945)`, () => {
+      const byUser = formatAgentReply({
+        ...MAYA,
+        ...NOTHING,
+        reply: "",
+        stopped: "stopped_by_user",
+      });
+      const deleted = formatAgentReply({
+        ...MAYA,
+        ...NOTHING,
+        reply: "",
+        stopped: "agent_deleted",
+      });
+
+      expect(byUser).toContain(
+        "Maya stopped, as the user asked. Maya's changes stay. Tell the user how far Maya got and what Maya changed; when Maya's reply doesn't say, read the files Maya changed to find out."
+      );
+      expect(deleted).toContain(
+        "Maya stopped because the user deleted Maya. Maya's changes stay. Tell the user how far Maya got and what Maya changed; when Maya's reply doesn't say, read the files Maya changed to find out."
+      );
+      expect(byUser).not.toContain("Maya replied.");
+    });
+
     it(`names each request Copilot turned down, quoted as the agent's own words, so the current agent can tell the user (${ISSUE})`, () => {
       expect(
         formatAgentReply({
