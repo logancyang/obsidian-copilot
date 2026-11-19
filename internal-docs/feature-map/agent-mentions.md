@@ -42,4 +42,5 @@ All of these need a license that includes custom agents and at least two agents 
 - A settings change that restarts the chat's agent also stops the mentioned agent, and its reply never comes back.
 - Stopping the chat's own reply doesn't drop a mentioned agent's reply that is waiting; it comes back after the stop. Stopping the turn that passes the reply on ends it there.
 - On Codex models, a Copilot chat with no agent usually answers an `@`-mention itself: Codex finds the tool only through its own tool search, and only an agent's chat names the tool in its prompt.
+- The chat's note keeps each mention's agent and how it ended, so it survives a restart. An agent that was still working when Obsidian closed is saved as not finished, and mentioning it again after a restart starts a new conversation with it.
 - The mentioned agent works in the chat's project folder, in the chat's mode, on its own model.

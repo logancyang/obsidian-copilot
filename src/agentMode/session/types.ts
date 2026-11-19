@@ -1,3 +1,4 @@
+import type { AgentMention } from "@/agents/agentMentions";
 import type { MemorySave } from "@/agents/memorySaves";
 import type { EffortOption } from "@/lib/model-effort";
 import type React from "react";
@@ -579,6 +580,7 @@ export interface AgentChatMessage {
   fileChanges?: TurnFileChange[];
   toolsUsed?: readonly string[];
   memorySaves?: readonly MemorySave[];
+  agentMentions?: readonly AgentMention[];
 }
 
 export interface TurnFileChange {

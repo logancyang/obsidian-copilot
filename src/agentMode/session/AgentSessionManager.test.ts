@@ -5543,6 +5543,32 @@ describe("AgentSessionManager", () => {
         await mgr.shutdown();
       });
 
+      it("saves again when an earlier message's @-mentioned agent finishes, so its note keeps the run's status (https://github.com/Brevilabs/obsidian-copilot-private/issues/944)", async () => {
+        const { mgr, saveSession } = savedNoteFixture();
+        const session = await mgr.createSession();
+        const handle = getSessionTestHandle(session);
+        const working = { id: "m1", agent: "maya", name: "Maya", status: "working", startedAt: 1 };
+        const asked = { message: "@Maya review", agentMentions: [working] };
+        handle.setMessages([asked, { message: "Asked Maya." }, { message: "Unrelated" }]);
+        await mgr.saveActiveSession();
+        const finished = [
+          { ...asked, agentMentions: [{ ...working, status: "finished", endedAt: 2 }] },
+          { message: "Asked Maya." },
+          { message: "Unrelated" },
+        ];
+        handle.setMessages(finished);
+
+        await mgr.saveActiveSession();
+
+        expect(saveSession).toHaveBeenCalledTimes(2);
+        expect(saveSession).toHaveBeenLastCalledWith(
+          finished,
+          session.backendId,
+          expect.anything()
+        );
+        await mgr.shutdown();
+      });
+
       it("persists changes during the first manual save for https://github.com/logancyang/obsidian-copilot/issues/3225", async () => {
         const { mgr, saveSession } = savedNoteFixture();
         let finishSave!: (result: { path: string }) => void;

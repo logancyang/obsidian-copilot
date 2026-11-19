@@ -37,6 +37,7 @@ import {
 } from "./agentChatYaml";
 import { sanitizeModel } from "./AgentSessionIndex";
 import type { MemorySave } from "@/agents/memorySaves";
+import { restoreAgentMentions, type AgentMention } from "@/agents/agentMentions";
 import { GLOBAL_SCOPE } from "./scope";
 import type { AgentChatMessage, BackendId, ModelSelection, SessionUsage } from "./types";
 
@@ -60,6 +61,9 @@ interface SavedMessageData {
   // A custom agent's save lines come back with the chat only from its note; a build without custom agents ignores the key and shows the reply as ordinary text.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/942
   memorySaves?: readonly MemorySave[];
+  // Each @-mentioned agent's run comes back with the chat only from its note; master and a build without custom agents ignore the key.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
+  agentMentions?: readonly AgentMention[];
 }
 
 function loadedMemorySaves(saved: unknown): MemorySave[] {
@@ -423,6 +427,7 @@ export class AgentChatPersistenceManager {
           ...(tools.length > 0 ? { tools } : {}),
           ...savedContext(m.context),
           ...(m.memorySaves?.length ? { memorySaves: m.memorySaves } : {}),
+          ...(m.agentMentions?.length ? { agentMentions: m.agentMentions } : {}),
         };
         // A message ending in a literal hidden line gets an empty one after it, so loading keeps that text.
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/906
@@ -465,6 +470,7 @@ export class AgentChatPersistenceManager {
         : [];
       const context = loadedContext(data, this.app);
       const memorySaves = loadedMemorySaves(data.memorySaves);
+      const agentMentions = restoreAgentMentions(data.agentMentions);
 
       let timestamp: FormattedDateTime | null = null;
       if (timestampStr !== "Unknown time") {
@@ -495,6 +501,7 @@ export class AgentChatPersistenceManager {
         ...(tools.length > 0 ? { toolsUsed: tools } : {}),
         ...(context ? { context } : {}),
         ...(memorySaves.length > 0 ? { memorySaves } : {}),
+        ...(agentMentions.length > 0 ? { agentMentions } : {}),
       });
     }
     return messages;

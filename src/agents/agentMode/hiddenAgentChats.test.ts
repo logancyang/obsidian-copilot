@@ -13,6 +13,7 @@ import {
 import { RELAY_PRINCIPLE } from "@/agents/agentReply";
 import { CustomAgentStore } from "@/agents/CustomAgentStore";
 import { serializeInstructionsFile } from "@/agents/customAgentFiles";
+import * as customAgentsGate from "@/agents/customAgentsGate";
 import { setCustomAgentsAccess } from "@/agents/testing/customAgentsAccess";
 import { createFakeAgentVault, type FakeAgentVault } from "@/agents/testing/fakeAgentVault";
 import { setSettings } from "@/settings/model";
@@ -127,6 +128,18 @@ class ObservedChat extends AgentSession {
   untilHanded(): Promise<void> {
     return new Promise((resolve) => this.handedWaiters.add(resolve));
   }
+}
+
+function mentionsOn(chat: AgentSession) {
+  return chat.store.getDisplayMessages().find((m) => m.message.startsWith("@Maya"))?.agentMentions;
+}
+
+async function askFromMessage(): Promise<{ coco: ObservedChat; maya: AgentSession }> {
+  const coco = await openChat({ agentSlug: "coco" });
+  coco.sendPrompt("@Maya what do you think of this plan?");
+  await fake.untilPrompt(sessionIdOf(coco));
+  const maya = await askedAndPrompted(coco);
+  return { coco, maya };
 }
 
 function answer(maya: AgentSession, text: string): void {
@@ -642,6 +655,91 @@ describe("hiddenAgentChats", () => {
 
         await untilStatus(maya, (status) => status === "closed");
         expect(coco.store.getDisplayMessages()).toEqual([]);
+      });
+
+      it(`saves the run as working with its hidden chat, then finished with when it ended (${ISSUE})`, async () => {
+        const { coco, maya } = await askFromMessage();
+
+        const [working] = mentionsOn(coco) ?? [];
+        expect(working).toMatchObject({
+          agent: "maya",
+          name: "Maya",
+          status: "working",
+          chat: { backendId: "fake", sessionId: sessionIdOf(maya) },
+        });
+        expect(working.endedAt).toBeUndefined();
+
+        answer(maya, "Too many features.");
+        fake.endTurn(sessionIdOf(coco));
+        await fake.untilPrompt(sessionIdOf(coco), 2);
+
+        const [finished] = mentionsOn(coco) ?? [];
+        expect(finished).toMatchObject({ id: working.id, status: "finished" });
+        expect(finished.endedAt).toBeGreaterThanOrEqual(working.startedAt);
+      });
+
+      it(`saves that the agent didn't finish because Copilot turned a request down (${ISSUE})`, async () => {
+        const { coco, maya } = await askFromMessage();
+        const request = { ...writePermissionRequest(), sessionId: sessionIdOf(maya) };
+        await chats.answerPermission(request);
+
+        answer(maya, "I couldn't add the line.");
+        fake.endTurn(sessionIdOf(coco));
+        await fake.untilPrompt(sessionIdOf(coco), 2);
+
+        expect(mentionsOn(coco)?.[0]).toEqual(
+          expect.objectContaining({
+            status: "didnt_finish",
+            end: { kind: "permission_denied", requests: [request.toolCall.title] },
+          })
+        );
+      });
+
+      it(`saves that the agent didn't finish, and why, when its chat disconnects (${ISSUE})`, async () => {
+        const { coco, maya } = await askFromMessage();
+
+        fake.emit(sessionIdOf(maya), {
+          sessionUpdate: "session_disconnected",
+          error: new Error("Claude stopped unexpectedly."),
+        });
+        fake.endTurn(sessionIdOf(coco));
+        await fake.untilPrompt(sessionIdOf(coco), 2);
+
+        expect(mentionsOn(coco)?.[0]).toEqual(
+          expect.objectContaining({
+            status: "didnt_finish",
+            end: { kind: "error", message: "Claude stopped unexpectedly." },
+          })
+        );
+      });
+
+      it(`saves and relays nothing for a run that ends after the license lapsed without notice, which its note then reads as didn't finish (${ISSUE})`, async () => {
+        const { coco, maya } = await askFromMessage();
+        const gateRead = new Promise<void>((resolve) =>
+          jest.spyOn(customAgentsGate, "getCustomAgentsGate").mockImplementation(() => {
+            resolve();
+            return "hidden";
+          })
+        );
+
+        try {
+          answer(maya, "Too many features.");
+          await gateRead;
+        } finally {
+          jest.mocked(customAgentsGate.getCustomAgentsGate).mockRestore();
+        }
+
+        expect(mentionsOn(coco)?.[0]).toEqual(expect.objectContaining({ status: "working" }));
+        expect(fake.promptsTo(sessionIdOf(coco))).toHaveLength(1);
+      });
+
+      it(`leaves the run working when the chat that asked closes, which its note then reads as didn't finish (${ISSUE})`, async () => {
+        const { coco, maya } = await askFromMessage();
+
+        await coco.dispose();
+        await untilStatus(maya, (status) => status === "closed");
+
+        expect(mentionsOn(coco)?.[0]).toEqual(expect.objectContaining({ status: "working" }));
       });
     });
 

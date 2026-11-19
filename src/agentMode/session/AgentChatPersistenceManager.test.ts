@@ -809,6 +809,68 @@ describe("AgentChatPersistenceManager", () => {
       expect(file.contents).toBe(before);
     });
 
+    it("restores each @-mentioned agent's run, with its hidden chat, from the message that asked it, keeping the note the same across saves (https://github.com/Brevilabs/obsidian-copilot-private/issues/944)", async () => {
+      const agentMentions = [
+        {
+          id: "mention-1",
+          agent: "maya",
+          name: "Maya",
+          status: "didnt_finish" as const,
+          startedAt: 1735732800000,
+          endedAt: 1735732860000,
+          end: { kind: "permission_denied" as const, requests: ["Edit Plans/Launch plan.md"] },
+          chat: { backendId: "claude", sessionId: "hidden-1" },
+        },
+      ];
+      const saved = await manager.saveSession(
+        [
+          { ...makeMessage(USER_SENDER, "@Maya add one line."), agentMentions },
+          makeMessage(AI_SENDER, "I asked Maya.", 1735732800001),
+        ],
+        "claude"
+      );
+      const file = app.files.get(saved!.path)!;
+
+      expect(file.contents).toContain('<!-- copilot-message {"agentMentions":[{"id":"mention-1"');
+      const loaded = await manager.loadFile(file as unknown as TFile);
+      expect(loaded.messages[0].message).toBe("@Maya add one line.");
+      expect(loaded.messages[0].agentMentions).toEqual(agentMentions);
+
+      const before = file.contents;
+      await manager.saveSession(loaded.messages, "claude", { existingPath: saved!.path });
+      expect(file.contents).toBe(before);
+    });
+
+    it("reads an @-mentioned agent still working when its chat was saved as one that didn't finish because Obsidian closed, and drops runs it cannot read (https://github.com/Brevilabs/obsidian-copilot-private/issues/944)", async () => {
+      const file = addNote(app, "copilot/copilot-conversations/agent__mention.md");
+      Object.assign(file, {
+        contents: [
+          "---",
+          "backendId: claude",
+          "---",
+          "",
+          "**user**: @Maya review the plan",
+          '<!-- copilot-message {"agentMentions":[{"id":"m1","agent":"maya","name":"Maya","status":"working","startedAt":5,"chat":{"backendId":"claude","sessionId":"h1"}},{"id":"m2","agent":"leo","name":"Leo","status":"dancing","startedAt":5},{"id":"m3","agent":"leo","name":"Leo","status":"stopped","startedAt":5,"end":null},"x"]} -->',
+          "[Timestamp: 2026/01/01 12:00:00]",
+        ].join("\n"),
+      });
+
+      const loaded = await manager.loadFile(file);
+
+      expect(loaded.messages[0].message).toBe("@Maya review the plan");
+      expect(loaded.messages[0].agentMentions).toEqual([
+        {
+          id: "m1",
+          agent: "maya",
+          name: "Maya",
+          status: "didnt_finish",
+          end: { kind: "obsidian_closed" },
+          startedAt: 5,
+          chat: { backendId: "claude", sessionId: "h1" },
+        },
+      ]);
+    });
+
     it("drops a saved rule entry it cannot read and keeps the reply's text", async () => {
       const file = addNote(app, "copilot/copilot-conversations/agent__saved.md");
       Object.assign(file, {

@@ -15,6 +15,16 @@ const MEMORY_SAVE = {
   rule: "Launch videos lead with user value, not the feature list.",
 };
 
+const MAYA_MENTION = Object.freeze({
+  id: "mention-1",
+  agent: "maya",
+  name: "Maya",
+  status: "finished" as const,
+  startedAt: 1,
+  endedAt: 2,
+  chat: { backendId: "claude", sessionId: "hidden-1" },
+});
+
 describe("AgentMessageStore", () => {
   afterEach(() => {
     jest.useRealTimers();
@@ -692,6 +702,23 @@ describe("AgentMessageStore", () => {
       expect(store.getDisplayMessages()[0].memorySaves).toEqual([MEMORY_SAVE]);
     });
 
+    it("keeps each @-mentioned agent's run on a loaded message (https://github.com/Brevilabs/obsidian-copilot-private/issues/944)", () => {
+      const store = new AgentMessageStore();
+
+      store.loadMessages([
+        {
+          id: "u1",
+          sender: USER_SENDER,
+          message: "@Maya review",
+          timestamp: null,
+          isVisible: true,
+          agentMentions: [MAYA_MENTION],
+        },
+      ]);
+
+      expect(store.getDisplayMessages()[0].agentMentions).toEqual([MAYA_MENTION]);
+    });
+
     it("drops file changes from a loaded chat so a reopened turn shows none", () => {
       const store = new AgentMessageStore();
       const id = store.addMessage(placeholder());
@@ -783,6 +810,19 @@ describe("AgentMessageStore", () => {
       const [reply] = store.getDisplayMessages();
       expect(reply.toolsUsed).toEqual(["Read (read): a.md"]);
       expect(reply.parts?.map((p) => p.kind)).toEqual(["tool_call", "text"]);
+    });
+
+    it("gives a replayed message the @-mentioned agents' runs its note saved (https://github.com/Brevilabs/obsidian-copilot-private/issues/944)", () => {
+      const store = new AgentMessageStore();
+      store.addMessage(replayed(USER_SENDER, "q"));
+      store.addMessage(replayed(AI_SENDER, "a"));
+
+      store.adoptNoteRows([
+        noteRow(USER_SENDER, "q", { agentMentions: [MAYA_MENTION] }),
+        noteRow(AI_SENDER, "a"),
+      ]);
+
+      expect(store.getDisplayMessages()[0].agentMentions).toEqual([MAYA_MENTION]);
     });
 
     it("gives a replayed reply the rules its note says the custom agent saved (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", () => {
@@ -993,6 +1033,23 @@ describe("AgentMessageStore", () => {
       store.truncateAfterMessageId(a);
       expect(store.getDisplayMessages().map((m) => m.id)).toEqual([a]);
       expect(store.getMessage(c)).toBeUndefined();
+    });
+  });
+
+  describe("setAgentMentions()", () => {
+    it("publishes the @-mentioned agents' runs on the message that asked them (https://github.com/Brevilabs/obsidian-copilot-private/issues/944)", () => {
+      const store = new AgentMessageStore();
+      const id = store.addMessage({ ...placeholder(), sender: USER_SENDER });
+      const before = store.getDisplayMessages();
+
+      expect(store.setAgentMentions(id, [MAYA_MENTION])).toBe(true);
+
+      expect(store.getDisplayMessages()).not.toBe(before);
+      expect(store.getMessage(id)?.agentMentions).toEqual([MAYA_MENTION]);
+    });
+
+    it("returns false for an unknown message", () => {
+      expect(new AgentMessageStore().setAgentMentions("nope", [MAYA_MENTION])).toBe(false);
     });
   });
 

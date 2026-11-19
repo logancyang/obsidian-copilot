@@ -12,10 +12,12 @@ import type {
   SessionEvent,
   TurnFileChange,
 } from "@/agentMode/session/types";
+import type { AgentMention } from "@/agents/agentMentions";
 import { formatAgentReply } from "@/agents/agentReply";
 import { loadAgentSessionPrompt } from "@/agents/agentSessionPrompt";
 import type { CustomAgent, CustomAgentStore } from "@/agents/CustomAgentStore";
 import { getCustomAgentsGate, subscribeToCustomAgentsGate } from "@/agents/customAgentsGate";
+import { USER_SENDER } from "@/constants";
 import { logWarn } from "@/logger";
 import { v4 as uuidv4 } from "uuid";
 
@@ -51,6 +53,7 @@ interface HiddenRunEnd {
 
 interface HiddenRun {
   id: string;
+  askedIn: string | null;
   reply: string;
   sawTurn: boolean;
   denied: string[];
@@ -187,6 +190,7 @@ export class HiddenAgentChats {
   private async run(hidden: HiddenChat, message: string): Promise<void> {
     const run: HiddenRun = {
       id: uuidv4(),
+      askedIn: lastUserMessageId(hidden.parent),
       reply: "",
       sawTurn: false,
       denied: [],
@@ -202,9 +206,20 @@ export class HiddenAgentChats {
       };
     });
     hidden.run = run;
+    record(hidden.parent, run, {
+      id: run.id,
+      agent: hidden.agent.slug,
+      name: hidden.agent.name,
+      status: "working",
+      startedAt: Date.now(),
+    });
     let end: HiddenRunEnd;
     try {
-      end = await this.runTurn(hidden, run, answer, await hidden.session, message);
+      const session = await hidden.session;
+      const sessionId = session.getBackendSessionId();
+      if (sessionId)
+        record(hidden.parent, run, { chat: { backendId: session.backendId, sessionId } });
+      end = await this.runTurn(hidden, run, answer, session, message);
     } catch (error) {
       end = { reply: run.reply.trim(), files: [], denied: run.denied, error: asError(error) };
     } finally {
@@ -257,10 +272,19 @@ export class HiddenAgentChats {
   }
 
   private finishRun(hidden: HiddenChat, run: HiddenRun, end: HiddenRunEnd): void {
-    // A stopped chat leaves the map, so a run that ends after its stop, as when its start fails on unload, relays nothing.
+    // A stopped chat leaves the map, so a run that ends after its stop, as when its start fails on unload, records and relays nothing.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
     if (this.chats.get(chatKey(hidden.parent, hidden.agent.slug)) !== hidden) return;
     if (getCustomAgentsGate() !== "full") return;
+    record(hidden.parent, run, {
+      status: end.error || end.denied.length > 0 ? "didnt_finish" : "finished",
+      endedAt: Date.now(),
+      ...(end.error
+        ? { end: { kind: "error", message: end.error.message } }
+        : end.denied.length > 0
+          ? { end: { kind: "permission_denied", requests: end.denied } }
+          : {}),
+    });
     void relay(
       hidden.parent,
       formatAgentReply({
@@ -361,6 +385,28 @@ async function stopSession(session: AgentSession): Promise<void> {
   } finally {
     await session.dispose();
   }
+}
+
+function lastUserMessageId(parent: AgentSession): string | null {
+  const messages = parent.store.getDisplayMessages();
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].sender === USER_SENDER) return messages[i].id;
+  }
+  return null;
+}
+
+// Each @ keeps its agent's run on the message that asked, the state later steps draw, resume and stop from.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/944
+function record(parent: AgentSession, run: HiddenRun, change: Partial<AgentMention>): void {
+  if (!run.askedIn) return;
+  const mentions = parent.store.getMessage(run.askedIn)?.agentMentions ?? [];
+  const known = mentions.some((mention) => mention.id === run.id);
+  parent.setAgentMentions(
+    run.askedIn,
+    known
+      ? mentions.map((mention) => (mention.id === run.id ? { ...mention, ...change } : mention))
+      : [...mentions, change as AgentMention]
+  );
 }
 
 function asError(error: unknown): Error {
