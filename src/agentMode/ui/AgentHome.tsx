@@ -174,9 +174,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const handleOpenRun = useCallback((run: RunRef) => setOpenedRun({ sessionId, run }), [sessionId]);
   const detailRun =
     openedRun?.sessionId === sessionId ? findRun(messages, openedRun.run) : undefined;
-  const markTaskViewClosedByUser = useComposerFocusAfterTaskView(
-    detailTask !== undefined || detailRun !== undefined
-  );
+  const detailOpen = detailTask !== undefined || detailRun !== undefined;
+  const markTaskViewClosedByUser = useComposerFocusAfterTaskView(detailOpen);
   const handleCloseTask = useCallback(() => {
     markTaskViewClosedByUser();
     setOpenedTask(null);
@@ -936,10 +935,10 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
         header={
           // A new chat's row of faces already shows who it is with; the bar takes over once the chat has a message.
           // https://github.com/Brevilabs/obsidian-copilot-private/issues/938
-          // An asked agent's conversation names both agents in its own header, which takes the bar's place.
+          // A task's or an asked agent's view names who it shows in its own header, which takes the bar's place.
           // https://github.com/Brevilabs/obsidian-copilot-private/issues/967
           !isLanding &&
-          !detailRun &&
+          !detailOpen &&
           agentHome.selected && (
             <AgentIdentityBar agent={agentHome.selected} onOpenProfile={profile.open} />
           )
@@ -1054,7 +1053,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                     <div
                       className={cn(
                         "tw-flex tw-min-h-0 tw-flex-1 tw-flex-col",
-                        (detailTask || detailRun) && "tw-invisible tw-absolute tw-inset-0"
+                        detailOpen && "tw-invisible tw-absolute tw-inset-0"
                       )}
                     >
                       <ChatAgentsContext.Provider value={chatAgents}>
