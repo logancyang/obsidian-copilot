@@ -1,5 +1,6 @@
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import type { AgentSessionStatus } from "@/agentMode/session/AgentSession";
+import type { AgentChatMessage } from "@/agentMode/session/types";
 import { AgentTabStrip } from "@/agentMode/ui/AgentTabStrip";
 import { COCO, LEO, MAYA, NORA } from "@/agents/ui/testing/rosterFixtures";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -13,7 +14,19 @@ interface StoryChat {
   status?: AgentSessionStatus;
   needsAttention?: boolean;
   agentSlug?: string;
+  messages?: AgentChatMessage[];
 }
+
+const LEO_WAITS: AgentChatMessage[] = [
+  {
+    id: "asked",
+    sender: "user",
+    timestamp: null,
+    isVisible: true,
+    message: "@Leo reconcile October",
+    agentMentions: [{ id: "run", agent: "leo", name: "Leo", status: "question", startedAt: 0 }],
+  },
+];
 
 function makeManager(chats: StoryChat[], activeIndex = 0): AgentSessionManager {
   const sessions = chats.map((chat, index) => ({
@@ -24,6 +37,7 @@ function makeManager(chats: StoryChat[], activeIndex = 0): AgentSessionManager {
     getLabel: () => chat.label,
     getStatus: () => chat.status ?? "idle",
     getNeedsAttention: () => chat.needsAttention ?? false,
+    store: { getDisplayMessages: () => chat.messages ?? [] },
   }));
   return {
     subscribe: () => () => {},
@@ -88,6 +102,34 @@ export const RunningAgentChat: StoryObj<AgentTabStripProps> = {
     manager: makeManager([
       { label: "October books", agentSlug: "leo", status: "running" },
       { label: "Release notes 4.0.21", status: "running" },
+    ]),
+  },
+};
+
+export const WaitingAndDoneDots: StoryObj<AgentTabStripProps> = {
+  render: WithTooltips,
+  args: {
+    gate: "full",
+    agents: [COCO, LEO, MAYA, NORA],
+    manager: makeManager([
+      { label: "Release notes 4.0.21" },
+      { label: "October books", agentSlug: "coco", needsAttention: true, messages: LEO_WAITS },
+      { label: "School pickup", agentSlug: "nora", needsAttention: true },
+    ]),
+  },
+};
+
+export const DotOnOverflow: StoryObj<AgentTabStripProps> = {
+  render: WithTooltips,
+  args: {
+    gate: "full",
+    agents: [COCO, LEO, MAYA, NORA],
+    manager: makeManager([
+      { label: "Launch video plan", agentSlug: "coco" },
+      { label: "Release notes 4.0.21" },
+      { label: "Winter break schedule", agentSlug: "nora" },
+      { label: "October books", agentSlug: "coco", needsAttention: true, messages: LEO_WAITS },
+      { label: "What to cut from the launch video", agentSlug: "maya", needsAttention: true },
     ]),
   },
 };

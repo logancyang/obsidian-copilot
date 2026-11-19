@@ -925,6 +925,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
         onOpenSidebar={handleOpenSessionsSidebar}
         agents={agentHome.agents}
         onTabClick={profile.agent ? leaveProfile : undefined}
+        gate={customAgentsGate}
       />
       {createAnchor && (
         <CreateProjectPanel
