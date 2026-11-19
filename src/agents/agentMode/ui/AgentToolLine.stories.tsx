@@ -46,6 +46,10 @@ export const Asking: StoryObj<ToolLinesProps> = {
   args: { lines: [{ tool: "ask_agent", agent: "Leo", status: "in_progress" }] },
 };
 
+export const AskingBeforeTheAgentIsNamed: StoryObj<ToolLinesProps> = {
+  args: { lines: [{ tool: "ask_agent", agent: null, status: "in_progress" }] },
+};
+
 export const Messaged: StoryObj<ToolLinesProps> = {
   args: { lines: [{ tool: "ask_agent", agent: "Leo" }] },
 };

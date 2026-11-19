@@ -16,7 +16,7 @@ const AGENT_TOOLS = [ASK_AGENT_TOOL_NAME, ...Object.keys(TOOL_LINES)];
 
 export interface AgentToolCall {
   tool: string;
-  agent: string;
+  agent: string | null;
 }
 
 function agentField(part: ToolCallPart, tool: string): string | null {
@@ -32,9 +32,13 @@ export function agentToolCall(part: ToolCallPart): AgentToolCall | null {
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/947
   if (part.status === "failed") return null;
   const tool = AGENT_TOOLS.find((name) => copilotToolCall(part, name));
-  const agent = tool ? agentField(part, tool) : null;
-  if (!tool || !agent) return null;
-  return { tool, agent: agent.replace(/^@/, "") };
+  if (!tool) return null;
+  const agent = agentField(part, tool);
+  if (agent) return { tool, agent: agent.replace(/^@/, "") };
+  // Claude shows an ask the moment the model starts it and names the agent only once the whole message is written, so the ask is a card from its first moment.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/967
+  const running = part.status === "pending" || part.status === "in_progress";
+  return tool === ASK_AGENT_TOOL_NAME && running ? { tool, agent: null } : null;
 }
 
 export function agentToolLineText(call: AgentToolCall, name: string): string {

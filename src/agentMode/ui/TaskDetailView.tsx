@@ -47,8 +47,10 @@ export const TaskDetailFrame: React.FC<TaskDetailFrameProps> = ({
   banner,
   children,
 }) => (
+  // The view slides in over the chat it takes the place of, so the switch reads as going one level in.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/967
   <div
-    className="tw-flex tw-size-full tw-min-h-0 tw-flex-col"
+    className="tw-flex tw-size-full tw-min-h-0 tw-flex-col tw-duration-300 tw-ease-out tw-animate-in tw-fade-in-25 tw-slide-in-from-right-1/4 motion-reduce:tw-animate-none"
     data-testid="agent-task-detail"
     onKeyDown={(event) => {
       if (event.key === "Escape") onBack();
