@@ -157,7 +157,6 @@ function renderWithApp(element: React.ReactElement | undefined, agents = NO_AGEN
 describe("lockedCustomAgents", () => {
   beforeEach(async () => {
     jest.clearAllMocks();
-    jest.replaceProperty(customAgentsGate, "launched", true);
     BrevilabsClient.getInstance().setPluginVersion("4.0.20");
     await enterLicenseKey("");
   });
@@ -364,14 +363,11 @@ describe("lockedCustomAgents", () => {
   });
 
   describe("renderNewAgentButton()", () => {
-    it.each(["hidden", "pending"] as const)(
-      `shows no + at all while the gate is %s, so nothing locked flashes at startup (${ISSUE})`,
-      (gate) => {
-        expect(
-          renderNewAgentButton(gate, { emphasized: true, onCreate: jest.fn() })
-        ).toBeUndefined();
-      }
-    );
+    it(`shows no + at all while the gate is pending, so nothing locked flashes at startup (${ISSUE})`, () => {
+      expect(
+        renderNewAgentButton("pending", { emphasized: true, onCreate: jest.fn() })
+      ).toBeUndefined();
+    });
 
     it("shows an unlocked + that opens the create dialog when the gate is full", () => {
       const onCreate = jest.fn();
@@ -444,7 +440,6 @@ describe("lockedCustomAgents", () => {
     });
 
     it.each([
-      { gate: "hidden", setUp: () => jest.replaceProperty(customAgentsGate, "launched", false) },
       { gate: "pending", setUp: () => setCustomAgentsAccess("unverified") },
       { gate: "full", setUp: () => setCustomAgentsAccess("team") },
     ])(`offers no row while the gate is $gate (${ISSUE})`, async ({ gate, setUp }) => {

@@ -8,7 +8,6 @@ import {
 } from "@/agents/ui/LockedAgentNotices";
 import type { CustomAgent } from "@/agents/CustomAgentStore";
 import { setCustomAgentsAccess } from "@/agents/testing/customAgentsAccess";
-import { setCustomAgentsLaunched } from "@/agents/testing/customAgentsLaunched";
 import { openCopilotSettings } from "@/settings/openSettings";
 import { act, fireEvent, render, renderHook, screen } from "@testing-library/react";
 import { App } from "obsidian";
@@ -199,7 +198,6 @@ describe("LockedAgentNotices", () => {
       const { result } = renderHook(() => useReadOnlyChatAgent(COCO, false, false));
       expect(result.current).toBeNull();
 
-      setCustomAgentsLaunched(true);
       await act(() => setCustomAgentsAccess("free"));
       expect(result.current).toBe(COCO);
 
@@ -208,7 +206,6 @@ describe("LockedAgentNotices", () => {
     });
 
     it(`keeps the chat input while a turn that started before the lapse is still running (${ISSUE})`, async () => {
-      setCustomAgentsLaunched(true);
       await setCustomAgentsAccess("free");
 
       const { result, rerender } = renderHook(
@@ -238,7 +235,6 @@ describe("LockedAgentNotices", () => {
     });
 
     it(`never makes a Copilot chat read-only (${ISSUE})`, async () => {
-      setCustomAgentsLaunched(true);
       await setCustomAgentsAccess("free");
 
       const { result } = renderHook(() => useReadOnlyChatAgent(null, false, true));

@@ -4,7 +4,6 @@ import { AgentProfile, agentDeleteNotice } from "@/agents/agentMode/ui/AgentProf
 import { CustomAgentStore, type CustomAgent } from "@/agents/CustomAgentStore";
 import { PRESET_FACES_URL } from "@/agents/presetFaces";
 import { setCustomAgentsAccess } from "@/agents/testing/customAgentsAccess";
-import { setCustomAgentsLaunched } from "@/agents/testing/customAgentsLaunched";
 import { createFakeAgentVault, type FakeAgentVault } from "@/agents/testing/fakeAgentVault";
 import { webpBytes } from "@/agents/testing/webpBytes";
 import type { AgentModelChoices } from "@/agents/ui/CreateAgentForm";
@@ -323,7 +322,6 @@ describe("AgentProfile", () => {
         archivedChats.mockClear();
         const { vault } = await setup();
 
-        setCustomAgentsLaunched(true);
         await act(() => setCustomAgentsAccess(access));
 
         expect(screen.getByText(banner)).not.toBeNull();

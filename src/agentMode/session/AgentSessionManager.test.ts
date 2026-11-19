@@ -7072,7 +7072,7 @@ describe("AgentSessionManager", () => {
         expect(session.readChatState(draftCard)).toEqual({ draft: { name: "Nora" } });
       });
 
-      it("reopens a chat note whose custom agent cannot load, because custom agents are hidden or its folder was removed, as a Copilot chat that still records the agent (https://github.com/Brevilabs/obsidian-copilot-private/issues/937)", async () => {
+      it("reopens a chat note whose custom agent cannot load, because custom agents are locked or its folder was removed, as a Copilot chat that still records the agent (https://github.com/Brevilabs/obsidian-copilot-private/issues/937)", async () => {
         const replay = buildReplayingBackend();
         const session = await buildManager({
           persistence: {

@@ -5,7 +5,6 @@ import {
 } from "@/agents/CustomAgentStore";
 import { NEUTRAL_FACE_SRC, serializeInstructionsFile } from "@/agents/customAgentFiles";
 import { setCustomAgentsAccess, verifyStoredToken } from "@/agents/testing/customAgentsAccess";
-import { setCustomAgentsLaunched } from "@/agents/testing/customAgentsLaunched";
 import { createFakeAgentVault, type FakeAgentVault } from "@/agents/testing/fakeAgentVault";
 import { installFakeFaceCanvas } from "@/agents/testing/fakeFaceCanvas";
 import { setSettings } from "@/settings/model";
@@ -43,11 +42,6 @@ function holdUploadDecoding(): () => void {
   return () => release();
 }
 
-async function lockCustomAgents(access: "free" | "keyless" = "free"): Promise<void> {
-  setCustomAgentsLaunched(true);
-  await setCustomAgentsAccess(access);
-}
-
 function nextChange(store: CustomAgentStore): Promise<void> {
   return new Promise((resolve) => {
     const unsubscribe = store.subscribe(() => {
@@ -61,8 +55,9 @@ describe("CustomAgentStore", () => {
   let vault: FakeAgentVault;
   let store: CustomAgentStore;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     setSettings({ copilotFolder: "copilot" });
+    await setCustomAgentsAccess("team");
     vault = createFakeAgentVault();
     store = new CustomAgentStore(vault.app);
   });
@@ -335,7 +330,7 @@ describe("CustomAgentStore", () => {
 
       it(`refuses while custom agents are locked and writes nothing, so a lapsed or synced vault's agents stay as they are (${LOCKED_ISSUE})`, async () => {
         seedAgent(vault, "coco", "Coco");
-        await lockCustomAgents("keyless");
+        await setCustomAgentsAccess("keyless");
         await store.start();
         const before = vault.listPaths();
 
@@ -431,7 +426,7 @@ describe("CustomAgentStore", () => {
       it(`refuses while custom agents are locked and leaves instructions.md as written (${LOCKED_ISSUE})`, async () => {
         seedAgent(vault, "coco", "Coco");
         const written = vault.readText("copilot/agents/coco/instructions.md");
-        await lockCustomAgents();
+        await setCustomAgentsAccess("free");
         await store.start();
 
         await expect(store.updateAgent("coco", { name: "Bean" })).rejects.toThrow(
@@ -494,7 +489,7 @@ describe("CustomAgentStore", () => {
 
       it(`refuses while custom agents are locked and keeps the old face (${LOCKED_ISSUE})`, async () => {
         seedAgent(vault, "coco", "Coco");
-        await lockCustomAgents();
+        await setCustomAgentsAccess("free");
         await store.start();
 
         await expect(
@@ -536,7 +531,7 @@ describe("CustomAgentStore", () => {
       it(`still deletes while custom agents are locked, the one change a lapsed or synced vault allows (${LOCKED_ISSUE})`, async () => {
         seedAgent(vault, "coco", "Coco");
         seedAgent(vault, "maya", "Maya");
-        await lockCustomAgents();
+        await setCustomAgentsAccess("free");
         await store.start();
 
         await store.deleteAgent("maya");
@@ -604,27 +599,9 @@ describe("CustomAgentStore", () => {
   });
 
   describe("runCustomAgentStoreWhileEnabled()", () => {
-    it("never reads or writes the agents folder while the gate is hidden", async () => {
+    it("starts the store when the gate turns full or locked, and lists nothing while a changed license token awaits verification", async () => {
       seedAgent(vault, "coco", "Coco");
-      const seeded = vault.touchedPaths.length;
-      await setCustomAgentsAccess("free");
-
-      const dispose = runCustomAgentStoreWhileEnabled(store);
-      await expect(
-        store.createAgent({ name: "Kai", title: "", model: null, instruction: "x" })
-      ).rejects.toThrow("Custom agents are not available.");
-      await expect(store.loadForSession("coco")).rejects.toThrow(
-        "Custom agents are not available."
-      );
-      dispose();
-
-      expect(vault.touchedPaths.slice(seeded)).toEqual([]);
-      expect(store.getAgents()).toEqual([]);
-    });
-
-    it("starts the store when the gate turns full and stops it when the license loses custom agents", async () => {
-      seedAgent(vault, "coco", "Coco");
-      await setCustomAgentsAccess("plus-without-custom-agents");
+      await setCustomAgentsAccess("unverified");
       const dispose = runCustomAgentStoreWhileEnabled(store);
 
       const listed = nextChange(store);
@@ -632,8 +609,13 @@ describe("CustomAgentStore", () => {
       await listed;
       expect(store.getAgents().map((agent) => agent.slug)).toEqual(["coco"]);
 
-      await verifyStoredToken(false);
+      setSettings({ entitlementToken: "changed-token" });
       expect(store.getAgents()).toEqual([]);
+
+      const relisted = nextChange(store);
+      await verifyStoredToken(false);
+      await relisted;
+      expect(store.getAgents().map((agent) => agent.slug)).toEqual(["coco"]);
       dispose();
     });
 
@@ -641,7 +623,7 @@ describe("CustomAgentStore", () => {
       `lists the agents while the gate is locked for a %s device, so lapsed and synced agents stay visible (${LOCKED_ISSUE})`,
       async (access) => {
         seedAgent(vault, "coco", "Coco");
-        await lockCustomAgents(access);
+        await setCustomAgentsAccess(access);
 
         const listed = nextChange(store);
         const dispose = runCustomAgentStoreWhileEnabled(store);

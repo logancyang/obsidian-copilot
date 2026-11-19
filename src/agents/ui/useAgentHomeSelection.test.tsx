@@ -1,6 +1,5 @@
 import type { CustomAgent, CustomAgentStore } from "@/agents/CustomAgentStore";
 import { setCustomAgentsAccess } from "@/agents/testing/customAgentsAccess";
-import { setCustomAgentsLaunched } from "@/agents/testing/customAgentsLaunched";
 import { fakeAgentStore } from "@/agents/ui/testing/fakeAgentStore";
 import {
   agentComposerHint,
@@ -150,7 +149,6 @@ describe("useAgentHomeSelection", () => {
       const { rerender, switchAgent } = renderSelection(store);
       expect(switchAgent).toHaveBeenLastCalledWith(MAYA);
 
-      setCustomAgentsLaunched(true);
       await act(() => setCustomAgentsAccess("free"));
       rerender({ current: { ...NEW_CHAT, agentSlug: "maya" } });
 
@@ -465,25 +463,22 @@ describe("useAgentHomeSelection", () => {
       expect(switchAgent).not.toHaveBeenCalled();
     });
 
-    it.each(["free", "plus-without-custom-agents", "unverified"] as const)(
-      `lists no agents, switches nothing and remembers nothing while the license is %s (${ISSUE})`,
-      async (access) => {
-        await setCustomAgentsAccess(access);
-        rememberLastAgent("maya");
-        const { store } = fakeAgentStore([COCO, MAYA]);
-        const { result, rerender, switchAgent } = renderSelection(store, {
-          ...NEW_CHAT,
-          agentSlug: "coco",
-        });
+    it(`lists no agents, switches nothing and remembers nothing while the stored license token awaits verification (${ISSUE})`, async () => {
+      await setCustomAgentsAccess("unverified");
+      rememberLastAgent("maya");
+      const { store } = fakeAgentStore([COCO, MAYA]);
+      const { result, rerender, switchAgent } = renderSelection(store, {
+        ...NEW_CHAT,
+        agentSlug: "coco",
+      });
 
-        rerender({ current: { ...NEW_CHAT, agentSlug: "coco", isLanding: false } });
+      rerender({ current: { ...NEW_CHAT, agentSlug: "coco", isLanding: false } });
 
-        expect(result.current.agents).toEqual([]);
-        expect(result.current.selected).toBeNull();
-        expect(switchAgent).not.toHaveBeenCalled();
-        expect(getSettings().agentMode.lastCustomAgent).toBe("maya");
-      }
-    );
+      expect(result.current.agents).toEqual([]);
+      expect(result.current.selected).toBeNull();
+      expect(switchAgent).not.toHaveBeenCalled();
+      expect(getSettings().agentMode.lastCustomAgent).toBe("maya");
+    });
   });
 
   describe("agentComposerHint()", () => {

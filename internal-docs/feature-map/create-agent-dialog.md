@@ -28,7 +28,7 @@ The `New agent` dialog that makes a custom agent: its face, name, optional title
 - `Create your first agent` on the first agent banner on the [start screen](agent-home.md).
 - `Review and create…` on a draft card in a custom agent's chat or a plain Copilot chat ([agent replies](agent-replies.md)).
 
-It needs a license that includes custom agents (a team license until launch).
+It needs a license that includes custom agents; without one, `New` opens the Supporter preview instead.
 
 ## Driving it
 

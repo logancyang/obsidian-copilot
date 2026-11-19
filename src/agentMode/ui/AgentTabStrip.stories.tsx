@@ -109,7 +109,6 @@ export const RunningAgentChat: StoryObj<AgentTabStripProps> = {
 export const WaitingAndDoneDots: StoryObj<AgentTabStripProps> = {
   render: WithTooltips,
   args: {
-    gate: "full",
     agents: [COCO, LEO, MAYA, NORA],
     manager: makeManager([
       { label: "Release notes 4.0.21" },
@@ -122,7 +121,6 @@ export const WaitingAndDoneDots: StoryObj<AgentTabStripProps> = {
 export const DotOnOverflow: StoryObj<AgentTabStripProps> = {
   render: WithTooltips,
   args: {
-    gate: "full",
     agents: [COCO, LEO, MAYA, NORA],
     manager: makeManager([
       { label: "Launch video plan", agentSlug: "coco" },

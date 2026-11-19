@@ -1,4 +1,3 @@
-import * as customAgentsGate from "@/agents/customAgentsGate";
 import {
   getCustomAgentsGate,
   isLicenseLapsed,
@@ -13,12 +12,6 @@ jest.mock("@/entitlement");
 const LAPSED_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/950";
 
 describe("customAgentsGate", () => {
-  let launchedConstant: jest.ReplaceProperty<boolean>;
-
-  beforeEach(() => {
-    launchedConstant = jest.replaceProperty(customAgentsGate, "launched", false);
-  });
-
   afterEach(() => {
     jest.restoreAllMocks();
   });
@@ -33,37 +26,17 @@ describe("customAgentsGate", () => {
     it.each([
       { who: "a Plus user without custom_agents", access: "plus-without-custom-agents" },
       { who: "a free user", access: "free" },
-    ] as const)("is hidden before launch for $who", async ({ access }) => {
+      { who: "a device with no license key", access: "keyless" },
+    ] as const)("is locked for $who", async ({ access }) => {
       await setCustomAgentsAccess(access);
-
-      expect(getCustomAgentsGate()).toBe("hidden");
-    });
-
-    it.each([
-      { when: "before launch", launched: false },
-      { when: "once launched", launched: true },
-    ])(
-      "is pending $when while the stored token is still being verified at startup, so nothing flashes for https://github.com/Brevilabs/obsidian-copilot-private/issues/934",
-      async ({ launched }) => {
-        launchedConstant.replaceValue(launched);
-        await setCustomAgentsAccess("unverified");
-
-        expect(getCustomAgentsGate()).toBe("pending");
-      }
-    );
-
-    it("is locked without custom_agents once launched", async () => {
-      launchedConstant.replaceValue(true);
-      await setCustomAgentsAccess("plus-without-custom-agents");
 
       expect(getCustomAgentsGate()).toBe("locked");
     });
 
-    it("stays full for a team license once launched", async () => {
-      launchedConstant.replaceValue(true);
-      await setCustomAgentsAccess("team");
+    it("is pending while the stored token is still being verified at startup, so nothing flashes for https://github.com/Brevilabs/obsidian-copilot-private/issues/934", async () => {
+      await setCustomAgentsAccess("unverified");
 
-      expect(getCustomAgentsGate()).toBe("full");
+      expect(getCustomAgentsGate()).toBe("pending");
     });
   });
 
@@ -78,13 +51,13 @@ describe("customAgentsGate", () => {
       expect(result.current).toBe("full");
     });
 
-    it("turns from pending to hidden when the verified token lacks custom_agents", async () => {
+    it("turns from pending to locked when the verified token lacks custom_agents", async () => {
       await setCustomAgentsAccess("unverified");
       const { result } = renderHook(() => useCustomAgentsGate());
 
       await act(() => verifyStoredToken(false));
 
-      expect(result.current).toBe("hidden");
+      expect(result.current).toBe("locked");
     });
   });
 
@@ -134,7 +107,6 @@ describe("customAgentsGate", () => {
     ] as const)(
       `tells $device apart by the gate, the stored license key and whether a paid plan is active (${LAPSED_ISSUE})`,
       async ({ access, gate, lapsed }) => {
-        launchedConstant.replaceValue(true);
         await setCustomAgentsAccess(access);
 
         expect(getCustomAgentsGate()).toBe(gate);

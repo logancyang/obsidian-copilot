@@ -530,7 +530,14 @@ describe("main", () => {
         };
         Object.assign(plugin, registrations, {
           app: {
-            vault: { adapter: {}, configDir: "config", on: jest.fn(), getRoot: jest.fn() },
+            vault: {
+              adapter: {},
+              configDir: "config",
+              on: jest.fn(),
+              offref: jest.fn(),
+              getRoot: jest.fn(),
+              getAbstractFileByPath: jest.fn(() => null),
+            },
             workspace: {
               getLeavesOfType: jest.fn(() => []),
               on: jest.fn(),
@@ -727,7 +734,7 @@ describe("main", () => {
         expect(custom.dispose).toHaveBeenCalledTimes(1);
       });
 
-      it("gives the plugin a custom agent store on desktop that never touches the vault, and adds no agent command, while custom agents are hidden (https://github.com/Brevilabs/obsidian-copilot-private/issues/936)", async () => {
+      it("gives the plugin a running custom agent store on desktop, so a vault's agents show locked, and adds no agent command, while custom agents are locked (https://github.com/Brevilabs/obsidian-copilot-private/issues/950)", async () => {
         (isDesktopRuntime as jest.Mock).mockReturnValue(true);
         (startActiveWebTabTracking as jest.Mock).mockReturnValue({
           activeLeafRef: {},
@@ -739,9 +746,7 @@ describe("main", () => {
         await finishStartup();
 
         expect(plugin.customAgents).toBeInstanceOf(CustomAgentStore);
-        await expect(plugin.customAgents?.loadForSession("coco")).rejects.toThrow(
-          "Custom agents are not available."
-        );
+        await expect(plugin.customAgents?.loadForSession("coco")).resolves.toBeNull();
         expect(
           registrations.addCommand.mock.calls.map(([command]) => (command as { id: string }).id)
         ).not.toContain(START_AGENT_CHAT_COMMAND_ID);

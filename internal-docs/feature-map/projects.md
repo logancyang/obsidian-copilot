@@ -54,7 +54,7 @@ A project groups chats with its own instructions and context. Agent Chat shows t
 
 ## Gotchas
 
-- The project home's row of faces needs a license that includes custom agents (a team license until launch).
+- Without custom agents in the license, the project home's row shows `New` and every agent locked, as on the [start screen](agent-home.md).
 - `Project instructions` in `Edit project` and the project's `AGENTS.md` are the same text; editing either changes both.
 - A chat that is already open keeps the description it started with; an edited description reaches new chats only.
 - Files appears alone without a tab bar when the project has no chats or the [Copilot Navigator](copilot-navigator.md) is open. Otherwise the home offers `Files` and `Recent chats`.

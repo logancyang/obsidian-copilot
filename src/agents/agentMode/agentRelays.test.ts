@@ -2,20 +2,9 @@ import { directCopilotToolUse } from "@/agentMode/session/copilotToolCalls";
 import type { AgentChatMessage } from "@/agentMode/session/types";
 import { ASK_AGENT_TOOL_NAME } from "@/agents/agentMentionPrompt";
 import type { AgentMention } from "@/agents/agentMentions";
-import {
-  findRun,
-  relayRuns,
-  restoreRelayedRuns,
-  useRelayRuns,
-} from "@/agents/agentMode/agentRelays";
+import { findRun, relayRuns, restoreRelayedRuns } from "@/agents/agentMode/agentRelays";
 import { formatAgentReply, type AgentReplyRelay } from "@/agents/agentReply";
-import { setCustomAgentsAccess } from "@/agents/testing/customAgentsAccess";
-import { setCustomAgentsLaunched } from "@/agents/testing/customAgentsLaunched";
 import { AI_SENDER, USER_SENDER } from "@/constants";
-import { resetSettings } from "@/settings/model";
-import { renderHook } from "@testing-library/react";
-
-jest.mock("@/entitlement");
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/947";
 const SEVERAL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/949";
@@ -60,8 +49,6 @@ const CHAT = [
 ];
 
 describe("agentRelays", () => {
-  beforeEach(() => resetSettings());
-
   describe("relayRuns()", () => {
     it(`reads each relay's words and finds its run on the message that asked (${ISSUE})`, () => {
       expect(relayRuns(CHAT).get("report")).toEqual({
@@ -302,32 +289,6 @@ describe("agentRelays", () => {
       const chat = reopen([message("ask", "Go on."), relayed("report")]);
 
       expect(chat.map((m) => m.agentMentions)).toEqual([undefined, undefined]);
-    });
-  });
-
-  describe("useRelayRuns()", () => {
-    it("indexes the chat's relays while custom agents are available", async () => {
-      await setCustomAgentsAccess("team");
-
-      const { result } = renderHook(() => useRelayRuns(CHAT));
-
-      expect(result.current.size).toBe(2);
-    });
-
-    it("still indexes the relays after the license lapsed (https://github.com/Brevilabs/obsidian-copilot-private/issues/950)", async () => {
-      await setCustomAgentsAccess("free");
-      setCustomAgentsLaunched(true);
-      const { result } = renderHook(() => useRelayRuns(CHAT));
-
-      expect(result.current.size).toBe(2);
-    });
-
-    it(`indexes nothing without a license that includes custom agents (${ISSUE})`, async () => {
-      await setCustomAgentsAccess("free");
-
-      const { result } = renderHook(() => useRelayRuns(CHAT));
-
-      expect(result.current.size).toBe(0);
     });
   });
 });

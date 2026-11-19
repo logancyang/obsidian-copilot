@@ -1,6 +1,5 @@
 import type { CustomAgent } from "@/agents/CustomAgentStore";
 import { setCustomAgentsAccess } from "@/agents/testing/customAgentsAccess";
-import { setCustomAgentsLaunched } from "@/agents/testing/customAgentsLaunched";
 import { fakeAgentStore } from "@/agents/ui/testing/fakeAgentStore";
 import { useCustomAgents } from "@/agents/ui/useCustomAgents";
 import { resetSettings } from "@/settings/model";
@@ -42,24 +41,20 @@ describe("useCustomAgents", () => {
       expect(result.current).toEqual([renamed]);
     });
 
-    it.each(["free", "plus-without-custom-agents", "unverified"] as const)(
-      `lists no agents for a %s license, so every surface stays as it is without custom agents (${ISSUE})`,
-      async (access) => {
-        await setCustomAgentsAccess(access);
-        const { store } = fakeAgentStore([COCO, MAYA]);
+    it(`lists no agents while the stored license token awaits verification, so nothing flashes at startup (${ISSUE})`, async () => {
+      await setCustomAgentsAccess("unverified");
+      const { store } = fakeAgentStore([COCO, MAYA]);
 
-        const { result } = renderHook(() => useCustomAgents(store));
+      const { result } = renderHook(() => useCustomAgents(store));
 
-        expect(result.current).toEqual([]);
-        expect(Object.isFrozen(result.current)).toBe(true);
-      }
-    );
+      expect(result.current).toEqual([]);
+      expect(Object.isFrozen(result.current)).toBe(true);
+    });
 
-    it.each(["free", "keyless"] as const)(
+    it.each(["free", "keyless", "plus-without-custom-agents"] as const)(
       `lists the store's agents while custom agents are locked for a %s device, so they show locked instead of vanishing (${LOCKED_ISSUE})`,
       async (access) => {
         await setCustomAgentsAccess(access);
-        setCustomAgentsLaunched(true);
         const { store } = fakeAgentStore([COCO, MAYA]);
 
         const { result } = renderHook(() => useCustomAgents(store));

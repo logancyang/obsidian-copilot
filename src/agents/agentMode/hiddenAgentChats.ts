@@ -20,7 +20,7 @@ import { formatAgentReply } from "@/agents/agentReply";
 import { loadAgentSessionPrompt } from "@/agents/agentSessionPrompt";
 import { readTurnMemorySaves, type MemorySave } from "@/agents/memorySaves";
 import type { CustomAgent, CustomAgentStore } from "@/agents/CustomAgentStore";
-import { getCustomAgentsGate, subscribeToCustomAgentsGate } from "@/agents/customAgentsGate";
+import { getCustomAgentsGate } from "@/agents/customAgentsGate";
 import { USER_SENDER } from "@/constants";
 import { logWarn } from "@/logger";
 import { v4 as uuidv4 } from "uuid";
@@ -131,15 +131,8 @@ export const HIDDEN_CHAT_DENY_MESSAGE =
 export class HiddenAgentChats {
   private readonly chats = new Map<string, HiddenChat>();
   private readonly watchedParents = new Map<string, () => void>();
-  private readonly unsubscribeGate: () => void;
 
-  constructor(private readonly host: HiddenAgentChatsHost) {
-    // The license is checked only when an @ is sent, so an agent asked before it lapsed finishes and its reply arrives; only hiding custom agents altogether stops it.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/950
-    this.unsubscribeGate = subscribeToCustomAgentsGate(() => {
-      if (getCustomAgentsGate() === "hidden") this.stopAll();
-    });
-  }
+  constructor(private readonly host: HiddenAgentChatsHost) {}
 
   ask(chat: ChatStateHost | null, agentName: string, message: string): AskAgentResult {
     const asking = this.resolve(chat, agentName);
@@ -305,8 +298,7 @@ export class HiddenAgentChats {
   }
 
   dispose(): void {
-    this.unsubscribeGate();
-    this.stopAll();
+    for (const hidden of Array.from(this.chats.values())) this.stopChatsOf(hidden.parent);
   }
 
   private resolve(chat: ChatStateHost | null, agentName: string): AskingChat | AgentRefusal {
@@ -528,7 +520,6 @@ export class HiddenAgentChats {
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
     const key = chatKey(hidden.parent, hidden.agent.slug);
     if (this.chats.get(key) !== hidden) return;
-    if (getCustomAgentsGate() === "hidden") return;
     const status = run.stopped ? "stopped" : end.error ? "didnt_finish" : "finished";
     record(hidden.parent, run, { status });
     // The asking chat shows the asked agent's save as its own chat does, as a line in place of its MEMORY.md among the changed files, so the asking agent hears only the files the user sees.
@@ -577,10 +568,6 @@ export class HiddenAgentChats {
       },
     });
     this.watchedParents.set(parent.internalId, unsubscribe);
-  }
-
-  private stopAll(): void {
-    for (const hidden of Array.from(this.chats.values())) this.stopChatsOf(hidden.parent);
   }
 
   private stopChatsOf(parent: AgentSession): void {

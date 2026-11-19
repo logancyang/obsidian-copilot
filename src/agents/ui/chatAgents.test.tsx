@@ -59,8 +59,8 @@ describe("chatAgents", () => {
       expect(result.current.openProfile).toBe(openProfile);
     });
 
-    it(`carries no agents without a license that includes custom agents, so the chat shows none of them (${ISSUE})`, async () => {
-      await setCustomAgentsAccess("plus-without-custom-agents");
+    it(`carries no agents while the stored license token awaits verification, so the chat shows none of them yet (${ISSUE})`, async () => {
+      await setCustomAgentsAccess("unverified");
       const { store } = fakeAgentStore(THREE_AGENTS);
 
       const { result } = renderHook(() => useChatAgentsValue(store, null));

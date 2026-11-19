@@ -27,7 +27,7 @@ A custom agent's page in the sidebar: its face, name, and title, how many chats 
 - The [agent identity bar](agent-identity-bar.md) at the top of an agent's chat.
 - The selected agent's large face above the row of faces on the [start screen](agent-home.md) (`Open <name>'s profile`).
 
-It needs a license that includes custom agents (a team license until launch). Without one, the locked profile opens from a greyed face on the start screen.
+Without a license that includes custom agents, the locked profile opens from a greyed face on the start screen.
 
 ## Driving it
 
@@ -44,7 +44,7 @@ It needs a license that includes custom agents (a team license until launch). Wi
 - New chat: choose `New chat with <name>` in the profile opened from an agent's chat. A new tab opens with the agent selected. Open the profile from the start screen and choose it: the start screen shows again with the agent selected.
 - Delete: choose `Delete <name>…`. The dialog lists both files, the rule count, and the face, and below the list says how many chats will be archived, not deleted; press Enter: nothing is deleted and the dialog closes. Choose `Delete <name>…` again and then `Delete <name>`. The start screen shows with Copilot selected and without the agent, the notice counts the archived chats, the agent's folder is in the trash, its chat notes are still in the chats folder, its chats are gone from Recent chats and the Navigator and listed under View archived, and other agents' chats remain.
 - Delete while working: send the agent a message and, while it replies, delete it from the profile. The reply stops, the agent is deleted, and the chat is under View archived.
-- Locked: after custom agents have launched, in a vault with agents, with a license that no longer includes custom agents, choose an agent's face on the start screen. The locked profile opens with `Renew` in its banner. Hover the face, name, and title: no pencil shows; the model picker does not open. Open both files, then delete the agent: it leaves the row, its folder goes to the trash, and its chats move under View archived. Remove the license key and open another agent's profile: the banner offers `Enter license key`.
+- Locked: in a vault with agents, with a license that no longer includes custom agents, choose an agent's face on the start screen. The locked profile opens with `Renew` in its banner. Hover the face, name, and title: no pencil shows; the model picker does not open. Open both files, then delete the agent: it leaves the row, its folder goes to the trash, and its chats move under View archived. Remove the license key and open another agent's profile: the banner offers `Enter license key`.
 - Needs setup: in a vault with an agent on OpenCode, take OpenCode off this device and choose the agent's greyed face. The lock line names OpenCode, `Model` is outlined in red, and hovering `New chat with <name>` shows the reason. `Set up OpenCode` opens OpenCode's setup dialog. Turn off an agent's model in Copilot's model settings and open that agent's profile: the line names the model. Pick another model in `Model`: the line, the red border and the lock on its face go, and `New chat with <name>` starts a chat on that model. With the vault's default coding agent not set up, delete a locked agent from its own chat's profile: it is deleted and its chats are archived.
 - Gone: open an agent's profile and delete its folder outside Obsidian. The profile goes back to the chat.
 

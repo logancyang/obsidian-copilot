@@ -318,7 +318,7 @@ describe("agentSessionPrompt", () => {
       expect(hidden?.prompt).not.toContain("list_chats");
     });
 
-    it("reads nothing and returns null while custom agents are hidden", async () => {
+    it("reads nothing and returns null while custom agents are locked", async () => {
       seedAgent(vault, "coco", COCO, "You handle houseplant care only.");
       await store.start();
       await setCustomAgentsAccess("free");
