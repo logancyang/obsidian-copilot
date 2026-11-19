@@ -67,10 +67,37 @@ describe("agentSessionPrompt", () => {
       );
     });
 
-    it("says there are no other agents when the agent is the only one", () => {
-      expect(
-        buildAgentPrompt({ agent: COCO, folder: "/v", others: [], instruction: "", memory: "" })
-      ).toContain("Other agents: none.");
+    it("says there are no other agents when the agent is the only one, and nothing about asking one", () => {
+      const alone = buildAgentPrompt({
+        agent: COCO,
+        folder: "/v",
+        others: [],
+        instruction: "",
+        memory: "",
+      });
+
+      expect(alone).toContain("Other agents: none.");
+      expect(alone).not.toContain("ask_agent");
+    });
+
+    it("tells the agent in a chat of its own to ask another agent with ask_agent only when the user @-mentions or points to it (https://github.com/Brevilabs/obsidian-copilot-private/issues/944)", () => {
+      const ownChat = buildAgentPrompt({
+        agent: COCO,
+        folder: "/vault/copilot/agents/coco",
+        others: [MAYA, { name: "Leo", title: "" }],
+        instruction: "",
+        memory: "",
+        saveRules: { instructionsPath: "copilot/agents/coco/instructions.md" },
+      });
+
+      expect(ownChat).toContain(
+        "Other agents: Maya (Product critic); Leo.\n\nWhen the user's message @-mentions one of them by name or clearly points to one, ask that agent with the ask_agent tool from obsidian-copilot; never otherwise."
+      );
+    });
+
+    it("says nothing about ask_agent in a chat the agent was asked into, which has no save rules and no ask_agent (https://github.com/Brevilabs/obsidian-copilot-private/issues/944)", () => {
+      expect(prompt).toContain("Other agents: Maya (Product critic); Leo.");
+      expect(prompt).not.toContain("ask_agent");
     });
 
     it("carries no memory save rules unless asked for them", () => {

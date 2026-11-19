@@ -20,6 +20,11 @@ export interface AgentPromptInput {
   saveRules?: { instructionsPath: string };
 }
 
+// Codex lists MCP tools only on search, so an agent learns from its own prompt that it can ask the others; a chat it was asked into, the one kind without save rules, has no ask_agent.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/944
+const ASK_OTHER_AGENTS =
+  "When the user's message @-mentions one of them by name or clearly points to one, ask that agent with the ask_agent tool from obsidian-copilot; never otherwise.";
+
 function describeAgent({ name, title }: Pick<CustomAgent, "name" | "title">): string {
   return title ? `${name} (${title})` : name;
 }
@@ -38,6 +43,7 @@ export function buildAgentPrompt({
     `Your folder is ${folder}. Keep your own files in it, and add nothing else to the vault unless the user asks. Do not read or change other agents' folders.`,
     `Your instruction is the body of ${folder}/instructions.md, and only the user edits that file. Your memory is ${folder}/MEMORY.md. When your memory contradicts your instruction, follow your memory.`,
     `Other agents: ${roster}.`,
+    ...(others.length > 0 && saveRules ? [ASK_OTHER_AGENTS] : []),
     ...(saveRules
       ? [buildMemorySaveRules(`${folder}/${MEMORY_FILE_NAME}`, saveRules.instructionsPath)]
       : []),

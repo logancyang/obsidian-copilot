@@ -1,6 +1,11 @@
 import { AgentSession, type AgentSessionStatus } from "@/agentMode/session/AgentSession";
-import type { BackendDescriptor, BackendState } from "@/agentMode/session/types";
-import { HiddenAgentChats, type HiddenChatStart } from "@/agents/agentMode/hiddenAgentChats";
+import { writePermissionRequest } from "@/agentMode/session/testing/permissionPrompts";
+import type { BackendDescriptor, BackendState, PermissionPrompt } from "@/agentMode/session/types";
+import {
+  HIDDEN_CHAT_DENY_MESSAGE,
+  HiddenAgentChats,
+  type HiddenChatStart,
+} from "@/agents/agentMode/hiddenAgentChats";
 import {
   createFakeAgentBackend,
   type FakeAgentBackend,
@@ -17,6 +22,7 @@ jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError:
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/944";
 const AUTO_MODE: BackendState = { model: null, mode: { current: "auto", options: [], apply: {} } };
+const CLAUDE_LIKE = { midTurnDelivery: true, withdraw: true } as unknown as BackendDescriptor;
 
 let vault: FakeAgentVault;
 let store: CustomAgentStore;
@@ -473,6 +479,56 @@ describe("hiddenAgentChats", () => {
         expect(await fake.untilPrompt(sessionIdOf(coco), 2)).toContain("Too many features.");
       });
 
+      it(`waits for a busy Claude chat's turn to end instead of handing the reply in mid-turn, so Stop can't put it in the user's draft (${ISSUE})`, async () => {
+        const coco = await openChat({ agentSlug: "coco", descriptor: CLAUDE_LIKE });
+        const maya = await askedAndPrompted(coco);
+        coco.sendPrompt("While she reads: what date did we lock?");
+        await fake.untilPrompt(sessionIdOf(coco));
+        let queuedMidTurn = false;
+        coco.subscribe({
+          onMessagesChanged: () => {},
+          onStatusChanged: () => {},
+          onQueuedPromptsChanged: () => {
+            queuedMidTurn ||= coco.getQueuedPrompts().length > 0;
+          },
+        });
+
+        answer(maya, "Too many features.");
+        await untilStatus(maya, (status) => status === "idle");
+        fake.endTurn(sessionIdOf(coco));
+
+        expect(await fake.untilPrompt(sessionIdOf(coco), 2)).toContain("Too many features.");
+        expect(queuedMidTurn).toBe(false);
+      });
+
+      it(`sends the reply again when Stop drops it before it reached the agent (${ISSUE})`, async () => {
+        const coco = await openChat({ agentSlug: "coco" });
+        const maya = await askedAndPrompted(coco);
+        coco.sendPrompt("Something long.");
+        await fake.untilPrompt(sessionIdOf(coco));
+        const handed = coco.untilHanded();
+        answer(maya, "Too many features.");
+        await handed;
+
+        await coco.cancel();
+
+        expect(await fake.untilPrompt(sessionIdOf(coco), 2)).toContain("Too many features.");
+      });
+
+      it(`drops the reply without an error when the chat that asked closes while it waits (${ISSUE})`, async () => {
+        const coco = await openChat({ agentSlug: "coco", descriptor: CLAUDE_LIKE });
+        const maya = await askedAndPrompted(coco);
+        coco.sendPrompt("Something long.");
+        await fake.untilPrompt(sessionIdOf(coco));
+        answer(maya, "Too many features.");
+        await untilStatus(maya, (status) => status === "idle");
+
+        await coco.dispose();
+
+        await untilStatus(maya, (status) => status === "closed");
+        expect(fake.promptsTo(sessionIdOf(coco))).toHaveLength(1);
+      });
+
       it(`turns down an agent asking itself (${ISSUE})`, async () => {
         const maya = await openChat({ agentSlug: "maya" });
 
@@ -523,6 +579,36 @@ describe("hiddenAgentChats", () => {
 
         await untilStatus(maya, (status) => status === "closed");
         expect(coco.store.getDisplayMessages()).toEqual([]);
+      });
+    });
+
+    describe("answerPermission()", () => {
+      it(`turns down a request from an asked agent's chat with the reason, and leaves other chats' requests alone (${ISSUE})`, async () => {
+        const coco = await openChat({ agentSlug: "coco" });
+        const maya = await askedAndPrompted(coco);
+        const request: PermissionPrompt = {
+          ...writePermissionRequest(),
+          sessionId: sessionIdOf(maya),
+        };
+
+        await expect(chats.answerPermission(request)).resolves.toEqual({
+          outcome: { outcome: "selected", optionId: "reject_once" },
+          denyMessage: HIDDEN_CHAT_DENY_MESSAGE,
+        });
+        expect(chats.answerPermission({ ...request, sessionId: sessionIdOf(coco) })).toBeNull();
+      });
+
+      it(`reports each turned-down request to the chat that asked when the agent's reply comes back (${ISSUE})`, async () => {
+        const coco = await openChat({ agentSlug: "coco" });
+        const maya = await askedAndPrompted(coco);
+        const request = { ...writePermissionRequest(), sessionId: sessionIdOf(maya) };
+        await chats.answerPermission(request);
+
+        answer(maya, "I couldn't add the line.");
+
+        expect(await fake.untilPrompt(sessionIdOf(coco))).toContain(
+          `<turned-down from="Maya">\n${request.toolCall.title}\n</turned-down>`
+        );
       });
     });
 

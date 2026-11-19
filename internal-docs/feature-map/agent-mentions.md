@@ -9,6 +9,7 @@ Asking another custom agent from a chat with `@`: that agent works in the backgr
 - mention-keep-chatting: messages sent while the other agent works get their own answers.
 - mention-relay: when the other agent is done, a new turn at the end of the chat passes its reply on, keeping its position as strong as it was, then adding the chat agent's own view.
 - mention-continue: mentioning the same agent again in the same chat continues its conversation, so it remembers the earlier exchange. Mentioning it while it still works gets a reply that it is still working.
+- mention-denied: in a mode that asks before changes, the mentioned agent can't change files; the chat's agent says what it couldn't do.
 - mention-cant-remember: asked through a mention to remember something, the mentioned agent saves nothing; the chat's agent says it can't save rules from a chat it was asked into, and to tell it in its own chat.
 - mention-no-self: an agent never asks itself; its own name is plain text in its chat.
 
@@ -25,6 +26,7 @@ All of these need a license that includes custom agents and at least two agents 
 - Relay: when Maya is done, a new turn at the end of the chat brings back her view. If she disagrees with the plan, the reply says so plainly.
 - Continue: after the relay, send `@Maya and the intro?`. Her answer builds on the first exchange.
 - From a Copilot chat: in a chat with no agent, send `@Maya is this too long?`. The same one line, then the relay.
+- Denied: in `Default` mode, send `@Maya add one line to <note>`. The note does not change, and the relay says Maya couldn't edit it.
 - Can't remember: send `@Maya from now on, flag video length first.` The relay says Maya can't save rules from a chat she was asked into; her `MEMORY.md` does not change.
 - Itself: in Maya's own chat, send `@Maya hello`. Maya answers directly.
 
@@ -36,4 +38,6 @@ All of these need a license that includes custom agents and at least two agents 
 - A chat can mention agents only if it was opened while custom agents were available: a chat keeps the tools it started with.
 - Closing Obsidian, shutting the chat down, or losing the license stops the mentioned agent; its reply never comes back.
 - A settings change that restarts the chat's agent also stops the mentioned agent, and its reply never comes back.
+- Stopping the chat's own reply doesn't drop a mentioned agent's reply that is waiting; it comes back after the stop. Stopping the turn that passes the reply on ends it there.
+- On Codex models, a Copilot chat with no agent usually answers an `@`-mention itself: Codex finds the tool only through its own tool search, and only an agent's chat names the tool in its prompt.
 - The mentioned agent works in the chat's project folder, in the chat's mode, on its own model.
