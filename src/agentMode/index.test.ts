@@ -13,6 +13,8 @@ import { isObsidianCliEnabled } from "@/services/obsidianCli/ObsidianCliClient";
 import { createCopilotMcpServer } from "./session/copilotMcpServer";
 import { isConnectorsEnabled } from "@/connectors/connectorsEntitlement";
 import { createDefaultPermissionPrompter } from "./ui/permissionPrompter";
+import { fakeChat } from "./session/testing/fakeChat";
+import { AGENT_DRAFT_CARD, AGENT_DRAFT_CARD_EXTENSION } from "@/agents/agentMode/agentDraftCard";
 
 jest.mock("@/constants", () => ({}));
 jest.mock("@/logger", () => ({ logError: jest.fn() }));
@@ -728,6 +730,35 @@ describe("agentMode", () => {
       const hosted = jest.mocked(createCopilotMcpServer).mock.calls[0][1];
       expect(hosted.map(({ definition }) => definition.name)).toContain("ask_agent");
       expect(plugin.register).toHaveBeenCalledWith(expect.any(Function));
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/941 offers draft_agent only to a custom agent's chat the user sees, refuses a hidden chat's call, and keeps the draft card with the chat", async () => {
+      const coco = Object.assign(fakeChat(), { agentSlug: "coco" });
+      const copilot = Object.assign(fakeChat(), { agentSlug: null });
+      Object.assign(mockManager, {
+        getSession: (key: string) => ({ "coco-chat": coco, "copilot-chat": copilot })[key],
+        getSessions: () => [coco, copilot],
+        isUnlistedSession: (key: string) => key === "hidden-chat",
+      });
+      createAgentSessionManager({} as App, plugin);
+      const draftAgent = jest
+        .mocked(createCopilotMcpServer)
+        .mock.calls[0][1].find(({ definition }) => definition.name === "draft_agent")!;
+      const listedFor = (sessionKey: string) =>
+        draftAgent.listedAs?.({ sessionKey, backendId: "claude" }) ?? null;
+      const nora = { name: "Nora", title: "", instruction: "You plan pickups." };
+
+      expect(listedFor("coco-chat")).not.toBeNull();
+      expect(listedFor("copilot-chat")).toBeNull();
+      expect(listedFor("hidden-chat")).toBeNull();
+      expect((await draftAgent.call(nora, fakeChat())).text).toContain(
+        "Only a custom agent can draft an agent"
+      );
+      expect((await draftAgent.call(nora, coco)).text).toContain("Shown to the user as a card");
+      expect(coco.readChatState(AGENT_DRAFT_CARD)?.draftedBy).toBe("coco");
+      expect(jest.mocked(AgentSessionManager).mock.calls[0][2].chatExtensions).toContain(
+        AGENT_DRAFT_CARD_EXTENSION
+      );
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/944 hands a permission request no asked agent made to the chat's own prompter", async () => {

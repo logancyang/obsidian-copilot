@@ -4,7 +4,14 @@ import {
   type AgentModelChoices,
   type CreateAgentFormProps,
 } from "@/agents/ui/CreateAgentForm";
-import { COCO, LEO, MAYA, NORA, TWELVE_AGENTS } from "@/agents/ui/testing/rosterFixtures";
+import {
+  COCO,
+  LEO,
+  MAYA,
+  NORA,
+  THREE_AGENTS,
+  TWELVE_AGENTS,
+} from "@/agents/ui/testing/rosterFixtures";
 import type { PresetFacesState } from "@/agents/ui/usePresetFaces";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { Meta, StoryObj } from "@/lib/story";
@@ -185,6 +192,21 @@ export const InstructionPastFourThousand: StoryObj<CreateAgentFormProps> = {
   render: () => (
     <FormStory
       initialValues={{ ...KAI, instruction: `${KAI_INSTRUCTION}\n\n`.repeat(13).trim() }}
+    />
+  ),
+};
+
+export const DraftedByAnAgent: StoryObj<CreateAgentFormProps> = {
+  render: () => (
+    <FormStory
+      agents={THREE_AGENTS}
+      initialValues={{
+        name: "Nora",
+        title: "Family calendar and school logistics",
+        instruction:
+          "You handle our family logistics: school pickups, after-school classes, camp sign-ups and the family calendar. The kids' notes are in Family/Kids/. Check the calendar before you suggest a time. Answer in short lines I can read on my phone.",
+      }}
+      draftedBy={{ name: COCO.name, faceSrc: COCO.faceSrc }}
     />
   ),
 };

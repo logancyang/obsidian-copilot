@@ -99,6 +99,7 @@ import type { FeedbackEvidence } from "@/agentMode/session/feedback/feedbackOffe
 import {
   EMPTY_CHAT_EXTENSIONS,
   EMPTY_CHAT_STATES,
+  NO_SAVED_CHAT_STATES,
   readChatState,
   withChatState,
   type ChatExtension,
@@ -107,6 +108,7 @@ import {
   type ChatStates,
   type ChatView,
   type PromptNote,
+  type SavedChatStates,
   type TurnFailure,
 } from "@/agentMode/session/chatExtension";
 
@@ -1148,6 +1150,25 @@ export class AgentSession implements ChatStateHost, ChatView {
   restoreChatStates(states: ChatStates): void {
     this.chatStates = states;
     this.notifyMessages();
+  }
+
+  getNoteChatStates(): SavedChatStates {
+    const saved = this.chatExtensions.flatMap(({ key, readFromNote }) => {
+      const state = this.readChatState(key);
+      return readFromNote && state !== key.initial ? [[key.id, state] as const] : [];
+    });
+    return saved.length > 0 ? Object.fromEntries(saved) : NO_SAVED_CHAT_STATES;
+  }
+
+  restoreNoteChatStates(saved: SavedChatStates): void {
+    const restored = this.chatExtensions.reduce(
+      (states, { key, readFromNote }) =>
+        readFromNote && saved[key.id] !== undefined
+          ? withChatState(states, key, readFromNote(saved[key.id]))
+          : states,
+      this.chatStates
+    );
+    if (restored !== this.chatStates) this.restoreChatStates(restored);
   }
 
   private takePromptNotes(): { extension: ChatExtension<unknown>; note: PromptNote<unknown> }[] {

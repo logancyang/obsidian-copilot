@@ -100,6 +100,25 @@ describe("agentSessionPrompt", () => {
       expect(prompt).not.toContain("ask_agent");
     });
 
+    it("tells the agent in a chat of its own, even with no other agents, to draft a new agent with draft_agent, to say first when it or another agent already handles the job, and that it can't create one (https://github.com/Brevilabs/obsidian-copilot-private/issues/941)", () => {
+      const ownChat = buildAgentPrompt({
+        agent: COCO,
+        folder: "/vault/copilot/agents/coco",
+        others: [],
+        instruction: "",
+        memory: "",
+        saveRules: { instructionsPath: "copilot/agents/coco/instructions.md" },
+      });
+
+      expect(ownChat).toContain(
+        "When the user asks you to make a new agent, draft it with the draft_agent tool from obsidian-copilot, which shows them a card to review and create it. If you or another agent already handles that job, say so and ask before drafting. You can't create an agent yourself."
+      );
+    });
+
+    it("says nothing about draft_agent in a chat the agent was asked into, which refuses it (https://github.com/Brevilabs/obsidian-copilot-private/issues/941)", () => {
+      expect(prompt).not.toContain("draft_agent");
+    });
+
     it("carries no memory save rules unless asked for them", () => {
       expect(prompt).not.toContain("Save a rule to your memory");
     });
@@ -208,6 +227,17 @@ describe("agentSessionPrompt", () => {
       jest.spyOn(store, "loadForSession").mockRejectedValueOnce(new Error("ENOENT"));
 
       await expect(loadAgentSessionPrompt(store, "coco", "/vault")).resolves.toBeNull();
+    });
+
+    it("tells the agent's own chat about draft_agent while custom agents are available, and leaves it out of a hidden chat's prompt (https://github.com/Brevilabs/obsidian-copilot-private/issues/941)", async () => {
+      seedAgent(vault, "coco", COCO, "You handle houseplant care only.");
+      await store.start();
+
+      const own = await loadAgentSessionPrompt(store, "coco", "/vault");
+      const hidden = await loadAgentSessionPrompt(store, "coco", "/vault", { saveRules: false });
+
+      expect(own?.prompt).toContain("draft it with the draft_agent tool from obsidian-copilot");
+      expect(hidden?.prompt).not.toContain("draft_agent");
     });
 
     it("reads nothing and returns null while custom agents are hidden", async () => {

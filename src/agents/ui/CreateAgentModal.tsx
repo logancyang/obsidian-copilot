@@ -4,6 +4,7 @@ import {
   CreateAgentForm,
   type AgentModelChoices,
   type CreateAgentInitialValues,
+  type DraftedBy,
 } from "@/agents/ui/CreateAgentForm";
 import { useCustomAgents } from "@/agents/ui/useCustomAgents";
 import { usePresetFaces } from "@/agents/ui/usePresetFaces";
@@ -19,6 +20,7 @@ export interface CreateAgentDialogOptions {
   store: CustomAgentStore;
   models: AgentModelChoices;
   initialValues?: CreateAgentInitialValues;
+  draftedBy?: DraftedBy;
   onCreated: (slug: string) => void;
 }
 
@@ -118,6 +120,7 @@ function CreateAgentDialog({ options, closeGuard, onCreated, onCancel }: CreateA
         models={options.models}
         presetFaces={presetFaces}
         initialValues={options.initialValues}
+        draftedBy={options.draftedBy}
         closeGuard={closeGuard}
         onCreate={async (agent) => onCreated(await options.store.createAgent(agent))}
         onClose={onCancel}

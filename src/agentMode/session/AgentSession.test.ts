@@ -6425,6 +6425,63 @@ describe("AgentSession", () => {
       });
     });
 
+    describe("getNoteChatStates()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/941 returns, by feature, the states the chat's note keeps, leaving out features still at their initial state", () => {
+        const session = makeSession(makeMockBackend(), {
+          chatExtensions: [
+            defineChatExtension({ key: NEWS, readFromNote: () => [] }),
+            defineChatExtension({ key: COUNTER, readFromNote: () => 0 }),
+          ],
+        });
+        expect(session.getNoteChatStates()).toBe(session.getNoteChatStates());
+
+        session.updateChatState(NEWS, () => ["draft shown"]);
+
+        expect(session.getNoteChatStates()).toEqual({ news: ["draft shown"] });
+      });
+
+      it("leaves out the state of features the note doesn't keep", () => {
+        const session = makeSession(makeMockBackend(), {
+          chatExtensions: [defineChatExtension({ key: NEWS, keepOnReload: true })],
+        });
+
+        session.updateChatState(NEWS, () => ["notion connected"]);
+
+        expect(session.getNoteChatStates()).toEqual({});
+      });
+    });
+
+    describe("restoreNoteChatStates()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/941 reads each kept state back through its feature, ignores other keys, and redraws", () => {
+        const readFromNote = jest.fn((saved: unknown) => (Array.isArray(saved) ? saved : []));
+        const session = makeSession(makeMockBackend(), {
+          chatExtensions: [defineChatExtension({ key: NEWS, readFromNote })],
+        });
+        const onMessagesChanged = jest.fn();
+        subscribeTo(session, { onMessagesChanged });
+
+        session.restoreNoteChatStates({ news: ["draft shown"], counter: 5 });
+
+        expect(session.readChatState(NEWS)).toEqual(["draft shown"]);
+        expect(session.readChatState(COUNTER)).toBe(0);
+        expect(onMessagesChanged).toHaveBeenCalledTimes(1);
+      });
+
+      it("neither changes nor redraws a chat whose note keeps nothing", () => {
+        const session = makeSession(makeMockBackend(), {
+          chatExtensions: [defineChatExtension({ key: NEWS, readFromNote: () => ["x"] })],
+        });
+        const before = session.getChatStates();
+        const onMessagesChanged = jest.fn();
+        subscribeTo(session, { onMessagesChanged });
+
+        session.restoreNoteChatStates({});
+
+        expect(session.getChatStates()).toBe(before);
+        expect(onMessagesChanged).not.toHaveBeenCalled();
+      });
+    });
+
     describe("getTasks()", () => {
       function launchTurn(mock: MockBackend, session: AgentSession) {
         let promptId = "";

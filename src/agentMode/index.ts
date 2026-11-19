@@ -25,14 +25,13 @@ import {
 import { isConnectorsEnabled } from "@/connectors/connectorsEntitlement";
 import { buildAgentSystemPrompt } from "./backends/shared/agentSystemPrompt";
 import { getBuiltinSkillEnvRestartPolicy } from "./backends/shared/builtinSkillEnv";
-import { backendRegistry, findBackendForModel, listBackendDescriptors } from "./backends/registry";
-import type { BackendId, ModelSelection } from "./session/types";
+import { backendRegistry, listBackendDescriptors } from "./backends/registry";
+import type { BackendId } from "./session/types";
 import { AgentChatPersistenceManager } from "./session/AgentChatPersistenceManager";
 import { AgentModelPreloader } from "./session/AgentModelPreloader";
 import { AgentSessionIndex } from "./session/AgentSessionIndex";
 import { createNodeFileStorage } from "./session/nodeFileStorage";
 import { AgentSessionManager } from "./session/AgentSessionManager";
-import type { AgentSession } from "./session/AgentSession";
 import {
   createCopilotMcpServer,
   SEND_FEEDBACK_TOOL_NAME,
@@ -58,7 +57,10 @@ import { createOpenArtifactsTools } from "@/openArtifacts/openArtifactsTools";
 import { getVaultBase } from "@/utils/vaultPath";
 import { loadAgentSessionPrompt } from "@/agents/agentSessionPrompt";
 import type { CustomAgent } from "@/agents/CustomAgentStore";
+import { agentBackend } from "@/agents/agentMode/agentChats";
+import { AGENT_DRAFT_CARD_EXTENSION } from "@/agents/agentMode/agentDraftCard";
 import { createAskAgentTool } from "@/agents/agentMode/askAgentTool";
+import { createDraftAgentTool } from "@/agents/agentMode/draftAgentTool";
 import { HiddenAgentChats } from "@/agents/agentMode/hiddenAgentChats";
 import { SkillManager } from "./skills";
 import {
@@ -77,6 +79,7 @@ import {
   createDefaultPermissionPrompter,
 } from "./ui/permissionPrompter";
 
+export { startCustomAgentChat } from "@/agents/agentMode/agentChats";
 export { default as CopilotAgentView } from "./ui/CopilotAgentView";
 export { openSessionsSidebar } from "./navigator/openSessionsSidebar";
 export { default as SessionsSidebarView } from "./navigator/ui/SessionsSidebarView";
@@ -115,23 +118,6 @@ export function applyCopilotDefaultModel(configuredModelId: string): BackendId[]
 }
 
 const NO_CUSTOM_AGENTS: readonly CustomAgent[] = Object.freeze([]);
-
-function agentBackend(
-  manager: AgentSessionManager,
-  model: CustomAgent["model"]
-): { backendId?: BackendId; seed?: ModelSelection } {
-  const backendId = model && findBackendForModel(getSettings(), model.baseModelId)?.id;
-  if (!backendId) return {};
-  return { backendId, seed: manager.getSeedSelection(backendId, model) ?? undefined };
-}
-
-export function startCustomAgentChat(
-  manager: AgentSessionManager,
-  { slug, model }: Pick<CustomAgent, "slug" | "model">
-): Promise<AgentSession> {
-  const { backendId, seed } = agentBackend(manager, model);
-  return manager.createSession(backendId, undefined, seed, undefined, slug);
-}
 
 function collectAgentSkillsDirsProjectRel(): Record<string, string> {
   const out: Record<string, string> = {};
@@ -309,6 +295,12 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
         isUnlistedChat: (sessionKey) => managerRef?.isUnlistedSession(sessionKey) ?? false,
         agentOfChat: (sessionKey) => managerRef?.getSession(sessionKey)?.agentSlug ?? null,
       }),
+      createDraftAgentTool({
+        isUnlistedChat: (sessionKey) => managerRef?.isUnlistedSession(sessionKey) ?? false,
+        isCopilotChat: (sessionKey) => managerRef?.getSession(sessionKey)?.agentSlug === null,
+        agentOfCaller: (chat) =>
+          managerRef?.getSessions().find((session) => session === chat)?.agentSlug ?? null,
+      }),
       ...(connectionManager
         ? [
             createSuggestConnectorTool({
@@ -356,6 +348,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     sessionIndex,
     chatExtensions: [
       FEEDBACK_OFFER_EXTENSION,
+      AGENT_DRAFT_CARD_EXTENSION,
       ...(connectionManager
         ? [
             // A stored login without the entitlement gives agents no tools, so its card must not report it connected.

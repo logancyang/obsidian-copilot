@@ -12,7 +12,12 @@ import { AgentSessionIndex } from "./AgentSessionIndex";
 import { AgentSessionManager } from "./AgentSessionManager";
 import type { FindCallingChat } from "./copilotMcpServer";
 import { FEEDBACK_OFFER_EXTENSION } from "./feedback/feedbackOffer";
-import { EMPTY_CHAT_STATES } from "./chatExtension";
+import {
+  defineChatExtension,
+  EMPTY_CHAT_STATES,
+  NO_SAVED_CHAT_STATES,
+  type ChatStateKey,
+} from "./chatExtension";
 import { GLOBAL_SCOPE } from "./scope";
 import {
   getSettings as mockedGetSettings,
@@ -256,6 +261,8 @@ function makeMockSession(overrides: {
     setContinuedFrom: jest.fn(),
     getReloadableChatStates: jest.fn(() => EMPTY_CHAT_STATES),
     restoreChatStates: jest.fn(),
+    getNoteChatStates: jest.fn(() => NO_SAVED_CHAT_STATES),
+    restoreNoteChatStates: jest.fn(),
     getSessionUsage: () => null,
     subscribe: (l: Parameters<typeof listeners.add>[0]) => {
       listeners.add(l);
@@ -5543,6 +5550,35 @@ describe("AgentSessionManager", () => {
         await mgr.shutdown();
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/941 saves the chat's card states with its note, and saves again when only a card's state changes", async () => {
+        const { mgr, saveSession } = savedNoteFixture();
+        const session = await mgr.createSession();
+        getSessionTestHandle(session).setMessages([
+          { message: "Draft one." },
+          { message: "Here." },
+        ]);
+        const shown = { "agent-draft": { draft: { name: "Nora" } } };
+        jest.mocked(session.getNoteChatStates).mockReturnValue(shown);
+        await mgr.saveActiveSession();
+        jest.mocked(session.getNoteChatStates).mockReturnValue(NO_SAVED_CHAT_STATES);
+
+        await mgr.saveActiveSession();
+
+        expect(saveSession).toHaveBeenCalledTimes(2);
+        expect(saveSession).toHaveBeenNthCalledWith(
+          1,
+          expect.anything(),
+          session.backendId,
+          expect.objectContaining({ chatStates: shown })
+        );
+        expect(saveSession).toHaveBeenLastCalledWith(
+          expect.anything(),
+          session.backendId,
+          expect.objectContaining({ chatStates: NO_SAVED_CHAT_STATES })
+        );
+        await mgr.shutdown();
+      });
+
       it("saves again when an earlier message's @-mentioned agent finishes, so its note keeps the run's status (https://github.com/Brevilabs/obsidian-copilot-private/issues/944)", async () => {
         const { mgr, saveSession } = savedNoteFixture();
         const session = await mgr.createSession();
@@ -6725,6 +6761,27 @@ describe("AgentSessionManager", () => {
           expect.objectContaining({ sessionId: "native-1", agent: COCO_AGENT })
         );
         expect(session.agentSlug).toBe("coco");
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/941 restores the card states its note keeps, so a card the user can still act on comes back with the chat", async () => {
+        const replay = buildReplayingBackend();
+        const chatStates = { "agent-draft": { draft: { name: "Nora" } } };
+        const draftCard: ChatStateKey<unknown> = { id: "agent-draft", initial: null };
+        const session = await buildManager({
+          chatExtensions: [defineChatExtension({ key: draftCard, readFromNote: (saved) => saved })],
+          persistence: {
+            loadFile: jest.fn().mockResolvedValue({
+              backendId: "opencode",
+              sessionId: "native-1",
+              projectId: GLOBAL_SCOPE,
+              messages: savedTurn,
+              chatStates,
+            }),
+          },
+          descriptor: buildDescriptor({ createBackendProcess: () => replay.backend }),
+        }).loadSessionFromHistory(mockTFile({ path: "chat/Saved.md" }));
+
+        expect(session.readChatState(draftCard)).toEqual({ draft: { name: "Nora" } });
       });
 
       it("reopens a chat note whose custom agent cannot load, because custom agents are hidden or its folder was removed, as a Copilot chat that still records the agent (https://github.com/Brevilabs/obsidian-copilot-private/issues/937)", async () => {

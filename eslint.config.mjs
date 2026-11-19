@@ -581,7 +581,7 @@ export default [
             },
             {
               from: { type: "customAgentsAgent" },
-              allow: { to: { type: ["customAgentsAgent", "ui", "session", "host"] } },
+              allow: { to: { type: ["customAgentsAgent", "ui", "session", "registry", "host"] } },
             },
             {
               from: { type: "projectsUi" },
