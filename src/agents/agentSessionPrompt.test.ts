@@ -1,6 +1,7 @@
 import { buildAgentPrompt, loadAgentSessionPrompt } from "@/agents/agentSessionPrompt";
 import { CustomAgentStore } from "@/agents/CustomAgentStore";
 import { serializeInstructionsFile } from "@/agents/customAgentFiles";
+import { buildMemorySaveRules } from "@/agents/memorySaveRules";
 import { setCustomAgentsAccess } from "@/agents/testing/customAgentsAccess";
 import { createFakeAgentVault, type FakeAgentVault } from "@/agents/testing/fakeAgentVault";
 import { setSettings } from "@/settings/model";
@@ -71,6 +72,25 @@ describe("agentSessionPrompt", () => {
         buildAgentPrompt({ agent: COCO, folder: "/v", others: [], instruction: "", memory: "" })
       ).toContain("Other agents: none.");
     });
+
+    it("carries no memory save rules unless asked for them", () => {
+      expect(prompt).not.toContain("Save a rule to your memory");
+    });
+
+    it("carries the memory save rules for its own MEMORY.md before the instruction when asked for them", () => {
+      const withRules = buildAgentPrompt({
+        agent: COCO,
+        folder: "/vault/copilot/agents/coco",
+        others: [],
+        instruction: "",
+        memory: "",
+        saveRules: { instructionsPath: "copilot/agents/coco/instructions.md" },
+      });
+
+      expect(withRules).toContain(
+        `${buildMemorySaveRules("/vault/copilot/agents/coco/MEMORY.md", "copilot/agents/coco/instructions.md")}\n\n<instruction>`
+      );
+    });
   });
 
   describe("loadAgentSessionPrompt()", () => {
@@ -101,9 +121,29 @@ describe("agentSessionPrompt", () => {
           others: [MAYA],
           instruction: "You handle houseplant care only.",
           memory: "End with ACORN.",
+          saveRules: { instructionsPath: "copilot/agents/coco/instructions.md" },
         }),
+        memoryPath: "/vault/copilot/agents/coco/MEMORY.md",
       });
       expect(loaded?.prompt).not.toContain("name: Coco");
+    });
+
+    it("leaves out the save rules and the memory path for a caller that asks for none, such as a hidden session (https://github.com/Brevilabs/obsidian-copilot-private/issues/944)", async () => {
+      seedAgent(vault, "coco", COCO, "You handle houseplant care only.", "End with ACORN.");
+      await store.start();
+
+      const loaded = await loadAgentSessionPrompt(store, "coco", "/vault", { saveRules: false });
+
+      expect(loaded).toEqual({
+        slug: "coco",
+        prompt: buildAgentPrompt({
+          agent: COCO,
+          folder: "/vault/copilot/agents/coco",
+          others: [],
+          instruction: "You handle houseplant care only.",
+          memory: "End with ACORN.",
+        }),
+      });
     });
 
     it("loads a missing MEMORY.md as an empty memory", async () => {

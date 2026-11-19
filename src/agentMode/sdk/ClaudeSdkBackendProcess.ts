@@ -78,6 +78,7 @@ interface SessionState {
   live?: ClaudeLiveQuery;
   starting?: Promise<ClaudeLiveQuery>;
   systemPromptAppend: string;
+  agentMemoryPath?: string;
 }
 
 // Subagents run in the background unless the model chooses: the chat lists them as tasks and their reports start replies, while a model that needs a result before going on can still wait on it. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
@@ -290,6 +291,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       model: seedModelId,
       mcpServers: params.mcpServers,
       systemPromptAppend: this.resolveSystemPromptAppend(params.agent),
+      agentMemoryPath: params.agent?.memoryPath,
       translator: createTranslatorState(),
     });
 
@@ -368,6 +370,8 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       getPrompter: () => this.permissionPrompter,
       getAskUserQuestionPrompter: () => this.askUserQuestionPrompter,
       isPlanModePlanFilePath: this.opts.isPlanModePlanFilePath,
+      agentMemoryPath: session.agentMemoryPath,
+      isPlanMode: () => session.permissionMode === "plan",
       getModeAfterPlanApproval: () => session.lastNonPlanPromptMode ?? this.autoPermissionMode(),
     });
 
@@ -425,7 +429,9 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     options.thinking = session.thinking
       ? { type: "adaptive", display: "summarized" }
       : { type: "disabled" };
-    options.env = env;
+    // Claude Code's own auto memory would be a second place a custom agent saves rules, so its MEMORY.md stays the only one.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/942
+    options.env = session.agentMemoryPath ? { ...env, CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1" } : env;
 
     if (this.sessions.get(sessionId) !== session) {
       throw new Error(`Session ${sessionId} closed before its prompt was sent`);
@@ -655,6 +661,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       model: seedModelId,
       mcpServers: params.mcpServers,
       systemPromptAppend: this.resolveSystemPromptAppend(params.agent),
+      agentMemoryPath: params.agent?.memoryPath,
       translator: createTranslatorState(claudeTaskPlan),
     });
 

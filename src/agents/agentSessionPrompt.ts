@@ -1,10 +1,13 @@
 import type { CustomAgent, CustomAgentStore } from "@/agents/CustomAgentStore";
 import { getCustomAgentsGate } from "@/agents/customAgentsGate";
+import { MEMORY_FILE_NAME } from "@/agents/customAgentFiles";
+import { buildMemorySaveRules } from "@/agents/memorySaveRules";
 import { logWarn } from "@/logger";
 
 export interface AgentSessionPrompt {
   slug: string;
   prompt: string;
+  memoryPath?: string;
 }
 
 export interface AgentPromptInput {
@@ -13,6 +16,7 @@ export interface AgentPromptInput {
   others: readonly Pick<CustomAgent, "name" | "title">[];
   instruction: string;
   memory: string;
+  saveRules?: { instructionsPath: string };
 }
 
 function describeAgent({ name, title }: Pick<CustomAgent, "name" | "title">): string {
@@ -25,6 +29,7 @@ export function buildAgentPrompt({
   others,
   instruction,
   memory,
+  saveRules,
 }: AgentPromptInput): string {
   const roster = others.length > 0 ? others.map(describeAgent).join("; ") : "none";
   return [
@@ -32,6 +37,9 @@ export function buildAgentPrompt({
     `Your folder is ${folder}. Keep your own files in it, and add nothing else to the vault unless the user asks. Do not read or change other agents' folders.`,
     `Your instruction is the body of ${folder}/instructions.md, and only the user edits that file. Your memory is ${folder}/MEMORY.md. When your memory contradicts your instruction, follow your memory.`,
     `Other agents: ${roster}.`,
+    ...(saveRules
+      ? [buildMemorySaveRules(`${folder}/${MEMORY_FILE_NAME}`, saveRules.instructionsPath)]
+      : []),
     `<instruction>\n${instruction}\n</instruction>`,
     `<memory>\n${memory}\n</memory>`,
   ].join("\n\n");
@@ -40,7 +48,8 @@ export function buildAgentPrompt({
 export async function loadAgentSessionPrompt(
   store: CustomAgentStore,
   slug: string,
-  vaultBase: string
+  vaultBase: string,
+  { saveRules = true }: { saveRules?: boolean } = {}
 ): Promise<AgentSessionPrompt | null> {
   if (getCustomAgentsGate() !== "full") return null;
   const agents = store.getAgents();
@@ -56,14 +65,17 @@ export async function loadAgentSessionPrompt(
     return null;
   }
   if (!files) return null;
+  const folder = `${vaultBase}/${agent.folderPath}`;
   return {
     slug,
     prompt: buildAgentPrompt({
       agent,
-      folder: `${vaultBase}/${agent.folderPath}`,
+      folder,
       others: agents.filter((other) => other !== agent),
       instruction: files.instruction,
       memory: files.memory,
+      ...(saveRules ? { saveRules: { instructionsPath: agent.instructionsPath } } : {}),
     }),
+    ...(saveRules ? { memoryPath: `${vaultBase}/${agent.memoryPath}` } : {}),
   };
 }
