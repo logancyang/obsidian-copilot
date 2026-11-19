@@ -1582,6 +1582,27 @@ describe("AgentChatPersistenceManager", () => {
       expect(raw).toContain("[Timestamp: 2026/09/10 23:49:11]");
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/971 gives a continued chat's first message the time it was sent, while its note keeps the continuation's epoch as its chat link", async () => {
+      const continuedAt = 1789200000123;
+      const saved = await manager.saveSession(
+        [
+          {
+            ...makeMessage(USER_SENDER, "The codeword is HERON."),
+            timestamp: { epoch: continuedAt, display: "2026/09/10 23:49:11", fileName: "" },
+          },
+        ],
+        "claude",
+        { continuedFrom: ["test-folder/original.md"] }
+      );
+      Object.setPrototypeOf(app.files.get(saved!.path)!, TFile.prototype);
+
+      const loaded = await manager.loadFile(app.files.get(saved!.path) as unknown as TFile);
+      await manager.saveSession(loaded.messages, "claude", { existingPath: saved!.path });
+
+      expect(loaded.messages[0].timestamp?.epoch).toBe(new Date("2026/09/10 23:49:11").getTime());
+      expect(app.files.get(saved!.path)!.contents).toContain(`epoch: ${continuedAt}\n`);
+    });
+
     it.each([
       ["has no epoch", []],
       ["has a non-numeric epoch", ["epoch: soon"]],
