@@ -63,7 +63,7 @@ export function AgentRoster({
   locked,
   needsSetup,
 }: AgentRosterProps): React.ReactElement {
-  const headingId = useId();
+  const labelId = useId();
   if (agents.length === 0 && !newAgentButton) return <>{emptyHero}</>;
   // Locked agents can't be picked for a chat, so Copilot stays selected and a face opens its locked profile.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/950
@@ -89,11 +89,7 @@ export function AgentRoster({
       onChoose={choose}
       lockOf={lockOf}
       newAgentButton={newAgentButton}
-      // The picked agent's big face, name and title already say who the chat is with, so the row carries the question
-      // only for screen readers. https://github.com/Brevilabs/obsidian-copilot-private/issues/978
-      labelProps={
-        agents.length === 0 ? { "aria-labelledby": headingId } : { "aria-label": ROSTER_QUESTION }
-      }
+      labelledBy={labelId}
     />
   );
 
@@ -102,7 +98,7 @@ export function AgentRoster({
   if (agents.length === 0) {
     return (
       <div className="tw-flex tw-min-w-0 tw-flex-col tw-items-center">
-        <div id={headingId} className="tw-min-w-0 tw-max-w-full">
+        <div id={labelId} className="tw-min-w-0 tw-max-w-full">
           {emptyHero}
         </div>
         {row}
@@ -114,6 +110,12 @@ export function AgentRoster({
     <div className="tw-flex tw-min-w-0 tw-flex-col tw-items-center">
       <PickedAgent agent={selected} onOpenProfile={onOpenProfile} />
       {row}
+      {/* The picked agent above already says who the chat is with, so only screen readers get the question, through a
+      hidden label: an aria-label would make Obsidian show it as the whole row's tooltip.
+      https://github.com/Brevilabs/obsidian-copilot-private/issues/978 */}
+      <span id={labelId} hidden>
+        {ROSTER_QUESTION}
+      </span>
       {locked && (
         <div className="tw-mt-2 tw-max-w-80 tw-text-balance tw-text-center tw-text-ui-small tw-text-muted">
           {locked.note}
@@ -213,7 +215,7 @@ interface FaceRowProps {
   onChoose: (slug: string) => void;
   lockOf: (slug: string) => AgentLock | undefined;
   newAgentButton?: React.ReactNode;
-  labelProps: Pick<React.HTMLAttributes<HTMLDivElement>, "aria-label" | "aria-labelledby">;
+  labelledBy: string;
 }
 
 function FaceRow({
@@ -223,7 +225,7 @@ function FaceRow({
   onChoose,
   lockOf,
   newAgentButton,
-  labelProps,
+  labelledBy,
 }: FaceRowProps) {
   const rowRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
@@ -255,7 +257,7 @@ function FaceRow({
     <div
       ref={rowRef}
       role="group"
-      {...labelProps}
+      aria-labelledby={labelledBy}
       className="tw-mt-3 tw-flex tw-w-full tw-justify-center tw-gap-1"
     >
       <RosterCell label={COPILOT_NAME} selected={!selected} onClick={() => onSelect(null)}>

@@ -115,12 +115,14 @@ describe("AgentRoster", () => {
   afterEach(() => jest.restoreAllMocks());
 
   describe("AgentRoster()", () => {
-    it(`shows Copilot's face and then each agent's face, each with its name under it, under no heading; screen readers hear the row as "Who do you want to talk to?" (${HEADING_ISSUE})`, () => {
-      renderRoster();
+    it(`shows Copilot's face and then each agent's face, each with its name under it, under no heading; screen readers hear the row as "Who do you want to talk to?" from a hidden label, with no aria-label that Obsidian would show as the whole row's tooltip (${HEADING_ISSUE})`, () => {
+      renderRoster({ newAgentButton: <NewAgentButton onClick={jest.fn()} /> });
 
+      const row = screen.getByRole("group", { name: "Who do you want to talk to?" });
       expect(screen.queryByRole("heading")).toBeNull();
-      expect(screen.queryByText("Who do you want to talk to?")).toBeNull();
-      expect(rowNames()).toEqual(["Copilot", "Coco", "Maya", "Leo"]);
+      expect(screen.getByText("Who do you want to talk to?").closest("[hidden]")).not.toBeNull();
+      expect(row.closest("[aria-label]")).toBeNull();
+      expect(rowNames()).toEqual(["Copilot", "Coco", "Maya", "Leo", "New agent"]);
     });
 
     it(`marks the selected agent in the row with a 2px accent ring on its 42px face (${ISSUE})`, () => {
