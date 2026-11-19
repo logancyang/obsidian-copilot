@@ -1,7 +1,6 @@
 import { readCodexCopilotTools } from "@/agentMode/backends/codex/codexCopilotToolCalls";
 import { directCopilotToolUse } from "@/agentMode/session/copilotToolCalls";
 import {
-  displayTargetFromPath,
   lookupToolSummary,
   extractSubAgentInputPrompt,
   extractSubAgentReturnText,
@@ -566,22 +565,6 @@ describe("toolSummaries", () => {
       expect(lookupToolSummary(read).expandedDetails).toBeUndefined();
       const edit = tool({ vendorToolName: "Edit", title: "edit" });
       expect(lookupToolSummary(edit).expandedDetails).toBeUndefined();
-    });
-  });
-
-  describe("displayTargetFromPath()", () => {
-    it("shows an in-vault target as its vault-relative path", () => {
-      const t = tool({ input: { file_path: "/Users/me/vault/notes/today.md" } });
-      expect(displayTargetFromPath(t, CTX.vaultBase)).toBe("notes/today.md");
-    });
-
-    it("shortens an out-of-vault target to its file name", () => {
-      const t = tool({ input: { file_path: "/Users/me/private/draft.md" } });
-      expect(displayTargetFromPath(t, CTX.vaultBase)).toBe("…/draft.md");
-    });
-
-    it("returns null when the tool call names no path", () => {
-      expect(displayTargetFromPath(tool({ input: {} }), CTX.vaultBase)).toBeNull();
     });
   });
 

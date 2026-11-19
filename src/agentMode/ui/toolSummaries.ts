@@ -6,6 +6,7 @@ import { toolUseLabel } from "@/agentMode/session/copilotToolCalls";
 import { formatDuration } from "@/lib/duration";
 import { humanizeToolName } from "@/lib/toolName";
 import { diffTargetPaths, primaryEditTargetPath } from "@/agentMode/session/editTargets";
+import { basename } from "@/utils/pathUtils";
 import { isAbsolutePath } from "@/utils/vaultPath";
 
 export interface ToolSummaryContext {
@@ -121,17 +122,13 @@ function targetFromPath(part: ToolCallPart, vaultBase: string | null): string | 
   );
 }
 
-function fileName(path: string): string {
-  return path.replace(/\\/g, "/").replace(/\/+$/, "").split("/").pop() ?? "";
-}
-
 function displayPath(path: string): string {
   if (!isAbsolutePath(path)) return path;
-  const leaf = fileName(path);
+  const leaf = basename(path);
   return leaf ? `…/${leaf}` : "…";
 }
 
-export function displayTargetFromPath(part: ToolCallPart, vaultBase: string | null): string | null {
+function displayTargetFromPath(part: ToolCallPart, vaultBase: string | null): string | null {
   const path = targetFromPath(part, vaultBase);
   return path ? displayPath(path) : null;
 }
@@ -140,7 +137,7 @@ function singleEditTarget(part: ToolCallPart, vaultBase: string | null): ToolTar
   if (diffTargetPaths(part.output).length > 1) return null;
   const path = targetFromPath(part, vaultBase);
   if (!path) return null;
-  return { path, label: isAbsolutePath(path) ? displayPath(path) : fileName(path) || path };
+  return { path, label: isAbsolutePath(path) ? displayPath(path) : basename(path) };
 }
 
 function skillNameFromInput(part: ToolCallPart): string | null {
