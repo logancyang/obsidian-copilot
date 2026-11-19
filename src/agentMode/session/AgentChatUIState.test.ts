@@ -162,6 +162,27 @@ describe("AgentChatUIState", () => {
       ).toBe(true);
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/943 sends Codex feedback after a message the session held while the plan turn ran", async () => {
+      const review = planReview("next_turn");
+      review.session.sendPrompt("Maya says: ship it");
+      const resolution = review.chat.resolvePlanProposal(
+        review.plan.id,
+        "feedback",
+        "save it to a note"
+      );
+      await review.permission;
+
+      review.finishFirstTurn();
+      await review.firstTurn;
+      await resolution;
+
+      expect(review.prompt.mock.calls.map(([input]) => input.prompt[0].text)).toEqual([
+        expect.stringContaining("Draft a plan"),
+        expect.stringContaining("Maya says: ship it"),
+        expect.stringContaining("save it to a note"),
+      ]);
+    });
+
     it("keeps permission-message feedback in the original turn for adapters that consume it", async () => {
       const review = planReview();
       await review.chat.resolvePlanProposal(review.plan.id, "feedback", "revise step two");
@@ -298,6 +319,24 @@ describe("AgentChatUIState", () => {
 
       review.finishFirstTurn();
       await review.firstTurn;
+      expect(review.chat.isTurnInFlight()).toBe(false);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/943 stays true after the composer's turn ends while a message the session held runs next, so the composer sends its own held messages after that one", async () => {
+      const review = planReview("next_turn");
+      await review.chat.resolvePlanProposal(review.plan.id, "approve");
+      await review.permission;
+      let finishRelay!: (outcome: { stopReason: "end_turn" }) => void;
+      review.prompt.mockImplementationOnce(() => new Promise((resolve) => (finishRelay = resolve)));
+      const relay = review.session.sendPrompt("Maya says: ship it");
+
+      review.finishFirstTurn();
+      await review.firstTurn;
+      expect(review.chat.isTurnInFlight()).toBe(true);
+
+      await waitFor(() => expect(review.prompt).toHaveBeenCalledTimes(2));
+      finishRelay({ stopReason: "end_turn" });
+      await relay.turn;
       expect(review.chat.isTurnInFlight()).toBe(false);
     });
   });

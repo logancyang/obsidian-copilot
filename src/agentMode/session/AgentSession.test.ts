@@ -308,6 +308,7 @@ function withdrawingDescriptor(): BackendDescriptor {
 const ISSUE_747 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/747";
 const ISSUE_749 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/749";
 const ISSUE_757 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/757";
+const ISSUE_943 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/943";
 
 function recordPrompts(mock: MockBackend): PromptInput[] {
   const sent: PromptInput[] = [];
@@ -325,6 +326,28 @@ function holdPrompt(mock: MockBackend): (stopReason?: StopReason) => void {
   let resolve: (result: { stopReason: StopReason }) => void = () => {};
   mock.prompt.mockImplementation(() => new Promise((r) => (resolve = r)));
   return (stopReason = "end_turn") => resolve({ stopReason });
+}
+
+interface ControlledTurn {
+  input: PromptInput;
+  reply: (text: string) => void;
+  end: (outcome?: Omit<TurnEnd, "turnId">) => void;
+}
+
+function controlTurns(mock: MockBackend): ControlledTurn[] {
+  const turns: ControlledTurn[] = [];
+  mock.prompt.mockImplementation(
+    (input: PromptInput) =>
+      new Promise((resolve, reject) => {
+        turns.push({
+          input,
+          reply: (text) => mock.emitUpdate(replayText("agent_message_chunk", text)),
+          end: ({ error, ...outcome } = { stopReason: "end_turn" }) =>
+            error ? reject(error) : resolve(outcome),
+        });
+      })
+  );
+  return turns;
 }
 
 function aiMessages(session: AgentSession) {
@@ -1593,13 +1616,6 @@ describe("AgentSession", () => {
         });
       });
 
-      it("throws when a turn is already in flight", () => {
-        const mock = makeMockBackend();
-        const session = makeSession(mock);
-        session.sendPrompt("first");
-        expect(() => session.sendPrompt("second")).toThrow(/in flight/);
-      });
-
       it("injects the project-context-updates note and acks its epoch after acceptance", async () => {
         const mock = makeMockBackend();
         const markDelivered = jest.fn();
@@ -2087,17 +2103,123 @@ describe("AgentSession", () => {
         expect(session.getStatus()).toBe("running");
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 refuses a message sent while the agent works on a backend without mid-turn input, so Copilot keeps holding it", async () => {
-        const mock = makeMockBackend();
-        const sent = recordPrompts(mock);
-        const session = makeSession(mock);
-        session.sendPrompt("list the notes");
+      describe(`while a turn runs on a backend without mid-turn input (${ISSUE_943})`, () => {
+        it(`${ISSUE_943} holds a message until the running turn ends, then sends it as the next turn below that turn's reply`, async () => {
+          const mock = makeMockBackend();
+          const turns = controlTurns(mock);
+          const session = makeSession(mock);
+          session.sendPrompt("list the notes");
+          await waitFor(() => expect(turns).toHaveLength(1));
 
-        expect(() => session.sendPrompt("only do the first two")).toThrow(
-          "Session already has a turn in flight"
+          const relay = session.sendPrompt("Maya says: ship it");
+
+          expect(session.getQueuedPrompts()).toEqual([]);
+          expect(bubbles(session).map((b) => b.message)).toEqual(["list the notes", ""]);
+          turns[0].reply("Alpha, Beta.");
+          turns[0].end();
+          await waitFor(() => expect(turns).toHaveLength(2));
+          expect(promptText(turns[1].input)).toBe("Maya says: ship it");
+          expect(turns[1].input.promptId).toBe(relay.userMessageId);
+          turns[1].reply("Noted.");
+          turns[1].end();
+          await expect(relay.turn).resolves.toBe("end_turn");
+          expect(bubbles(session)).toEqual([
+            { sender: USER_SENDER, message: "list the notes" },
+            { sender: AI_SENDER, message: "Alpha, Beta." },
+            { sender: USER_SENDER, message: "Maya says: ship it" },
+            { sender: AI_SENDER, message: "Noted." },
+          ]);
+        });
+
+        it(`${ISSUE_943} sends several held messages one turn each, in the order they were sent, including one sent while an earlier held message runs`, async () => {
+          const mock = makeMockBackend();
+          const turns = controlTurns(mock);
+          const session = makeSession(mock);
+          session.sendPrompt("list the notes");
+          await waitFor(() => expect(turns).toHaveLength(1));
+          session.sendPrompt("first relay");
+          session.sendPrompt("second relay");
+
+          turns[0].end();
+          await waitFor(() => expect(turns).toHaveLength(2));
+          const third = session.sendPrompt("third relay");
+          turns[1].end();
+          await waitFor(() => expect(turns).toHaveLength(3));
+          turns[2].end();
+          await waitFor(() => expect(turns).toHaveLength(4));
+          turns[3].end();
+          await third.turn;
+
+          expect(turns.map((t) => promptText(t.input))).toEqual([
+            "list the notes",
+            "first relay",
+            "second relay",
+            "third relay",
+          ]);
+        });
+
+        it(`${ISSUE_943} keeps the chat running, never reporting it idle, from the end of the turn until every held message has run, so the composer keeps its own held messages until then`, async () => {
+          const mock = makeMockBackend();
+          const turns = controlTurns(mock);
+          const session = makeSession(mock);
+          const statuses: string[] = [];
+          subscribeTo(session, { onStatusChanged: (status) => statuses.push(status) });
+          session.sendPrompt("list the notes");
+          await waitFor(() => expect(turns).toHaveLength(1));
+          const relay = session.sendPrompt("Maya says: ship it");
+
+          turns[0].end();
+          await waitFor(() => expect(turns).toHaveLength(2));
+          expect(session.getStatus()).toBe("running");
+          turns[1].end();
+          await relay.turn;
+
+          expect(statuses).toEqual(["running", "running", "idle"]);
+          expect(session.getStatus()).toBe("idle");
+        });
+
+        it.each([
+          ["fails", { stopReason: "end_turn", error: new Error("rate limited") }],
+          ["is ended by the agent, as on a declined permission", { stopReason: "cancelled" }],
+        ] as const)(
+          `${ISSUE_943} sends a held message when the running turn %s`,
+          async (_ending, outcome) => {
+            const mock = makeMockBackend();
+            const turns = controlTurns(mock);
+            const session = makeSession(mock);
+            const first = session.sendPrompt("list the notes");
+            first.turn.catch(() => undefined);
+            await waitFor(() => expect(turns).toHaveLength(1));
+            const relay = session.sendPrompt("Maya says: ship it");
+
+            turns[0].end(outcome);
+            await waitFor(() => expect(turns).toHaveLength(2));
+            turns[1].end();
+
+            await expect(relay.turn).resolves.toBe("end_turn");
+            expect(promptText(turns[1].input)).toBe("Maya says: ship it");
+          }
         );
-        await waitFor(() => expect(sent).toHaveLength(1));
-        expect(session.getQueuedPrompts()).toEqual([]);
+
+        it(`${ISSUE_943} rejects a held message's turn when its own turn fails, and still sends the message held behind it`, async () => {
+          const mock = makeMockBackend();
+          const turns = controlTurns(mock);
+          const session = makeSession(mock);
+          session.sendPrompt("list the notes");
+          await waitFor(() => expect(turns).toHaveLength(1));
+          const failed = session.sendPrompt("Maya says: ship it");
+          const next = session.sendPrompt("Leo says: wait");
+
+          turns[0].end();
+          await waitFor(() => expect(turns).toHaveLength(2));
+          turns[1].end({ stopReason: "end_turn", error: new Error("rate limited") });
+          await expect(failed.turn).rejects.toThrow("rate limited");
+          await waitFor(() => expect(turns).toHaveLength(3));
+          turns[2].end();
+
+          await expect(next.turn).resolves.toBe("end_turn");
+          expect(promptText(turns[2].input)).toBe("Leo says: wait");
+        });
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 refuses /compact while the agent works, even on a backend that takes mid-turn input", () => {
@@ -3554,6 +3676,24 @@ describe("AgentSession", () => {
     });
 
     describe("cancel()", () => {
+      it(`${ISSUE_943} drops the messages held for the end of the turn instead of sending them, and settles each one's turn as cancelled`, async () => {
+        const mock = makeMockBackend();
+        const turns = controlTurns(mock);
+        const session = makeSession(mock);
+        const first = session.sendPrompt("list the notes");
+        await waitFor(() => expect(turns).toHaveLength(1));
+        const relay = session.sendPrompt("Maya says: ship it");
+
+        await session.cancel();
+        turns[0].end({ stopReason: "cancelled" });
+        await first.turn;
+
+        await expect(relay.turn).resolves.toBe("cancelled");
+        expect(turns).toHaveLength(1);
+        expect(bubbles(session).map((b) => b.message)).not.toContain("Maya says: ship it");
+        expect(session.getStatus()).toBe("idle");
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/788 stops only the agent's reply, leaving running subagents and background commands to the running-tasks list", async () => {
         const mock = makeMockBackend();
         const session = makeSession(mock, { getDescriptor: () => ClaudeBackendDescriptor });
@@ -4488,6 +4628,21 @@ describe("AgentSession", () => {
         return { mock, session };
       }
 
+      it(`${ISSUE_943} drops the messages held for the end of the turn before releasing, so the turn the release ends sends none of them`, async () => {
+        const { mock, session } = setupReleaseSession();
+        const turns = controlTurns(mock);
+        const first = session.sendPrompt("list the notes");
+        await waitFor(() => expect(turns).toHaveLength(1));
+        const relay = session.sendPrompt("Maya says: ship it");
+
+        await session.releaseBackendSession();
+        turns[0].end({ stopReason: "cancelled" });
+        await first.turn;
+
+        await expect(relay.turn).resolves.toBe("cancelled");
+        expect(turns).toHaveLength(1);
+      });
+
       it("closes a running backend session without waiting for cancellation https://github.com/Brevilabs/obsidian-copilot-private/issues/429", async () => {
         const { mock, session } = setupReleaseSession();
         mock.cancel.mockImplementation(() => new Promise<void>(() => undefined));
@@ -4522,6 +4677,24 @@ describe("AgentSession", () => {
           );
         }
       );
+    });
+
+    describe("dispose()", () => {
+      it(`${ISSUE_943} drops messages held for the end of the turn without sending them, and settles each one's turn as cancelled`, async () => {
+        const mock = makeMockBackend();
+        const turns = controlTurns(mock);
+        const session = makeSession(mock);
+        session.sendPrompt("list the notes");
+        await waitFor(() => expect(turns).toHaveLength(1));
+        const relay = session.sendPrompt("Maya says: ship it");
+
+        await session.dispose();
+        turns[0].end();
+
+        await expect(relay.turn).resolves.toBe("cancelled");
+        expect(turns).toHaveLength(1);
+        expect(bubbles(session).map((b) => b.message)).not.toContain("Maya says: ship it");
+      });
     });
 
     describe("loadDisplayMessages()", () => {
@@ -5682,12 +5855,12 @@ describe("AgentSession", () => {
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/805 does not fire onPromptSent for a message refused because a turn is in flight", () => {
         const mock = makeMockBackend();
         recordPrompts(mock);
-        const session = makeSession(mock);
+        const session = makeSession(mock, { getDescriptor: midTurnDescriptor });
         session.sendPrompt("list the notes");
         const onPromptSent = jest.fn();
         subscribeTo(session, { onPromptSent });
 
-        expect(() => session.sendPrompt("only do the first two")).toThrow();
+        expect(() => session.sendPrompt("/compact")).toThrow();
 
         expect(onPromptSent).not.toHaveBeenCalled();
       });
