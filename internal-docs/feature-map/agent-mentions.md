@@ -58,6 +58,5 @@ All of these need a license that includes custom agents and at least two agents 
 - Stopping the chat's own reply doesn't drop a mentioned agent's reply that is waiting; it comes back after the stop. Stopping the turn that passes the reply on ends it there.
 - A mentioned agent's permission card stays when the chat's own reply is stopped. Stopping or deleting that agent, closing the chat, or closing Obsidian takes the card away, and the agent's request counts as turned down.
 - On Codex models, `No, and tell Codex what to do differently` ends the mentioned agent's turn without a reply; the chat's agent says the user turned the request down.
-- On Codex models, a Copilot chat with no agent usually answers an `@`-mention itself: Codex finds the tool only through its own tool search, and only an agent's chat names the tool in its prompt.
 - The chat's note keeps each mention's agent and how it ended, so it survives a restart. An agent that was still working when Obsidian closed is saved as not finished. Mentioning it again continues the conversation only while its agent still keeps it; otherwise a new conversation starts.
 - The mentioned agent works in the chat's project folder, in the chat's mode, on its own model.

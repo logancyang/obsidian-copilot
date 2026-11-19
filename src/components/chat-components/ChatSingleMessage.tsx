@@ -1,5 +1,6 @@
 import { renderFolderMentions } from "@/components/chat-components/renderFolderMentions";
 import { attachedContext } from "@/components/chat-components/attachedContext";
+import { useAgentMentionRenderer } from "@/agents/ui/agentMentionPills";
 import { Markdown } from "@/components/Markdown";
 import { ChatButtons } from "@/components/chat-components/ChatButtons";
 import { AssistantResponseFooter } from "@/components/ui/AssistantResponseFooter";
@@ -793,9 +794,13 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   };
 
   const mentionedFolders = message.context?.folders;
+  const renderMentionedAgents = useAgentMentionRenderer(message.context?.agents);
   const renderMentionedFolders = useCallback(
-    (container: HTMLElement) => renderFolderMentions(container, mentionedFolders ?? []),
-    [mentionedFolders]
+    (container: HTMLElement) => {
+      renderFolderMentions(container, mentionedFolders ?? []);
+      renderMentionedAgents(container);
+    },
+    [mentionedFolders, renderMentionedAgents]
   );
 
   const renderMessageContent = () => {

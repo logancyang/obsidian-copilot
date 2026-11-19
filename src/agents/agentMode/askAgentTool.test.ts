@@ -1,7 +1,6 @@
 import type { ChatStateHost } from "@/agentMode/session/chatExtension";
 import {
   ANSWER_AGENT_TOOL_NAME,
-  ASK_AGENT_TOOL_NAME,
   ASK_USER_TOOL_NAME,
   createAnswerAgentTool,
   createAskUserTool,
@@ -18,6 +17,7 @@ import type {
   HiddenAgentChats,
   StopAgentResult,
 } from "@/agents/agentMode/hiddenAgentChats";
+import { ASK_AGENT_TOOL_NAME } from "@/agents/agentMentionPrompt";
 import { RELAY_PRINCIPLE } from "@/agents/agentReply";
 import type { CustomAgent } from "@/agents/CustomAgentStore";
 import { setCustomAgentsAccess } from "@/agents/testing/customAgentsAccess";

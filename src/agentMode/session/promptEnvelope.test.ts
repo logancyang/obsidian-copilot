@@ -138,6 +138,34 @@ describe("promptEnvelope", () => {
       );
     });
 
+    it("names the agents the user @-mentioned after the attached context, so the agent asks them (https://github.com/Brevilabs/obsidian-copilot-private/issues/947)", () => {
+      const blocks = buildPromptBlocks("@Maya what do you think of [[Launch plan]]?", {
+        notes: [makeFile("Plans/Launch plan.md")],
+        urls: [],
+        agents: ["Maya"],
+      });
+
+      expect((blocks[0] as { type: "text"; text: string }).text).toBe(
+        [
+          "<copilot-context>",
+          "The user attached the following vault items as context. The vault is your current working directory; open them if you need their contents.",
+          "",
+          "Notes:",
+          "- Plans/Launch plan.md",
+          "</copilot-context>",
+          "",
+          "<copilot-agents>",
+          "The user @-mentioned these custom agents in this message. Ask each of them with the ask_agent tool:",
+          "- Maya",
+          "</copilot-agents>",
+          "",
+          "<user-message>",
+          "@Maya what do you think of [[Launch plan]]?",
+          "</user-message>",
+        ].join("\n")
+      );
+    });
+
     it("inlines selected text excerpts with path and line range", () => {
       const blocks = buildPromptBlocks("explain", {
         notes: [],

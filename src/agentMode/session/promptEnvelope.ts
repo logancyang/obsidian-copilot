@@ -1,4 +1,5 @@
 import type { NewAgentChatMessage, PromptContent } from "@/agentMode/session/types";
+import { agentMentionsBlock } from "@/agents/agentMentionPrompt";
 import { USER_SENDER, WEB_SELECTED_TEXT_TAG } from "@/constants";
 import { ContextProcessor } from "@/contextProcessor";
 import { escapeXml } from "@/LLMProviders/chainRunner/utils/xmlParsing";
@@ -80,6 +81,7 @@ export function buildPromptBlocks(
     projectContextUpdatesBlock?.trim() || null,
     leadingContextBlock?.trim() || null,
     buildContextEnvelope(context),
+    agentMentionsBlock(context?.agents),
     buildWebSelectionBlocks(context),
     webTabBlock?.trim() || null,
   ].filter((s): s is string => Boolean(s));

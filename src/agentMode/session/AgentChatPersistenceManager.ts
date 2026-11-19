@@ -60,6 +60,7 @@ interface SavedMessageData {
   notes?: string[];
   folders?: string[];
   webTabs?: { url: string; title?: string }[];
+  agents?: string[];
   // A custom agent's save lines come back with the chat only from its note; a build without custom agents ignores the key and shows the reply as ordinary text.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/942
   memorySaves?: readonly MemorySave[];
@@ -95,6 +96,7 @@ function savedContext(context: MessageContext | undefined): SavedMessageData {
   const saved: SavedMessageData = {};
   if (context?.notes?.length) saved.notes = context.notes.map((note) => note.path);
   if (context?.folders?.length) saved.folders = context.folders;
+  if (context?.agents?.length) saved.agents = context.agents;
   if (context?.webTabs?.length)
     saved.webTabs = context.webTabs.map(({ url, title }) => ({ url, title }));
   return saved;
@@ -111,12 +113,17 @@ function loadedContext(saved: SavedMessageData, app: App): MessageContext | unde
   const folders = (Array.isArray(saved.folders) ? saved.folders : []).filter(
     (path) => typeof path === "string"
   );
-  if (notes.length === 0 && webTabs.length === 0 && folders.length === 0) return undefined;
+  const agents = (Array.isArray(saved.agents) ? saved.agents : []).filter(
+    (name) => typeof name === "string"
+  );
+  if (notes.length === 0 && webTabs.length === 0 && folders.length === 0 && agents.length === 0)
+    return undefined;
   return {
     notes,
     urls: [],
     ...(folders.length > 0 ? { folders } : {}),
     ...(webTabs.length > 0 ? { webTabs } : {}),
+    ...(agents.length > 0 ? { agents } : {}),
   };
 }
 
