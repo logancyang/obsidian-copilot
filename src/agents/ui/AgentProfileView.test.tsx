@@ -304,6 +304,41 @@ describe("AgentProfileView", () => {
       await waitFor(() => expect(onRename).toHaveBeenCalledWith("COCO"));
     });
 
+    it(`shows each edit pencil while the pointer is over the head or its own control has keyboard focus, not while focus a click left sits in the head (${ISSUE})`, () => {
+      renderProfile();
+
+      for (const name of ["Change Coco's face", "Rename Coco", "Change Coco's title"]) {
+        const pencil = screen
+          .getByRole("button", { name })
+          .querySelector(".lucide-pencil")?.parentElement;
+        expect(pencil?.className.split(" ")).toEqual(
+          expect.arrayContaining([
+            "tw-opacity-0",
+            "group-hover:tw-opacity-100",
+            "[:focus-visible>&]:tw-opacity-100",
+          ])
+        );
+        expect(pencil?.className).not.toContain("focus-within");
+      }
+    });
+
+    it(`hands focus back to the name without the keyboard focus look after an edit started with a click, and with it after one started from the keyboard (${ISSUE})`, async () => {
+      const focus = jest.spyOn(HTMLElement.prototype, "focus");
+      renderProfile();
+
+      fireEvent.click(screen.getByRole("button", { name: "Rename Coco" }), { detail: 1 });
+      fireEvent.keyDown(screen.getByRole("textbox"), { key: "Escape" });
+      expect(document.activeElement).toBe(screen.getByRole("button", { name: "Rename Coco" }));
+      expect(focus).toHaveBeenLastCalledWith({ focusVisible: false });
+
+      fireEvent.click(screen.getByRole("button", { name: "Rename Coco" }), { detail: 0 });
+      fireEvent.change(screen.getByRole("textbox"), { target: { value: "Cocoa" } });
+      fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
+      await waitFor(() => expect(screen.queryByRole("textbox")).toBeNull());
+      expect(focus).toHaveBeenLastCalledWith({ focusVisible: true });
+      focus.mockRestore();
+    });
+
     it(`cancels a rename on Esc without leaving the profile (${ISSUE})`, () => {
       const { onRename, onBack } = renderProfile();
 
