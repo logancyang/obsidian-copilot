@@ -27,6 +27,7 @@ const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/944"
 const LAPSED_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/950";
 const CONTROL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/945";
 const PERMISSION = "https://github.com/Brevilabs/obsidian-copilot-private/issues/946";
+const SEVERAL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/949";
 const AUTO_MODE: BackendState = { model: null, mode: { current: "auto", options: [], apply: {} } };
 const PLAN: BackendState = { model: null, mode: { current: "plan", options: [], apply: {} } };
 const PLAN_CHANGE = Object.freeze({
@@ -175,6 +176,50 @@ function requestFrom(maya: AgentSession, toolCallId = "tc-write"): PermissionPro
 function answer(maya: AgentSession, text: string): void {
   fake.say(sessionIdOf(maya), text);
   fake.endTurn(sessionIdOf(maya));
+}
+
+interface TwoAsked {
+  coco: ObservedChat;
+  maya: AgentSession;
+  leo: AgentSession;
+}
+
+function agentChat(slug: string): Promise<AgentSession> {
+  return new Promise((resolve) => {
+    const wake = () => {
+      const chat = started.find((session) => session.agentSlug === slug);
+      if (!chat) return;
+      startWaiters.delete(wake);
+      resolve(chat);
+    };
+    startWaiters.add(wake);
+    wake();
+  });
+}
+
+async function askBoth(descriptor?: BackendDescriptor): Promise<TwoAsked> {
+  seedAgent("leo", "Leo", "You keep the company books.");
+  store.stop();
+  await store.start();
+  const coco = await openChat({ agentSlug: "coco", descriptor });
+  coco.sendPrompt("@Maya @Leo does the $8k launch budget hold up?");
+  await fake.untilPrompt(sessionIdOf(coco));
+  chats.ask(coco, "Maya", "Is $8k right for the launch?");
+  chats.ask(coco, "Leo", "Does the Q4 marketing line cover $8k?");
+  const maya = await agentChat("maya");
+  const leo = await agentChat("leo");
+  await fake.untilPrompt(sessionIdOf(maya));
+  await fake.untilPrompt(sessionIdOf(leo));
+  return { coco, maya, leo };
+}
+
+function relayedFrom(relay: string): string {
+  const marker = relay.split("\n")[0];
+  return (
+    JSON.parse(marker.slice("<!-- copilot-agent-reply ".length, -" -->".length)) as {
+      agent: string;
+    }
+  ).agent;
 }
 
 beforeEach(async () => {
@@ -739,6 +784,74 @@ describe("hiddenAgentChats", () => {
         expect(fake.promptsTo(sessionIdOf(coco))).toHaveLength(1);
       });
 
+      it(`starts its own chat for each agent one message mentions, sends each only its own message, and saves both runs on that message (${SEVERAL})`, async () => {
+        const { coco, maya, leo } = await askBoth();
+
+        expect(maya).not.toBe(leo);
+        expect(starts.map(({ prompt }) => prompt.slug).sort()).toEqual(["leo", "maya"]);
+        const [toMaya] = fake.promptsTo(sessionIdOf(maya));
+        const [toLeo] = fake.promptsTo(sessionIdOf(leo));
+        expect(toMaya).toContain("Is $8k right for the launch?");
+        expect(toMaya).not.toContain("Q4 marketing line");
+        expect(toLeo).toContain("Does the Q4 marketing line cover $8k?");
+        expect(toLeo).not.toContain("Is $8k right");
+        expect(mentionsOn(coco)).toEqual([
+          expect.objectContaining({ agent: "maya", status: "working" }),
+          expect.objectContaining({ agent: "leo", status: "working" }),
+        ]);
+      });
+
+      it(`relays the first reply as soon as it is in, saying the other agent still works, then the second as a message of its own (${SEVERAL})`, async () => {
+        const { coco, maya, leo } = await askBoth();
+        fake.endTurn(sessionIdOf(coco));
+
+        answer(maya, "$8k is fine, drop the paid ads.");
+
+        const first = await fake.untilPrompt(sessionIdOf(coco), 2);
+        expect(relayedFrom(first)).toBe("maya");
+        expect(first).toContain("$8k is fine, drop the paid ads.");
+        expect(first).toContain("Leo is still working on what you asked.");
+        expect(mentionsOn(coco)?.map(({ status }) => status)).toEqual(["finished", "working"]);
+        fake.endTurn(sessionIdOf(coco));
+
+        answer(leo, "The line has $6,200 left.");
+
+        const second = await fake.untilPrompt(sessionIdOf(coco), 3);
+        expect(relayedFrom(second)).toBe("leo");
+        expect(second).toContain("The line has $6,200 left.");
+        expect(second).not.toContain("drop the paid ads");
+        expect(second).not.toContain("still working");
+        expect(mentionsOn(coco)?.map(({ status }) => status)).toEqual(["finished", "finished"]);
+      });
+
+      it(`passes two replies that come in during a Claude chat's turn one turn each, in the order they came (${SEVERAL})`, async () => {
+        const { coco, maya, leo } = await askBoth(CLAUDE_LIKE);
+        let queuedMidTurn = false;
+        coco.subscribe({
+          onMessagesChanged: () => {},
+          onStatusChanged: () => {},
+          onQueuedPromptsChanged: () => {
+            queuedMidTurn ||= coco.getQueuedPrompts().length > 0;
+          },
+        });
+
+        answer(leo, "The line has $6,200 left.");
+        answer(maya, "$8k is fine, drop the paid ads.");
+        await untilStatus(maya, (status) => status === "idle");
+        await untilStatus(leo, (status) => status === "idle");
+        expect(fake.promptsTo(sessionIdOf(coco))).toHaveLength(1);
+        fake.endTurn(sessionIdOf(coco));
+
+        const first = await fake.untilPrompt(sessionIdOf(coco), 2);
+        expect(relayedFrom(first)).toBe("leo");
+        expect(first).not.toContain("drop the paid ads");
+        expect(fake.promptsTo(sessionIdOf(coco))).toHaveLength(2);
+        fake.endTurn(sessionIdOf(coco));
+
+        expect(relayedFrom(await fake.untilPrompt(sessionIdOf(coco), 3))).toBe("maya");
+        expect(queuedMidTurn).toBe(false);
+      });
+
       it(`turns down an agent asking itself (${ISSUE})`, async () => {
         const maya = await openChat({ agentSlug: "maya" });
 
@@ -1119,6 +1232,52 @@ describe("hiddenAgentChats", () => {
           expect.objectContaining({ status: "stopped", end: { kind: "stopped_by_user" } })
         );
       });
+      it(`leaves an agent waiting on the user's answer out of who is still working when another agent's reply is passed on (${SEVERAL})`, async () => {
+        const { coco, maya, leo } = await askBoth();
+        chats.askUser(leo, "October or November?");
+        answer(leo, "Need one call.");
+        fake.endTurn(sessionIdOf(coco));
+        await fake.untilPrompt(sessionIdOf(coco), 2);
+        fake.endTurn(sessionIdOf(coco));
+
+        answer(maya, "$8k is fine.");
+
+        const relayed = await fake.untilPrompt(sessionIdOf(coco), 3);
+        expect(relayed).toContain("$8k is fine.");
+        expect(relayed).not.toContain("still working");
+      });
+
+      it(`relays each of two agents' questions under its own run and passes each answer only to the agent it names (${SEVERAL})`, async () => {
+        const { coco, maya, leo } = await askBoth();
+        chats.askUser(maya, "Count the video shoot?");
+        chats.askUser(leo, "October or November?");
+        answer(maya, "One question first.");
+        answer(leo, "Need one call.");
+        fake.endTurn(sessionIdOf(coco));
+        const questions = [
+          await fake.untilPrompt(sessionIdOf(coco), 2),
+          await (async () => {
+            fake.endTurn(sessionIdOf(coco));
+            return fake.untilPrompt(sessionIdOf(coco), 3);
+          })(),
+        ];
+        fake.endTurn(sessionIdOf(coco));
+        const runs = mentionsOn(coco)!;
+        expect(runs.map(({ status }) => status)).toEqual(["question", "question"]);
+        const byAgent = Object.fromEntries(
+          questions.map((relay) => [relayedFrom(relay), relay] as const)
+        );
+        expect(byAgent.maya).toContain(`"mention":"${runs[0].id}"`);
+        expect(byAgent.maya).toContain("Count the video shoot?");
+        expect(byAgent.leo).toContain(`"mention":"${runs[1].id}"`);
+        expect(byAgent.leo).toContain("October or November?");
+
+        expect(chats.answer(coco, "Leo", "October.")).toMatchObject({ kind: "answered" });
+
+        expect(await fake.untilPrompt(sessionIdOf(leo), 2)).toContain("October.");
+        expect(fake.promptsTo(sessionIdOf(maya))).toHaveLength(1);
+        expect(mentionsOn(coco)?.map(({ status }) => status)).toEqual(["question", "working"]);
+      });
     });
 
     describe("answer()", () => {
@@ -1420,6 +1579,37 @@ describe("hiddenAgentChats", () => {
         );
         expect(fake.promptsTo(sessionIdOf(started[0]))).toEqual([]);
       });
+      it(`stops one of two agents one message asked and leaves the other working (${SEVERAL})`, async () => {
+        const { coco, maya, leo } = await askBoth();
+
+        expect(chats.stop(coco, "Leo")).toMatchObject({ kind: "stopped" });
+        fake.endTurn(sessionIdOf(coco));
+
+        expect(relayedFrom(await fake.untilPrompt(sessionIdOf(coco), 2))).toBe("leo");
+        expect(fake.cancel).not.toHaveBeenCalledWith(
+          expect.objectContaining({ sessionId: sessionIdOf(maya) })
+        );
+        expect(mentionsOn(coco)?.map(({ status }) => status)).toEqual(["working", "stopped"]);
+        fake.endTurn(sessionIdOf(coco));
+        answer(maya, "$8k is fine.");
+        expect(await fake.untilPrompt(sessionIdOf(coco), 3)).toContain("$8k is fine.");
+        expect(leo.getStatus()).not.toBe("closed");
+      });
+
+      it(`names neither agent as still working when the user stops both at once (${SEVERAL})`, async () => {
+        const { coco } = await askBoth();
+
+        chats.stop(coco, "Leo");
+        chats.stop(coco, "Maya");
+        fake.endTurn(sessionIdOf(coco));
+
+        const first = await fake.untilPrompt(sessionIdOf(coco), 2);
+        fake.endTurn(sessionIdOf(coco));
+        const second = await fake.untilPrompt(sessionIdOf(coco), 3);
+        expect([first, second].map(relayedFrom).sort()).toEqual(["leo", "maya"]);
+        expect(first).not.toContain("still working");
+        expect(second).not.toContain("still working");
+      });
     });
 
     describe("stopAgent()", () => {
@@ -1464,6 +1654,20 @@ describe("hiddenAgentChats", () => {
         expect(fake.cancel).not.toHaveBeenCalled();
         expect(maya.getStatus()).not.toBe("closed");
         expect(mentionsOn(coco)?.[0].status).toBe("working");
+      });
+      it(`stops a deleted agent while another agent the same message asked keeps working (${SEVERAL})`, async () => {
+        const { coco, maya, leo } = await askBoth();
+
+        chats.stopAgent("leo");
+        fake.endTurn(sessionIdOf(coco));
+
+        expect(relayedFrom(await fake.untilPrompt(sessionIdOf(coco), 2))).toBe("leo");
+        await untilStatus(leo, (status) => status === "closed");
+        expect(maya.getStatus()).not.toBe("closed");
+        expect(mentionsOn(coco)?.map(({ status }) => status)).toEqual(["working", "stopped"]);
+        fake.endTurn(sessionIdOf(coco));
+        answer(maya, "$8k is fine.");
+        expect(await fake.untilPrompt(sessionIdOf(coco), 3)).toContain("$8k is fine.");
       });
     });
 

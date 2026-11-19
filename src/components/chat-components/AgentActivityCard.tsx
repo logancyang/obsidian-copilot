@@ -51,7 +51,7 @@ export const AgentActivityCard: React.FC<AgentActivityCardProps> = ({
             : undefined
         }
       >
-        <span className="tw-flex tw-size-3.5 tw-shrink-0 tw-items-center tw-justify-center">
+        <span className="tw-flex tw-h-3.5 tw-min-w-3.5 tw-shrink-0 tw-items-center tw-justify-center">
           {"props" in Icon ? Icon : <Icon className="tw-size-3.5 tw-text-normal" />}
         </span>
         <div className="tw-flex tw-min-w-0 tw-flex-1 tw-items-center tw-gap-1 tw-truncate tw-font-medium">

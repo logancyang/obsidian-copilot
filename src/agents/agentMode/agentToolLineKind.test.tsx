@@ -1,6 +1,8 @@
 import { directCopilotToolUse } from "@/agentMode/session/copilotToolCalls";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
+import { foldActivityGroups } from "@/agentMode/ui/activityGroups";
 import { ASK_AGENT_TOOL_NAME } from "@/agents/agentMentionPrompt";
+import { CHECK_AGENT_TOOL_NAME } from "@/agents/agentMode/agentToolCalls";
 import { agentToolLineKind } from "@/agents/agentMode/agentToolLineKind";
 import { ChatAgentsContext } from "@/agents/ui/chatAgents";
 import { THREE_AGENTS } from "@/agents/ui/testing/rosterFixtures";
@@ -9,6 +11,7 @@ import type { App } from "obsidian";
 import React from "react";
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/947";
+const SEVERAL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/949";
 const SENT = "Zero wants a blunt read of [[Launch video plan]]: six features in 90 seconds.";
 
 const ASK_CALL: ToolCallPart = {
@@ -25,11 +28,67 @@ const ASK_CALL: ToolCallPart = {
   }),
 };
 
+function askCall(id: string, agent: string): ToolCallPart {
+  return {
+    ...ASK_CALL,
+    id,
+    input: { agent, message: SENT },
+    copilotTools: directCopilotToolUse("obsidian-copilot", ASK_AGENT_TOOL_NAME, {
+      agent,
+      message: SENT,
+    }),
+  };
+}
+
+const CHECK_CALL: ToolCallPart = {
+  ...ASK_CALL,
+  id: "call-check",
+  title: CHECK_AGENT_TOOL_NAME,
+  vendorToolName: CHECK_AGENT_TOOL_NAME,
+  input: { agent: "Leo" },
+  copilotTools: directCopilotToolUse("obsidian-copilot", CHECK_AGENT_TOOL_NAME, { agent: "Leo" }),
+};
+
 describe("agentToolLineKind", () => {
   describe("agentToolLineKind", () => {
     describe("place()", () => {
-      it(`gives an @ tool call a line of its own (${ISSUE})`, () => {
-        expect(agentToolLineKind.place(ASK_CALL, { tasks: null })).toEqual({ joinKey: null });
+      it(`gives an @ tool call other than asking a line of its own (${ISSUE})`, () => {
+        expect(agentToolLineKind.place(CHECK_CALL, { tasks: null })).toEqual({ joinKey: null });
+      });
+
+      it(`puts asks made one after another on one line, as when one message mentions several agents (${SEVERAL})`, () => {
+        const trail = foldActivityGroups(
+          [askCall("ask-maya", "Maya"), askCall("ask-leo", "Leo"), CHECK_CALL].map((part) => ({
+            type: "action" as const,
+            part,
+          })),
+          { tasks: null },
+          [agentToolLineKind]
+        );
+
+        expect(
+          trail.map((node) => (node.type === "toolCard" ? node.members.map(({ id }) => id) : node))
+        ).toEqual([["ask-maya", "ask-leo"], ["call-check"]]);
+      });
+
+      it(`keeps a failed ask out of the joined line, on its ordinary row with its error (${SEVERAL})`, () => {
+        const failed = { ...askCall("ask-leo", "Leo"), status: "failed" as const };
+        const trail = foldActivityGroups(
+          [askCall("ask-maya", "Maya"), failed, askCall("ask-nora", "Nora")].map((part) => ({
+            type: "action" as const,
+            part,
+          })),
+          { tasks: null },
+          [agentToolLineKind]
+        );
+
+        expect(
+          trail.map((node) =>
+            node.type === "toolCard"
+              ? node.members.map(({ id }) => id)
+              : node.type === "action" && node.part.id
+          )
+        ).toEqual([["ask-maya", "ask-nora"], "ask-leo"]);
       });
 
       it("leaves Copilot's other tools to their own rows", () => {
@@ -56,6 +115,24 @@ describe("agentToolLineKind", () => {
         );
 
         expect(container.textContent).toBe(`Asked Maya· ${SENT}`);
+      });
+
+      it(`draws asks joined on one line as one line naming every agent asked (${SEVERAL})`, () => {
+        const { container } = render(
+          <ChatAgentsContext.Provider value={{ agents: THREE_AGENTS, self: "coco" }}>
+            <>
+              {agentToolLineKind.render([askCall("ask-maya", "Maya"), askCall("ask-leo", "Leo")], {
+                tasks: null,
+                app: {} as App,
+                open: false,
+                onToggle: jest.fn(),
+                renderCall: () => "ordinary row",
+              })}
+            </>
+          </ChatAgentsContext.Provider>
+        );
+
+        expect(container.textContent).toBe(`Asked Maya and Leo· ${SENT}`);
       });
     });
   });

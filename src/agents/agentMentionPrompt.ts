@@ -4,19 +4,29 @@ export const ASK_AGENT_TOOL_NAME = "ask_agent";
 
 const WORD_CHARACTER = /[\p{L}\p{N}_]/u;
 
-function mentions(text: string, name: string): boolean {
+function withoutMentions(text: string, name: string): string {
   const needle = `@${name.toLowerCase()}`;
-  for (let at = text.indexOf(needle); at !== -1; at = text.indexOf(needle, at + 1)) {
-    const before = text[at - 1] ?? "";
-    const after = text[at + needle.length] ?? "";
-    if (!WORD_CHARACTER.test(before) && !WORD_CHARACTER.test(after)) return true;
+  let rest = text;
+  for (let at = rest.indexOf(needle); at !== -1; at = rest.indexOf(needle, at + 1)) {
+    const before = rest[at - 1] ?? "";
+    const after = rest[at + needle.length] ?? "";
+    if (WORD_CHARACTER.test(before) || WORD_CHARACTER.test(after)) continue;
+    rest = rest.slice(0, at) + " ".repeat(needle.length) + rest.slice(at + needle.length);
   }
-  return false;
+  return rest;
 }
 
 export function mentionedAgentNames(text: string, agents: readonly CustomAgent[]): string[] {
-  const lower = text.toLowerCase();
-  return agents.filter((agent) => mentions(lower, agent.name)).map((agent) => agent.name);
+  let rest = text.toLowerCase();
+  const mentioned = new Set<CustomAgent>();
+  // A mention of "Maya Chen" also reads as one of "Maya", so the longest name takes its text before shorter names look.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/949
+  for (const agent of [...agents].sort((a, b) => b.name.length - a.name.length)) {
+    const left = withoutMentions(rest, agent.name);
+    if (left !== rest) mentioned.add(agent);
+    rest = left;
+  }
+  return agents.filter((agent) => mentioned.has(agent)).map((agent) => agent.name);
 }
 
 // Codex keeps MCP tools behind its tool search and a Copilot chat has no prompt of its own there, so the message names the tool for each agent the user mentioned.

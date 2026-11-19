@@ -11,6 +11,7 @@ import { renderHook } from "@testing-library/react";
 jest.mock("@/entitlement");
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/947";
+const SEVERAL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/949";
 
 const LEO_RUN: AgentMention = {
   id: "run-1",
@@ -64,6 +65,35 @@ describe("agentRelays", () => {
 
     it(`marks a relay followed by another for the same run, which was the agent's question (${ISSUE})`, () => {
       expect(relayRuns(CHAT).get("question")).toMatchObject({ run: LEO_RUN, followedUp: true });
+    });
+
+    it(`keeps each agent's question apart when two agents asked in one message relay in turn (${SEVERAL})`, () => {
+      const mayaRun: AgentMention = { ...LEO_RUN, id: "run-2", agent: "maya", name: "Maya" };
+      const maya = (id: string, reply: string) =>
+        message(
+          id,
+          formatAgentReply({
+            agent: "maya",
+            name: "Maya",
+            mention: "run-2",
+            reply,
+            changed: [],
+          })
+        );
+      const runs = relayRuns([
+        message("ask", "@Leo @Maya does the budget hold?", { agentMentions: [LEO_RUN, mayaRun] }),
+        maya("maya-question", "Count the shoot?"),
+        relay("leo-question", "October or November?"),
+        relay("leo-report", "The line has $6,200 left."),
+        maya("maya-report", "Drop the paid ads."),
+      ]);
+
+      expect([...runs].map(([id, { run, followedUp }]) => [id, run?.agent, followedUp])).toEqual([
+        ["maya-question", "maya", true],
+        ["leo-question", "leo", true],
+        ["leo-report", "leo", false],
+        ["maya-report", "maya", false],
+      ]);
     });
 
     it("reads nothing from an agent's own reply that quotes the marker", () => {
