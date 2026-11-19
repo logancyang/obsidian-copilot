@@ -2,7 +2,7 @@ import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
 import type { AgentToolCall } from "@/agents/agentMode/agentToolCalls";
 import { AgentToolLine } from "@/agents/agentMode/ui/AgentToolLine";
 import { NEUTRAL_FACE_SRC } from "@/agents/customAgentFiles";
-import { ChatAgentsContext } from "@/agents/ui/chatAgents";
+import { ChatAgentsContext, ChatRunsContext } from "@/agents/ui/chatAgents";
 import { LEO, MAYA, THREE_AGENTS } from "@/agents/ui/testing/rosterFixtures";
 import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
@@ -24,7 +24,7 @@ function line(call: AgentToolCall, status?: ToolCallPart["status"]) {
 function inChat(element: React.ReactElement, openRun = jest.fn()) {
   return (
     <ChatAgentsContext.Provider value={{ agents: THREE_AGENTS, self: "coco", openRun }}>
-      {element}
+      <ChatRunsContext.Provider value={() => true}>{element}</ChatRunsContext.Provider>
     </ChatAgentsContext.Provider>
   );
 }

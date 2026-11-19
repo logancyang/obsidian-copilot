@@ -67,7 +67,12 @@ import { chatRunningAgents } from "@/agents/agentMode/ui/RunningAgents";
 import { isLicenseLapsed, useCustomAgentsGate } from "@/agents/customAgentsGate";
 import type { CustomAgent } from "@/agents/CustomAgentStore";
 import { AgentIdentityBar } from "@/agents/ui/AgentIdentityBar";
-import { ChatAgentsContext, useChatAgentsValue, type RunRef } from "@/agents/ui/chatAgents";
+import {
+  ChatAgentsContext,
+  ChatRunsContext,
+  useChatAgentsValue,
+  type RunRef,
+} from "@/agents/ui/chatAgents";
 import { AgentProfileCover, useAgentProfileRoute } from "@/agents/ui/AgentProfileCover";
 import { AgentRoster } from "@/agents/ui/AgentRoster";
 import { CreateAgentModal } from "@/agents/ui/CreateAgentModal";
@@ -181,6 +186,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const handleOpenRun = useCallback((run: RunRef) => setOpenedRun({ sessionId, run }), [sessionId]);
   const detailRun =
     openedRun?.sessionId === sessionId ? findRun(messages, openedRun.run) : undefined;
+  const hasRun = useCallback((run: RunRef) => findRun(messages, run) !== undefined, [messages]);
   const detailOpen = detailTask !== undefined || detailRun !== undefined;
   const markTaskViewClosedByUser = useComposerFocusAfterTaskView(detailOpen);
   const handleCloseTask = useCallback(() => {
@@ -1080,19 +1086,21 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                       )}
                     >
                       <ChatAgentsContext.Provider value={chatAgents}>
-                        <AgentChatMessages
-                          sourcePath={activeSourcePath}
-                          key={sessionId}
-                          messages={messages}
-                          plugin={plugin}
-                          currentPlan={currentPlan}
-                          pendingToolPermissions={pendingToolPermissions}
-                          pendingAskUserQuestions={pendingAskUserQuestions}
-                          chatBackend={backend}
-                          isLoading={isLoading}
-                          chatStates={chatStates}
-                          onContinueFrom={handleContinueFrom}
-                        />
+                        <ChatRunsContext.Provider value={hasRun}>
+                          <AgentChatMessages
+                            sourcePath={activeSourcePath}
+                            key={sessionId}
+                            messages={messages}
+                            plugin={plugin}
+                            currentPlan={currentPlan}
+                            pendingToolPermissions={pendingToolPermissions}
+                            pendingAskUserQuestions={pendingAskUserQuestions}
+                            chatBackend={backend}
+                            isLoading={isLoading}
+                            chatStates={chatStates}
+                            onContinueFrom={handleContinueFrom}
+                          />
+                        </ChatRunsContext.Provider>
                       </ChatAgentsContext.Provider>
                       {queuedMessagesNode}
                       <AgentChatControls

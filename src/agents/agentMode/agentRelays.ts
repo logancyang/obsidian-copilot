@@ -1,6 +1,9 @@
+import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { AgentChatMessage } from "@/agentMode/session/types";
-import type { AgentMention } from "@/agents/agentMentions";
-import { readAgentReply, type AgentReply } from "@/agents/agentReply";
+import { ASK_AGENT_TOOL_NAME } from "@/agents/agentMentionPrompt";
+import { restoreAgentMentions, type AgentMention } from "@/agents/agentMentions";
+import { agentToolCall } from "@/agents/agentMode/agentToolCalls";
+import { readAgentReply, type AgentReply, type AgentReplyMarker } from "@/agents/agentReply";
 import { useCustomAgentsGate } from "@/agents/customAgentsGate";
 import type { RunRef } from "@/agents/ui/chatAgents";
 import { USER_SENDER } from "@/constants";
@@ -52,6 +55,51 @@ export function findRun(
     if (run) return run;
   }
   return undefined;
+}
+
+// A chat without a note loses its runs on a restart, while its agent's history keeps each relay, so a reopened chat rebuilds every run it lacks from its last relay, on the message before the run's first ask as the ask saved it, and validated as a note's run is.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/976
+export function restoreRelayedRuns(
+  chat: Pick<AgentSession, "getDisplayMessages" | "setAgentMentions">
+): void {
+  const messages = chat.getDisplayMessages();
+  const known = new Set(messages.flatMap((m) => m.agentMentions ?? []).map((run) => run.id));
+  const asking = new Map<string, AgentChatMessage>();
+  const relayed = new Map<string, { at: AgentChatMessage; marker: AgentReplyMarker }>();
+  let lastUser: AgentChatMessage | undefined;
+  for (const message of messages) {
+    for (const part of message.parts ?? []) {
+      const call = part.kind === "tool_call" ? agentToolCall(part) : null;
+      const asked = call?.tool === ASK_AGENT_TOOL_NAME ? call.agent?.toLowerCase() : undefined;
+      if (asked && lastUser && !asking.has(asked)) asking.set(asked, lastUser);
+    }
+    const marker = relayOf(message)?.marker;
+    if (message.sender === USER_SENDER) lastUser = message;
+    if (!marker) continue;
+    const names = [marker.name.toLowerCase(), marker.agent];
+    const at = relayed.get(marker.mention)?.at ?? names.map((n) => asking.get(n)).find(Boolean);
+    names.forEach((n) => asking.delete(n));
+    // A relay whose ask the chat doesn't hold, as one carried from the chat it continues, has no message to put its run on.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/976
+    if (at && !known.has(marker.mention)) relayed.set(marker.mention, { at, marker });
+  }
+  const runs = new Map<AgentChatMessage, AgentMention[]>();
+  for (const { at, marker } of relayed.values()) {
+    const [run] = restoreAgentMentions([
+      {
+        id: marker.mention,
+        agent: marker.agent,
+        name: marker.name,
+        status: marker.status,
+        // A replay can carry no send times, and a rebuilt run's start only orders it before the runs this Obsidian session starts.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/976
+        startedAt: at.timestamp?.epoch ?? 0,
+        chat: marker.chat,
+      },
+    ]);
+    if (run) runs.set(at, [...(runs.get(at) ?? at.agentMentions ?? []), run]);
+  }
+  for (const [at, mentions] of runs) chat.setAgentMentions(at.id, mentions);
 }
 
 export function useRelayRuns(messages: readonly AgentChatMessage[]): ReadonlyMap<string, RelayRun> {

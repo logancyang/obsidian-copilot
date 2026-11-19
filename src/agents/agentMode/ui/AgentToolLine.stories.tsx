@@ -1,7 +1,7 @@
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
 import type { AgentToolCall } from "@/agents/agentMode/agentToolCalls";
 import { AgentToolLine } from "@/agents/agentMode/ui/AgentToolLine";
-import { ChatAgentsContext } from "@/agents/ui/chatAgents";
+import { ChatAgentsContext, ChatRunsContext } from "@/agents/ui/chatAgents";
 import { FIVE_AGENTS, LONG_NAMED_AGENT } from "@/agents/ui/testing/rosterFixtures";
 import type { Meta, StoryObj } from "@/lib/story";
 import React from "react";
@@ -20,17 +20,21 @@ const CHAT_AGENTS = {
   openRun: () => {},
 };
 
+const EVERY_RUN_FOUND = () => true;
+
 function ToolLines({ lines }: ToolLinesProps) {
   return (
     <ChatAgentsContext.Provider value={CHAT_AGENTS}>
-      {lines.map(({ status = "completed", ...call }, index) => (
-        <AgentToolLine
-          key={`${call.tool}-${call.agent}`}
-          call={call}
-          part={{ kind: "tool_call", id: `call-${index}`, title: call.tool, status }}
-          ordinaryRow={null}
-        />
-      ))}
+      <ChatRunsContext.Provider value={EVERY_RUN_FOUND}>
+        {lines.map(({ status = "completed", ...call }, index) => (
+          <AgentToolLine
+            key={`${call.tool}-${call.agent}`}
+            call={call}
+            part={{ kind: "tool_call", id: `call-${index}`, title: call.tool, status }}
+            ordinaryRow={null}
+          />
+        ))}
+      </ChatRunsContext.Provider>
     </ChatAgentsContext.Provider>
   );
 }

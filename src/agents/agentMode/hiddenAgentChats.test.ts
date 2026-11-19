@@ -32,6 +32,7 @@ const PERMISSION = "https://github.com/Brevilabs/obsidian-copilot-private/issues
 const SEVERAL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/949";
 const ASKED_MEMORY = "https://github.com/Brevilabs/obsidian-copilot-private/issues/969";
 const SETUP = "https://github.com/Brevilabs/obsidian-copilot-private/issues/962";
+const NO_NOTE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/976";
 const AUTO_MODE: BackendState = { model: null, mode: { current: "auto", options: [], apply: {} } };
 const PLAN: BackendState = { model: null, mode: { current: "plan", options: [], apply: {} } };
 const PLAN_CHANGE = Object.freeze({
@@ -218,6 +219,14 @@ async function askBoth(descriptor?: BackendDescriptor): Promise<TwoAsked> {
   return { coco, maya, leo };
 }
 
+function markerOf(relay: string): Record<string, unknown> {
+  const marker = relay.split("\n")[0];
+  return JSON.parse(marker.slice("<!-- copilot-agent-reply ".length, -" -->".length)) as Record<
+    string,
+    unknown
+  >;
+}
+
 function relayedFrom(relay: string): string {
   const marker = relay.split("\n")[0];
   return (
@@ -371,6 +380,21 @@ describe("hiddenAgentChats", () => {
         expect(relayed).toContain(
           '<agent-reply from="Maya">\nI disagree. Six features is too many.\n</agent-reply>'
         );
+      });
+
+      it(`names in each relay's marker the run's ending and the asked agent's chat, as the asking message saves them, for its question and then its reply (${NO_NOTE})`, async () => {
+        const { coco, maya } = await waitingOnQuestion();
+        const chat = { backendId: "fake", sessionId: sessionIdOf(maya) };
+        const question = fake.promptsTo(sessionIdOf(coco))[1];
+
+        chats.answer(coco, "Maya", "October.");
+        await fake.untilPrompt(sessionIdOf(maya), 2);
+        answer(maya, "All matched.");
+        const reply = await fake.untilPrompt(sessionIdOf(coco), 3);
+
+        expect(markerOf(question)).toMatchObject({ status: "question", chat });
+        expect(markerOf(reply)).toMatchObject({ status: "finished", chat });
+        expect(mentionsOn(coco)?.[0]).toMatchObject({ status: "finished", chat });
       });
 
       it(`carries the files the agent changed onto the relayed reply, for the Files changed card, and names them to the current agent (${ISSUE})`, async () => {
@@ -1569,6 +1593,7 @@ describe("hiddenAgentChats", () => {
         const relayMessage = coco.store.getDisplayMessages().find((m) => m.message === relayed);
         expect(relayMessage?.fileChanges).toEqual([PLAN_CHANGE]);
         expect(mentionsOn(coco)?.[0]).toEqual(expect.objectContaining({ status: "stopped" }));
+        expect(markerOf(relayed)).toMatchObject({ status: "stopped" });
       });
 
       it(`relays the files a stopped turn changed, though they are recorded after its chat goes idle (${CONTROL})`, async () => {

@@ -439,9 +439,8 @@ export class HiddenAgentChats {
     let end: HiddenRunEnd;
     try {
       const session = await hidden.session;
-      const sessionId = session.getBackendSessionId();
-      if (sessionId)
-        record(hidden.parent, run, { chat: { backendId: session.backendId, sessionId } });
+      const chat = chatOf(session);
+      if (chat) record(hidden.parent, run, { chat });
       end = await this.runTurn(hidden, run, answer, session, message);
     } catch (error) {
       end = { reply: run.reply.trim(), files: [], error: asError(error) };
@@ -503,6 +502,8 @@ export class HiddenAgentChats {
             agent: hidden.agent.slug,
             name: hidden.agent.name,
             mention: run.id,
+            status: "question",
+            chat: chatOf(session),
             reply: run.question,
             changed: [],
             question: true,
@@ -528,9 +529,8 @@ export class HiddenAgentChats {
     const key = chatKey(hidden.parent, hidden.agent.slug);
     if (this.chats.get(key) !== hidden) return;
     if (getCustomAgentsGate() === "hidden") return;
-    record(hidden.parent, run, {
-      status: run.stopped ? "stopped" : end.error ? "didnt_finish" : "finished",
-    });
+    const status = run.stopped ? "stopped" : end.error ? "didnt_finish" : "finished";
+    record(hidden.parent, run, { status });
     // The asking chat shows the asked agent's save as its own chat does, as a line in place of its MEMORY.md among the changed files, so the asking agent hears only the files the user sees.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/969
     const memorySaves = readTurnMemorySaves(end.files, {
@@ -546,6 +546,8 @@ export class HiddenAgentChats {
         agent: hidden.agent.slug,
         name: hidden.agent.name,
         mention: run.id,
+        status,
+        chat: chatOf(hidden.started),
         reply: end.reply,
         changed: shown.map((change) => change.path),
         error: end.error?.message,
@@ -658,6 +660,11 @@ async function stopSession(session: AgentSession): Promise<void> {
 
 function requesterOf({ agent }: HiddenChat): PermissionRequester {
   return { agent: { slug: agent.slug, name: agent.name, faceSrc: agent.faceSrc } };
+}
+
+function chatOf(session: AgentSession | null): AgentMention["chat"] {
+  const sessionId = session?.getBackendSessionId();
+  return session && sessionId ? { backendId: session.backendId, sessionId } : undefined;
 }
 
 function savedChat(parent: AgentSession, slug: string): AgentMention["chat"] {

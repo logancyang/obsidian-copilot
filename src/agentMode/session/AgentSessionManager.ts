@@ -204,6 +204,7 @@ export interface AgentSessionManagerOptions {
   copilotMcpServer?: CopilotMcpServer;
   chatExtensions?: readonly ChatExtension<unknown>[];
   resolveAgent?: (slug: string) => Promise<SessionAgent | null>;
+  onChatReopened?: (chat: AgentSession) => void;
 }
 
 export class AgentSessionManager {
@@ -2205,6 +2206,7 @@ export class AgentSessionManager {
     }
 
     this.restoreFromNote(session, resumed !== null, file, loaded);
+    this.opts.onChatReopened?.(session);
     if (loaded.label) session.setLabel(loaded.label);
     if (loaded.sessionId) {
       void this.opts.sessionIndex?.touch(loaded.backendId, loaded.sessionId);
@@ -2357,6 +2359,7 @@ export class AgentSessionManager {
     if (!session) {
       throw new Error(`Could not resume session ${sessionId} from the ${backendId} session store.`);
     }
+    this.opts.onChatReopened?.(session);
     if (entry?.title) {
       session.restoreLabel(entry.title, entry.titleSource === "user" ? "user" : "agent");
     }
