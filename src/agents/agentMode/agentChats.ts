@@ -87,10 +87,7 @@ export async function startCustomAgentChat(
   return manager.createSession(backendId, undefined, seed, undefined, agent.slug);
 }
 
-export async function listAgentChats(
-  manager: AgentSessionManager,
-  slug: string
-): Promise<ChatHistoryItem[]> {
+export async function listAllChats(manager: AgentSessionManager): Promise<ChatHistoryItem[]> {
   // The all-chats list hides archived projects' chats, which still belong to the agent.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/940
   const archivedProjectIds = getCachedProjectRecords()
@@ -99,7 +96,14 @@ export async function listAgentChats(
   const lists = await Promise.all(
     [GLOBAL_SCOPE, ...archivedProjectIds].map((scope) => manager.getChatHistoryItems(scope))
   );
-  return lists.flat().filter((chat) => chat.agent === slug);
+  return lists.flat();
+}
+
+export async function listAgentChats(
+  manager: AgentSessionManager,
+  slug: string
+): Promise<ChatHistoryItem[]> {
+  return (await listAllChats(manager)).filter((chat) => chat.agent === slug);
 }
 
 export async function listAgentChatsToArchive(

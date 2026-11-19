@@ -52,7 +52,7 @@ Without a license that includes custom agents, the locked profile opens from a g
 
 - An edit to the instructions file reaches chats that start after it; open chats keep the instructions they started with.
 - The dialog says deleting can't be undone even when "Deleted files" sends files to a trash they can be restored from.
-- An agent's identity is its folder: a new agent made later with the same name gets the deleted agent's folder name, so the deleted agent's archived chats, and chats left behind when a folder is deleted outside Obsidian, belong to it. Its profile counts them, and they show its face once unarchived.
+- An agent's identity is its folder: a new agent made later with the same name gets the deleted agent's folder name, so the deleted agent's archived chats, and chats left behind when a folder is deleted outside Obsidian, belong to it. Its profile counts them, it recalls them when asked about earlier chats, and they show its face once unarchived.
 - An archived chat of a deleted agent opens from View archived as a plain chat under the coding agent's icon, with its transcript as it was. Sending a message continues it without the agent's instructions and moves it back to Recent chats.
 - The preset faces download from the Brevilabs CDN only when the face picker opens.
 - The profile belongs to the tab it was opened in: switching tabs and coming back shows the chat, not the profile.

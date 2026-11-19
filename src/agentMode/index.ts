@@ -57,7 +57,12 @@ import { createOpenArtifactsTools } from "@/openArtifacts/openArtifactsTools";
 import { getVaultBase } from "@/utils/vaultPath";
 import { buildNativeChatId } from "@/utils/nativeChatId";
 import { loadAgentSessionPrompt } from "@/agents/agentSessionPrompt";
-import { agentBackend, agentSetupProblem, agentSetupReason } from "@/agents/agentMode/agentChats";
+import {
+  agentBackend,
+  agentSetupProblem,
+  agentSetupReason,
+  listAllChats,
+} from "@/agents/agentMode/agentChats";
 import { AGENT_DRAFT_CARD_EXTENSION } from "@/agents/agentMode/agentDraftCard";
 import { restoreRelayedRuns } from "@/agents/agentMode/agentRelays";
 import {
@@ -333,7 +338,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
           ]);
           return {
             agent: session.agentSlug,
-            chats: (await manager.getChatHistoryItems()).filter((item) => !own.has(item.id)),
+            chats: (await listAllChats(manager)).filter((item) => !own.has(item.id)),
           };
         },
         vaultBase: () => getVaultBase(app) ?? "",

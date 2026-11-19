@@ -59,10 +59,10 @@ export function createListChatsTool(host: ListChatsToolHost): HostedTool {
           isError: false,
         };
       }
-      // An agent recalls what Recent chats lists, which leaves out archived chats as it does an archived project's.
+      // Archiving a chat or its project means the user is done talking there, not that the agent should forget it, so archived chats are listed too.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/959
       const chats = caller.chats
-        .filter((item) => (item.agent ?? null) === caller.agent && item.archivedAt === undefined)
+        .filter((item) => (item.agent ?? null) === caller.agent)
         .sort((a, b) => b.lastAccessedAt.getTime() - a.lastAccessedAt.getTime())
         .slice(0, MAX_LISTED_CHATS);
       if (chats.length === 0) {
