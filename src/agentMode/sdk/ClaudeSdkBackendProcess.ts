@@ -36,6 +36,7 @@ import type {
   PermissionPrompt,
   PromptInput,
   ResumeSessionInput,
+  SessionAgent,
   ResumeSessionOutput,
   SessionEvent,
   SessionId,
@@ -234,8 +235,9 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     this.askUserQuestionPrompter = fn;
   }
 
-  private resolveSystemPromptAppend(): string {
-    return this.opts.getSystemPromptAppend?.() ?? "";
+  private resolveSystemPromptAppend(agent: SessionAgent | undefined): string {
+    const shared = this.opts.getSystemPromptAppend?.() ?? "";
+    return agent ? [shared, agent.prompt].filter(Boolean).join("\n\n") : shared;
   }
 
   registerSessionHandler(sessionId: SessionId, handler: SessionUpdateHandler): () => void {
@@ -287,7 +289,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       hasTranscript: false,
       model: seedModelId,
       mcpServers: params.mcpServers,
-      systemPromptAppend: this.resolveSystemPromptAppend(),
+      systemPromptAppend: this.resolveSystemPromptAppend(params.agent),
       translator: createTranslatorState(),
     });
 
@@ -652,7 +654,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       hasTranscript: true,
       model: seedModelId,
       mcpServers: params.mcpServers,
-      systemPromptAppend: this.resolveSystemPromptAppend(),
+      systemPromptAppend: this.resolveSystemPromptAppend(params.agent),
       translator: createTranslatorState(claudeTaskPlan),
     });
 

@@ -105,7 +105,7 @@ describe("CodexBackend", () => {
           });
           const prompt = JSON.parse(desc.env.CODEX_CONFIG as string).developer_instructions;
 
-          expect(prompt).not.toContain("You are Obsidian Copilot");
+          expect(prompt).not.toContain("You work inside Obsidian Copilot");
           expect(prompt).toContain("call the `request_user_input` tool");
           expect(prompt).toContain("including Default");
         } finally {

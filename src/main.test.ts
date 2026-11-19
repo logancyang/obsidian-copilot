@@ -75,6 +75,7 @@ jest.mock("@/agentMode", () => ({
   registerTurnDiffCommands: jest.fn(),
   acpFrameSink: { narrowLegacyLogs: jest.fn(async () => undefined) },
   createAgentSessionManager: jest.fn(() => ({})),
+  startCustomAgentChat: jest.fn(),
   MAX_PROVIDED_TOOL_NAME_LENGTH: 41,
 }));
 jest.mock("@/agentMode/agentModelDiscovery", () => ({ wireAgentModelDiscovery: jest.fn() }));
@@ -126,6 +127,7 @@ import { findChatFileByDeepLinkId } from "@/utils/chatDeepLink";
 import { Notice, TFile, type WorkspaceLeaf } from "obsidian";
 import { ConnectionManager } from "@/connectors/connectionManager";
 import { CustomAgentStore } from "@/agents/CustomAgentStore";
+import { START_AGENT_CHAT_COMMAND_ID } from "@/agents/startAgentChatCommand";
 import { ConnectorTools } from "@/connectors/connectorTools";
 import { CustomConnectors } from "@/connectors/custom/customConnectors";
 
@@ -725,13 +727,13 @@ describe("main", () => {
         expect(custom.dispose).toHaveBeenCalledTimes(1);
       });
 
-      it("gives the plugin a custom agent store on desktop that never touches the vault while custom agents are hidden (https://github.com/Brevilabs/obsidian-copilot-private/issues/936)", async () => {
+      it("gives the plugin a custom agent store on desktop that never touches the vault, and adds no agent command, while custom agents are hidden (https://github.com/Brevilabs/obsidian-copilot-private/issues/936)", async () => {
         (isDesktopRuntime as jest.Mock).mockReturnValue(true);
         (startActiveWebTabTracking as jest.Mock).mockReturnValue({
           activeLeafRef: {},
           layoutRef: {},
         });
-        const { plugin, finishStartup } = createLoadingPlugin();
+        const { plugin, registrations, finishStartup } = createLoadingPlugin();
 
         plugin.onload();
         await finishStartup();
@@ -740,6 +742,9 @@ describe("main", () => {
         await expect(plugin.customAgents?.loadForSession("coco")).rejects.toThrow(
           "Custom agents are not available."
         );
+        expect(
+          registrations.addCommand.mock.calls.map(([command]) => (command as { id: string }).id)
+        ).not.toContain(START_AGENT_CHAT_COMMAND_ID);
       });
 
       it("starts no connection manager on mobile, where connector logins cannot run", async () => {

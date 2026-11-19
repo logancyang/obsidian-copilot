@@ -23,6 +23,7 @@ import {
   PlanDecisionAction,
   PromptContent,
   QueuedPrompt,
+  SessionAgent,
   SessionEvent,
   SessionId,
   PlanUsage,
@@ -211,6 +212,8 @@ export interface AgentSessionStartOptions extends ProjectContextUpdatesHooks {
   getProjectContextBlock?: () => string;
   mcpServers?: ReadonlyArray<AgentMcpServer>;
   chatExtensions?: readonly ChatExtension<unknown>[];
+  agentSlug?: string;
+  agent?: SessionAgent | null;
 }
 
 export interface AgentSessionStateOptions extends ProjectContextUpdatesHooks {
@@ -227,6 +230,7 @@ export interface AgentSessionStateOptions extends ProjectContextUpdatesHooks {
   getDisplayName?: (backendId: BackendId) => string;
   getApp?: () => App;
   chatExtensions?: readonly ChatExtension<unknown>[];
+  agentSlug?: string;
 }
 
 export class AgentSession implements ChatStateHost, ChatView {
@@ -236,6 +240,7 @@ export class AgentSession implements ChatStateHost, ChatView {
   readonly backendId: BackendId;
   readonly planFeedbackDelivery: "permission" | "next_turn";
   readonly projectId: ProjectScopeId;
+  readonly agentSlug: string | null;
   readonly ready: Promise<void>;
   private backendSessionId: SessionId | null = null;
   private readonly backend: BackendProcess;
@@ -315,6 +320,7 @@ export class AgentSession implements ChatStateHost, ChatView {
     });
     this.planFeedbackDelivery = opts.getDescriptor?.()?.planFeedbackDelivery ?? "permission";
     this.projectId = opts.projectId ?? GLOBAL_SCOPE;
+    this.agentSlug = opts.agentSlug ?? null;
     this.cwd = opts.cwd ?? null;
     this.getDescriptor = opts.getDescriptor ?? null;
     this.getDisplayName = opts.getDisplayName ?? null;
@@ -390,6 +396,7 @@ export class AgentSession implements ChatStateHost, ChatView {
         cwd,
         projectId: this.projectId,
         mcpServers: opts.mcpServers,
+        agent: opts.agent ?? undefined,
       });
       if (this.disposed) return;
       const modelLog = resp.state.model

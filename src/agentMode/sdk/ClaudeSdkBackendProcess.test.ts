@@ -1082,6 +1082,22 @@ describe("ClaudeSdkBackendProcess", () => {
         });
       });
 
+      it("appends a custom agent's part after the shared prompt for a chat started as that agent", async () => {
+        queryMock.mockImplementation(answering([resultMessage()]));
+        const proc = makeProc({ getSystemPromptAppend: () => "SHARED PROMPT" });
+
+        const { sessionId } = await proc.newSession({
+          cwd: "/vault",
+          agent: { slug: "coco", prompt: "In this chat you are Coco." },
+        });
+        await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "hi" }] });
+
+        const opts = (getPromptQueryCalls()[0][0] as { options: Record<string, unknown> }).options;
+        expect(opts.systemPrompt).toMatchObject({
+          append: "SHARED PROMPT\n\nIn this chat you are Coco.",
+        });
+      });
+
       it("captures the system prompt at newSession time and ignores later setting changes mid-session", async () => {
         queryMock.mockImplementation(
           answering([streamEvent({ type: "message_start", message: {} }), resultMessage()])
@@ -1716,6 +1732,26 @@ describe("ClaudeSdkBackendProcess", () => {
         const { options } = getPromptQueryCalls()[0][0] as { options: Record<string, unknown> };
         expect(options.resume).toBe(sessionId);
         expect(options.sessionId).toBeUndefined();
+      });
+
+      it("resumes a custom agent chat with the agent's part after the shared prompt", async () => {
+        queryMock.mockImplementation(answering([resultMessage()]));
+        const proc = makeProc({ getSystemPromptAppend: () => "SHARED PROMPT" });
+
+        await proc.resumeSession({
+          sessionId: "resumed-session",
+          cwd: "/vault",
+          agent: { slug: "coco", prompt: "In this chat you are Coco." },
+        });
+        await promptTurn(proc, {
+          sessionId: "resumed-session",
+          prompt: [{ type: "text", text: "continue" }],
+        });
+
+        const opts = (getPromptQueryCalls()[0][0] as { options: Record<string, unknown> }).options;
+        expect(opts.systemPrompt).toMatchObject({
+          append: "SHARED PROMPT\n\nIn this chat you are Coco.",
+        });
       });
 
       it(`resumes the chat's query in Default, the mode the picker shows, whatever defaultMode Claude settings set (${ISSUE_870})`, async () => {

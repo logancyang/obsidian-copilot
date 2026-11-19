@@ -906,6 +906,23 @@ describe("AgentSession", () => {
         expect(mock.newSession).toHaveBeenCalledWith(expect.objectContaining({ mcpServers }));
       });
 
+      it("starts the backend session as the chat's custom agent and remembers which agent the chat runs as", async () => {
+        const mock = makeMockBackend();
+        const agent = { slug: "coco", prompt: "In this chat you are Coco." };
+        const session = startSession(mock, { agentSlug: "coco", agent });
+        await session.ready;
+        expect(mock.newSession).toHaveBeenCalledWith(expect.objectContaining({ agent }));
+        expect(session.agentSlug).toBe("coco");
+      });
+
+      it("keeps a chat's custom agent while starting it as a Copilot chat when the agent could not be loaded (https://github.com/Brevilabs/obsidian-copilot-private/issues/937)", async () => {
+        const mock = makeMockBackend();
+        const session = startSession(mock, { agentSlug: "coco", agent: null });
+        await session.ready;
+        expect(mock.newSession.mock.calls[0][0].agent).toBeUndefined();
+        expect(session.agentSlug).toBe("coco");
+      });
+
       it("passes the session's projectId into the newSession payload", async () => {
         const mock = makeMockBackend();
         const session = startSession(mock, { cwd: "/vault/Projects/p", projectId: "proj-7" });

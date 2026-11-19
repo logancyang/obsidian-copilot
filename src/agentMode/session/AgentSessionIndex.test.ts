@@ -91,6 +91,13 @@ describe("AgentSessionIndex", () => {
   });
 
   describe("mergeDiscoveredSessions()", () => {
+    it("keeps the custom agent a chat runs as when a sweep rediscovers the chat", async () => {
+      const index = new AgentSessionIndex(makeStorage(), INDEX_PATH);
+      await index.recordSession(entry({ agent: "coco" }));
+      await index.mergeDiscoveredSessions([entry({ title: "Renamed by the agent" })]);
+      expect((await index.getEntry("opencode", "s1"))?.agent).toBe("coco");
+    });
+
     it("never moves lastAccessed backwards", async () => {
       const index = new AgentSessionIndex(makeStorage(), INDEX_PATH);
       await index.recordSession(entry({ lastAccessedAtMs: 9_000 }));
@@ -228,6 +235,18 @@ describe("AgentSessionIndex", () => {
         effort: null,
       });
       expect((await second.getEntry("opencode", "bad-model"))?.model).toBeUndefined();
+    });
+
+    it("restores the custom agent a chat runs as after reload, keeps it when a later record names none, and leaves other chats without one", async () => {
+      const storage = makeStorage();
+      const first = new AgentSessionIndex(storage, INDEX_PATH);
+      await first.recordSession(entry({ agent: "coco" }));
+      await first.recordSession(entry({ lastAccessedAtMs: 9_000 }));
+      await first.recordSession(entry({ sessionId: "plain" }));
+      await first.flush();
+      const second = new AgentSessionIndex(storage, INDEX_PATH);
+      expect((await second.getEntry("opencode", "s1"))?.agent).toBe("coco");
+      expect((await second.getEntry("opencode", "plain"))?.agent).toBeUndefined();
     });
   });
 

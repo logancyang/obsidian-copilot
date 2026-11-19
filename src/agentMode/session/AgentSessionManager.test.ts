@@ -197,6 +197,7 @@ function makeMockSession(overrides: {
   cwd?: string;
   ready?: Promise<void>;
   label?: string;
+  agentSlug?: string;
 }): AgentSession {
   const sessionId = overrides.backendSessionId ?? `backend-${nextBackendSessionId++}`;
   let label: string | null = overrides.label ?? null;
@@ -223,6 +224,7 @@ function makeMockSession(overrides: {
     chatInputId: overrides.chatInputId ?? overrides.internalId,
     backendId: overrides.backendId,
     projectId: overrides.projectId ?? GLOBAL_SCOPE,
+    agentSlug: overrides.agentSlug ?? null,
     cwd: overrides.cwd ?? null,
     ready: overrides.ready ?? Promise.resolve(),
     getBackendSessionId: () => sessionId,
@@ -327,8 +329,12 @@ const sessionCreateSpy = jest.spyOn(AgentSession, "start").mockImplementation((o
     backend: opts.backend,
     projectId: opts.projectId,
     cwd: opts.cwd ?? undefined,
+    agentSlug: opts.agentSlug,
   })
 );
+
+const COCO_AGENT = Object.freeze({ slug: "coco", prompt: "In this chat you are Coco." });
+const mockResolveAgent = jest.fn(async (slug: string) => (slug === "coco" ? COCO_AGENT : null));
 
 type MockAgentChatFocus =
   | "none"
@@ -444,6 +450,7 @@ interface ManagerOptions {
   beforeBackendStart?: ManagerDeps["beforeBackendStart"];
   copilotMcpServer?: ManagerDeps["copilotMcpServer"];
   chatExtensions?: ManagerDeps["chatExtensions"];
+  resolveAgent?: ManagerDeps["resolveAgent"];
 }
 
 const builtManagers: AgentSessionManager[] = [];
@@ -478,6 +485,7 @@ function buildManager(options: ManagerOptions = {}): AgentSessionManager {
       beforeBackendStart: options.beforeBackendStart,
       copilotMcpServer: options.copilotMcpServer,
       chatExtensions: options.chatExtensions,
+      resolveAgent: options.resolveAgent ?? mockResolveAgent,
     }
   );
   builtManagers.push(manager);
@@ -774,6 +782,7 @@ function chatNoteFixture(opts: { autosave?: boolean } = {}) {
       model: options.model,
       carriedMessages: options.carriedMessages,
       continuedFrom: options.continuedFrom,
+      agent: options.agent as string | undefined,
     };
   });
   let agentWritten: (() => void) | null = null;
@@ -1087,6 +1096,35 @@ describe("AgentSessionManager", () => {
         expect(mgr.getActiveSession()).toBe(session);
         expect(mgr.getActiveChatUIState()).not.toBeNull();
         expect(mgr.getChatUIState(session.internalId)).toBe(mgr.getActiveChatUIState());
+      });
+
+      it("starts a chat as the custom agent it names, giving the backend that agent's part", async () => {
+        const mgr = buildManager();
+
+        const session = await mgr.createSession(
+          "opencode",
+          GLOBAL_SCOPE,
+          undefined,
+          undefined,
+          "coco"
+        );
+
+        expect(sessionCreateSpy).toHaveBeenLastCalledWith(
+          expect.objectContaining({ agentSlug: "coco", agent: COCO_AGENT })
+        );
+        expect(session.agentSlug).toBe("coco");
+      });
+
+      it("starts a Copilot chat without asking for any agent when none is named", async () => {
+        mockResolveAgent.mockClear();
+        const mgr = buildManager();
+
+        await mgr.createSession();
+
+        expect(mockResolveAgent).not.toHaveBeenCalled();
+        expect(sessionCreateSpy).toHaveBeenLastCalledWith(
+          expect.objectContaining({ agentSlug: undefined, agent: null })
+        );
       });
 
       it("asks for the hourly release check each time a session is created for https://github.com/Brevilabs/obsidian-copilot-private/issues/837", async () => {
@@ -2037,6 +2075,21 @@ describe("AgentSessionManager", () => {
         expect(mgr.getActiveSession()).toBe(replacement);
       });
 
+      it("keeps the chat's custom agent when the chat moves to another agent backend before its first message", async () => {
+        const mgr = buildManager({ otherDescriptors: [buildDescriptor({ id: "claude" })] });
+        const chat = await mgr.createSession(
+          "opencode",
+          GLOBAL_SCOPE,
+          undefined,
+          undefined,
+          "coco"
+        );
+
+        const replacement = await mgr.replaceSessionInPlace(chat.internalId, "claude");
+
+        expect(replacement.agentSlug).toBe("coco");
+      });
+
       it("preserves the leftmost slot when replacing the first tab", async () => {
         const mgr = buildManager();
         const a = await createWorkedSession(mgr);
@@ -2523,10 +2576,16 @@ describe("AgentSessionManager", () => {
         { id: "a2", sender: AI_SENDER, message: "Got it.", isVisible: true, timestamp: null },
       ];
 
-      async function continueFromFirstReply(opts: { autosave?: boolean } = {}) {
+      async function continueFromFirstReply(opts: { autosave?: boolean; agent?: string } = {}) {
         const fixture = chatNoteFixture(opts);
         const mgr = buildManager({ app: fixture.app, persistence: fixture.persistence });
-        const source = await mgr.createSession();
+        const source = await mgr.createSession(
+          undefined,
+          GLOBAL_SCOPE,
+          undefined,
+          undefined,
+          opts.agent
+        );
         getSessionTestHandle(source).setMessages(original);
         getSessionTestHandle(source).setHasUserVisibleMessages(true);
         jest.setSystemTime(5_000);
@@ -2559,8 +2618,16 @@ describe("AgentSessionManager", () => {
           projectId: GLOBAL_SCOPE,
           model: undefined,
           continuedFrom: ["chats/note-1.md"],
+          agent: null,
         });
         expect(source.store.getDisplayMessages()[0].timestamp?.epoch).toBe(1_000);
+      });
+
+      it("continues a custom agent chat as the same agent", async () => {
+        const { notes, continued } = await continueFromFirstReply({ agent: "coco" });
+
+        expect(notes.get("chats/note-2.md")?.options.agent).toBe("coco");
+        expect(continued.agentSlug).toBe("coco");
       });
 
       it(`${ISSUE} shows the messages up to the chosen reply as text rows and sends them as history with the first message`, async () => {
@@ -3997,6 +4064,20 @@ describe("AgentSessionManager", () => {
         expect(mgr.getSessions()).toHaveLength(1);
       });
 
+      it("brings a custom agent chat back as the same agent", async () => {
+        const loadSession = jest.fn(async ({ sessionId }: { sessionId: string }) => ({
+          sessionId,
+          state: { model: null, mode: null },
+        }));
+        const mgr = buildManagerWithReplay({ loadSession });
+        await mgr.createSession(undefined, GLOBAL_SCOPE, undefined, undefined, "coco");
+
+        await mgr.restartBackend("opencode", "managed skills changed");
+
+        expect(loadSession).toHaveBeenCalledWith(expect.objectContaining({ agent: COCO_AGENT }));
+        expect(mgr.getActiveSession()?.agentSlug).toBe("coco");
+      });
+
       it("re-attaches the Copilot MCP server when it reloads the replaced tab", async () => {
         const loadSession = jest.fn(async ({ sessionId }: { sessionId: string }) => ({
           sessionId,
@@ -5204,6 +5285,26 @@ describe("AgentSessionManager", () => {
         expect(saveSession).toHaveBeenCalledWith(messages, session.backendId, expect.anything());
       });
 
+      it("records the custom agent the chat runs as in its note", async () => {
+        const { mgr, saveSession } = savedNoteFixture();
+        const session = await mgr.createSession(
+          undefined,
+          GLOBAL_SCOPE,
+          undefined,
+          undefined,
+          "coco"
+        );
+        getSessionTestHandle(session).setMessages([{ message: "What do you handle?" }]);
+
+        await mgr.saveActiveSession();
+
+        expect(saveSession).toHaveBeenCalledWith(
+          expect.anything(),
+          session.backendId,
+          expect.objectContaining({ agent: "coco" })
+        );
+      });
+
       it("saves again when the last reply gains a tool call without new text, so its note lists that tool (https://github.com/Brevilabs/obsidian-copilot-private/issues/906)", async () => {
         const { mgr, saveSession } = savedNoteFixture();
         const session = await mgr.createSession();
@@ -6347,6 +6448,46 @@ describe("AgentSessionManager", () => {
           descriptor: buildDescriptor({ createBackendProcess: () => replay.backend }),
         }).loadSessionFromHistory(mockTFile({ path: "chat/Saved.md" }));
 
+      it("reopens a chat note recorded with a custom agent as that agent, loading the backend session with the agent's part", async () => {
+        const replay = buildReplayingBackend();
+        const session = await buildManager({
+          persistence: {
+            loadFile: jest.fn().mockResolvedValue({
+              backendId: "opencode",
+              sessionId: "native-1",
+              projectId: GLOBAL_SCOPE,
+              messages: savedTurn,
+              agent: "coco",
+            }),
+          },
+          descriptor: buildDescriptor({ createBackendProcess: () => replay.backend }),
+        }).loadSessionFromHistory(mockTFile({ path: "chat/Saved.md" }));
+
+        expect(replay.backend.loadSession).toHaveBeenCalledWith(
+          expect.objectContaining({ sessionId: "native-1", agent: COCO_AGENT })
+        );
+        expect(session.agentSlug).toBe("coco");
+      });
+
+      it("reopens a chat note whose custom agent cannot load, because custom agents are hidden or its folder was removed, as a Copilot chat that still records the agent (https://github.com/Brevilabs/obsidian-copilot-private/issues/937)", async () => {
+        const replay = buildReplayingBackend();
+        const session = await buildManager({
+          persistence: {
+            loadFile: jest.fn().mockResolvedValue({
+              backendId: "opencode",
+              sessionId: "native-1",
+              projectId: GLOBAL_SCOPE,
+              messages: savedTurn,
+              agent: "removed-agent",
+            }),
+          },
+          descriptor: buildDescriptor({ createBackendProcess: () => replay.backend }),
+        }).loadSessionFromHistory(mockTFile({ path: "chat/Saved.md" }));
+
+        expect(replay.backend.loadSession.mock.calls[0][0].agent).toBeUndefined();
+        expect(session.agentSlug).toBe("removed-agent");
+      });
+
       it("saves a chat left without a sent message into its own note when it is reopened while still closing for https://github.com/Brevilabs/obsidian-copilot-private/issues/812", async () => {
         jest.useFakeTimers();
         getSettingsMock.mockReturnValue({ ...getSettingsMock(), autosaveChat: true });
@@ -6884,6 +7025,33 @@ describe("AgentSessionManager", () => {
     });
 
     describe("loadNativeSessionFromHistory()", () => {
+      it("reopens a custom agent chat that has no note as the agent its chat index records", async () => {
+        jest.useFakeTimers();
+        getSettingsMock.mockReturnValue({ ...getSettingsMock(), autosaveChat: false });
+        const replay = buildReplayingBackend();
+        const { manager } = buildHistoryHarness({
+          createBackendProcess: jest.fn(() => replay.backend),
+        });
+        const chat = await manager.createSession(
+          "opencode",
+          GLOBAL_SCOPE,
+          undefined,
+          undefined,
+          "coco"
+        );
+        const sessionId = chat.getBackendSessionId()!;
+        getSessionTestHandle(chat).setMessages([{ message: "What do you handle?" }], true);
+        await jest.advanceTimersByTimeAsync(2000);
+        await manager.closeChatSession(buildNativeChatId("opencode", sessionId));
+
+        const reopened = await manager.loadNativeSessionFromHistory("opencode", sessionId);
+
+        expect(replay.backend.loadSession).toHaveBeenCalledWith(
+          expect.objectContaining({ sessionId, agent: COCO_AGENT })
+        );
+        expect(reopened.agentSlug).toBe("coco");
+      });
+
       it("reopens a shut-down chat on the model and effort it last ran instead of the agent's default (https://github.com/logancyang/obsidian-copilot/issues/4274)", async () => {
         jest.useFakeTimers();
         getSettingsMock.mockReturnValue({ ...getSettingsMock(), autosaveChat: false });

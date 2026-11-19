@@ -407,10 +407,16 @@ export interface AgentMcpServer {
   readOnlyToolNames: ReadonlyArray<string>;
 }
 
+export interface SessionAgent {
+  slug: string;
+  prompt: string;
+}
+
 export interface OpenSessionInput {
   cwd: string;
   projectId?: ProjectScopeId;
   mcpServers?: ReadonlyArray<AgentMcpServer>;
+  agent?: SessionAgent;
 }
 
 export interface OpenSessionOutput {
@@ -423,6 +429,7 @@ export interface ResumeSessionInput {
   cwd: string;
   projectId?: ProjectScopeId;
   mcpServers?: ReadonlyArray<AgentMcpServer>;
+  agent?: SessionAgent;
 }
 
 export type ResumeSessionOutput = OpenSessionOutput;
@@ -432,6 +439,7 @@ export interface LoadSessionInput {
   cwd: string;
   projectId?: ProjectScopeId;
   mcpServers?: ReadonlyArray<AgentMcpServer>;
+  agent?: SessionAgent;
 }
 
 export type LoadSessionOutput = OpenSessionOutput;

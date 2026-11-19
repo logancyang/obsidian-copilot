@@ -3,7 +3,8 @@ import type CopilotPlugin from "@/main";
 import type { CopilotSettings } from "@/settings/model";
 import type { InstallState } from "./session/types";
 import type { BuiltinSkillRuntime } from "./skills/SkillManager";
-import { createAgentSessionManager, isCopilotToolOn } from "./index";
+import { createAgentSessionManager, isCopilotToolOn, startCustomAgentChat } from "./index";
+import { loadAgentSessionPrompt } from "@/agents/agentSessionPrompt";
 import { trackTabStripShown } from "./ui/trackTabStripShown";
 import { AgentSessionManager } from "./session/AgentSessionManager";
 import { reconcileBuiltinSkills } from "./skills/builtin/reconcileBuiltinSkills";
@@ -97,6 +98,8 @@ jest.mock("./session/debugSink", () => ({}));
 jest.mock("./backends/shared/ui/AgentBackendHeader", () => ({}));
 jest.mock("./session/useBackendAuthState", () => ({}));
 jest.mock("@/connectors/connectorsEntitlement", () => ({ isConnectorsEnabled: jest.fn() }));
+jest.mock("@/agents/agentSessionPrompt", () => ({ loadAgentSessionPrompt: jest.fn() }));
+jest.mock("@/utils/vaultPath", () => ({ getVaultBase: () => "/vault" }));
 
 const ISSUE = "https://github.com/logancyang/obsidian-copilot/issues/3022";
 
@@ -216,6 +219,20 @@ describe("agentMode", () => {
       expect(reconcile).toHaveBeenLastCalledWith(
         expect.objectContaining({ settings: expect.objectContaining({ plusLicenseKey: "" }) })
       );
+    });
+
+    it("gives the manager the plugin's custom agents to start a chat as one", async () => {
+      const agent = { slug: "coco", prompt: "In this chat you are Coco." };
+      jest.mocked(loadAgentSessionPrompt).mockResolvedValueOnce(agent);
+      const customAgents = {};
+      createAgentSessionManager({} as App, { ...plugin, customAgents } as unknown as CopilotPlugin);
+
+      const resolved = await jest
+        .mocked(AgentSessionManager)
+        .mock.calls[0][2].resolveAgent?.("coco");
+
+      expect(resolved).toBe(agent);
+      expect(loadAgentSessionPrompt).toHaveBeenCalledWith(customAgents, "coco", "/vault");
     });
 
     it("tells the manager whether a tab strip holds its chats as the workspace layout changes for https://github.com/Brevilabs/obsidian-copilot-private/issues/849", () => {
@@ -704,6 +721,32 @@ describe("agentMode", () => {
       await handled.promise;
       expect(reconcile).toHaveBeenLastCalledWith(
         expect.objectContaining({ availableAgents: ["claude"] })
+      );
+    });
+  });
+
+  describe("startCustomAgentChat()", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/937 starts the agent's chat on Claude, on the agent's model when Claude can run it", async () => {
+      const created = {};
+      const manager = {
+        getSeedSelection: jest.fn(() => ({ baseModelId: "claude-sonnet-4-5", effort: "medium" })),
+        createSession: jest.fn(async () => created),
+      };
+      const model = { baseModelId: "claude-sonnet-4-5", effort: "medium" };
+
+      const session = await startCustomAgentChat(manager as unknown as AgentSessionManager, {
+        slug: "coco",
+        model,
+      });
+
+      expect(session).toBe(created);
+      expect(manager.getSeedSelection).toHaveBeenCalledWith("claude", model);
+      expect(manager.createSession).toHaveBeenCalledWith(
+        "claude",
+        undefined,
+        model,
+        undefined,
+        "coco"
       );
     });
   });

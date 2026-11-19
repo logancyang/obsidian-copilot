@@ -27,7 +27,7 @@ import {
 import { formatChatNoteMessage } from "@/utils/chatHistoryUtils";
 import { joinPosix } from "@/utils/pathUtils";
 import { getVaultBase } from "@/utils/vaultPath";
-import { TFile, type App } from "obsidian";
+import { parseYaml, TFile, type App } from "obsidian";
 import {
   coerceProjectId,
   escapeYamlString,
@@ -117,6 +117,17 @@ function parseContinuedFrom(raw: string | undefined): string[] | undefined {
   }
 }
 
+// A chat note is the user's file: a hand edit or the Properties panel can leave agent as a list, a number, null or broken YAML, and the chat still opens.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/937
+function parseAgentSlug(yaml: string): string | undefined {
+  try {
+    const agent: unknown = (parseYaml(yaml) as { agent?: unknown } | null)?.agent;
+    return typeof agent === "string" ? agent.trim() || undefined : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function parseUsageJson(raw: unknown): SessionUsage | undefined {
   if (typeof raw !== "string" || raw.trim().length === 0) return undefined;
   try {
@@ -144,6 +155,7 @@ export interface LoadedAgentChat {
   model?: ModelSelection;
   carriedMessages?: number;
   continuedFrom?: string[];
+  agent?: string;
 }
 
 export class AgentChatPersistenceManager {
@@ -174,6 +186,7 @@ export class AgentChatPersistenceManager {
       usage?: SessionUsage;
       carriedMessages?: number;
       continuedFrom?: readonly string[];
+      agent?: string | null;
     }
   ): Promise<{ path: string } | null> {
     if (messages.length === 0) return null;
@@ -217,6 +230,7 @@ export class AgentChatPersistenceManager {
         usage: options?.usage,
         carriedMessages: options?.carriedMessages,
         continuedFrom: options?.continuedFrom,
+        agent: options?.agent,
       });
       // A chat link finds its note by exact epoch, and a resumed Claude transcript starts at a later time than the note.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/744
@@ -271,7 +285,7 @@ export class AgentChatPersistenceManager {
     const content = await this.app.vault.read(file);
     const key = this.app.vault.getAbstractFileByPath(file.path) ?? file.path;
     this.loadedTranscripts.set(key, content);
-    const { frontmatter, body } = this.splitFrontmatter(content);
+    const { frontmatter, yaml, body } = this.splitFrontmatter(content);
     const backendId = (frontmatter.backendId ?? "").trim();
     if (!backendId) {
       throw new Error(`Missing backendId in agent chat frontmatter: ${file.path}`);
@@ -285,6 +299,7 @@ export class AgentChatPersistenceManager {
     const model = parseModelJson(frontmatter.model);
     const carriedMessages = Number(frontmatter.carriedMessages) || undefined;
     const continuedFrom = parseContinuedFrom(frontmatter.continuedFrom);
+    const agent = parseAgentSlug(yaml);
     const messages = this.parseChatBody(body, parseLinkableEpoch(frontmatter.epoch));
 
     logInfo(
@@ -300,6 +315,7 @@ export class AgentChatPersistenceManager {
       model,
       carriedMessages,
       continuedFrom,
+      agent,
     };
   }
 
@@ -467,10 +483,11 @@ export class AgentChatPersistenceManager {
 
   private splitFrontmatter(content: string): {
     frontmatter: Record<string, string>;
+    yaml: string;
     body: string;
   } {
     const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
-    if (!match) return { frontmatter: {}, body: content };
+    if (!match) return { frontmatter: {}, yaml: "", body: content };
     const frontmatter: Record<string, string> = {};
     for (const line of match[1].split("\n")) {
       const m = line.match(/^(\w+):\s*(.+)/);
@@ -486,7 +503,7 @@ export class AgentChatPersistenceManager {
       }
       frontmatter[m[1]] = value;
     }
-    return { frontmatter, body: content.slice(match[0].length).trim() };
+    return { frontmatter, yaml: match[1], body: content.slice(match[0].length).trim() };
   }
 
   private generateFileName(
@@ -565,6 +582,7 @@ export class AgentChatPersistenceManager {
     usage?: SessionUsage;
     carriedMessages?: number;
     continuedFrom?: readonly string[];
+    agent?: string | null;
   }): FrontmatterUpdates {
     const projectId = coerceProjectId(args.projectId);
     const quoted = (key: string, value: string | null | undefined) =>
@@ -578,6 +596,7 @@ export class AgentChatPersistenceManager {
       ["projectId", projectId === GLOBAL_SCOPE ? null : quoted("projectId", projectId)],
       ["sessionId", quoted("sessionId", args.sessionId)],
       ["topic", quoted("topic", args.label)],
+      ["agent", quoted("agent", args.agent)],
       ["model", args.model ? `model: '${JSON.stringify(args.model)}'` : undefined],
       ["usage", args.usage ? `usage: '${JSON.stringify(args.usage)}'` : undefined],
       [

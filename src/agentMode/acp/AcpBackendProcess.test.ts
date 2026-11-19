@@ -1219,6 +1219,21 @@ describe("AcpBackendProcess", () => {
         readOnlyToolNames: [],
       };
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/937 refuses a custom agent chat, without opening a session, and says the backend needs an update when it cannot take the agent's part", async () => {
+        const backend = new AcpBackendProcess(
+          buildApp(),
+          buildStubBackend({ id: "codex", displayName: "Codex" }),
+          "1.0.0",
+          buildStubDescriptor({ id: "codex", displayName: "Codex" })
+        );
+        await backend.start();
+
+        await expect(
+          backend.newSession({ cwd: "/vault", agent: { slug: "coco", prompt: "You are Coco." } })
+        ).rejects.toThrow("Codex needs an update to run custom agents.");
+        expect(mockNewSession).not.toHaveBeenCalled();
+      });
+
       it("passes Copilot's MCP servers to session/new as HTTP servers when the agent advertises HTTP MCP", async () => {
         mockInitializeResult = {
           protocolVersion: 1,
@@ -1332,6 +1347,23 @@ describe("AcpBackendProcess", () => {
         ]);
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/937 refuses to resume a chat as its custom agent when the backend cannot take the agent's part", async () => {
+        mockInitializeResult = {
+          protocolVersion: 1,
+          agentCapabilities: { sessionCapabilities: { resume: {} } },
+        };
+        const backend = await startBackend();
+
+        await expect(
+          backend.resumeSession({
+            sessionId: "s1",
+            cwd: "/vault",
+            agent: { slug: "coco", prompt: "You are Coco." },
+          })
+        ).rejects.toThrow("opencode needs an update to run custom agents.");
+        expect(mockResumeSession).not.toHaveBeenCalled();
+      });
+
       it("sends the session's cwd with no MCP servers to session/resume", async () => {
         mockInitializeResult = {
           protocolVersion: 1,
@@ -1389,6 +1421,19 @@ describe("AcpBackendProcess", () => {
         expect(req.mcpServers).toEqual([
           { type: "http", name: "obsidian-copilot", url: "http://127.0.0.1:1/mcp", headers: [] },
         ]);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/937 refuses to load a chat as its custom agent when the backend cannot take the agent's part", async () => {
+        const backend = await startLoadCapableBackend();
+
+        await expect(
+          backend.loadSession({
+            sessionId: "ses_load",
+            cwd: "/vault",
+            agent: { slug: "coco", prompt: "You are Coco." },
+          })
+        ).rejects.toThrow("opencode needs an update to run custom agents.");
+        expect(mockLoadSession).not.toHaveBeenCalled();
       });
 
       it("returns the session id and the state the agent reports", async () => {
