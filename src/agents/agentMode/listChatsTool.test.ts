@@ -109,16 +109,23 @@ describe("listChatsTool", () => {
         expect(lines[19]).toContain("Chat 6");
       });
 
-      it(`leaves out a chat the user archived, as Recent chats does (${ISSUE})`, async () => {
-        const archived = { ...chatItem("Old beta plan", 14, "juno"), archivedAt: Date.now() };
+      it(`lists the caller's archived chats among its current ones, newest first within the 20 limit, and never another agent's archived chat (${ISSUE})`, async () => {
+        const history = Array.from({ length: 25 }, (_, i) => {
+          const item = chatItem(`Chat ${i + 1}`, i + 1, "juno");
+          return i % 2 === 0 ? { ...item, archivedAt: Date.now() } : item;
+        });
+        const rexArchived = { ...chatItem("Rex archived plan", 30, "rex"), archivedAt: Date.now() };
 
         const { text } = await buildTool({
           caller: "juno",
-          history: [...JUNO_CHATS, archived],
+          history: [rexArchived, ...history],
         }).call({}, fakeChat());
 
-        expect(text).toContain("Launch announcement draft");
-        expect(text).not.toContain("Old beta plan");
+        const lines = text.split("\n").slice(1);
+        expect(lines.map((line) => line.split(" · ")[1])).toEqual(
+          Array.from({ length: 20 }, (_, i) => `Chat ${25 - i}`)
+        );
+        expect(text).not.toContain("Rex archived plan");
       });
 
       it(`says there are none when the caller has no earlier chats, so it doesn't invent one (${ISSUE})`, async () => {

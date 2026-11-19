@@ -5,6 +5,7 @@ import {
   agentToSetUpBeforeChat,
   deleteAgentAndArchiveChats,
   listAgentChats,
+  listAllChats,
 } from "@/agents/agentMode/agentChats";
 import { AgentUnavailableError } from "@/agents/agentUnavailableError";
 import { ClaudeBackendDescriptor } from "@/agentMode/backends/claude/descriptor";
@@ -23,6 +24,7 @@ import type { ProjectFileRecord } from "@/projects/type";
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/940";
 const STOP_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/945";
 const SETUP_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/962";
+const RECALL_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/959";
 const READY: InstallState = { kind: "ready", source: "managed" };
 const ABSENT: InstallState = { kind: "absent" };
 
@@ -198,6 +200,32 @@ describe("agentChats", () => {
       expect(start).toThrow(AgentUnavailableError);
       expect(start).toThrow("Leo runs on OpenCode, which isn't set up on this device.");
       expect(manager.getSeedSelection).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("listAllChats()", () => {
+    it(`lists the all-chats list's chats, archived ones included, then each archived project's, so an agent recalls chats the user put away (${RECALL_ISSUE})`, async () => {
+      updateCachedProjectRecords([project("launch", 10), project("books")]);
+      const archived = { ...chat("coco-archived.md", "coco"), archivedAt: 5 };
+      const { manager, getChatHistoryItems } = fakeManager({
+        [GLOBAL_SCOPE]: [chat("coco-1.md", "coco"), archived, chat("copilot.md")],
+        launch: [chat("launch-coco.md", "coco"), chat("launch-maya.md", "maya")],
+        books: [chat("books-coco.md", "coco")],
+      });
+
+      const chats = await listAllChats(manager);
+
+      expect(chats.map((c) => c.id)).toEqual([
+        "coco-1.md",
+        "coco-archived.md",
+        "copilot.md",
+        "launch-coco.md",
+        "launch-maya.md",
+      ]);
+      expect(getChatHistoryItems.mock.calls.map(([scope]) => scope)).toEqual([
+        GLOBAL_SCOPE,
+        "launch",
+      ]);
     });
   });
 
