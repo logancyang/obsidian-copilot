@@ -3,7 +3,13 @@ import { AnswerCompletion, type AnswerEnd } from "@/agentMode/session/answerComp
 import type { ChatStateHost } from "@/agentMode/session/chatExtension";
 import { replayPersistedMode } from "@/agentMode/session/replayPersistedMode";
 import type { ProjectScopeId } from "@/agentMode/session/scope";
-import type { CopilotMode, SessionAgent, SessionEvent } from "@/agentMode/session/types";
+import type {
+  CopilotMode,
+  PermissionDecision,
+  PermissionPrompt,
+  SessionAgent,
+  SessionEvent,
+} from "@/agentMode/session/types";
 import { formatAgentReply } from "@/agents/agentReply";
 import { loadAgentSessionPrompt } from "@/agents/agentSessionPrompt";
 import type { CustomAgent, CustomAgentStore } from "@/agents/CustomAgentStore";
@@ -36,6 +42,7 @@ export type AskAgentResult =
 
 interface HiddenRunEnd {
   reply: string;
+  denied: readonly string[];
   error?: Error;
 }
 
@@ -43,6 +50,7 @@ interface HiddenRun {
   id: string;
   reply: string;
   sawTurn: boolean;
+  denied: string[];
   completion: AnswerCompletion;
   finish: (end: AnswerEnd) => void;
 }
@@ -61,6 +69,11 @@ const BUSY_STATUSES: ReadonlySet<AgentSessionStatus> = new Set([
   "running",
   "awaiting_permission",
 ]);
+
+// A request the user can't answer from a chat they never see is turned down, and the agent says what it couldn't do.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/944
+export const HIDDEN_CHAT_DENY_MESSAGE =
+  "Copilot turned this down: you're working in a chat another agent started, and the user can't approve changes from here. Don't try again. Say in your reply what you would have changed.";
 
 export class HiddenAgentChats {
   private readonly chats = new Map<string, HiddenChat>();
@@ -100,6 +113,23 @@ export class HiddenAgentChats {
     this.chats.set(key, hidden);
     void this.run(hidden, message);
     return { kind: "asked", agent };
+  }
+
+  answerPermission(request: PermissionPrompt): Promise<PermissionDecision> | null {
+    const hidden = Array.from(this.chats.values()).find(
+      (chat) => chat.started?.getBackendSessionId() === request.sessionId
+    );
+    if (!hidden) return null;
+    hidden.run?.denied.push(request.toolCall.title);
+    const reject = request.options.find((option) => option.kind === "reject_once");
+    return Promise.resolve(
+      reject
+        ? {
+            outcome: { outcome: "selected", optionId: reject.optionId },
+            denyMessage: HIDDEN_CHAT_DENY_MESSAGE,
+          }
+        : { outcome: { outcome: "cancelled" } }
+    );
   }
 
   dispose(): void {
@@ -156,6 +186,7 @@ export class HiddenAgentChats {
       id: uuidv4(),
       reply: "",
       sawTurn: false,
+      denied: [],
       completion: new AnswerCompletion((text) => (run.reply += text)),
       finish: () => {},
     };
@@ -172,7 +203,7 @@ export class HiddenAgentChats {
     try {
       end = await this.runTurn(hidden, run, answer, await hidden.session, message);
     } catch (error) {
-      end = { reply: run.reply.trim(), error: asError(error) };
+      end = { reply: run.reply.trim(), denied: run.denied, error: asError(error) };
     } finally {
       hidden.run = null;
     }
@@ -211,6 +242,7 @@ export class HiddenAgentChats {
       if (!error) await untilSettled(session);
       return {
         reply: run.reply.trim(),
+        denied: run.denied,
         ...(error ? { error } : {}),
       };
     } finally {
@@ -230,6 +262,7 @@ export class HiddenAgentChats {
         name: hidden.agent.name,
         mention: run.id,
         reply: end.reply,
+        denied: end.denied,
         error: end.error?.message,
       })
     );
@@ -262,12 +295,27 @@ export class HiddenAgentChats {
   }
 }
 
+// Claude reads a message mid-turn and Stop would move a waiting one into the user's draft, so a reply waits for the turn to end there; Codex and OpenCode hold it themselves.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/944
 async function relay(parent: AgentSession, text: string): Promise<void> {
-  if (parent.getStatus() === "closed") return;
-  try {
-    await parent.sendPrompt(text).turn;
-  } catch (error) {
-    logWarn("[Custom agents] couldn't pass an asked agent's reply to its chat", error);
+  for (;;) {
+    const status = parent.getStatus();
+    if (status === "closed") return;
+    if (status === "starting" || (BUSY_STATUSES.has(status) && parent.acceptsMidTurnPrompts())) {
+      await nextStatus(parent);
+      continue;
+    }
+    let sent: ReturnType<AgentSession["sendPrompt"]>;
+    try {
+      sent = parent.sendPrompt(text);
+    } catch (error) {
+      logWarn("[Custom agents] couldn't pass an asked agent's reply to its chat", error);
+      return;
+    }
+    const outcome = await sent.turn.catch(() => null);
+    // A reply dropped before it reached the agent, as by Stop while it waited, goes again once the chat can take it.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
+    if (outcome !== "cancelled" || parent.store.getMessage(sent.userMessageId)) return;
   }
 }
 
@@ -305,6 +353,18 @@ function hiddenJobText({ from }: HiddenChat, message: string): string {
     `${from} asked you this for the user, from another chat. Your reply goes back to ${from}, who passes it on to the user. You can't save rules to your memory or change your instruction from this chat.`,
     `<message from="${from}">\n${message}\n</message>`,
   ].join("\n\n");
+}
+
+function nextStatus(session: AgentSession): Promise<void> {
+  return new Promise((resolve) => {
+    const unsubscribe = session.subscribe({
+      onMessagesChanged: () => {},
+      onStatusChanged: () => {
+        unsubscribe();
+        resolve();
+      },
+    });
+  });
 }
 
 function untilSettled(session: AgentSession): Promise<void> {

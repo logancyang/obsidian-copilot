@@ -12,6 +12,7 @@ import { BackendConfigRegistry } from "@/modelManagement";
 import { isObsidianCliEnabled } from "@/services/obsidianCli/ObsidianCliClient";
 import { createCopilotMcpServer } from "./session/copilotMcpServer";
 import { isConnectorsEnabled } from "@/connectors/connectorsEntitlement";
+import { createDefaultPermissionPrompter } from "./ui/permissionPrompter";
 
 jest.mock("@/constants", () => ({}));
 jest.mock("@/logger", () => ({ logError: jest.fn() }));
@@ -727,6 +728,21 @@ describe("agentMode", () => {
       const hosted = jest.mocked(createCopilotMcpServer).mock.calls[0][1];
       expect(hosted.map(({ definition }) => definition.name)).toContain("ask_agent");
       expect(plugin.register).toHaveBeenCalledWith(expect.any(Function));
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/944 hands a permission request no asked agent made to the chat's own prompter", async () => {
+      const chatPrompter = jest.fn(async () => ({ outcome: { outcome: "cancelled" as const } }));
+      jest.mocked(createDefaultPermissionPrompter).mockReturnValueOnce(chatPrompter);
+      createAgentSessionManager({} as App, plugin);
+      const request = {
+        sessionId: "chat-session",
+        toolCall: { toolCallId: "t", title: "Edit" },
+        options: [],
+      };
+
+      await jest.mocked(AgentSessionManager).mock.calls[0][2].permissionPrompter(request);
+
+      expect(chatPrompter).toHaveBeenCalledWith(request);
     });
 
     it(`retains only previously ready agents during compatibility checks ${ISSUE}`, async () => {

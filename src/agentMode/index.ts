@@ -344,7 +344,10 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     (id) => managerRef?.getSessionByBackendId(id) ?? null
   );
   const manager = new AgentSessionManager(app, plugin, {
-    permissionPrompter: prompter,
+    // Until a request from an asked agent can show in the chat that asked it, Copilot turns it down.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
+    permissionPrompter: (request) =>
+      hiddenAgentChats.answerPermission(request) ?? prompter(request),
     askUserQuestionPrompter,
     resolveDescriptor: (id) => backendRegistry[id],
     modelPreloader: preloader,
