@@ -5,7 +5,9 @@ import { CreateAgentModal } from "@/agents/ui/CreateAgentModal";
 import type { FakeObsidianModal } from "@/agents/ui/testing/fakeObsidianModal";
 import { resetSettings } from "@/settings/model";
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
-import type { App } from "obsidian";
+import { PRESET_FACES_URL } from "@/agents/presetFaces";
+import { createFakeAgentVault } from "@/agents/testing/fakeAgentVault";
+import * as obsidian from "obsidian";
 
 jest.mock("obsidian", () => ({
   ...jest.requireActual<object>("obsidian"),
@@ -17,6 +19,11 @@ jest.mock("@/entitlement");
 jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError: jest.fn() }));
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/939";
+
+const requestUrl = jest.fn(() => new Promise(() => {}));
+(obsidian as unknown as { __setRequestUrlImpl: (impl: jest.Mock) => void }).__setRequestUrlImpl(
+  requestUrl
+);
 
 const MODELS: AgentModelChoices = {
   models: [{ name: "opus", displayName: "Opus 5.5", provider: "agent", enabled: true }],
@@ -38,16 +45,21 @@ type OpenedModal = CreateAgentModal & FakeObsidianModal;
 
 const openedModals: OpenedModal[] = [];
 
-function openDialog(createAgent = jest.fn().mockResolvedValue("kai")) {
+function newDialog(createAgent = jest.fn().mockResolvedValue("kai")) {
   const onCreated = jest.fn();
-  const modal = new CreateAgentModal({} as App, {
+  const modal = new CreateAgentModal(createFakeAgentVault().app, {
     store: fakeStore(createAgent),
     models: MODELS,
     onCreated,
   }) as OpenedModal;
-  act(() => modal.open());
-  openedModals.push(modal);
   return { modal, onCreated, createAgent };
+}
+
+function openDialog(createAgent?: jest.Mock) {
+  const dialog = newDialog(createAgent);
+  act(() => dialog.modal.open());
+  openedModals.push(dialog.modal);
+  return dialog;
 }
 
 function type(label: string | RegExp, text: string) {
@@ -65,6 +77,7 @@ describe("CreateAgentModal", () => {
   });
 
   afterEach(() => {
+    requestUrl.mockClear();
     act(() => openedModals.splice(0).forEach((modal) => modal.onClose()));
     document.body.innerHTML = "";
   });
@@ -77,6 +90,21 @@ describe("CreateAgentModal", () => {
         expect(modal.titleEl.textContent).toBe("New agent");
         expect(screen.getByLabelText("Name")).not.toBeNull();
         expect(screen.getByText("Saved in copilot/agents/")).not.toBeNull();
+      });
+
+      it(`downloads nothing from the CDN until the dialog opens, then the preset face list (${ISSUE})`, async () => {
+        requestUrl.mockRejectedValueOnce(new Error("Request failed, status 404"));
+        const { modal } = newDialog();
+        expect(requestUrl).not.toHaveBeenCalled();
+
+        act(() => modal.open());
+        openedModals.push(modal);
+
+        expect(requestUrl).toHaveBeenCalledWith({ url: PRESET_FACES_URL });
+        fireEvent.click(screen.getByRole("button", { name: "Change face" }));
+        expect(
+          await screen.findByText("Couldn't load the preset faces. You can upload an image.")
+        ).not.toBeNull();
       });
     });
 

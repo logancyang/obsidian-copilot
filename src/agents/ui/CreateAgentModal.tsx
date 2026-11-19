@@ -6,8 +6,10 @@ import {
   type CreateAgentInitialValues,
 } from "@/agents/ui/CreateAgentForm";
 import { useCustomAgents } from "@/agents/ui/useCustomAgents";
+import { usePresetFaces } from "@/agents/ui/usePresetFaces";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useApp } from "@/context";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
 import { Modal, type App } from "obsidian";
 import React from "react";
@@ -106,6 +108,7 @@ interface CreateAgentDialogProps {
 
 function CreateAgentDialog({ options, closeGuard, onCreated, onCancel }: CreateAgentDialogProps) {
   const agents = useCustomAgents(options.store);
+  const presetFaces = usePresetFaces(useApp().vault, options.store);
   return (
     <TooltipProvider>
       <CreateAgentForm
@@ -113,6 +116,7 @@ function CreateAgentDialog({ options, closeGuard, onCreated, onCancel }: CreateA
         folderNames={options.store.folderNames()}
         agentsFolder={customAgentsFolderPath()}
         models={options.models}
+        presetFaces={presetFaces}
         initialValues={options.initialValues}
         closeGuard={closeGuard}
         onCreate={async (agent) => onCreated(await options.store.createAgent(agent))}

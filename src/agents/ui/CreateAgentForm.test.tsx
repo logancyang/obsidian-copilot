@@ -5,6 +5,7 @@ import {
   type AgentModelChoices,
   type CreateAgentFormProps,
 } from "@/agents/ui/CreateAgentForm";
+import type { PresetFacesState } from "@/agents/ui/usePresetFaces";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
@@ -48,6 +49,36 @@ const MODELS: AgentModelChoices = {
 
 const LEO = { slug: "leo", name: "Leo" };
 
+const LEO_BYTES = new Uint8Array([1]).buffer;
+const KAI_BYTES = new Uint8Array([2]).buffer;
+const NORA_BYTES = new Uint8Array([3]).buffer;
+const presetsWithLeoUsed: PresetFacesState = {
+  status: "ready",
+  faces: [
+    { id: "leo", alt: "Face with a beard", bytes: LEO_BYTES, src: "data:image/webp;base64,bGVv" },
+    {
+      id: "kai",
+      alt: "Face with round glasses",
+      bytes: KAI_BYTES,
+      src: "data:image/webp;base64,a2Fp",
+    },
+    {
+      id: "nora",
+      alt: "Face with a peace sign",
+      bytes: NORA_BYTES,
+      src: "data:image/webp;base64,bm9yYQ==",
+    },
+  ],
+  usedIds: new Set(["leo"]),
+};
+
+function faceShown(): string | undefined {
+  return (
+    screen.getByRole("button", { name: "Change face" }).querySelector("img")?.getAttribute("src") ??
+    undefined
+  );
+}
+
 function renderForm(props: Partial<CreateAgentFormProps> = {}) {
   const onCreate = jest.fn<Promise<void>, [NewCustomAgent]>().mockResolvedValue(undefined);
   const onClose = jest.fn();
@@ -59,6 +90,7 @@ function renderForm(props: Partial<CreateAgentFormProps> = {}) {
         folderNames={["leo"]}
         agentsFolder="copilot/agents"
         models={MODELS}
+        presetFaces={{ status: "loading" }}
         closeGuard={closeGuard}
         onCreate={onCreate}
         onClose={onClose}
@@ -175,6 +207,40 @@ describe("CreateAgentForm", () => {
       await waitFor(() =>
         expect(onCreate.mock.calls[0][0].face).toEqual({ kind: "upload", image: photo })
       );
+    });
+
+    it(`opens on the first preset face no other agent wears and creates the agent with its bytes (${ISSUE})`, async () => {
+      const { onCreate } = renderForm({ presetFaces: presetsWithLeoUsed });
+      type("Name", "Kai");
+      type("What Kai handles", "You handle marketing.");
+
+      expect(faceShown()).toBe("data:image/webp;base64,a2Fp");
+      fireEvent.click(createButton());
+
+      await waitFor(() =>
+        expect(onCreate.mock.calls[0][0].face).toEqual({ kind: "preset", bytes: KAI_BYTES })
+      );
+    });
+
+    it("creates the agent with the preset face picked from the grid", async () => {
+      const { onCreate } = renderForm({ presetFaces: presetsWithLeoUsed });
+      type("Name", "Kai");
+      type("What Kai handles", "You handle marketing.");
+
+      fireEvent.click(screen.getByRole("button", { name: "Change face" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Face with a peace sign" }));
+      fireEvent.click(createButton());
+
+      expect(faceShown()).toBe("data:image/webp;base64,bm9yYQ==");
+      await waitFor(() =>
+        expect(onCreate.mock.calls[0][0].face).toEqual({ kind: "preset", bytes: NORA_BYTES })
+      );
+    });
+
+    it(`opens with the empty face while the preset faces load or when they could not load (${ISSUE})`, () => {
+      renderForm({ presetFaces: { status: "failed" } });
+
+      expect(faceShown()).toMatch(/^data:image\/svg\+xml,/);
     });
 
     it(`keeps Create unavailable without a name and says to give it a name first (${ISSUE})`, async () => {
