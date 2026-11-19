@@ -1,9 +1,11 @@
+import { AgentChatControls } from "@/agentMode/ui/AgentChatControls";
+import { UsageMeter } from "@/agentMode/ui/AgentContextMeter";
 import { RunningTasksIndicator } from "@/agentMode/ui/RunningTasksIndicator";
 import { makeTask } from "@/agentMode/ui/testing/taskFixtures";
 import type { AgentMention } from "@/agents/agentMentions";
 import { runningAgentsSlot, type RunningAgent } from "@/agents/agentMode/ui/RunningAgents";
 import type { CustomAgent } from "@/agents/CustomAgentStore";
-import { KAI, LEO, MAYA, NORA } from "@/agents/ui/testing/rosterFixtures";
+import { KAI, LEO, LONG_NAMED_AGENT, MAYA, NORA } from "@/agents/ui/testing/rosterFixtures";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { Meta, StoryObj } from "@/lib/story";
 import React from "react";
@@ -21,6 +23,7 @@ const ASKED: Record<string, string> = {
   maya: "Review the launch video plan. Be blunt.",
   nora: "Check whether the school pickup schedule clashes with the offsite.",
   kai: "Draft the launch post from the release notes.",
+  [LONG_NAMED_AGENT.slug]: "Check whether the school pickup schedule clashes with the offsite.",
 };
 
 function asked(
@@ -102,4 +105,31 @@ export const PopoverWaitingRow: StoryObj<LineProps> = {
     runs: [asked(MAYA, "working", Date.now() - 40_000), asked(LEO, "question")],
     defaultOpen: true,
   },
+};
+
+export const InTheChatControls: StoryObj<LineProps> = {
+  args: { runs: [asked(MAYA), asked(LONG_NAMED_AGENT, "question")] },
+  render: ({ runs = [], taskCount = 0 }) => (
+    <TooltipProvider>
+      <AgentChatControls
+        onNewChat={() => {}}
+        onSaveAsNote={() => {}}
+        usageMeter={
+          <UsageMeter
+            usage={{ usedTokens: 48_000, contextWindow: 200_000, updatedAt: STARTED }}
+            contextWindow={200_000}
+            planUsage={null}
+          />
+        }
+        tasksIndicator={
+          <RunningTasksIndicator
+            tasks={[]}
+            permissions={[]}
+            onOpenTask={() => {}}
+            runs={runningAgentsSlot({ runs, taskCount, onOpen: () => {}, onStop: () => {} })}
+          />
+        }
+      />
+    </TooltipProvider>
+  ),
 };

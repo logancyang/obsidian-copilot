@@ -1,5 +1,6 @@
 import type { AgentMention } from "@/agents/agentMentions";
 import { AgentMentionStatus } from "@/agents/agentMode/ui/AgentMentionStatus";
+import { ChatAgentsContext, type ChatAgents } from "@/agents/ui/chatAgents";
 import type { Meta, StoryObj } from "@/lib/story";
 import React from "react";
 
@@ -13,9 +14,17 @@ function run(change: Partial<AgentMention>): AgentMention {
   return { id: "m1", agent: "leo", name: "Leo", status: "working", startedAt: STARTED, ...change };
 }
 
+const IN_A_CHAT: ChatAgents = { agents: [], self: null, openRun: () => {} };
+
+const StatusInAChat: React.FC<StatusProps> = ({ mention }) => (
+  <ChatAgentsContext.Provider value={IN_A_CHAT}>
+    <AgentMentionStatus mention={mention} />
+  </ChatAgentsContext.Provider>
+);
+
 const meta = {
   title: "Custom Agents/Mention Status",
-  component: AgentMentionStatus,
+  component: StatusInAChat,
   parameters: { gallery: { host: "leaf", layout: "padded" } },
 } satisfies Meta<StatusProps>;
 export default meta;
@@ -92,14 +101,24 @@ export const LongName: StoryObj<StatusProps> = {
   },
 };
 
+export const LongNameFinished: StoryObj<StatusProps> = {
+  args: {
+    mention: run({
+      name: "Nora · Family & School",
+      status: "finished",
+      endedAt: STARTED + 12 * 60_000 + 4_000,
+    }),
+  },
+};
+
 export const SeveralAgents: StoryObj<StatusProps> = {
   args: { mention: run({}) },
   render: () => (
     <div className="tw-flex tw-flex-col tw-gap-0.5">
-      <AgentMentionStatus
+      <StatusInAChat
         mention={run({ id: "m1", name: "Maya", status: "finished", endedAt: STARTED + 70_000 })}
       />
-      <AgentMentionStatus mention={run({ id: "m2" })} />
+      <StatusInAChat mention={run({ id: "m2" })} />
     </div>
   ),
 };

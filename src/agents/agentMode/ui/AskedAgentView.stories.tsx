@@ -123,6 +123,16 @@ const PICKING_UP: AgentChatMessage = {
   parts: [{ kind: "text", text: "Picking up at transaction 183." }],
 };
 
+const FAILED: AgentChatMessage = {
+  id: "failed",
+  sender: "ai",
+  timestamp: at(ASKED_AT + 15_000),
+  isVisible: true,
+  isErrorMessage: true,
+  message: "**Error:** The model is overloaded right now. Try again in a few minutes.",
+  parts: [],
+};
+
 function run(change: Partial<AgentMention>): AgentMention {
   return {
     id: "run-1",
@@ -202,6 +212,18 @@ export const ContinuedAt: StoryObj<ViewProps> = {
         [SENT_BACK.id, SENT_BACK_AT],
       ])
     ),
+  },
+};
+
+export const DidntFinishWithAnError: StoryObj<ViewProps> = {
+  args: {
+    run: run({
+      status: "didnt_finish",
+      startedAt: ASKED_AT,
+      endedAt: ASKED_AT + 15_000,
+      end: { kind: "error", message: "The model is overloaded right now." },
+    }),
+    chat: askedAgentChatFixture([ASKED, FAILED], "idle"),
   },
 };
 

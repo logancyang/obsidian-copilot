@@ -2948,6 +2948,31 @@ describe("AgentSessionManager", () => {
         expect(source.store.getDisplayMessages()[0].timestamp?.epoch).toBe(1_000);
       });
 
+      it(`saves each @ run on the copied messages without its agent's hidden chat, so asking that agent from the new chat starts a conversation of its own instead of sharing the original's (https://github.com/Brevilabs/obsidian-copilot-private/issues/945)`, async () => {
+        const run = {
+          id: "run-1",
+          agent: "maya",
+          name: "Maya",
+          status: "finished" as const,
+          startedAt: 1_000,
+        };
+        const fixture = chatNoteFixture();
+        const mgr = buildManager({ app: fixture.app, persistence: fixture.persistence });
+        const source = await mgr.createSession();
+        getSessionTestHandle(source).setMessages([
+          {
+            ...original[0],
+            agentMentions: [{ ...run, chat: { backendId: "claude", sessionId: "s1" } }],
+          },
+          ...original.slice(1),
+        ]);
+
+        await mgr.continueChatFrom(source.internalId, "a1");
+
+        const [copied] = fixture.saveSession.mock.calls[1];
+        expect(copied[0].agentMentions).toEqual([run]);
+      });
+
       it("continues a custom agent chat as the same agent", async () => {
         const { notes, continued } = await continueFromFirstReply({ agent: "coco" });
 

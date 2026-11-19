@@ -15,8 +15,17 @@ import React from "react";
 
 jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError: jest.fn() }));
 jest.mock("@/agentMode/ui/AgentTrailView", () => ({
-  AgentTrail: ({ parts }: { parts: { kind: string; text?: string }[] }) => (
-    <div>{parts.map((part) => part.text ?? "").join("")}</div>
+  AgentTrail: ({
+    parts,
+    errorText,
+  }: {
+    parts: { kind: string; text?: string }[];
+    errorText?: string;
+  }) => (
+    <div>
+      {parts.map((part) => part.text ?? "").join("")}
+      {errorText}
+    </div>
   ),
 }));
 
@@ -208,6 +217,20 @@ describe("AskedAgentView", () => {
 
       expect(screen.getByText("Finished · 12:04")).toBeTruthy();
       expect(screen.queryByRole("button", { name: "Answer there" })).toBeNull();
+    });
+
+    it(`shows the error a reply failed with, as the chat does, when the agent failed before any step (${ISSUE})`, async () => {
+      const sessionId = leo.getBackendSessionId()!;
+      const { turn: failed } = leo.sendPrompt(job("Reconcile October."));
+      failed.catch(() => undefined);
+      await fake.untilPrompt(sessionId);
+      act(() => fake.endTurn(sessionId, { error: new Error("The model is overloaded.") }));
+      renderView({
+        status: "didnt_finish",
+        end: { kind: "error", message: "The model is overloaded." },
+      });
+
+      expect(screen.getByText(/The model is overloaded\./)).toBeTruthy();
     });
 
     it(`says a run's steps are no longer available when its chat is gone, as after a restart, and still shows how it ended (${ISSUE})`, () => {

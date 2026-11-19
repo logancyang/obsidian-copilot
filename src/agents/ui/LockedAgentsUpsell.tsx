@@ -1,3 +1,4 @@
+import { joinNames } from "@/agents/agentReply";
 import { isLicenseLapsed } from "@/agents/customAgentsGate";
 import { type CustomAgent, customAgentsFolderPath } from "@/agents/CustomAgentStore";
 import { AgentFace } from "@/agents/ui/AgentFace";
@@ -14,10 +15,6 @@ export type LockedAgent = Pick<CustomAgent, "slug" | "name" | "faceSrc">;
 
 export function lockedAgentsTitle(count: number, lapsed: boolean): string {
   return lapsed ? "Your agents are still here" : `This vault has ${countOf(count, "custom agent")}`;
-}
-
-function joinNames(names: readonly string[]): string {
-  return names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}` : names[0];
 }
 
 export interface LockedAgentsUpsellContentProps {

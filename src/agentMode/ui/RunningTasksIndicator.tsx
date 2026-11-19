@@ -68,7 +68,7 @@ export const RunningTasksIndicator: React.FC<RunningTasksIndicatorProps> = ({
         <Button
           variant="ghost2"
           size="fit"
-          className="tw-flex tw-shrink-0 tw-items-center tw-gap-1 tw-text-ui-smaller tw-text-muted hover:tw-text-normal"
+          className="tw-flex tw-min-w-0 tw-items-center tw-gap-1 tw-text-ui-smaller tw-text-muted hover:tw-text-normal"
           onPointerEnter={show}
           onPointerLeave={hideSoon}
         >
