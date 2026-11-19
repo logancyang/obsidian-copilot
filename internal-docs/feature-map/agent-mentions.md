@@ -9,7 +9,9 @@ Asking another custom agent from a chat with `@`: that agent works in the backgr
 - mention-keep-chatting: messages sent while the other agent works get their own answers.
 - mention-relay: when the other agent is done, a new turn at the end of the chat passes its reply on, keeping its position as strong as it was, then adding the chat agent's own view.
 - mention-reply-row: the turn starts with `<name>'s reply` and the other agent's own words set off by a bar, then a Files changed card for the files it changed; each row opens its diff.
-- mention-continue: mentioning the same agent again in the same chat continues its conversation, so it remembers the earlier exchange. Mentioning it while it still works gets a reply that it is still working.
+- mention-continue: mentioning the same agent again in the same chat continues its conversation, so it remembers the earlier exchange.
+- mention-redirect: a new instruction for an agent that still works, such as "Tell Maya to skip the outro.", reaches it in the same conversation. The chat's agent says it passed it on; on Codex and OpenCode models the other agent gets it after its current step.
+- mention-progress: asking the chat's agent how the other agent is doing, such as "How's Maya doing?", gets an answer from that agent's progress so far: how long it has worked, what it has written and its latest steps. The other agent isn't interrupted.
 - mention-denied: in a mode that asks before changes, the mentioned agent can't change files; the chat's agent says what it couldn't do.
 - mention-stop: telling the chat's agent to stop the other agent, such as "Tell Maya to stop.", stops it at once. Its changes stay, and the chat's agent says how far it got, with a Files changed card for what it changed. Mentioning it again continues the same conversation.
 - mention-delete-while-working: deleting an agent from its profile while it works for another chat stops it. The delete dialog says so in an orange line, such as "Maya is working in Coco's chat. Deleting stops it."; the chat's agent then says how far it got.
@@ -31,6 +33,8 @@ All of these need a license that includes custom agents and at least two agents 
 - Continue: after the relay, send `@Maya and the intro?`. Her answer builds on the first exchange.
 - From a Copilot chat: in a chat with no agent, send `@Maya is this too long?`. The same one line, then the relay.
 - Denied: in `Default` mode, send `@Maya add one line to <note>`. The note does not change, and the relay says Maya couldn't edit it.
+- Redirect: while Maya works, send `Tell Maya to leave the intro alone.` The chat's agent says it passed it on, and Maya's reply follows the new instruction.
+- Progress: while Maya works, send `How's Maya doing?`. The chat's agent says how far she got without stopping her.
 - Stop: send `@Maya check every claim in <note>, one by one`, then `Tell Maya to stop.` while she works. The chat's agent stops her, then says how far she got; the note keeps any change she made.
 - Delete while working: send `@Maya …` with a long job, open Maya's profile, and choose Delete. The dialog shows `Maya is working in <agent>'s chat. Deleting stops it.` in orange. After Delete, the chat's agent says Maya was deleted and how far she got.
 - Can't remember: send `@Maya from now on, flag video length first.` The relay says Maya can't save rules from a chat she was asked into; her `MEMORY.md` does not change.

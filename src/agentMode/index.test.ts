@@ -732,11 +732,13 @@ describe("agentMode", () => {
       expect(plugin.register).toHaveBeenCalledWith(expect.any(Function));
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/945 offers stop_agent and hands the profile's delete the asked agents' chats to stop", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/945 offers check_agent and stop_agent and hands the profile's delete the asked agents' chats to stop", () => {
       createAgentSessionManager({} as App, plugin);
 
       const hosted = jest.mocked(createCopilotMcpServer).mock.calls[0][1];
-      expect(hosted.map(({ definition }) => definition.name)).toContain("stop_agent");
+      expect(hosted.map(({ definition }) => definition.name)).toEqual(
+        expect.arrayContaining(["check_agent", "stop_agent"])
+      );
       expect(plugin.hiddenAgentChats).toEqual(
         expect.objectContaining({ stopAgent: expect.any(Function) })
       );

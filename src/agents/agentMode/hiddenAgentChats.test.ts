@@ -386,14 +386,52 @@ describe("hiddenAgentChats", () => {
         expect(maya.getState()?.mode?.current).toBe("auto");
       });
 
-      it(`turns down asking the same agent again while it still works on the first request (${ISSUE})`, async () => {
+      it(`sends a new message for an agent that still works into the same chat, after its current step on Codex or OpenCode, and relays once both are done (${CONTROL})`, async () => {
         const coco = await openChat({ agentSlug: "coco" });
-        const maya = await askedAndPrompted(coco, "First question.");
+        const maya = await askedAndPrompted(coco, "Review the plan.");
+        fake.say(sessionIdOf(maya), "Reading the plan.");
 
-        expect(chats.ask(coco, "Maya", "Second question.")).toEqual(
-          expect.objectContaining({ kind: "busy" })
-        );
+        expect(chats.ask(coco, "Maya", "Skip the outro for now.")).toEqual({
+          kind: "sent",
+          agent: agentNamed("Maya"),
+          now: false,
+        });
         expect(fake.promptsTo(sessionIdOf(maya))).toHaveLength(1);
+        fake.endTurn(sessionIdOf(maya));
+
+        const redirected = await fake.untilPrompt(sessionIdOf(maya), 2);
+        expect(redirected).toContain("Coco sent you more from the user while you work.");
+        expect(redirected).toContain('<message from="Coco">\nSkip the outro for now.\n</message>');
+        expect(fake.promptsTo(sessionIdOf(coco))).toEqual([]);
+        answer(maya, "Skipped the outro.");
+
+        const relayed = await fake.untilPrompt(sessionIdOf(coco));
+        expect(relayed).toContain("Reading the plan.\n\nSkipped the outro.");
+        expect(startChat).toHaveBeenCalledTimes(1);
+      });
+
+      it(`says a new message reaches a working agent now when its chat reads messages mid-turn, as on Claude (${CONTROL})`, async () => {
+        startChat.mockImplementationOnce(async (start) => {
+          const session = AgentSession.start({
+            backend: fake.backend,
+            cwd: "/vault",
+            internalId: "hidden-claude",
+            backendId: "fake",
+            agent: start.prompt,
+            observeSessionEvent: start.observeSessionEvent,
+            getDescriptor: () => CLAUDE_LIKE,
+          });
+          await session.ready;
+          started.push(session);
+          startWaiters.forEach((wake) => wake());
+          return session;
+        });
+        const coco = await openChat({ agentSlug: "coco" });
+        await askedAndPrompted(coco, "Review the plan.");
+
+        expect(chats.ask(coco, "Maya", "Skip the outro.")).toEqual(
+          expect.objectContaining({ kind: "sent", now: true })
+        );
       });
 
       it(`starts one chat per asking chat and agent, so another chat asking the same agent gets its own (${ISSUE})`, async () => {
@@ -425,9 +463,6 @@ describe("hiddenAgentChats", () => {
           "tool-1"
         );
 
-        expect(chats.ask(coco, "Maya", "Again?")).toEqual(
-          expect.objectContaining({ kind: "busy" })
-        );
         expect(fake.promptsTo(sessionIdOf(coco))).toEqual([]);
 
         fake.emit(id, { sessionUpdate: "task_ended", taskId: "task-1", status: "completed" });
@@ -776,6 +811,78 @@ describe("hiddenAgentChats", () => {
         expect(await fake.untilPrompt(sessionIdOf(coco))).toContain(
           `<turned-down from="Maya">\n${request.toolCall.title}\n</turned-down>`
         );
+      });
+    });
+
+    describe("check()", () => {
+      it(`reports how long the agent has worked, the end of what it has written and its latest steps, without sending it anything (${CONTROL})`, async () => {
+        const coco = await openChat({ agentSlug: "coco" });
+        const maya = await askedAndPrompted(coco, "Reconcile October.");
+        fake.say(sessionIdOf(maya), "Matched 182 of 214 transactions.");
+        fake.emit(sessionIdOf(maya), {
+          sessionUpdate: "tool_call",
+          toolCallId: "read-1",
+          title: "Read Finance/October books.md",
+          status: "completed",
+        });
+
+        const result = chats.check(coco, "Maya");
+
+        expect(result).toMatchObject({ kind: "progress", agent: agentNamed("Maya") });
+        const progress = result.kind === "progress" ? result.progress : "";
+        expect(progress).toContain("Maya has been working for under a minute.");
+        expect(progress).toContain("Matched 182 of 214 transactions.");
+        expect(progress).toContain("- Read Finance/October books.md (completed)");
+        expect(fake.promptsTo(sessionIdOf(maya))).toHaveLength(1);
+      });
+
+      it(`keeps the progress short: only the end of a long reply, the latest steps and the start of each step's title, such as a long shell command (${CONTROL})`, async () => {
+        const coco = await openChat({ agentSlug: "coco" });
+        const maya = await askedAndPrompted(coco);
+        fake.say(sessionIdOf(maya), `START ${"x".repeat(5000)} END`);
+        for (let step = 1; step <= 15; step++) {
+          fake.emit(sessionIdOf(maya), {
+            sessionUpdate: "tool_call",
+            toolCallId: `step-${step}`,
+            title:
+              step === 15 ? `Step 15 python3 - <<'PY'\n${"y".repeat(5000)}\nPY` : `Step ${step}`,
+            status: "completed",
+          });
+        }
+
+        const result = chats.check(coco, "Maya");
+
+        const progress = result.kind === "progress" ? result.progress : "";
+        expect(progress).toContain("END");
+        expect(progress).not.toContain("START");
+        expect(progress).toContain("- Step 14 (completed)");
+        expect(progress).toContain("- Step 15 python3");
+        expect(progress).not.toContain("- Step 5 (completed)");
+        expect(progress.length).toBeLessThan(2500);
+      });
+
+      it(`says the agent isn't working when it finished, and that the chat never asked it otherwise (${CONTROL})`, async () => {
+        const coco = await openChat({ agentSlug: "coco" });
+        const other = await openChat();
+        const maya = await askedAndPrompted(coco);
+        answer(maya, "Done.");
+        await fake.untilPrompt(sessionIdOf(coco));
+
+        expect(chats.check(coco, "Maya")).toEqual({
+          kind: "progress",
+          agent: agentNamed("Maya"),
+          progress: "Maya isn't working on anything from this chat now.",
+        });
+        expect(chats.check(other, "Maya")).toEqual({
+          kind: "not_asked",
+          agent: agentNamed("Maya"),
+        });
+      });
+
+      it(`turns down a check from a chat no list shows, such as an asked agent's own chat (${CONTROL})`, async () => {
+        const hidden = await openChat({ agentSlug: "maya", listed: false });
+
+        expect(chats.check(hidden, "Coco")).toEqual({ kind: "not_from_here" });
       });
     });
 

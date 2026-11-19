@@ -2,11 +2,14 @@ import type { ChatStateHost } from "@/agentMode/session/chatExtension";
 import {
   ASK_AGENT_TOOL_NAME,
   createAskAgentTool,
+  CHECK_AGENT_TOOL_NAME,
+  createCheckAgentTool,
   createStopAgentTool,
   STOP_AGENT_TOOL_NAME,
 } from "@/agents/agentMode/askAgentTool";
 import type {
   AskAgentResult,
+  CheckAgentResult,
   HiddenAgentChats,
   StopAgentResult,
 } from "@/agents/agentMode/hiddenAgentChats";
@@ -142,13 +145,23 @@ describe("askAgentTool", () => {
       });
     });
 
-    it(`tells the agent to wait for the earlier reply when the agent is still working, and fails the call so the chat doesn't show it as asked (${CONTROL})`, async () => {
-      const { tool } = buildTool({ asked: { kind: "busy", agent: MAYA } });
+    it(`tells the agent its message reached the working agent in the same chat, now or after its current step, as a call that succeeded (${CONTROL})`, async () => {
+      const now = await buildTool({ asked: { kind: "sent", agent: MAYA, now: true } }).tool.call(
+        { agent: "Maya", message: "Skip the outro." },
+        CHAT
+      );
+      const later = await buildTool({ asked: { kind: "sent", agent: MAYA, now: false } }).tool.call(
+        { agent: "Maya", message: "Skip the outro." },
+        CHAT
+      );
 
-      const { text, isError } = await tool.call({ agent: "Maya", message: "Hi" }, CHAT);
-
-      expect(text).toContain("Maya is still working on the earlier request from this chat.");
-      expect(isError).toBe(true);
+      expect(now.text).toBe(
+        "Sent Maya your message in the chat Maya is working in; Maya reads it now. Tell the user in one short line, then end your turn."
+      );
+      expect(later.text).toBe(
+        "Sent Maya your message in the chat Maya is working in; Maya gets it after the current step. Tell the user in one short line, then end your turn."
+      );
+      expect([now.isError, later.isError]).toEqual([false, false]);
     });
 
     it("rejects a call without an agent or a message", async () => {
@@ -160,6 +173,56 @@ describe("askAgentTool", () => {
       });
       expect(ask).not.toHaveBeenCalled();
       expect(tool.definition.name).toBe(ASK_AGENT_TOOL_NAME);
+    });
+  });
+
+  describe("createCheckAgentTool()", () => {
+    function buildCheck(result: CheckAgentResult) {
+      const check = jest.fn(() => result);
+      return { tool: createCheckAgentTool({ check } as unknown as HiddenAgentChats, HOST), check };
+    }
+
+    it(`lists the check tool for the chats that can ask, says to call it each time the user asks, and leaves it out of an asked agent's own chat (${CONTROL})`, () => {
+      const { tool } = buildCheck({ kind: "not_asked", agent: MAYA });
+
+      const listed = tool.listedAs?.({ sessionKey: "chat-1", backendId: "claude" });
+
+      expect(listed?.name).toBe(CHECK_AGENT_TOOL_NAME);
+      expect((listed as unknown as { description: string }).description.slice(0, 120)).toContain(
+        "each time the user asks how an agent you asked is doing"
+      );
+      expect(tool.listedAs?.({ sessionKey: "hidden-1", backendId: "claude" })).toBeNull();
+    });
+
+    it(`returns the agent's progress for the calling chat to retell in the agent's own words (${CONTROL})`, async () => {
+      const { tool, check } = buildCheck({
+        kind: "progress",
+        agent: MAYA,
+        progress: "Maya has been working for 3 min.",
+      });
+
+      const result = await tool.call({ agent: "Maya" }, CHAT);
+
+      expect(check).toHaveBeenCalledWith(CHAT, "Maya");
+      expect(result).toEqual({
+        text: "Maya has been working for 3 min.\n\nTell the user in your own words how far Maya got. Don't paste this.",
+        isError: false,
+      });
+    });
+
+    it(`says the agent isn't working and how to send it back when no run from this chat is known, as after a reload, and turns down a call from an asked agent's own chat, failing both calls so the chat doesn't show a check (${CONTROL})`, async () => {
+      await expect(
+        buildCheck({ kind: "not_asked", agent: MAYA }).tool.call({ agent: "Maya" }, CHAT)
+      ).resolves.toEqual({
+        text: "Maya isn't working on anything from this chat now. To send Maya back to it, use ask_agent.",
+        isError: true,
+      });
+      await expect(
+        buildCheck({ kind: "not_from_here" }).tool.call({ agent: "Maya" }, CHAT)
+      ).resolves.toEqual({
+        text: "You can't ask another agent from this chat. Don't call check_agent again.",
+        isError: true,
+      });
     });
   });
 
