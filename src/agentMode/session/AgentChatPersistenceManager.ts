@@ -336,7 +336,9 @@ export class AgentChatPersistenceManager {
     const agent = parseAgentSlug(yaml);
     const { messages, chatStates } = this.parseChatBody(
       body,
-      parseLinkableEpoch(frontmatter.epoch)
+      // A continued chat's epoch is the time it was continued, and its first message's time and day label must show when it was sent.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/971
+      continuedFrom ? undefined : parseLinkableEpoch(frontmatter.epoch)
     );
 
     logInfo(

@@ -89,6 +89,13 @@ function FormStory({ setup, ...props }: StoryProps) {
   );
 }
 
+function typeNameWithoutLeaving(form: HTMLElement) {
+  const name = form.querySelector<HTMLInputElement>('input[placeholder="e.g. Leo"]');
+  if (!name) return;
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(name, "Kai");
+  name.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
 function leaveInstructionEmpty(form: HTMLElement) {
   const instruction = form.querySelector("textarea");
   instruction?.focus();
@@ -128,6 +135,10 @@ export default meta;
 
 export const Empty: StoryObj<CreateAgentFormProps> = {
   render: () => <FormStory onAskCopilot={() => {}} />,
+};
+
+export const NameTypedNotYetLeft: StoryObj<CreateAgentFormProps> = {
+  render: () => <FormStory setup={typeNameWithoutLeaving} />,
 };
 
 export const FirstAgent: StoryObj<CreateAgentFormProps> = {

@@ -481,7 +481,7 @@ function InlineEdit({
           NO_OBSIDIAN_TOOLTIP
         )}
       >
-        <span className={cn("tw-min-w-0 tw-break-words", textClassName)}>{text}</span>
+        <span className={cn("tw-min-w-0 [overflow-wrap:anywhere]", textClassName)}>{text}</span>
         <span
           className={cn(
             "tw-absolute tw-left-full tw-top-1/2 tw-flex -tw-translate-y-1/2 tw-pl-1 tw-text-faint",
