@@ -154,7 +154,11 @@ describe("AgentRoster", () => {
       expect(screen.queryByRole("heading", { name: "Maya" })).toBeNull();
       expect(pickedAgent().nameElement.getAttribute("aria-hidden")).toBe("true");
       expect(screen.getByText("Product critic. Pushes back on plans")).not.toBeNull();
-      expect(screen.getByRole("button", { name: "Profile" })).not.toBeNull();
+      expect(
+        screen
+          .getAllByRole("button", { name: /Maya/ })
+          .map((button) => button.getAttribute("aria-label") ?? button.textContent)
+      ).toEqual(["Open Maya's profile", "Maya"]);
       expect(screen.getByRole("button", { name: "Maya", pressed: true })).not.toBeNull();
     });
 
@@ -170,7 +174,6 @@ describe("AgentRoster", () => {
       expect(picked.block.querySelector("img")).toBeNull();
       expect(picked.block.querySelector("svg")).not.toBeNull();
       expect(picked.text).toContain("Classic agent. Starts fresh every chat.");
-      expect(screen.queryByRole("button", { name: "Profile" })).toBeNull();
     });
 
     it(`shrinks the picked agent's face, and Copilot's, to 64px in a window up to 640px tall so the row and chat input stay in view (${ISSUE})`, () => {
@@ -266,23 +269,56 @@ describe("AgentRoster", () => {
       expect(screen.queryByText("Classic agent. Starts fresh every chat.")).toBeNull();
     });
 
-    it(`links the selected agent's profile beside its title above the row, only when the home can open one (${ISSUE})`, () => {
+    it(`opens the selected agent's profile from its big face above the row, named Open <name>'s profile and placed before the row in the tab order (${ISSUE})`, () => {
       const onOpenProfile = jest.fn();
       renderRoster({ selectedSlug: "coco", onOpenProfile });
 
-      expect(pickedAgent().text).toBe("CocoKeeps the whole vault in view·Profile");
-      fireEvent.click(screen.getByRole("button", { name: "Profile" }));
+      const face = screen.getByRole("button", { name: "Open Coco's profile" });
+      expect(face.querySelector("img")?.getAttribute("src")).toBe(COCO.faceSrc);
+      expect(pickedAgent().block.firstElementChild).toBe(face);
+      fireEvent.click(face);
 
       expect(onOpenProfile).toHaveBeenCalledWith("coco");
     });
 
-    it(`shows no profile link while the home cannot open one, or for Copilot (${ISSUE})`, () => {
+    it(`shows the selected agent's title alone under its name, with no Profile link (${ISSUE})`, () => {
+      renderRoster({ selectedSlug: "coco", onOpenProfile: jest.fn() });
+
+      expect(pickedAgent().text).toBe("CocoKeeps the whole vault in view");
+      expect(screen.queryByRole("button", { name: /^Profile/ })).toBeNull();
+    });
+
+    it(`shows a muted gear on the big face at rest that brightens while the face is hovered or keyboard-focused, and grows the face slightly on hover, inside a round focus ring (${ISSUE})`, () => {
+      renderRoster({ selectedSlug: "coco", onOpenProfile: jest.fn() });
+
+      const face = screen.getByRole("button", { name: "Open Coco's profile" });
+      const gear = face.querySelector(".lucide-settings")?.parentElement;
+      expect(gear?.className).toContain("tw-text-muted");
+      expect(gear?.className).not.toContain("tw-opacity-0");
+      expect(gear?.className).toContain("[:hover>&]:tw-text-normal");
+      expect(gear?.className).toContain("[:focus-visible>&]:tw-text-normal");
+      expect(face.className).toContain("motion-safe:hover:tw-scale-105");
+      expect(face.className).toContain("tw-cursor-pointer");
+      expect(face.className).toContain("[corner-shape:round]");
+    });
+
+    it(`shows Open profile as the big face's tooltip when it is focused (${ISSUE})`, async () => {
+      renderRoster({ selectedSlug: "coco", onOpenProfile: jest.fn() });
+
+      fireEvent.focus(screen.getByRole("button", { name: "Open Coco's profile" }));
+
+      expect((await screen.findByRole("tooltip")).textContent).toBe("Open profile");
+    });
+
+    it(`keeps the big face a plain image while the home cannot open a profile, and Copilot's mark, which has no profile, never a button (${ISSUE})`, () => {
       const { unmount } = renderRoster({ selectedSlug: "coco" });
-      expect(screen.queryByRole("button", { name: "Profile" })).toBeNull();
+      expect(within(pickedAgent().block).queryByRole("button")).toBeNull();
+      expect(pickedAgent().block.querySelector("img")).not.toBeNull();
       unmount();
 
       renderRoster({ selectedSlug: null, onOpenProfile: jest.fn() });
-      expect(screen.queryByRole("button", { name: "Profile" })).toBeNull();
+      expect(within(pickedAgent().block).queryByRole("button")).toBeNull();
+      expect(pickedAgent().block.querySelector(".lucide-settings")).toBeNull();
     });
 
     it(`fits Copilot, six agents and the new-agent button in one row of a 440px sidebar (${ISSUE})`, () => {

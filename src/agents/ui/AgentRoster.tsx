@@ -2,11 +2,13 @@ import { agentTitle } from "@/agents/agentTitle";
 import type { CustomAgent } from "@/agents/CustomAgentStore";
 import {
   AgentFace,
+  FACE_BADGE_CLASS,
   LOCKED_FACE_CLASS,
   LockBadge,
   ROSTER_SELECTED_FACE_CLASS,
 } from "@/agents/ui/AgentFace";
 import { CopilotBrandIcon } from "@/components/ui/CopilotBrandIcon";
+import { NO_OBSIDIAN_TOOLTIP } from "@/connectors/ui/ConnectorRow";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,7 +18,7 @@ import {
 import { computeVisibleTabIndices } from "@/components/ui/tabOverflow";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { ChevronRight, Lock, Plus } from "lucide-react";
+import { Lock, Plus, Settings } from "lucide-react";
 import React, { useId, useLayoutEffect, useRef, useState } from "react";
 
 export type RosterAgent = Pick<CustomAgent, "slug" | "name" | "title" | "instruction" | "faceSrc">;
@@ -120,7 +122,9 @@ function PickedAgent({ agent, onOpenProfile }: PickedAgentProps) {
   const title = agent ? agentTitle(agent) : COPILOT_TITLE;
   return (
     <div className="tw-mt-4 tw-flex tw-w-full tw-min-w-0 tw-flex-col tw-items-center tw-text-center">
-      {agent ? (
+      {agent && onOpenProfile ? (
+        <ProfileFaceButton agent={agent} onOpen={() => onOpenProfile(agent.slug)} />
+      ) : agent ? (
         <AgentFace src={agent.faceSrc} size="xxl" className={SHORT_WINDOW_PICKED_FACE_CLASS} />
       ) : (
         <span
@@ -141,25 +145,47 @@ function PickedAgent({ agent, onOpenProfile }: PickedAgentProps) {
       >
         {agent?.name ?? COPILOT_NAME}
       </div>
-      <div className="tw-flex tw-min-w-0 tw-max-w-full tw-items-center tw-justify-center tw-gap-1.5 tw-text-ui-small tw-text-muted">
-        <span className="tw-line-clamp-2 tw-min-w-0">{title}</span>
-        {agent && onOpenProfile && (
-          <>
-            <span aria-hidden="true" className="tw-text-faint">
-              ·
-            </span>
-            <button
-              type="button"
-              onClick={() => onOpenProfile(agent.slug)}
-              className="clickable-icon tw-h-auto tw-shrink-0 tw-gap-px tw-bg-transparent tw-p-0 tw-text-ui-small tw-text-muted tw-underline tw-decoration-[color:var(--text-faint)] tw-underline-offset-2 tw-shadow-none"
-            >
-              Profile
-              <ChevronRight className="tw-size-3" />
-            </button>
-          </>
-        )}
+      <div className="tw-line-clamp-2 tw-min-w-0 tw-max-w-full tw-text-ui-small tw-text-muted">
+        {title}
       </div>
     </div>
+  );
+}
+
+interface ProfileFaceButtonProps {
+  agent: RosterAgent;
+  onOpen: () => void;
+}
+
+const GEAR_BRIGHTER_ON_HOVER_OR_FOCUS =
+  "[:hover>&]:tw-text-normal [:focus-visible>&]:tw-text-normal";
+
+// Obsidian draws buttons as squircles, so the round face asks for a round focus ring.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/588
+const ROUND_CORNERS = "[corner-shape:round]";
+
+function ProfileFaceButton({ agent, onOpen }: ProfileFaceButtonProps) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          aria-label={`Open ${agent.name}'s profile`}
+          onClick={onOpen}
+          className={cn(
+            "clickable-icon tw-relative tw-h-auto tw-cursor-pointer tw-rounded-full tw-bg-transparent tw-p-0 tw-shadow-none hover:tw-bg-transparent motion-safe:tw-transition-transform motion-safe:tw-duration-150 motion-safe:tw-ease-out motion-safe:hover:tw-scale-105",
+            ROUND_CORNERS,
+            NO_OBSIDIAN_TOOLTIP
+          )}
+        >
+          <AgentFace src={agent.faceSrc} size="xxl" className={SHORT_WINDOW_PICKED_FACE_CLASS} />
+          <span className={cn(FACE_BADGE_CLASS, "tw-size-6", GEAR_BRIGHTER_ON_HOVER_OR_FOCUS)}>
+            <Settings className="tw-size-3.5" />
+          </span>
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="right">Open profile</TooltipContent>
+    </Tooltip>
   );
 }
 

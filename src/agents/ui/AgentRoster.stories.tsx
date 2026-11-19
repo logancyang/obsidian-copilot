@@ -12,7 +12,7 @@ import {
 import { CopilotBrandIcon } from "@/components/ui/CopilotBrandIcon";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { Meta, StoryObj } from "@/lib/story";
-import React from "react";
+import React, { useEffect, useRef } from "react";
 
 const meta = {
   title: "Custom Agents/Agent Roster",
@@ -59,6 +59,21 @@ export const AgentPickedWithTitle: StoryObj<AgentRosterProps> = {
   args: { selectedSlug: "coco", onOpenProfile: () => {} },
 };
 
+function FocusedProfileFace(args: Partial<AgentRosterProps>) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    ref.current
+      ?.querySelector<HTMLButtonElement>('button[aria-label$="profile"]')
+      ?.focus({ focusVisible: true } as FocusOptions);
+  }, []);
+  return <div ref={ref}>{render(args)}</div>;
+}
+
+export const AgentPickedFaceFocused: StoryObj<AgentRosterProps> = {
+  render: (args) => <FocusedProfileFace {...args} />,
+  args: { selectedSlug: "coco", onOpenProfile: () => {} },
+};
+
 export const AgentPickedWithoutTitle: StoryObj<AgentRosterProps> = {
   render,
   args: {
@@ -101,7 +116,7 @@ export const LongNameAndTitle: StoryObj<AgentRosterProps> = {
   },
 };
 
-export const ProfileLinkAndNewAgentSlots: StoryObj<AgentRosterProps> = {
+export const ProfileFaceAndNewAgentSlots: StoryObj<AgentRosterProps> = {
   render,
   args: {
     agents: FIVE_AGENTS,

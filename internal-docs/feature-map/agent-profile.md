@@ -24,7 +24,7 @@ A custom agent's page in the sidebar: its face, name, and title, how many chats 
 ## How to get to it
 
 - The [agent identity bar](agent-identity-bar.md) at the top of an agent's chat.
-- `Profile` in the line under the row of faces on the [start screen](agent-home.md), with an agent selected.
+- The selected agent's large face above the row of faces on the [start screen](agent-home.md) (`Open <name>'s profile`).
 
 It needs a license that includes custom agents (a team license until launch). Without one, the locked profile opens from a greyed face on the start screen.
 
