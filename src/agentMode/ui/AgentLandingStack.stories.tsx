@@ -291,7 +291,7 @@ function AgentHomeCanvas({
             }
             composer={
               <>
-                <div className="tw-flex tw-min-h-28 tw-flex-col tw-justify-between tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-primary tw-p-3 tw-text-ui-small tw-text-muted">
+                <div className="tw-flex tw-min-h-[104px] tw-flex-col tw-justify-between tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-primary tw-p-3 tw-text-ui-small tw-text-muted">
                   <div className="tw-truncate">
                     {selected
                       ? `Ask ${selected.name} anything • @ to add context • / for commands`
