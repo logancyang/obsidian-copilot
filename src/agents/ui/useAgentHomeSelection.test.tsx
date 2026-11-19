@@ -17,9 +17,16 @@ jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError:
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/588";
 const LOCKED_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/950";
+const PROFILE_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/940";
 
 function agent(slug: string, name: string): CustomAgent {
-  return { slug, name, title: `${name}'s job`, faceSrc: `face:${slug}` } as CustomAgent;
+  return {
+    slug,
+    name,
+    title: `${name}'s job`,
+    faceSrc: `face:${slug}`,
+    model: { baseModelId: "haiku", effort: "low" },
+  } as CustomAgent;
 }
 
 const COCO = agent("coco", "Coco");
@@ -179,6 +186,106 @@ describe("useAgentHomeSelection", () => {
       rerender({ current: { ...NEW_CHAT, sessionId: "session-2", agentSlug: "coco" } });
 
       expect(result.current.selected).toBe(COCO);
+    });
+
+    it.each([
+      ["model", { model: { baseModelId: "sonnet", effort: "low" } }],
+      ["effort", { model: { baseModelId: "haiku", effort: "medium" } }],
+      ["name", { name: "Cocoa" }],
+    ] as const)(
+      `rebuilds a new chat on its picked agent when that agent's %s changes before the first message, so the chat starts as the agent now is (${PROFILE_ISSUE})`,
+      async (_, change) => {
+        const { store, publish } = fakeAgentStore([COCO, MAYA]);
+        const switchAgent = jest.fn(() => Promise.resolve());
+        const { result, rerender } = renderSelection(store, NEW_CHAT, switchAgent);
+        await act(() => result.current.select("coco"));
+        rerender({ current: { ...NEW_CHAT, sessionId: "session-2", agentSlug: "coco" } });
+
+        const changed = { ...COCO, ...change } as CustomAgent;
+        publish([changed, MAYA]);
+
+        expect(switchAgent.mock.calls).toEqual([[COCO], [changed]]);
+      }
+    );
+
+    it(`rebuilds a new chat started on an agent, as by the start-a-chat command, when that agent changes (${PROFILE_ISSUE})`, () => {
+      const { store, publish } = fakeAgentStore([COCO, MAYA]);
+      const { switchAgent } = renderSelection(store, { ...NEW_CHAT, agentSlug: "coco" });
+
+      const changed = { ...COCO, model: { baseModelId: "sonnet", effort: null } } as CustomAgent;
+      publish([changed, MAYA]);
+
+      expect(jest.mocked(switchAgent).mock.calls).toEqual([[changed]]);
+    });
+
+    it(`rebuilds a new chat in another tab when the user comes back to it after its agent changed (${PROFILE_ISSUE})`, () => {
+      const { store, publish } = fakeAgentStore([COCO, MAYA]);
+      const newCoco = { ...NEW_CHAT, agentSlug: "coco" };
+      const { rerender, switchAgent } = renderSelection(store, newCoco);
+      rerender({
+        current: { sessionId: "other", chatInputId: "input-2", agentSlug: null, isLanding: false },
+      });
+
+      const changed = { ...COCO, model: { baseModelId: "sonnet", effort: null } } as CustomAgent;
+      publish([changed, MAYA]);
+      expect(switchAgent).not.toHaveBeenCalled();
+      rerender({ current: newCoco });
+
+      expect(jest.mocked(switchAgent).mock.calls).toEqual([[changed]]);
+    });
+
+    it(`moves a new chat to Copilot and says why, without trying again, when its agent changes to a model whose chat cannot start (${PROFILE_ISSUE})`, async () => {
+      const { store, publish } = fakeAgentStore([COCO, MAYA]);
+      let fellBack!: () => void;
+      const fallback = new Promise<void>((resolve) => (fellBack = resolve));
+      const switchAgent = jest.fn((agent: CustomAgent | null) => {
+        if (agent) return Promise.reject(new Error("OpenCode isn't set up."));
+        fellBack();
+        return Promise.resolve();
+      });
+      const { rerender } = renderSelection(store, { ...NEW_CHAT, agentSlug: "coco" }, switchAgent);
+
+      const changed = { ...COCO, model: { baseModelId: "opencode/beam-free", effort: null } };
+      publish([changed, MAYA]);
+      await act(() => fallback);
+      rerender({ current: { ...NEW_CHAT, sessionId: "session-2", agentSlug: null } });
+      publish([{ ...changed, name: "Cocoa" }, MAYA]);
+
+      expect(switchAgent.mock.calls).toEqual([[changed], [null]]);
+      expect(Notice).toHaveBeenCalledWith(
+        "Couldn't start a chat with Coco. OpenCode isn't set up."
+      );
+    });
+
+    it(`leaves a new chat as it is when only its agent's face changes, so a model picked for that chat stays (${PROFILE_ISSUE})`, () => {
+      const { store, publish } = fakeAgentStore([COCO, MAYA]);
+      const { switchAgent } = renderSelection(store, { ...NEW_CHAT, agentSlug: "coco" });
+
+      publish([{ ...COCO, faceSrc: "face:coco?2" }, MAYA]);
+
+      expect(switchAgent).not.toHaveBeenCalled();
+    });
+
+    it("leaves a new chat as it is when only another agent changes", () => {
+      const { store, publish } = fakeAgentStore([COCO, MAYA]);
+      const { switchAgent } = renderSelection(store, { ...NEW_CHAT, agentSlug: "coco" });
+
+      publish([COCO, { ...MAYA, name: "Maia" }]);
+
+      expect(switchAgent).not.toHaveBeenCalled();
+    });
+
+    it("keeps a chat under way on the agent as it started when that agent changes", () => {
+      const { store, publish } = fakeAgentStore([COCO, MAYA]);
+      const { switchAgent } = renderSelection(store, {
+        ...NEW_CHAT,
+        agentSlug: "coco",
+        isLanding: false,
+      });
+
+      publish([{ ...COCO, model: { baseModelId: "sonnet", effort: null } }, MAYA]);
+
+      expect(switchAgent).not.toHaveBeenCalled();
     });
 
     it(`reports the new chat as switching from the pick until the picked agent's chat has started, so a message sent meanwhile waits for that agent (${ISSUE})`, async () => {

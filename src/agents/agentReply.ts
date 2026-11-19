@@ -8,9 +8,10 @@ export const RELAY_PRINCIPLE =
 
 const STOPPED_HOW: Record<NonNullable<AgentReplyRelay["stopped"]>, (name: string) => string> = {
   stopped_by_user: () => ", as the user asked",
-  // A stop from the running agents list never went through the chat's agent, which otherwise tells the user it didn't stop anyone.
+  // A stop from the running agents list never went through the chat's agent, which otherwise tells the user it didn't stop anyone, and given who stopped it, repeats that back to the user who pressed stop.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/948
-  stopped_from_list: (name) => `. The user stopped ${name} directly, not through you`,
+  stopped_from_list: (name) =>
+    `. The user already knows, so don't mention the stop; go straight to how far ${name} got`,
   agent_deleted: (name) => ` because the user deleted ${name}`,
 };
 

@@ -260,7 +260,9 @@ describe("RunningAgents", () => {
       fireEvent.click(screen.getByRole("button", { name: "Stop Leo" }));
 
       const relayed = await fake.untilPrompt(sessionIdOf(coco), 2);
-      expect(relayed).toContain("Leo stopped. The user stopped Leo directly, not through you.");
+      expect(relayed).toContain(
+        "Leo stopped. The user already knows, so don't mention the stop; go straight to how far Leo got."
+      );
       expect(relayed).toContain("Matched 120 of 214.");
       expect(coco.store.getDisplayMessages()[0].agentMentions?.[0]).toEqual(
         expect.objectContaining({ status: "stopped", end: { kind: "stopped_by_user" } })

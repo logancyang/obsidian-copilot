@@ -25,6 +25,12 @@ export function agentComposerHint(agent: CustomAgent | null): string | undefined
   return agent ? `Ask ${agent.name} anything • @ to add context • / for commands` : undefined;
 }
 
+// Faces read the agent list wherever they show, so a new face alone does not rebuild a new chat and drop the model picked for it.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/940
+function builtFromKey(agent: CustomAgent): string {
+  return JSON.stringify({ ...agent, faceSrc: undefined });
+}
+
 function rememberLastAgent(slug: string | null): void {
   if ((getSettings().agentMode.lastCustomAgent ?? null) === slug) return;
   setSettings((cur) => ({ agentMode: { ...cur.agentMode, lastCustomAgent: slug ?? undefined } }));
@@ -42,6 +48,7 @@ export function useAgentHomeSelection(
   const chosenChatInputIds = useRef(new Set<string>());
   const droppedAgents = useRef(new Set<string>());
   const latestRequest = useRef<object | null>(null);
+  const builtFrom = useRef(new Map<string, { slug: string; agent: string }>());
 
   const select = useCallback(
     (slug: string | null) => {
@@ -49,6 +56,8 @@ export function useAgentHomeSelection(
       const switchTo = (agent: CustomAgent | null): Promise<void> => {
         const request = { chatInputId, slug: agent?.slug ?? null };
         latestRequest.current = request;
+        if (agent)
+          builtFrom.current.set(chatInputId, { slug: agent.slug, agent: builtFromKey(agent) });
         setPending(request);
         return switchAgent(agent)
           .catch((error: unknown) => {
@@ -94,6 +103,19 @@ export function useAgentHomeSelection(
     chosenChatInputIds.current.add(chatInputId);
     if (agentSlug === null && lastAgent !== null) void select(lastAgent);
   }, [gate, isLanding, chatInputId, agentSlug, lastAgent, agents, select]);
+
+  // A new chat reads its agent when it is built, so an agent changed before the first message, as from its profile, rebuilds the chat to start as the agent now is.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/940
+  useEffect(() => {
+    const agent = agents.find((candidate) => candidate.slug === agentSlug);
+    if (!isLanding || gate !== "full" || !agent) return;
+    const built = builtFrom.current.get(chatInputId);
+    if (built?.slug !== agent.slug) {
+      builtFrom.current.set(chatInputId, { slug: agent.slug, agent: builtFromKey(agent) });
+    } else if (built.agent !== builtFromKey(agent)) {
+      void select(agent.slug);
+    }
+  }, [gate, isLanding, chatInputId, agentSlug, agents, select]);
 
   const previousChat = useRef<{ sessionId: string; isLanding: boolean } | null>(null);
   useEffect(() => {

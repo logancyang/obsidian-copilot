@@ -484,7 +484,9 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     onCreate: openCreateAgentDialog,
   });
   const firstAgentBannerVisible = useFirstAgentBannerVisible(agentHome.agents.length);
-  const profile = useAgentProfileRoute(agentHome.agents, sessionId);
+  // A new chat rebuilt in place, as when the agent's model changes from this profile, keeps its chat input, so the profile stays open over it.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/940
+  const profile = useAgentProfileRoute(agentHome.agents, chatInputId);
   const markProfileClosedByUser = useComposerFocusAfterTaskView(profile.agent !== null);
   const { close: closeProfile, open: openProfile } = profile;
   const openLockedProfile = useCallback(
