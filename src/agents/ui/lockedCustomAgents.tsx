@@ -5,6 +5,7 @@ import {
   type CustomAgentsGate,
 } from "@/agents/customAgentsGate";
 import type { CustomAgent } from "@/agents/CustomAgentStore";
+import { AGENTS_MENTION_CATEGORY } from "@/agents/ui/agentMentionOptions";
 import { NewAgentButton } from "@/agents/ui/AgentRoster";
 import {
   CustomAgentsUpsellModal,
@@ -15,7 +16,6 @@ import { CustomAgentStoreContext, useCustomAgents } from "@/agents/ui/useCustomA
 import type { CategoryOption } from "@/components/chat-components/hooks/useAtMentionCategories";
 import { useApp } from "@/context";
 import { ensureEntitlement } from "@/plusUtils";
-import { UserPlus } from "lucide-react";
 import type { App } from "obsidian";
 import React, { useContext, useMemo } from "react";
 
@@ -126,16 +126,13 @@ export function renderNewAgentButton(
 }
 
 export interface LockedAgentMention {
-  option: CategoryOption | null;
+  option: CategoryOption;
   agents: readonly CustomAgent[];
   choose: () => void;
 }
 
-const LOCKED_AGENT_MENTION_OPTION: CategoryOption = {
-  key: "locked-custom-agents",
-  title: "Ask an agent",
-  category: "agents",
-  icon: <UserPlus className="tw-size-4" />,
+const LOCKED_AGENTS_MENTION_CATEGORY: CategoryOption = {
+  ...AGENTS_MENTION_CATEGORY,
   lockedNote: "Supporter preview",
 };
 
@@ -147,9 +144,7 @@ export function useLockedAgentMention(enabled: boolean): LockedAgentMention | nu
     () =>
       enabled && gate === "locked"
         ? {
-            // A vault with agents lists each of them locked, as typing a name that finds nothing would read as lost agents; the single row stands in only when there are none.
-            // https://github.com/Brevilabs/obsidian-copilot-private/issues/950
-            option: agents.length > 0 ? null : LOCKED_AGENT_MENTION_OPTION,
+            option: LOCKED_AGENTS_MENTION_CATEGORY,
             agents,
             choose: () => void openLockedCustomAgents(app, "custom_agent_mention", agents),
           }

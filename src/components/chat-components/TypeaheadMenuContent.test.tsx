@@ -1,6 +1,6 @@
 import { TypeaheadMenuContent, type TypeaheadOption } from "./TypeaheadMenuContent";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { FileText, UserPlus } from "lucide-react";
+import { FileText, Users } from "lucide-react";
 import React from "react";
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/582";
@@ -13,10 +13,10 @@ const NOTES: TypeaheadOption = {
   icon: <FileText className="tw-size-4" />,
 };
 
-const ASK_AN_AGENT: TypeaheadOption = {
-  key: "locked-agents",
-  title: "Ask an agent",
-  icon: <UserPlus className="tw-size-4" />,
+const LOCKED_AGENTS: TypeaheadOption = {
+  key: "agents",
+  title: "Agents",
+  icon: <Users className="tw-size-4" />,
   lockedNote: "Supporter preview",
 };
 
@@ -70,25 +70,17 @@ describe("TypeaheadMenuContent", () => {
       expect(onHighlight).not.toHaveBeenCalled();
     });
 
-    it(`shows a locked row below a divider, with its note and a lock in place of the arrow (${ISSUE})`, () => {
-      const { container, onSelect } = renderMenu([NOTES, ASK_AN_AGENT]);
+    it(`shows a locked category in line with the others, with its note and a lock in place of the arrow (${ISSUE})`, () => {
+      const { container, onSelect } = renderMenu([LOCKED_AGENTS, NOTES]);
 
-      const title = screen.getByText("Ask an agent");
+      const title = screen.getByText("Agents");
       expect(screen.getByText("Supporter preview")).toBeTruthy();
       expect(container.querySelectorAll(".lucide-chevron-right")).toHaveLength(1);
       expect(container.querySelectorAll(".lucide-lock")).toHaveLength(1);
-      const separators = container.querySelectorAll('[role="separator"]');
-      expect(separators).toHaveLength(1);
-      expect(
-        screen.getByText("Notes").compareDocumentPosition(separators[0]) &
-          Node.DOCUMENT_POSITION_FOLLOWING
-      ).toBeTruthy();
-      expect(
-        separators[0].compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING
-      ).toBeTruthy();
+      expect(container.querySelectorAll('[role="separator"]')).toHaveLength(0);
 
       fireEvent.mouseDown(title);
-      expect(onSelect).toHaveBeenCalledWith(ASK_AN_AGENT);
+      expect(onSelect).toHaveBeenCalledWith(LOCKED_AGENTS);
     });
     it(`shows a locked agent among the first results with a lock at its end and no divider (${LAPSED_ISSUE})`, () => {
       const maya = {

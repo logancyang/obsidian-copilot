@@ -47,6 +47,7 @@ const { __setRequestUrlImpl: setRequestUrlImpl } = obsidianModule as unknown as 
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/582";
 const LAPSED_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/950";
+const MENTION_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/947";
 const NO_AGENTS: readonly CustomAgent[] = [];
 const AGENTS = [COCO, MAYA] as unknown as readonly CustomAgent[];
 
@@ -430,11 +431,12 @@ describe("lockedCustomAgents", () => {
   });
 
   describe("useLockedAgentMention()", () => {
-    it(`offers a locked Ask an agent row, marked Supporter preview, while the gate is locked (${ISSUE})`, () => {
+    it(`offers the Agents row locked, marked Supporter preview, while the gate is locked (${MENTION_ISSUE})`, () => {
       const { result } = renderMentionHook(true);
 
       expect(result.current?.option).toMatchObject({
-        title: "Ask an agent",
+        title: "Agents",
+        category: "agents",
         lockedNote: "Supporter preview",
       });
     });
@@ -475,10 +477,13 @@ describe("lockedCustomAgents", () => {
       expect(mockOpenUpsell).toHaveBeenCalledTimes(1);
     });
 
-    it(`lists the vault's agents in place of the Ask an agent row, and opens the dialog for them when one is chosen (${LAPSED_ISSUE})`, async () => {
+    it(`keeps the locked Agents row in a vault with agents, and opens the dialog for them when it is chosen (${LAPSED_ISSUE})`, async () => {
       answerLicenseChecks(REFUSED_403);
       const { result } = renderMentionHook(true, AGENTS);
-      expect(result.current?.option).toBeNull();
+      expect(result.current?.option).toMatchObject({
+        title: "Agents",
+        lockedNote: "Supporter preview",
+      });
       expect(result.current?.agents).toEqual(AGENTS);
 
       act(() => result.current?.choose());

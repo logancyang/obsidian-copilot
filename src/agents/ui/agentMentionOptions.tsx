@@ -1,9 +1,20 @@
 import { agentTitle } from "@/agents/agentTitle";
 import type { CustomAgent } from "@/agents/CustomAgentStore";
 import { AgentFace, LOCKED_FACE_CLASS } from "@/agents/ui/AgentFace";
-import type { AtMentionOption } from "@/components/chat-components/hooks/useAtMentionCategories";
+import type {
+  AtMentionOption,
+  CategoryOption,
+} from "@/components/chat-components/hooks/useAtMentionCategories";
 import { cn } from "@/lib/utils";
+import { Users } from "lucide-react";
 import React from "react";
+
+export const AGENTS_MENTION_CATEGORY: CategoryOption = {
+  key: "agents",
+  title: "Agents",
+  category: "agents",
+  icon: <Users className="tw-size-4" />,
+};
 
 export function agentMentionOptions(
   agents: readonly CustomAgent[],

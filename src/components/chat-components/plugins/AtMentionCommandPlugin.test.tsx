@@ -33,8 +33,8 @@ jest.mock("@/components/chat-components/utils/lexicalTextUtils", () => ({
 const mockChooseLockedAgents = jest.fn();
 const mockCloseMenu = jest.fn();
 const LOCKED_ROW: CategoryOption = {
-  key: "locked-custom-agents",
-  title: "Ask an agent",
+  key: "agents",
+  title: "Agents",
   category: "agents",
   icon: null,
   lockedNote: "Supporter preview",
@@ -45,15 +45,21 @@ jest.mock("@/agents/ui/lockedCustomAgents", () => ({
   ),
 }));
 
+const LEDGER_NOTE: AtMentionOption = {
+  key: "note-ledger",
+  title: "Ledger rules",
+  category: "notes",
+  data: "Finance/Ledger rules.md",
+};
 jest.mock("@/components/chat-components/hooks/useAtMentionSearch", () => ({
   useAtMentionSearch: jest.fn(
     (
-      _query: string,
-      _mode: string,
+      query: string,
+      mode: string,
       _category: string | undefined,
       _showTools: boolean,
       categories: CategoryOption[]
-    ) => categories
+    ) => (mode === "category" && !query ? categories : [LEDGER_NOTE])
   ),
 }));
 
@@ -74,9 +80,9 @@ function menuTitles(): string[] {
   return (mockTypeahead?.options ?? []).map((option) => option.title);
 }
 
-function renderInChat(self: string | null, isAgentMode = false) {
+function renderInChat(self: string | null, isAgentMode = false, agents = THREE_AGENTS) {
   return render(
-    <ChatAgentsContext.Provider value={{ agents: THREE_AGENTS, self }}>
+    <ChatAgentsContext.Provider value={{ agents, self }}>
       <AtMentionCommandPlugin isAgentMode={isAgentMode} />
     </ChatAgentsContext.Provider>
   );
@@ -88,6 +94,14 @@ function option(title: string): MenuOption {
   return found;
 }
 
+function choose(title: string): void {
+  act(() => mockTypeahead?.onSelect(option(title)));
+}
+
+function type(query: string): void {
+  act(() => mockTypeahead?.onStateChange?.({ query, isOpen: true, selectedIndex: 0, range: null }));
+}
+
 describe("AtMentionCommandPlugin", () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -96,67 +110,85 @@ describe("AtMentionCommandPlugin", () => {
   });
 
   describe("AtMentionCommandPlugin()", () => {
-    it(`lists the other agents first, then the context categories, in an agent's chat (${MENTION_ISSUE})`, () => {
+    it(`lists an Agents row first, then the context categories, and no single agent at the first level (${MENTION_ISSUE})`, () => {
       renderInChat(COCO.slug);
 
-      expect(menuTitles()).toEqual(["Maya", "Leo", "Notes", "Web tabs", "Folders"]);
+      expect(menuTitles()).toEqual(["Agents", "Notes", "Web tabs", "Folders"]);
     });
 
-    it(`lists every agent in a Copilot chat (${MENTION_ISSUE})`, () => {
-      renderInChat(null);
+    it(`leaves out the Agents row when the only agent is the one the chat is with (${MENTION_ISSUE})`, () => {
+      renderInChat(COCO.slug, false, [COCO]);
 
-      expect(menuTitles().slice(0, 3)).toEqual([COCO.name, MAYA.name, LEO.name]);
+      expect(menuTitles()).toEqual(["Notes", "Web tabs", "Folders"]);
     });
 
-    it(`lists the locked Ask an agent row after every category in an Agent Mode chat (${LOCKED_ISSUE})`, () => {
-      render(<AtMentionCommandPlugin isAgentMode />);
-
-      expect(menuTitles()).toEqual(["Notes", "Web tabs", "Folders", "Ask an agent"]);
-    });
-
-    it(`lists the locked row and none of the chat's agents when the license doesn't include custom agents (${LOCKED_ISSUE})`, () => {
-      mockGate = "locked";
-
-      renderInChat(null, true);
-
-      expect(menuTitles()).toEqual(["Notes", "Web tabs", "Folders", "Ask an agent"]);
-    });
-
-    it("lists only the categories outside Agent Mode, where the chat has no agents", () => {
+    it("lists only the categories outside Agent Chat, where the chat has no agents", () => {
       render(<AtMentionCommandPlugin />);
 
       expect(menuTitles()).toEqual(["Notes", "Web tabs", "Folders"]);
     });
 
-    it(`keeps the agents whose name holds the typed text above the matching context (${MENTION_ISSUE})`, () => {
+    it(`lists the other agents, without the chat's own, once Agents is chosen (${MENTION_ISSUE})`, () => {
       renderInChat(COCO.slug);
 
-      act(() =>
-        mockTypeahead?.onStateChange?.({ query: "le", isOpen: true, selectedIndex: 0, range: null })
-      );
+      choose("Agents");
 
-      expect(menuTitles()).toEqual(["Leo", "Notes", "Web tabs", "Folders"]);
+      expect(menuTitles()).toEqual([MAYA.name, LEO.name]);
+    });
+
+    it(`lists every agent under Agents in a Copilot chat (${MENTION_ISSUE})`, () => {
+      renderInChat(null);
+
+      choose("Agents");
+
+      expect(menuTitles()).toEqual([COCO.name, MAYA.name, LEO.name]);
+    });
+
+    it(`keeps only the agents whose name holds the typed text under Agents, and lists nothing when none does (${MENTION_ISSUE})`, () => {
+      renderInChat(COCO.slug);
+      choose("Agents");
+
+      type("le");
+      expect(menuTitles()).toEqual([LEO.name]);
+
+      type("zz");
+      expect(menuTitles()).toEqual([]);
+    });
+
+    it(`lists the agents whose name holds a first-level query ahead of the matching notes (${MENTION_ISSUE})`, () => {
+      renderInChat(COCO.slug);
+
+      type("le");
+
+      expect(menuTitles()).toEqual([LEO.name, LEDGER_NOTE.title]);
     });
 
     it("lists no agents inside a context category", () => {
       renderInChat(COCO.slug);
 
-      act(() => mockTypeahead?.onSelect(option("Notes")));
+      choose("Notes");
 
-      expect(menuTitles()).toEqual(["Notes", "Web tabs", "Folders"]);
+      expect(menuTitles()).toEqual([LEDGER_NOTE.title]);
     });
 
-    it(`puts a picked agent in the message as its mention pill (${MENTION_ISSUE})`, () => {
-      renderInChat(COCO.slug);
+    it.each([
+      { from: "the Agents list", open: () => choose("Agents") },
+      { from: "the first-level results", open: () => type("ma") },
+    ])(
+      `puts an agent picked from $from in the message as its mention pill (${MENTION_ISSUE})`,
+      ({ open }) => {
+        renderInChat(COCO.slug);
+        open();
 
-      act(() => mockTypeahead?.onSelect(option("Maya")));
+        choose(MAYA.name);
 
-      expect($replaceTriggeredTextWithPill).toHaveBeenCalledWith("@", {
-        type: "customAgent",
-        title: "Maya",
-        data: "maya",
-      });
-    });
+        expect($replaceTriggeredTextWithPill).toHaveBeenCalledWith("@", {
+          type: "customAgent",
+          title: "Maya",
+          data: "maya",
+        });
+      }
+    );
 
     it(`greys an agent whose model can't run on this device and opens its profile with nothing inserted when it is chosen (${SETUP_ISSUE})`, () => {
       const openProfile = jest.fn();
@@ -167,54 +199,61 @@ describe("AtMentionCommandPlugin", () => {
           <AtMentionCommandPlugin />
         </ChatAgentsContext.Provider>
       );
+      choose("Agents");
 
       expect(option(LEO.name).lockedNote).toBe("Needs setup");
       expect(option(MAYA.name).lockedNote).toBeUndefined();
-      act(() => mockTypeahead?.onSelect(option(LEO.name)));
+      choose(LEO.name);
 
       expect(mockCloseMenu).toHaveBeenCalledTimes(1);
       expect(openProfile).toHaveBeenCalledWith(LEO.slug);
       expect($replaceTriggeredTextWithPill).not.toHaveBeenCalled();
     });
 
-    it(`opens the upsell from Ask an agent and puts nothing in the message (${LOCKED_ISSUE})`, () => {
+    it(`lists the locked Agents row first in an Agent Chat whose license doesn't include custom agents (${MENTION_ISSUE})`, () => {
       render(<AtMentionCommandPlugin isAgentMode />);
 
-      mockTypeahead?.onSelect(LOCKED_ROW);
-
-      expect(mockChooseLockedAgents).toHaveBeenCalledTimes(1);
-      expect(mockEditorUpdate).not.toHaveBeenCalled();
+      expect(menuTitles()).toEqual(["Agents", "Notes", "Web tabs", "Folders"]);
+      expect(option("Agents").lockedNote).toBe("Supporter preview");
     });
 
-    it(`lists the vault's agents locked, in place of the Ask an agent row, and opens the locked dialog with nothing inserted when one is chosen (${LAPSED_ISSUE})`, () => {
-      jest
-        .mocked(useLockedAgentMention)
-        .mockReturnValue({ option: null, agents: THREE_AGENTS, choose: mockChooseLockedAgents });
+    it(`lists none of the chat's agents for a first-level query when the license doesn't include custom agents (${LOCKED_ISSUE})`, () => {
+      mockGate = "locked";
+      renderInChat(null, true);
 
+      type("le");
+
+      expect(menuTitles()).toEqual([LEDGER_NOTE.title]);
+    });
+
+    it(`opens the upsell from the locked Agents row, closes the menu so Enter sends the message when the license check grants custom agents, and puts nothing in the message (${LOCKED_ISSUE})`, () => {
       render(<AtMentionCommandPlugin isAgentMode />);
 
-      expect(menuTitles()).toEqual([
-        COCO.name,
-        MAYA.name,
-        LEO.name,
-        "Notes",
-        "Web tabs",
-        "Folders",
-      ]);
+      choose("Agents");
+
+      expect(mockChooseLockedAgents).toHaveBeenCalledTimes(1);
+      expect(mockCloseMenu).toHaveBeenCalledTimes(1);
+      expect(mockEditorUpdate).not.toHaveBeenCalled();
+      expect(menuTitles()).toEqual(["Agents", "Notes", "Web tabs", "Folders"]);
+    });
+
+    it(`keeps the one locked Agents row in a vault with agents, and lists them locked for a first-level query, each opening the locked dialog with nothing inserted (${LAPSED_ISSUE})`, () => {
+      jest.mocked(useLockedAgentMention).mockReturnValue({
+        option: LOCKED_ROW,
+        agents: THREE_AGENTS,
+        choose: mockChooseLockedAgents,
+      });
+      render(<AtMentionCommandPlugin isAgentMode />);
+      expect(menuTitles()).toEqual(["Agents", "Notes", "Web tabs", "Folders"]);
+
+      type("ma");
+
+      expect(menuTitles()).toEqual([MAYA.name, LEDGER_NOTE.title]);
       expect(option(MAYA.name).lockedNote).toBe("Supporter preview");
-      mockTypeahead?.onSelect(option(MAYA.name));
-
+      choose(MAYA.name);
       expect(mockCloseMenu).toHaveBeenCalledTimes(1);
       expect(mockChooseLockedAgents).toHaveBeenCalledTimes(1);
       expect(mockEditorUpdate).not.toHaveBeenCalled();
-    });
-
-    it(`closes the menu on Ask an agent, so Enter sends the message when the license check grants custom agents and no dialog opens (${LOCKED_ISSUE})`, () => {
-      render(<AtMentionCommandPlugin isAgentMode />);
-
-      mockTypeahead?.onSelect(LOCKED_ROW);
-
-      expect(mockCloseMenu).toHaveBeenCalledTimes(1);
     });
   });
 });

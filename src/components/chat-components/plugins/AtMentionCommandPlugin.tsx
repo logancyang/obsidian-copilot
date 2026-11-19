@@ -15,7 +15,7 @@ import {
   CategoryOption,
 } from "@/components/chat-components/hooks/useAtMentionCategories";
 import { useAtMentionSearch } from "@/components/chat-components/hooks/useAtMentionSearch";
-import { agentMentionOptions } from "@/agents/ui/agentMentionOptions";
+import { AGENTS_MENTION_CATEGORY, agentMentionOptions } from "@/agents/ui/agentMentionOptions";
 import { ChatAgentsContext, useMentionableAgents } from "@/agents/ui/chatAgents";
 import { useLockedAgentMention } from "@/agents/ui/lockedCustomAgents";
 
@@ -43,10 +43,14 @@ export function AtMentionCommandPlugin({
 
   const allCategoryOptions = useAtMentionCategories(showTools);
   const lockedAgentMention = useLockedAgentMention(isAgentMode);
+  const mentionableAgents = useMentionableAgents();
+  const { needsSetup, openProfile } = useContext(ChatAgentsContext);
+  const agentsCategory =
+    lockedAgentMention?.option ?? (mentionableAgents.length > 0 ? AGENTS_MENTION_CATEGORY : null);
   const availableCategoryOptions = useMemo(() => {
     const categories = allCategoryOptions.filter((c) => !c.isAction);
-    return lockedAgentMention?.option ? [...categories, lockedAgentMention.option] : categories;
-  }, [allCategoryOptions, lockedAgentMention]);
+    return agentsCategory ? [agentsCategory, ...categories] : categories;
+  }, [allCategoryOptions, agentsCategory]);
 
   const loadNoteContentForPreview = useCallback(
     async (file: TFile | null) => {
@@ -87,35 +91,26 @@ export function AtMentionCommandPlugin({
     availableCategoryOptions,
     currentActiveFile
   );
-  const mentionableAgents = useMentionableAgents();
-  const { needsSetup, openProfile } = useContext(ChatAgentsContext);
-  // Agents lead the menu's first level, above notes and the other context, and are not a category of their own.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/947
-  const searchResults = useMemo(
-    () =>
-      extendedState.mode === "category"
-        ? [
-            ...(lockedAgentMention
-              ? agentMentionOptions(
-                  lockedAgentMention.agents,
-                  currentQuery,
-                  () => "Supporter preview"
-                )
-              : agentMentionOptions(mentionableAgents, currentQuery, (agent) =>
-                  needsSetup?.has(agent.slug) ? "Needs setup" : undefined
-                )),
-            ...contextResults,
-          ]
-        : contextResults,
-    [
-      extendedState.mode,
-      lockedAgentMention,
-      mentionableAgents,
-      needsSetup,
-      currentQuery,
-      contextResults,
-    ]
-  );
+  const searchResults = useMemo(() => {
+    const inAgents = extendedState.selectedCategory === "agents";
+    if (!inAgents && (extendedState.mode === "search" || !currentQuery)) return contextResults;
+    const agentOptions = lockedAgentMention
+      ? agentMentionOptions(lockedAgentMention.agents, currentQuery, () => "Supporter preview")
+      : agentMentionOptions(mentionableAgents, currentQuery, (agent) =>
+          needsSetup?.has(agent.slug) ? "Needs setup" : undefined
+        );
+    // A first-level search lists matching agents above notes: a vault has few agents, and a name match is almost always the one meant.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/947
+    return inAgents ? agentOptions : [...agentOptions, ...contextResults];
+  }, [
+    extendedState.selectedCategory,
+    extendedState.mode,
+    lockedAgentMention,
+    mentionableAgents,
+    needsSetup,
+    currentQuery,
+    contextResults,
+  ]);
 
   const isAtMentionOption = useCallback(
     (option: CategoryOption | AtMentionOption): option is AtMentionOption => {
