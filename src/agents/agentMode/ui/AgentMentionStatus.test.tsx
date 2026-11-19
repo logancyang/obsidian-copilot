@@ -52,6 +52,9 @@ describe("AgentMentionStatus", () => {
       expect(container.textContent).toBe("Leo has a question3:12");
 
       rerender(<AgentMentionStatus mention={run()} />);
+
+      expect(container.textContent).toBe("Leo is working4:12");
+
       act(() => jest.advanceTimersByTime(1_000));
 
       expect(container.textContent).toBe("Leo is working4:13");

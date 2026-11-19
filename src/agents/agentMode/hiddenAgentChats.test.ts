@@ -26,6 +26,7 @@ jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError:
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/944";
 const LAPSED_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/950";
 const CONTROL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/945";
+const RUNNING = "https://github.com/Brevilabs/obsidian-copilot-private/issues/948";
 const PERMISSION = "https://github.com/Brevilabs/obsidian-copilot-private/issues/946";
 const SEVERAL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/949";
 const AUTO_MODE: BackendState = { model: null, mode: { current: "auto", options: [], apply: {} } };
@@ -1511,6 +1512,22 @@ describe("hiddenAgentChats", () => {
         expect(await fake.untilPrompt(sessionIdOf(coco), 2)).not.toContain("turned down");
       });
 
+      it(`tells the chat's agent the user stopped the agent from the list above the chat input, and saves it as stopped by the user (${RUNNING})`, async () => {
+        const { coco } = await askFromMessage();
+
+        expect(chats.stop(coco, "maya", { fromList: true })).toEqual(
+          expect.objectContaining({ kind: "stopped" })
+        );
+        fake.endTurn(sessionIdOf(coco));
+
+        const relayed = await fake.untilPrompt(sessionIdOf(coco), 2);
+        expect(relayed).toContain("Maya stopped. The user stopped Maya directly, not through you.");
+        expect(relayed).not.toContain("as the user asked");
+        expect(mentionsOn(coco)?.[0]).toEqual(
+          expect.objectContaining({ status: "stopped", end: { kind: "stopped_by_user" } })
+        );
+      });
+
       it(`stops the run with the agent's slug, as the chat's running agents list does (${CONTROL})`, async () => {
         const { coco } = await askFromMessage();
 
@@ -1682,6 +1699,21 @@ describe("hiddenAgentChats", () => {
         answer(maya, "Done.");
         await fake.untilPrompt(sessionIdOf(coco));
         expect(chats.workingIn("maya")).toBeNull();
+      });
+    });
+
+    describe("workingOn()", () => {
+      it(`gives what a saved run's agent was asked while it still works on it, and nothing once it is done (${RUNNING})`, async () => {
+        const { coco, maya } = await askFromMessage();
+        const runId = mentionsOn(coco)![0].id;
+
+        expect(chats.workingOn(runId)).toBe("What do you think of this plan?");
+        expect(chats.workingOn("another-run")).toBeNull();
+
+        answer(maya, "Done.");
+        fake.endTurn(sessionIdOf(coco));
+        await fake.untilPrompt(sessionIdOf(coco), 2);
+        expect(chats.workingOn(runId)).toBeNull();
       });
     });
 

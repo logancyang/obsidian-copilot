@@ -17,7 +17,7 @@ import { AgentTasksProvider } from "@/agentMode/ui/AgentTasksContext";
 import { QueuedMessageList } from "@/agentMode/ui/QueuedMessageList";
 import { RunningTasksIndicator } from "@/agentMode/ui/RunningTasksIndicator";
 import { TaskDetailView } from "@/agentMode/ui/TaskDetailView";
-import { taskDisplayStatus } from "@/agentMode/ui/taskDisplay";
+import { runningTasks, taskDisplayStatus } from "@/agentMode/ui/taskDisplay";
 import { AgentHomeReleaseUpdate } from "@/components/release-update/AgentHomeReleaseUpdate";
 import { RelevantNotes } from "@/components/chat-components/RelevantNotes";
 import { CopilotBrandIcon } from "@/components/ui/CopilotBrandIcon";
@@ -55,6 +55,7 @@ import { pickRandomGreeting } from "@/agentMode/ui/landingGreetings";
 import { findBackendForModel, listBackendDescriptors } from "@/agentMode/backends/registry";
 import { buildAgentModelChoices } from "@/agentMode/ui/agentModelPickerHelpers";
 import { AgentProfile } from "@/agents/agentMode/ui/AgentProfile";
+import { chatRunningAgents } from "@/agents/agentMode/ui/RunningAgents";
 import { isLicenseLapsed, useCustomAgentsGate } from "@/agents/customAgentsGate";
 import type { CustomAgent } from "@/agents/CustomAgentStore";
 import { AgentIdentityBar } from "@/agents/ui/AgentIdentityBar";
@@ -824,6 +825,14 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   );
 
   const activeSession = manager.getSession(sessionId);
+  const runningAgents = chatRunningAgents({
+    messages,
+    chat: activeSession,
+    hiddenChats: plugin.hiddenAgentChats,
+    agents: chatAgents.agents,
+    taskCount: runningTasks(tasks).length,
+    gate: customAgentsGate,
+  });
   const getActiveChatBookmarkState = useCallback(
     () => getChatBookmarkState(manager.getSessionSourcePath(sessionId)),
     [getChatBookmarkState, manager, sessionId]
@@ -1065,6 +1074,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                             onOpenTask={handleOpenTask}
                             onStopTask={backend.canStopTasks() ? handleStopTask : undefined}
                             container={rootEl}
+                            runs={runningAgents}
                           />
                         }
                       />

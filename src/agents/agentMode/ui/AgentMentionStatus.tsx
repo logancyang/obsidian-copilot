@@ -36,20 +36,26 @@ function scrollToReply(from: HTMLElement, mentionId: string): void {
     ?.scrollIntoView({ block: "start", behavior: "smooth" });
 }
 
+export function useTickingNow(ticking: boolean, ref: React.RefObject<HTMLElement>): number {
+  const [now, setNow] = useState(() => Date.now());
+  // Only the element that shows a clock ticks while the agent works, so the clock never re-renders the chat's messages.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/947
+  useEffect(() => {
+    const win = ref.current?.win;
+    if (!ticking || !win) return;
+    // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- a clock that starts ticking again shows the current time at once, not the time it was held at
+    setNow(Date.now());
+    const id = win.setInterval(() => setNow(Date.now()), 1000);
+    return () => win.clearInterval(id);
+  }, [ticking, ref]);
+  return now;
+}
+
 export const AgentMentionStatus: React.FC<{ mention: AgentMention }> = ({ mention }) => {
   const line = mentionStatusLine(mention);
   const rootRef = useRef<HTMLDivElement>(null);
-  const [now, setNow] = useState(() => Date.now());
+  const now = useTickingNow(line.clock === "ticking", rootRef);
   const [detailsOpen, setDetailsOpen] = useState(false);
-
-  // Only this line ticks while the agent works, so the clock never re-renders the chat's messages.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/947
-  useEffect(() => {
-    const win = rootRef.current?.win;
-    if (line.clock !== "ticking" || !win) return;
-    const id = win.setInterval(() => setNow(Date.now()), 1000);
-    return () => win.clearInterval(id);
-  }, [line.clock]);
 
   const elapsedMs = line.clock ? now - mention.startedAt : line.elapsedMs;
   return (

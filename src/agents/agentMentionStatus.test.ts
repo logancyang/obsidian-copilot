@@ -1,7 +1,8 @@
 import type { AgentMention } from "@/agents/agentMentions";
-import { formatRunTime, mentionStatusLine } from "@/agents/agentMentionStatus";
+import { formatRunTime, mentionStatusLine, runningAgentsLine } from "@/agents/agentMentionStatus";
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/947";
+const ISSUE_948 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/948";
 const STARTED = Date.parse("2026-11-16T10:02:00Z");
 const MINUTES = 60_000;
 
@@ -119,6 +120,74 @@ describe("agentMentionStatus", () => {
             run({ status: "didnt_finish", end: { kind: "permission_denied", requests } })
           )
         ).toMatchObject({ text, details: requests.join("\n") });
+      }
+    );
+  });
+
+  describe("runningAgentsLine()", () => {
+    const named = (name: string, change: Partial<AgentMention> = {}) =>
+      run({ id: name, agent: name.toLowerCase(), name, ...change });
+
+    it(`says one working agent is working, with a clock from when it was asked (${ISSUE_948})`, () => {
+      expect(runningAgentsLine([named("Maya")], 0)).toEqual({
+        text: "Maya is working",
+        waiting: false,
+        clockFrom: STARTED,
+      });
+    });
+
+    it.each([
+      [["Maya", "Leo"], "Maya and Leo are working"],
+      [["Maya", "Leo", "Nora"], "Maya, Leo and Nora are working"],
+      [["Maya", "Leo", "Nora", "Coco"], "4 agents are working"],
+    ])(
+      `names several working agents without a clock, and counts four or more (${ISSUE_948})`,
+      (names, text) => {
+        expect(
+          runningAgentsLine(
+            names.map((name) => named(name)),
+            0
+          )
+        ).toEqual({ text, waiting: false });
+      }
+    );
+
+    it.each([
+      ["question", "Leo is waiting for you"],
+      ["permission", "Leo needs your OK"],
+    ] as const)(
+      `puts an agent that waits on a %s first and marks the line waiting (${ISSUE_948})`,
+      (status, waitingText) => {
+        expect(runningAgentsLine([named("Maya"), named("Leo", { status })], 0)).toEqual({
+          text: `${waitingText} · Maya is working`,
+          waiting: true,
+        });
+      }
+    );
+
+    it(`says a lone agent waits on the user without a clock (${ISSUE_948})`, () => {
+      expect(runningAgentsLine([named("Leo", { status: "question" })], 0)).toEqual({
+        text: "Leo is waiting for you",
+        waiting: true,
+      });
+    });
+
+    it(`names several waiting agents together, whatever each waits on (${ISSUE_948})`, () => {
+      expect(
+        runningAgentsLine(
+          [named("Leo", { status: "question" }), named("Maya", { status: "permission" })],
+          0
+        ).text
+      ).toBe("Leo and Maya are waiting for you");
+    });
+
+    it.each([
+      [1, "Leo is working · 1 task"],
+      [2, "Leo is working · 2 tasks"],
+    ])(
+      `adds the count of the chat's own tasks after the agents, without a clock (${ISSUE_948})`,
+      (tasks, text) => {
+        expect(runningAgentsLine([named("Leo")], tasks)).toEqual({ text, waiting: false });
       }
     );
   });

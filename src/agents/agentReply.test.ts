@@ -83,6 +83,14 @@ describe("agentReply", () => {
       expect(byUser).not.toContain("Maya replied.");
     });
 
+    it(`says a stop from the running agents list was the user's own, not through the chat's agent (https://github.com/Brevilabs/obsidian-copilot-private/issues/948)`, () => {
+      expect(
+        formatAgentReply({ ...MAYA, ...NOTHING, reply: "", stopped: "stopped_from_list" })
+      ).toContain(
+        "Maya stopped. The user stopped Maya directly, not through you. Maya's changes stay. Tell the user how far Maya got and what Maya changed;"
+      );
+    });
+
     it(`says the agent has a question for the user and how to pass the answer back, quoting the question (https://github.com/Brevilabs/obsidian-copilot-private/issues/945)`, () => {
       const text = formatAgentReply({
         ...MAYA,

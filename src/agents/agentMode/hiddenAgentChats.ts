@@ -65,7 +65,7 @@ export type StopAgentResult =
   | { kind: "stopped" | "not_working" | "not_asked"; agent: CustomAgent }
   | AgentRefusal;
 
-type StopReason = "stopped_by_user" | "agent_deleted";
+type StopReason = "stopped_by_user" | "stopped_from_list" | "agent_deleted";
 
 interface AskingChat {
   parent: AgentSession;
@@ -82,6 +82,7 @@ interface HiddenRunEnd {
 
 interface HiddenRun {
   id: string;
+  message: string;
   askedIn: string | null;
   startedAt: number;
   since: string | null;
@@ -193,13 +194,17 @@ export class HiddenAgentChats {
 
   // The user stops an agent from the chat that asked it, by telling its agent or from the running agents list; its changes stay and its chat stays open to continue.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/945
-  stop(chat: ChatStateHost | null, agentName: string): StopAgentResult {
+  stop(
+    chat: ChatStateHost | null,
+    agentName: string,
+    { fromList = false }: { fromList?: boolean } = {}
+  ): StopAgentResult {
     const asking = this.resolve(chat, agentName);
     if ("kind" in asking) return asking;
     const hidden = this.chats.get(chatKey(asking.parent, asking.agent.slug));
     const kind = !hidden
       ? "not_asked"
-      : this.stopRun(hidden, "stopped_by_user")
+      : this.stopRun(hidden, fromList ? "stopped_from_list" : "stopped_by_user")
         ? "stopped"
         : "not_working";
     return { kind, agent: asking.agent };
@@ -219,6 +224,15 @@ export class HiddenAgentChats {
     return (
       Array.from(this.chats.values()).find((hidden) => hidden.agent.slug === slug && hidden.run)
         ?.from ?? null
+    );
+  }
+
+  // The chat's running agents list draws only runs still held here, with what each was asked; a saved run can outlive its chat.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/948
+  workingOn(runId: string): string | null {
+    return (
+      Array.from(this.chats.values()).find((hidden) => hidden.run?.id === runId)?.run?.message ??
+      null
     );
   }
 
@@ -362,6 +376,7 @@ export class HiddenAgentChats {
   private async run(hidden: HiddenChat, message: string): Promise<void> {
     const run: HiddenRun = {
       id: uuidv4(),
+      message,
       askedIn: lastUserMessageId(hidden.parent),
       startedAt: Date.now(),
       since: null,
@@ -478,7 +493,7 @@ export class HiddenAgentChats {
       status: run.stopped ? "stopped" : end.error ? "didnt_finish" : "finished",
       endedAt: Date.now(),
       ...(run.stopped
-        ? { end: { kind: run.stopped } }
+        ? { end: { kind: run.stopped === "agent_deleted" ? "agent_deleted" : "stopped_by_user" } }
         : end.error
           ? { end: { kind: "error", message: end.error.message } }
           : {}),

@@ -16,6 +16,11 @@ const ROW_OUTPUT_BYTES = 4096;
 export const STOP_UNAVAILABLE_UNTIL_STARTED = "Can stop once the task starts";
 const HOVER_CLOSE_MS = 150;
 
+export interface RunningRunsSlot {
+  label: React.ReactNode;
+  rows: (close: () => void) => React.ReactNode;
+}
+
 interface RunningTasksIndicatorProps {
   tasks: readonly AgentTask[];
   permissions: readonly PermissionPrompt[];
@@ -23,6 +28,7 @@ interface RunningTasksIndicatorProps {
   onStopTask?: (taskId: string) => void;
   container?: HTMLElement | null;
   defaultOpen?: boolean;
+  runs?: RunningRunsSlot;
 }
 
 export const RunningTasksIndicator: React.FC<RunningTasksIndicatorProps> = ({
@@ -32,11 +38,12 @@ export const RunningTasksIndicator: React.FC<RunningTasksIndicatorProps> = ({
   onStopTask,
   container,
   defaultOpen = false,
+  runs,
 }) => {
   const [open, setOpen] = useState(defaultOpen);
   const closeTimer = useRef<number | null>(null);
   const running = runningTasks(tasks);
-  if (running.length === 0) {
+  if (running.length === 0 && !runs) {
     // The list unmounts under the pointer when the last task ends, so no hover-out ever closes it. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
     if (open) setOpen(false);
     return null;
@@ -65,8 +72,12 @@ export const RunningTasksIndicator: React.FC<RunningTasksIndicatorProps> = ({
           onPointerEnter={show}
           onPointerLeave={hideSoon}
         >
-          <Loader2 className="tw-size-3 tw-animate-spin tw-text-loading" />
-          {pluralize(running.length, "task")} running
+          {runs?.label ?? (
+            <>
+              <Loader2 className="tw-size-3 tw-animate-spin tw-text-loading" />
+              {pluralize(running.length, "task")} running
+            </>
+          )}
         </Button>
       </PopoverTrigger>
       <PopoverContent
@@ -81,6 +92,7 @@ export const RunningTasksIndicator: React.FC<RunningTasksIndicatorProps> = ({
         onOpenAutoFocus={(event) => event.preventDefault()}
       >
         <ul className="tw-m-0 tw-flex tw-list-none tw-flex-col tw-p-0">
+          {runs?.rows(() => setOpen(false))}
           {running.map((task) => (
             <li key={task.toolCallId} className="tw-flex tw-items-start tw-gap-1">
               <RunningTaskRow
@@ -101,10 +113,11 @@ export const RunningTasksIndicator: React.FC<RunningTasksIndicatorProps> = ({
 };
 
 // Stopping needs the id the agent gives a task once it starts; until then the control stays in place, disabled, and says why. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
-const StopTaskButton: React.FC<{
+export const StopTaskButton: React.FC<{
   taskId: string | undefined;
   onStopTask: (taskId: string) => void;
-}> = ({ taskId, onStopTask }) => {
+  label?: string;
+}> = ({ taskId, onStopTask, label = "Stop task" }) => {
   const disabled = taskId === undefined;
   return (
     <Tooltip>
@@ -116,7 +129,7 @@ const StopTaskButton: React.FC<{
             "tw-mt-2 tw-shrink-0 tw-p-1 tw-text-muted",
             disabled ? "tw-cursor-not-allowed tw-opacity-50" : "hover:tw-text-error"
           )}
-          aria-label="Stop task"
+          aria-label={label}
           aria-disabled={disabled || undefined}
           onClick={() => {
             if (!disabled) onStopTask(taskId);
