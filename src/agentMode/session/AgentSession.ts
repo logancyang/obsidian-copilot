@@ -112,7 +112,7 @@ import {
   type TurnFailure,
 } from "@/agentMode/session/chatExtension";
 
-export const DEFAULT_TITLE_PREFIX = "New session";
+const DEFAULT_TITLE_PREFIX = "New session";
 const EMPTY_TASKS: readonly AgentTask[] = Object.freeze([]);
 const EMPTY_MESSAGES: readonly AgentChatMessage[] = Object.freeze([]);
 const NO_EARLIER_CHATS: readonly string[] = Object.freeze([]);
