@@ -19,6 +19,7 @@ import { FolderPillNode } from "./pills/FolderPillNode";
 import { ActiveNotePillNode } from "./pills/ActiveNotePillNode";
 import { WebTabPillNode } from "./pills/WebTabPillNode";
 import { ActiveWebTabPillNode } from "./pills/ActiveWebTabPillNode";
+import { AgentMentionPillNode } from "@/agents/ui/AgentMentionPillNode";
 import { PillDeletionPlugin } from "./plugins/PillDeletionPlugin";
 import { KeyboardPlugin } from "./plugins/KeyboardPlugin";
 import { ValueSyncPlugin } from "./plugins/ValueSyncPlugin";
@@ -115,6 +116,7 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
         FolderPillNode,
         WebTabPillNode,
         ActiveWebTabPillNode,
+        AgentMentionPillNode,
         ...(onURLsChange ? [URLPillNode] : []),
       ],
       onError: (error: Error) => {

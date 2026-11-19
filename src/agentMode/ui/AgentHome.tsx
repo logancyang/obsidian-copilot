@@ -58,6 +58,7 @@ import { AgentProfile } from "@/agents/agentMode/ui/AgentProfile";
 import { useCustomAgentsGate } from "@/agents/customAgentsGate";
 import type { CustomAgent } from "@/agents/CustomAgentStore";
 import { AgentIdentityBar } from "@/agents/ui/AgentIdentityBar";
+import { ChatAgentsContext, useChatAgentsValue } from "@/agents/ui/chatAgents";
 import { AgentProfileCover, useAgentProfileRoute } from "@/agents/ui/AgentProfileCover";
 import { AgentRoster } from "@/agents/ui/AgentRoster";
 import { CreateAgentModal } from "@/agents/ui/CreateAgentModal";
@@ -430,6 +431,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     switchLandingAgent
   );
   const recentChats = useAgentRecentChats(chatHistoryItems, agentHome.agents, agentHome.selected);
+  const chatAgents = useChatAgentsValue(plugin.customAgents, agentHome.selected?.slug ?? null);
   const customAgentsGate = useCustomAgentsGate();
   const { focusInput } = useChatInput();
   const selectAgent = agentHome.select;
@@ -719,28 +721,30 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   );
 
   const composerNode = (
-    <AgentChatInput
-      backend={backend}
-      chatInputId={chatInputId}
-      draft={draft}
-      app={app}
-      updateUserMessageHistory={updateUserMessageHistory}
-      // A message sent while a picked agent's chat is still starting would reach the chat it replaces, so it waits for the agent the home shows.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/588
-      isStarting={isStarting || agentHome.switching}
-      isLoading={isLoading}
-      isReplyRunning={replyRunning}
-      queuedPrompts={queuedPrompts}
-      acceptsMidTurnMessages={backend.acceptsMidTurnMessages()}
-      hasPendingPlanPermission={hasPendingPlanPermission}
-      modelPickerOverride={modelPickerOverride ?? undefined}
-      modePickerOverride={modePickerOverride ?? undefined}
-      onCycleMode={handleCycleMode}
-      disabled={isOrphanedProject}
-      projectFolderPath={projectFolderPath}
-      hasChatMovedFrom={hasChatMovedFrom}
-      placeholder={agentComposerHint(agentHome.selected)}
-    />
+    <ChatAgentsContext.Provider value={chatAgents}>
+      <AgentChatInput
+        backend={backend}
+        chatInputId={chatInputId}
+        draft={draft}
+        app={app}
+        updateUserMessageHistory={updateUserMessageHistory}
+        // A message sent while a picked agent's chat is still starting would reach the chat it replaces, so it waits for the agent the home shows.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/588
+        isStarting={isStarting || agentHome.switching}
+        isLoading={isLoading}
+        isReplyRunning={replyRunning}
+        queuedPrompts={queuedPrompts}
+        acceptsMidTurnMessages={backend.acceptsMidTurnMessages()}
+        hasPendingPlanPermission={hasPendingPlanPermission}
+        modelPickerOverride={modelPickerOverride ?? undefined}
+        modePickerOverride={modePickerOverride ?? undefined}
+        onCycleMode={handleCycleMode}
+        disabled={isOrphanedProject}
+        projectFolderPath={projectFolderPath}
+        hasChatMovedFrom={hasChatMovedFrom}
+        placeholder={agentComposerHint(agentHome.selected)}
+      />
+    </ChatAgentsContext.Provider>
   );
 
   const { queue: heldMessages, setQueue: setHeldMessages } = draft;
@@ -987,19 +991,21 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                         detailTask && "tw-invisible tw-absolute tw-inset-0"
                       )}
                     >
-                      <AgentChatMessages
-                        sourcePath={activeSourcePath}
-                        key={sessionId}
-                        messages={messages}
-                        plugin={plugin}
-                        currentPlan={currentPlan}
-                        pendingToolPermissions={pendingToolPermissions}
-                        pendingAskUserQuestions={pendingAskUserQuestions}
-                        chatBackend={backend}
-                        isLoading={isLoading}
-                        chatStates={chatStates}
-                        onContinueFrom={handleContinueFrom}
-                      />
+                      <ChatAgentsContext.Provider value={chatAgents}>
+                        <AgentChatMessages
+                          sourcePath={activeSourcePath}
+                          key={sessionId}
+                          messages={messages}
+                          plugin={plugin}
+                          currentPlan={currentPlan}
+                          pendingToolPermissions={pendingToolPermissions}
+                          pendingAskUserQuestions={pendingAskUserQuestions}
+                          chatBackend={backend}
+                          isLoading={isLoading}
+                          chatStates={chatStates}
+                          onContinueFrom={handleContinueFrom}
+                        />
+                      </ChatAgentsContext.Provider>
                       {queuedMessagesNode}
                       <AgentChatControls
                         onCopyChatLink={

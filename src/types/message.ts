@@ -54,6 +54,7 @@ export interface MessageContext {
   folders?: string[];
   selectedTextContexts?: SelectedTextContext[];
   webTabs?: WebTabContext[];
+  agents?: string[];
 }
 
 export interface TokenUsage {

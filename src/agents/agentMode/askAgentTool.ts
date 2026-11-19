@@ -14,10 +14,10 @@ import type {
   StopAgentResult,
 } from "@/agents/agentMode/hiddenAgentChats";
 import type { CustomAgent } from "@/agents/CustomAgentStore";
+import { ASK_AGENT_TOOL_NAME } from "@/agents/agentMentionPrompt";
 import { RELAY_PRINCIPLE } from "@/agents/agentReply";
 import { getCustomAgentsGate } from "@/agents/customAgentsGate";
 
-export const ASK_AGENT_TOOL_NAME = "ask_agent";
 export const STOP_AGENT_TOOL_NAME = "stop_agent";
 export const CHECK_AGENT_TOOL_NAME = "check_agent";
 export const ANSWER_AGENT_TOOL_NAME = "answer_agent";

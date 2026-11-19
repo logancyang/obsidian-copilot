@@ -6,6 +6,7 @@ import { TypeaheadOption } from "@/components/chat-components/TypeaheadMenuConte
 import type { WebTabContext } from "@/types/message";
 
 export type AtMentionCategory =
+  | "customAgent"
   | "notes"
   | "tools"
   | "folders"

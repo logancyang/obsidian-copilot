@@ -15,6 +15,8 @@ import {
   CategoryOption,
 } from "@/components/chat-components/hooks/useAtMentionCategories";
 import { useAtMentionSearch } from "@/components/chat-components/hooks/useAtMentionSearch";
+import { agentMentionOptions } from "@/agents/ui/agentMentionOptions";
+import { useMentionableAgents } from "@/agents/ui/chatAgents";
 import { useLockedAgentMention } from "@/agents/ui/lockedCustomAgents";
 
 interface AtMentionCommandPluginProps {
@@ -77,13 +79,23 @@ export function AtMentionCommandPlugin({
 
   const [currentQuery, setCurrentQuery] = useState("");
 
-  const searchResults = useAtMentionSearch(
+  const contextResults = useAtMentionSearch(
     currentQuery,
     extendedState.mode,
     extendedState.selectedCategory,
     showTools,
     availableCategoryOptions,
     currentActiveFile
+  );
+  const mentionableAgents = useMentionableAgents();
+  // Agents lead the menu's first level, above notes and the other context, and are not a category of their own.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/947
+  const searchResults = useMemo(
+    () =>
+      extendedState.mode === "category"
+        ? [...agentMentionOptions(mentionableAgents, currentQuery), ...contextResults]
+        : contextResults,
+    [extendedState.mode, mentionableAgents, currentQuery, contextResults]
   );
 
   const isAtMentionOption = useCallback(

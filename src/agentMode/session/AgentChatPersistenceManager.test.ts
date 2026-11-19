@@ -846,6 +846,45 @@ describe("AgentChatPersistenceManager", () => {
       expect(file.contents).toBe(before);
     });
 
+    it("keeps a message's mentioned agents, their runs and the chat's card states together on one data line and reads all three back (https://github.com/Brevilabs/obsidian-copilot-private/issues/947)", async () => {
+      const chatStates = { "agent-draft": { draftedBy: "coco", afterUserTurn: 1 } };
+      const agentMentions = [
+        {
+          id: "run-1",
+          agent: "maya",
+          name: "Maya",
+          status: "finished" as const,
+          startedAt: 1,
+          endedAt: 2,
+        },
+      ];
+      const saved = await manager.saveSession(
+        [
+          {
+            ...makeMessage(USER_SENDER, "@Maya is this too long?"),
+            context: { notes: [], urls: [], agents: ["Maya"] },
+            agentMentions,
+          },
+        ],
+        "claude",
+        { chatStates }
+      );
+      const file = app.files.get(saved!.path)!;
+      expect(file.contents?.match(/copilot-message/g)).toHaveLength(1);
+
+      const loaded = await manager.loadFile(file as unknown as TFile);
+
+      expect(loaded.messages[0].context?.agents).toEqual(["Maya"]);
+      expect(loaded.messages[0].agentMentions).toEqual(agentMentions);
+      expect(loaded.chatStates).toEqual(chatStates);
+      const before = file.contents;
+      await manager.saveSession(loaded.messages, "claude", {
+        existingPath: saved!.path,
+        chatStates: loaded.chatStates,
+      });
+      expect(file.contents).toBe(before);
+    });
+
     it("reads no card states from a note whose last message keeps none", async () => {
       const file = addNote(app, "copilot/copilot-conversations/agent__earlier.md");
       Object.assign(file, {
@@ -1223,6 +1262,24 @@ describe("AgentChatPersistenceManager", () => {
         urls: [],
         folders: ["Research/Pricing, v2"],
       });
+    });
+
+    it("restores each @-mentioned agent's name as the message's context, so the reopened message draws its pill (https://github.com/Brevilabs/obsidian-copilot-private/issues/947)", async () => {
+      const saved = await manager.saveSession(
+        [
+          {
+            ...makeMessage(USER_SENDER, "@Maya is this too long?"),
+            context: { notes: [], urls: [], agents: ["Maya"] },
+          },
+        ],
+        "claude"
+      );
+      const file = app.files.get(saved!.path)!;
+      expect(file.contents).toContain('<!-- copilot-message {"agents":["Maya"]} -->');
+
+      const loaded = await manager.loadFile(file as unknown as TFile);
+
+      expect(loaded.messages[0].context).toEqual({ notes: [], urls: [], agents: ["Maya"] });
     });
 
     it(`leaves out an attached note that no longer exists in the vault (${CONTEXT_ISSUE})`, async () => {

@@ -19,6 +19,8 @@ import ChatInput, {
 import { useActiveWebTabState } from "@/components/chat-components/hooks/useActiveWebTabState";
 import { ACTIVE_NOTE_MENTION, ACTIVE_WEB_TAB_MARKER, EVENT_NAMES } from "@/constants";
 import { EventTargetContext } from "@/context";
+import { mentionedAgentNames } from "@/agents/agentMentionPrompt";
+import { useMentionableAgents } from "@/agents/ui/chatAgents";
 import { logError, logWarn } from "@/logger";
 import { buildWebTabsWithActiveSnapshot } from "@/services/webViewerService/activeWebTabSnapshot";
 import {
@@ -73,9 +75,16 @@ const buildMessageContext = (
   notes: TFile[],
   selected: readonly SelectedTextContext[],
   webTabs: readonly WebTabContext[],
-  folders: readonly string[]
+  folders: readonly string[],
+  agents: readonly string[] = []
 ): MessageContext | undefined => {
-  if (notes.length === 0 && selected.length === 0 && webTabs.length === 0 && folders.length === 0)
+  if (
+    notes.length === 0 &&
+    selected.length === 0 &&
+    webTabs.length === 0 &&
+    folders.length === 0 &&
+    agents.length === 0
+  )
     return undefined;
   return {
     notes,
@@ -83,6 +92,7 @@ const buildMessageContext = (
     folders: folders.length > 0 ? [...folders] : undefined,
     selectedTextContexts: selected.length > 0 ? [...selected] : undefined,
     webTabs: webTabs.length > 0 ? [...webTabs] : undefined,
+    agents: agents.length > 0 ? [...agents] : undefined,
   };
 };
 
@@ -93,6 +103,7 @@ const combineQueuedMessages = (items: QueuedAgentMessage[]): QueuedAgentMessage 
   const allSelected = items.flatMap((i) => i.context?.selectedTextContexts ?? []);
   const allWebTabs = items.flatMap((i) => i.context?.webTabs ?? []);
   const allFolders = items.flatMap((i) => i.context?.folders ?? []);
+  const allAgents = items.flatMap((i) => i.context?.agents ?? []);
   const allPromptContent = items.flatMap((i) => i.promptContent ?? []);
 
   return {
@@ -103,7 +114,8 @@ const combineQueuedMessages = (items: QueuedAgentMessage[]): QueuedAgentMessage 
       dedupeBy(allNotes, (n) => n.path),
       dedupeBy(allSelected, (s) => s.id),
       mergeWebTabContexts(allWebTabs),
-      dedupeBy(allFolders, (folder) => folder)
+      dedupeBy(allFolders, (folder) => folder),
+      dedupeBy(allAgents, (name) => name)
     ),
     promptContent: allPromptContent.length > 0 ? allPromptContent : undefined,
   };
@@ -159,6 +171,7 @@ export const AgentChatInput = memo(function AgentChatInput({
   placeholder = "Ask anything • @ to add context • / for commands",
 }: AgentChatInputProps) {
   const eventTarget = useContext(EventTargetContext);
+  const mentionableAgents = useMentionableAgents();
   const chatInputRef = useRef<ChatInputHandle>(null);
 
   const selectedTextContexts = useSelectedTextContexts();
@@ -370,7 +383,13 @@ export const AgentChatInput = memo(function AgentChatInput({
         id: `queued-${uuidv4()}`,
         text: resolvedText,
         rawInput,
-        context: buildMessageContext(notes, selectedTextContexts, resolvedWebTabs, folders),
+        context: buildMessageContext(
+          notes,
+          selectedTextContexts,
+          resolvedWebTabs,
+          folders,
+          mentionedAgentNames(resolvedText, mentionableAgents)
+        ),
         promptContent: content.length > 0 ? content : undefined,
       };
 
@@ -415,6 +434,7 @@ export const AgentChatInput = memo(function AgentChatInput({
       acceptsMidTurnMessages,
       sendMidTurn,
       unsupportedImageModelLabel,
+      mentionableAgents,
       disabled,
       resetCompose,
       runSend,

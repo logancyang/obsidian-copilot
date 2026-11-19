@@ -1,3 +1,5 @@
+import { ChatAgentsContext } from "@/agents/ui/chatAgents";
+import { THREE_AGENTS } from "@/agents/ui/testing/rosterFixtures";
 import { expandCustomCommandPrefix } from "@/agentMode/session/expandCustomCommandPrefix";
 import { AgentChatInput } from "@/agentMode/ui/AgentChatInput";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
@@ -90,6 +92,8 @@ jest.mock("@/settings/model", () => ({
   getSettings: () => ({ debug: false }),
 }));
 /* eslint-enable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
+
+jest.mock("@/agents/customAgentsGate", () => ({ useCustomAgentsGate: jest.fn(() => "full") }));
 
 jest.mock("@/commands/customCommandManager", () => ({
   CustomCommandManager: { getInstance: () => ({ recordUsage: jest.fn() }) },
@@ -555,6 +559,27 @@ describe("AgentChatInput", () => {
         notes: [],
         urls: [],
         folders: ["Research/Pricing"],
+      });
+    });
+
+    it("sends each agent the text @-mentions, other than the chat's own, as the message's context (https://github.com/Brevilabs/obsidian-copilot-private/issues/947)", async () => {
+      const backend = {
+        sendMessage: jest.fn(() => ({ turn: Promise.resolve() })),
+        takeWithdrawnPrompts: () => [],
+      } as unknown as AgentChatBackend;
+      render(
+        <ChatAgentsContext.Provider value={{ agents: THREE_AGENTS, self: "coco" }}>
+          {inputNode(backend, makeDraft({ input: "@Maya and @Coco, is this too long?" }))}
+        </ChatAgentsContext.Provider>
+      );
+
+      fireEvent.click(screen.getByText("send"));
+
+      await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
+      expect(jest.mocked(backend.sendMessage).mock.calls[0][1]).toEqual({
+        notes: [],
+        urls: [],
+        agents: ["Maya"],
       });
     });
 
