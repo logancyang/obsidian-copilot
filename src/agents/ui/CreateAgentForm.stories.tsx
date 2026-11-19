@@ -1,3 +1,4 @@
+import { FIRST_AGENT_TEMPLATE } from "@/agents/ui/firstAgentTemplate";
 import {
   CreateAgentCloseGuard,
   CreateAgentForm,
@@ -127,6 +128,16 @@ export default meta;
 
 export const Empty: StoryObj<CreateAgentFormProps> = {
   render: () => <FormStory />,
+};
+
+export const FirstAgent: StoryObj<CreateAgentFormProps> = {
+  render: () => (
+    <FormStory
+      agents={[]}
+      initialValues={FIRST_AGENT_TEMPLATE}
+      presetFaces={{ ...PRESET_FACES, usedIds: new Set() }}
+    />
+  ),
 };
 
 export const Filled: StoryObj<CreateAgentFormProps> = {

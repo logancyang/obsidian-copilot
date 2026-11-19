@@ -1,4 +1,5 @@
 import { customAgentsFolderPath, type CustomAgentStore } from "@/agents/CustomAgentStore";
+import { FIRST_AGENT_TEMPLATE } from "@/agents/ui/firstAgentTemplate";
 import {
   CreateAgentCloseGuard,
   CreateAgentForm,
@@ -119,7 +120,11 @@ function CreateAgentDialog({ options, closeGuard, onCreated, onCancel }: CreateA
         agentsFolder={customAgentsFolderPath()}
         models={options.models}
         presetFaces={presetFaces}
-        initialValues={options.initialValues}
+        initialValues={
+          // A vault's first agent starts from a ready template so the user never faces a blank dialog.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/963
+          options.initialValues ?? (agents.length === 0 ? FIRST_AGENT_TEMPLATE : undefined)
+        }
         draftedBy={options.draftedBy}
         closeGuard={closeGuard}
         onCreate={async (agent) => onCreated(await options.store.createAgent(agent))}

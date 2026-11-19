@@ -388,6 +388,16 @@ describe("CreateAgentForm", () => {
       expect(closeGuard).toMatchObject({ hasInput: true, name: "Kai" });
     });
 
+    it(`tells its dialog nothing needs asking while the starting values are untouched, and asks once one is edited (https://github.com/Brevilabs/obsidian-copilot-private/issues/963)`, () => {
+      const { closeGuard } = renderForm({
+        initialValues: { name: "Coco", title: "", instruction: "You look after my vault." },
+      });
+      expect(closeGuard.hasInput).toBe(false);
+
+      type(/^Title/, "Runs my week");
+      expect(closeGuard).toMatchObject({ hasInput: true, name: "Coco" });
+    });
+
     it("starts from the values it is given", () => {
       renderForm({
         initialValues: {

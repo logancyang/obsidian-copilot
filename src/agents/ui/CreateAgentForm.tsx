@@ -77,9 +77,14 @@ export function CreateAgentForm({
   onClose,
 }: CreateAgentFormProps): React.ReactElement {
   const [rootEl, setRootEl] = useState<HTMLFormElement | null>(null);
-  const [name, setName] = useState(initialValues?.name ?? "");
-  const [title, setTitle] = useState(initialValues?.title ?? "");
-  const [instruction, setInstruction] = useState(initialValues?.instruction ?? "");
+  const [start] = useState(() => [
+    initialValues?.name ?? "",
+    initialValues?.title ?? "",
+    initialValues?.instruction ?? "",
+  ]);
+  const [name, setName] = useState(start[0]);
+  const [title, setTitle] = useState(start[1]);
+  const [instruction, setInstruction] = useState(start[2]);
   const [model, setModel] = useState(models.initial);
   const [pickedFace, setFace] = useState<PickedFace | null>(null);
   const [facePickerOpen, setFacePickerOpen] = useState(false);
@@ -91,7 +96,11 @@ export function CreateAgentForm({
   const face = pickedFace ?? unusedPresetFace(presetFaces);
   const trimmedName = name.trim();
   const who = trimmedName || "it";
-  const hasInput = [name, title, instruction].some((text) => text.trim() !== "");
+  // Closing a prefilled dialog the user has not touched loses nothing, so only their own edits are guarded.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/963
+  const hasInput = [name, title, instruction].some(
+    (text, index) => text.trim() !== start[index].trim()
+  );
   const nameTaken = trimmedName && findAgentNameConflict(agents, folderNames, trimmedName);
   const missingInstruction = instruction.trim() === "";
   const blocker = !trimmedName
