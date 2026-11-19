@@ -15,8 +15,13 @@ import {
 import type CopilotPlugin from "@/main";
 import type { SelectedTextContext } from "@/types/message";
 
+const ISSUE_983 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/983";
 const NOTE_TEXT = "Alpha beta gamma";
 const BETA = { anchor: 6, head: 10 };
+
+interface FakeHighlight {
+  ranges: Range[];
+}
 
 const NOTE_SELECTION_CONTEXT: SelectedTextContext = {
   id: "selection-1",
@@ -30,8 +35,13 @@ const NOTE_SELECTION_CONTEXT: SelectedTextContext = {
 
 describe("chatSelectionHighlightController", () => {
   const editors: EditorView[] = [];
+  const cleanups: Array<() => void> = [];
+  const realCss = Object.getOwnPropertyDescriptor(window, "CSS");
   let activeNote: MarkdownView | null;
   let controller: ChatSelectionHighlightController;
+  let readingHighlights: Map<string, FakeHighlight>;
+  let watchedDocuments: Document[];
+  let openWindow: (win: { doc: Document }) => void;
 
   function openNote(selection?: { anchor: number; head: number }): {
     leaf: WorkspaceLeaf;
@@ -44,10 +54,44 @@ describe("chatSelectionHighlightController", () => {
     editors.push(editor);
     const view = Object.assign(Object.create(MarkdownView.prototype) as MarkdownView, {
       editor: { cm: editor },
+      getMode: () => "source",
     });
     const leaf = { view, getViewState: () => ({ type: "markdown" }) } as unknown as WorkspaceLeaf;
     view.leaf = leaf;
     return { leaf, editor };
+  }
+
+  function openReadingNote(): { leaf: WorkspaceLeaf; rendered: Text } {
+    const preview = window.document.createElement("div");
+    preview.textContent = NOTE_TEXT;
+    window.document.body.append(preview);
+    const view = Object.assign(Object.create(MarkdownView.prototype) as MarkdownView, {
+      containerEl: preview,
+      previewMode: { containerEl: preview },
+      getMode: () => "preview",
+    });
+    const leaf = { view, getViewState: () => ({ type: "markdown" }) } as unknown as WorkspaceLeaf;
+    view.leaf = leaf;
+    return { leaf, rendered: preview.firstChild as Text };
+  }
+
+  function selectRendered(text: Text, { anchor, head }: { anchor: number; head: number }): void {
+    const range = window.document.createRange();
+    range.setStart(text, anchor);
+    range.setEnd(text, head);
+    const selection = window.document.getSelection()!;
+    selection.removeAllRanges();
+    selection.addRange(range);
+    window.document.dispatchEvent(new Event("selectionchange"));
+  }
+
+  function focusChatFromReadingNote(type: string): void {
+    window.document.getSelection()!.removeAllRanges();
+    focus(leafOfType(type));
+  }
+
+  function readingHighlightText(): string | null {
+    return readingHighlights.get("copilot-chat-selection")?.ranges[0].toString() ?? null;
   }
 
   function focus(leaf: WorkspaceLeaf): void {
@@ -67,14 +111,42 @@ describe("chatSelectionHighlightController", () => {
 
   beforeEach(() => {
     activeNote = null;
+    readingHighlights = new Map();
+    watchedDocuments = [];
+    Object.assign(window, {
+      CSS: { highlights: readingHighlights },
+      Highlight: class implements FakeHighlight {
+        ranges: Range[];
+        constructor(...ranges: Range[]) {
+          this.ranges = ranges;
+        }
+      },
+    });
     const plugin = {
-      app: { workspace: { getActiveViewOfType: () => activeNote } },
+      app: {
+        workspace: {
+          getActiveViewOfType: () => activeNote,
+          on: (_name: string, callback: typeof openWindow) => {
+            openWindow = callback;
+          },
+        },
+      },
+      registerEvent: jest.fn(),
+      registerDomEvent: (doc: Document, type: string, listener: () => void) => {
+        watchedDocuments.push(doc);
+        doc.addEventListener(type, listener);
+        cleanups.push(() => doc.removeEventListener(type, listener));
+      },
     } as unknown as CopilotPlugin;
     controller = new ChatSelectionHighlightController(plugin);
   });
 
   afterEach(() => {
     editors.splice(0).forEach((editor) => editor.destroy());
+    cleanups.splice(0).forEach((cleanup) => cleanup());
+    window.document.getSelection()!.removeAllRanges();
+    window.document.body.replaceChildren();
+    if (realCss) Object.defineProperty(window, "CSS", realCss);
   });
 
   describe("ChatSelectionHighlightController", () => {
@@ -135,6 +207,62 @@ describe("chatSelectionHighlightController", () => {
 
         expect(highlightedText(note.editor)).toBeNull();
       });
+
+      it(`keeps text selected in reading view highlighted once the chat has taken the selection (${ISSUE_983})`, () => {
+        const note = openReadingNote();
+        controller.initialize();
+        focus(note.leaf);
+        selectRendered(note.rendered, BETA);
+
+        focusChatFromReadingNote(CHAT_AGENT_VIEWTYPE);
+
+        expect(readingHighlightText()).toBe("beta");
+      });
+
+      it("leaves a reading view note unhighlighted after a click in it cleared the selection", () => {
+        const note = openReadingNote();
+        controller.initialize();
+        focus(note.leaf);
+        selectRendered(note.rendered, BETA);
+        selectRendered(note.rendered, { anchor: 2, head: 2 });
+
+        focusChatFromReadingNote(CHAT_AGENT_VIEWTYPE);
+
+        expect(readingHighlightText()).toBeNull();
+      });
+
+      it("removes the reading view highlight when focus moves from the chat to a view that is not a chat", () => {
+        const note = openReadingNote();
+        controller.initialize();
+        focus(note.leaf);
+        selectRendered(note.rendered, BETA);
+        focusChatFromReadingNote(CHAT_AGENT_VIEWTYPE);
+
+        focus(leafOfType("file-explorer"));
+
+        expect(readingHighlightText()).toBeNull();
+      });
+
+      it(`lets the chat take focus on a platform without CSS highlights, such as older iOS (${ISSUE_983})`, () => {
+        const note = openReadingNote();
+        controller.initialize();
+        focus(note.leaf);
+        selectRendered(note.rendered, BETA);
+        Object.assign(window, { CSS: {} });
+
+        expect(() => focusChatFromReadingNote(CHAT_AGENT_VIEWTYPE)).not.toThrow();
+      });
+    });
+
+    describe("initialize()", () => {
+      it("watches selections in a popout window opened later", () => {
+        const popout = window.document.implementation.createHTMLDocument();
+        controller.initialize();
+
+        openWindow({ doc: popout });
+
+        expect(watchedDocuments.includes(popout)).toBe(true);
+      });
     });
 
     describe("persistFromPointerDown()", () => {
@@ -177,6 +305,20 @@ describe("chatSelectionHighlightController", () => {
         controller.clearIfNoNoteContexts([]);
 
         expect(highlightedText(note.editor)).toBeNull();
+      });
+
+      it("does not highlight reading view text again after its selection was removed from the chat", () => {
+        const note = openReadingNote();
+        controller.initialize();
+        focus(note.leaf);
+        selectRendered(note.rendered, BETA);
+        focusChatFromReadingNote(CHAT_AGENT_VIEWTYPE);
+
+        controller.clearIfNoNoteContexts([]);
+        focus(note.leaf);
+        focus(leafOfType(CHAT_AGENT_VIEWTYPE));
+
+        expect(readingHighlightText()).toBeNull();
       });
     });
 

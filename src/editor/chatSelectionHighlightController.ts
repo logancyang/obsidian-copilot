@@ -9,8 +9,10 @@ import {
   createPersistentHighlight,
   type PersistentHighlightRange,
 } from "@/editor/persistentHighlight";
+import { activeReadingSelection } from "@/selection/selectionWatcher";
 
 const chatHighlight = createPersistentHighlight("copilot-chat-selection-highlight");
+const READING_HIGHLIGHT = "copilot-chat-selection";
 
 export function hideChatSelectionHighlight(view: EditorView): void {
   try {
@@ -29,6 +31,13 @@ interface Snapshot {
   to: number;
 }
 
+interface ReadingSelectionRange {
+  view: MarkdownView;
+  range: Range;
+}
+
+type HighlightWindow = Window & { CSS: typeof CSS; Highlight: typeof Highlight };
+
 export interface ChatSelectionHighlightControllerOptions {
   closeQuickAskOnChatFocus?: boolean;
 }
@@ -40,6 +49,8 @@ export class ChatSelectionHighlightController {
   private lastActiveMarkdownLeaf: WorkspaceLeaf | null = null;
   private lastActiveLeafWasMarkdown = false;
   private snapshot: Snapshot | null = null;
+  private readingSelection: ReadingSelectionRange | null = null;
+  private readingHighlights: HighlightRegistry | null = null;
 
   constructor(plugin: CopilotPlugin, options?: ChatSelectionHighlightControllerOptions) {
     this.plugin = plugin;
@@ -53,12 +64,20 @@ export class ChatSelectionHighlightController {
     if (this.lastActiveLeafWasMarkdown && leaf) {
       this.lastActiveMarkdownLeaf = leaf;
     }
+
+    const watch = (doc: Document) =>
+      this.plugin.registerDomEvent(doc, "selectionchange", () =>
+        this.rememberReadingSelection(doc)
+      );
+    watch(activeDocument);
+    this.plugin.registerEvent(this.plugin.app.workspace.on("window-open", (win) => watch(win.doc)));
   }
 
   cleanup(): void {
     this.clear();
     this.lastActiveMarkdownLeaf = null;
     this.lastActiveLeafWasMarkdown = false;
+    this.readingSelection = null;
   }
 
   handleActiveLeafChange(leaf: WorkspaceLeaf | null): void {
@@ -72,7 +91,7 @@ export class ChatSelectionHighlightController {
       this.lastActiveMarkdownLeaf = leaf;
     }
 
-    if (this.snapshot && !nextIsChat) {
+    if (!nextIsChat) {
       this.clear();
     }
 
@@ -99,8 +118,23 @@ export class ChatSelectionHighlightController {
     }
   }
 
+  private rememberReadingSelection(doc: Document): void {
+    const active = activeReadingSelection(this.plugin.app, doc);
+    if (!active) return;
+
+    this.readingSelection = active.selection.isCollapsed
+      ? null
+      : { view: active.view, range: active.selection.getRangeAt(0).cloneRange() };
+  }
+
   private persist(options: { useFallback: boolean }): void {
-    const cm = this.getEditorView(options.useFallback);
+    const view = this.getMarkdownView(options.useFallback);
+    if (view?.getMode() === "preview") {
+      this.showReadingHighlight(view);
+      return;
+    }
+
+    const cm = view?.editor?.cm;
     if (!cm) return;
 
     const sel = cm.state.selection.main;
@@ -132,23 +166,42 @@ export class ChatSelectionHighlightController {
   }
 
   private clear(): void {
-    if (!this.snapshot) return;
-
-    this.hideHighlight(this.snapshot.view);
-    this.snapshot = null;
-  }
-
-  private getEditorView(allowFallback: boolean): EditorView | null {
-    const active = this.plugin.app.workspace.getActiveViewOfType(MarkdownView);
-    if (active?.editor?.cm) {
-      return active.editor.cm;
+    if (this.snapshot) {
+      this.hideHighlight(this.snapshot.view);
+      this.snapshot = null;
     }
 
+    if (this.readingHighlights) {
+      this.readingHighlights.delete(READING_HIGHLIGHT);
+      this.readingHighlights = null;
+      this.readingSelection = null;
+    }
+  }
+
+  private getMarkdownView(allowFallback: boolean): MarkdownView | null {
+    const active = this.plugin.app.workspace.getActiveViewOfType(MarkdownView);
+    if (active) return active;
+
     if (allowFallback && this.lastActiveMarkdownLeaf?.view instanceof MarkdownView) {
-      return this.lastActiveMarkdownLeaf.view.editor?.cm ?? null;
+      return this.lastActiveMarkdownLeaf.view;
     }
 
     return null;
+  }
+
+  private showReadingHighlight(view: MarkdownView): void {
+    const remembered = this.readingSelection;
+    if (remembered?.view !== view) return;
+
+    const win = view.containerEl.win as HighlightWindow;
+    try {
+      win.CSS.highlights.set(READING_HIGHLIGHT, new win.Highlight(remembered.range));
+      this.readingHighlights = win.CSS.highlights;
+    } catch (error) {
+      // Obsidian still runs on iOS versions whose WebView has no CSS Custom Highlight API.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/983
+      logWarn("Could not highlight the reading view selection", error);
+    }
   }
 
   private showHighlight(view: EditorView, from: number, to: number): boolean {

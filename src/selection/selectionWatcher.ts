@@ -35,20 +35,32 @@ export function editorSelectionReport({
   };
 }
 
-export function readingSelectionReport(app: App, doc: Document): SelectionReport | null {
+export interface ReadingSelection {
+  view: MarkdownView;
+  selection: Selection;
+}
+
+export function activeReadingSelection(app: App, doc: Document): ReadingSelection | null {
   const selection = doc.getSelection();
   const anchor = selection?.anchorNode;
   const focus = selection?.focusNode;
   const view = app.workspace.getActiveViewOfType(MarkdownView);
-  const file = view?.file;
-  if (!anchor || !focus || !file || view.getMode() !== "preview") return null;
+  if (!selection || !anchor || !focus || view?.getMode() !== "preview") return null;
 
   // Only rendered text inside the note is a note selection; a later chat
   // selection leaves the pending one attached. https://github.com/Brevilabs/obsidian-copilot-private/issues/597
   const readingEl = view.previewMode.containerEl;
   if (!readingEl.contains(anchor) || !readingEl.contains(focus)) return null;
 
-  const content = selection.toString();
+  return { view, selection };
+}
+
+export function readingSelectionReport(app: App, doc: Document): SelectionReport | null {
+  const active = activeReadingSelection(app, doc);
+  const file = active?.view.file;
+  if (!active || !file) return null;
+
+  const content = active.selection.toString();
   if (!content.trim()) return { location: file.path, context: null };
 
   // Rendered Markdown does not expose reliable source line numbers for every selection.

@@ -30,7 +30,7 @@ The box at the bottom of Agent Chat where the user writes and sends a message: m
 - Copilot files: with a saved chat, a custom command, and a project holding a note, type `@` then part of each name, and `[[` then the same. The project's note is listed; the saved chat, the custom command, and the project's `project.md` are not.
 - Add context: choose `Add context` (**+**). Notes, Web tabs, Folders, and Files are listed.
 - Current note: open a note beside Agent Chat. A badge with its name and `Current` shows above the text.
-- Selection: select a line in that note. A badge with the selected text and its line (`L3`) shows next to the `Current` badge. Click the chat input: the line stays highlighted in the note. Remove the badge: the highlight goes away.
+- Selection: select a line in that note. A badge with the selected text and its line (`L3`) shows next to the `Current` badge. Click the chat input: the line stays highlighted in the note. Remove the badge: the highlight goes away. The same holds for text selected in reading view, whose badge reads `Selection`.
 - Images: paste an image into the chat input. A preview shows above the text; `Remove image` takes it off.
 - Files: drop a `.csv` file from Finder onto the chat input. A copy appears in the attachment folder, a notice reads `Copied <file> into <folder>/`, and its badge shows above the text. Drag a note from the file explorer onto the chat input: its badge shows and nothing is copied. Drag a nested folder from the file explorer onto the chat input: its badge shows above the text, the message text is unchanged, and the sent message shows the folder badge.
 - Commands: type `/`. `compact` is listed first with "Summarize this chat to free up context", followed by skills.
@@ -42,6 +42,5 @@ The box at the bottom of Agent Chat where the user writes and sends a message: m
 - Picking another agent's model in `Model · effort` replaces the chat in the tab with a new chat on that agent, and that agent becomes the default for new chats. Other agents' models are listed only until a message is sent. A chat opened with `Continue from here in a new chat` lists them too until its first message; switching it keeps its messages, title and single chat note, and reopening it from Recent chats before that message opens it on the agent and model picked.
 - A chat reopened from Recent chats or [Copilot Navigator](copilot-navigator.md), after `Shut down` or an Obsidian restart, comes back on the model and effort of its last reply, not the agent's `Default model`.
 - While the agent works, Escape in the chat input stops the reply even when a draft is typed.
-- A selection made in reading view keeps its badge but is not highlighted in the note once the chat has focus.
 - Only suggestions skip Copilot's own files: a note link typed in full, a dropped file, and the `Active Note` row still attach one.
 - A file dragged from Finder that is already in the vault is attached where it is, not copied. One drop can carry notes and outside files together; each is attached. A folder from outside the vault can't be added: dropping one shows a notice.

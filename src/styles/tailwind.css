@@ -947,6 +947,12 @@ If your plugin does not need CSS, delete this file.
   }
 }
 
+/* The reading view selection kept visible while a chat has focus is a CSS Custom
+   Highlight range, which has no element for a Tailwind utility to target. */
+::highlight(copilot-chat-selection) {
+  background-color: var(--text-selection);
+}
+
 /* Quick Ask Overlay Styles */
 .copilot-quick-ask-overlay-host {
   position: relative;

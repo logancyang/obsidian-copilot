@@ -15,6 +15,7 @@ import {
   type SelectionReport,
 } from "@/selection/selectionStore";
 import {
+  activeReadingSelection,
   editorSelectionReport,
   readingSelectionReport,
   watchSelections,
@@ -90,6 +91,28 @@ describe("selectionWatcher", () => {
         location: "Research.md",
         context: null,
       });
+    });
+  });
+
+  describe("activeReadingSelection()", () => {
+    it("returns the reading view together with the selection made in its rendered text", () => {
+      const { preview, app } = readingNote("Excerpt from the note");
+      selectText(preview.firstChild!, 7);
+
+      const active = activeReadingSelection(app, document);
+
+      expect(active?.view.previewMode.containerEl).toBe(preview);
+      expect(active?.selection.toString()).toBe("Excerpt");
+    });
+
+    it("returns nothing for a selection outside the rendered note, such as in chat", () => {
+      const { app } = readingNote("Excerpt from the note");
+      const chat = document.createElement("div");
+      chat.textContent = "Chat input";
+      document.body.append(chat);
+      selectText(chat.firstChild!, 4);
+
+      expect(activeReadingSelection(app, document)).toBeNull();
     });
   });
 
