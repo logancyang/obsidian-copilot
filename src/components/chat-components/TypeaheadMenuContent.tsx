@@ -136,7 +136,7 @@ export function TypeaheadMenuContent({
               return (
                 <React.Fragment key={option.key}>
                   {/* A locked entry sits apart below the categories so users looking for a note see those first: https://github.com/Brevilabs/obsidian-copilot-private/issues/582 */}
-                  {option.lockedNote && (
+                  {option.lockedNote && !("data" in option) && (
                     <div
                       role="separator"
                       className="tw-mx-3 tw-my-1 tw-border-0 tw-border-t tw-border-solid tw-border-border"
@@ -170,7 +170,7 @@ export function TypeaheadMenuContent({
                         <div className="tw-flex tw-items-center tw-gap-2">
                           {option.icon}
                           <span className="tw-font-medium">{option.title}</span>
-                          {option.lockedNote && (
+                          {option.lockedNote && !("data" in option) && (
                             <span className="tw-text-xs">{option.lockedNote}</span>
                           )}
                         </div>
@@ -197,6 +197,12 @@ export function TypeaheadMenuContent({
                             </div>
                           )}
                         </div>
+                        {option.lockedNote && (
+                          <Lock
+                            aria-label={option.lockedNote}
+                            className="tw-size-4 tw-shrink-0 tw-text-faint"
+                          />
+                        )}
                       </div>
                     )}
                   </div>

@@ -1,12 +1,14 @@
 import { agentTitle } from "@/agents/agentTitle";
 import type { CustomAgent } from "@/agents/CustomAgentStore";
-import { AgentFace } from "@/agents/ui/AgentFace";
+import { AgentFace, LOCKED_FACE_CLASS } from "@/agents/ui/AgentFace";
 import type { AtMentionOption } from "@/components/chat-components/hooks/useAtMentionCategories";
+import { cn } from "@/lib/utils";
 import React from "react";
 
 export function agentMentionOptions(
   agents: readonly CustomAgent[],
-  query: string
+  query: string,
+  locked = false
 ): AtMentionOption[] {
   const wanted = query.trim().toLowerCase();
   return agents
@@ -17,6 +19,7 @@ export function agentMentionOptions(
       subtitle: agentTitle(agent) || undefined,
       category: "customAgent",
       data: agent.slug,
-      icon: <AgentFace src={agent.faceSrc} size="xs" />,
+      icon: <AgentFace src={agent.faceSrc} size="xs" className={cn(locked && LOCKED_FACE_CLASS)} />,
+      ...(locked ? { lockedNote: "Supporter preview" } : {}),
     }));
 }

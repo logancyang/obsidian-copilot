@@ -45,7 +45,7 @@ export function AtMentionCommandPlugin({
   const lockedAgentMention = useLockedAgentMention(isAgentMode);
   const availableCategoryOptions = useMemo(() => {
     const categories = allCategoryOptions.filter((c) => !c.isAction);
-    return lockedAgentMention ? [...categories, lockedAgentMention.option] : categories;
+    return lockedAgentMention?.option ? [...categories, lockedAgentMention.option] : categories;
   }, [allCategoryOptions, lockedAgentMention]);
 
   const loadNoteContentForPreview = useCallback(
@@ -93,9 +93,14 @@ export function AtMentionCommandPlugin({
   const searchResults = useMemo(
     () =>
       extendedState.mode === "category"
-        ? [...agentMentionOptions(mentionableAgents, currentQuery), ...contextResults]
+        ? [
+            ...(lockedAgentMention
+              ? agentMentionOptions(lockedAgentMention.agents, currentQuery, true)
+              : agentMentionOptions(mentionableAgents, currentQuery)),
+            ...contextResults,
+          ]
         : contextResults,
-    [extendedState.mode, mentionableAgents, currentQuery, contextResults]
+    [extendedState.mode, lockedAgentMention, mentionableAgents, currentQuery, contextResults]
   );
 
   const isAtMentionOption = useCallback(
@@ -117,7 +122,7 @@ export function AtMentionCommandPlugin({
     (option: CategoryOption | AtMentionOption) => {
       // The locked row opens the upsell and puts nothing in the message; it closes the menu itself because a license check that grants custom agents opens no dialog to take focus.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/582
-      if (option.key === lockedAgentMention?.option.key) {
+      if (lockedAgentMention && option.lockedNote) {
         closeMenuRef.current();
         lockedAgentMention.choose();
         return;

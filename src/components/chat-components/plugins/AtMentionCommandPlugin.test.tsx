@@ -1,4 +1,5 @@
 import { ChatAgentsContext } from "@/agents/ui/chatAgents";
+import { useLockedAgentMention } from "@/agents/ui/lockedCustomAgents";
 import { COCO, LEO, MAYA, THREE_AGENTS } from "@/agents/ui/testing/rosterFixtures";
 import type {
   AtMentionOption,
@@ -11,6 +12,7 @@ import { act, render } from "@testing-library/react";
 import React from "react";
 
 const LOCKED_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/582";
+const LAPSED_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/950";
 const MENTION_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/947";
 
 const mockEditorUpdate = jest.fn((change: () => void) => change());
@@ -38,7 +40,7 @@ const LOCKED_ROW: CategoryOption = {
 };
 jest.mock("@/agents/ui/lockedCustomAgents", () => ({
   useLockedAgentMention: jest.fn((enabled: boolean) =>
-    enabled ? { option: LOCKED_ROW, choose: mockChooseLockedAgents } : null
+    enabled ? { option: LOCKED_ROW, agents: [], choose: mockChooseLockedAgents } : null
   ),
 }));
 
@@ -160,6 +162,29 @@ describe("AtMentionCommandPlugin", () => {
 
       mockTypeahead?.onSelect(LOCKED_ROW);
 
+      expect(mockChooseLockedAgents).toHaveBeenCalledTimes(1);
+      expect(mockEditorUpdate).not.toHaveBeenCalled();
+    });
+
+    it(`lists the vault's agents locked, in place of the Ask an agent row, and opens the locked dialog with nothing inserted when one is chosen (${LAPSED_ISSUE})`, () => {
+      jest
+        .mocked(useLockedAgentMention)
+        .mockReturnValue({ option: null, agents: THREE_AGENTS, choose: mockChooseLockedAgents });
+
+      render(<AtMentionCommandPlugin isAgentMode />);
+
+      expect(menuTitles()).toEqual([
+        COCO.name,
+        MAYA.name,
+        LEO.name,
+        "Notes",
+        "Web tabs",
+        "Folders",
+      ]);
+      expect(option(MAYA.name).lockedNote).toBe("Supporter preview");
+      mockTypeahead?.onSelect(option(MAYA.name));
+
+      expect(mockCloseMenu).toHaveBeenCalledTimes(1);
       expect(mockChooseLockedAgents).toHaveBeenCalledTimes(1);
       expect(mockEditorUpdate).not.toHaveBeenCalled();
     });

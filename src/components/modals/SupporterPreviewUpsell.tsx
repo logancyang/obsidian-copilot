@@ -8,15 +8,19 @@ import * as React from "react";
 
 interface EnterLicenseKeyButtonProps {
   onOpenSettings?: () => void;
+  primary?: boolean;
+  children?: React.ReactNode;
 }
 
 export function EnterLicenseKeyButton({
   onOpenSettings,
+  primary,
+  children = "Already a Supporter? Enter your license key",
 }: EnterLicenseKeyButtonProps): React.ReactElement {
   const app = useApp();
   return (
     <Button
-      variant="secondary"
+      variant={primary ? "default" : "secondary"}
       className="tw-h-auto tw-min-h-9 tw-whitespace-normal"
       onClick={(event) => {
         const ownerWindow = event.currentTarget.win;
@@ -24,7 +28,7 @@ export function EnterLicenseKeyButton({
         openCopilotSettings(app, ownerWindow, "basic");
       }}
     >
-      Already a Supporter? Enter your license key
+      {children}
     </Button>
   );
 }
