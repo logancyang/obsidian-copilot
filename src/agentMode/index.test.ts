@@ -14,6 +14,7 @@ import { createCopilotMcpServer } from "./session/copilotMcpServer";
 import { isConnectorsEnabled } from "@/connectors/connectorsEntitlement";
 import { createDefaultPermissionPrompter } from "./ui/permissionPrompter";
 import { fakeChat } from "./session/testing/fakeChat";
+import { buildNativeChatId } from "@/utils/nativeChatId";
 import { AGENT_DRAFT_CARD, AGENT_DRAFT_CARD_EXTENSION } from "@/agents/agentMode/agentDraftCard";
 
 jest.mock("@/constants", () => ({}));
@@ -43,7 +44,7 @@ jest.mock("@/utils/appPaths", () => ({
 }));
 jest.mock("./backends/shared/agentSystemPrompt", () => ({
   buildAgentSystemPrompt: (id: string, app: { plugins?: { getPlugin(id: string): unknown } }) =>
-    `prompt:${id}:${JSON.stringify(mockSettings.agentMode.skills.builtinPreferences ?? {})}:${mockSettings.agentMode.offerFeedbackCards}:${mockSettings.enableMiyoSearchSkill}:${mockSettings.enableMiyoDocumentProcessing}:${app.plugins?.getPlugin("obsidian-excalidraw-plugin") != null}:${jest.requireMock<typeof import("@/services/obsidianCli/ObsidianCliClient")>("@/services/obsidianCli/ObsidianCliClient").isObsidianCliEnabled()}`,
+    `prompt:${id}:${mockCustomAgentsGate}:${JSON.stringify(mockSettings.agentMode.skills.builtinPreferences ?? {})}:${mockSettings.agentMode.offerFeedbackCards}:${mockSettings.enableMiyoSearchSkill}:${mockSettings.enableMiyoDocumentProcessing}:${app.plugins?.getPlugin("obsidian-excalidraw-plugin") != null}:${jest.requireMock<typeof import("@/services/obsidianCli/ObsidianCliClient")>("@/services/obsidianCli/ObsidianCliClient").isObsidianCliEnabled()}`,
 }));
 jest.mock("./backends/shared/builtinSkillEnv", () => ({
   getBuiltinSkillEnvRestartPolicy: () => "none",
@@ -108,9 +109,14 @@ jest.mock("./backends/shared/ui/AgentBackendHeader", () => ({}));
 jest.mock("./session/useBackendAuthState", () => ({}));
 jest.mock("@/connectors/connectorsEntitlement", () => ({ isConnectorsEnabled: jest.fn() }));
 jest.mock("@/agents/agentSessionPrompt", () => ({ loadAgentSessionPrompt: jest.fn() }));
+let mockCustomAgentsGate = "full";
+const mockGateListeners: Array<() => void> = [];
 jest.mock("@/agents/customAgentsGate", () => ({
-  getCustomAgentsGate: () => "full",
-  subscribeToCustomAgentsGate: () => () => {},
+  getCustomAgentsGate: () => mockCustomAgentsGate,
+  subscribeToCustomAgentsGate: (listener: () => void) => {
+    mockGateListeners.push(listener);
+    return () => {};
+  },
 }));
 jest.mock("@/utils/vaultPath", () => ({ getVaultBase: () => "/vault" }));
 
@@ -206,6 +212,8 @@ describe("agentMode", () => {
       jest.mocked(isObsidianCliEnabled).mockReturnValue(false);
       mockRefresh.mockImplementation(() => mockRuntime.prepare("copilot/skills"));
       mockSettingsSubscribers.length = 0;
+      mockGateListeners.length = 0;
+      mockCustomAgentsGate = "full";
       mockSettings = settingsWith({ reasoning: true });
       plugin = {
         manifest: { id: "copilot" },
@@ -362,6 +370,24 @@ describe("agentMode", () => {
         "system prompt changed"
       );
       expect(reconcile).toHaveBeenCalledTimes(passes);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/959 re-checks the shared prompt as soon as the custom agents gate changes, so a stored license verified after start doesn't restart the backends at the next agent start", async () => {
+      mockCustomAgentsGate = "pending";
+      createAgentSessionManager({} as App, plugin);
+      await mockManager.registerPreload.mock.calls[0][1];
+
+      mockCustomAgentsGate = "full";
+      mockGateListeners.forEach((listener) => listener());
+      expect(mockManager.noteSpawnConfigChanged).toHaveBeenCalledWith(
+        "opencode",
+        "system prompt changed"
+      );
+
+      mockManager.noteSpawnConfigChanged.mockClear();
+      const { beforeBackendStart } = jest.mocked(AgentSessionManager).mock.calls[0][2];
+      await beforeBackendStart!("claude");
+      expect(mockManager.noteSpawnConfigChanged).not.toHaveBeenCalled();
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/787 offers a reload when the Excalidraw plugin is turned on between agent starts, so new chats gain the Excalidraw steering, without re-reconciling skills", async () => {
@@ -771,6 +797,46 @@ describe("agentMode", () => {
       expect(jest.mocked(AgentSessionManager).mock.calls[0][2].chatExtensions).toContain(
         AGENT_DRAFT_CARD_EXTENSION
       );
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/959 lists a chat's own earlier chats without the calling chat, and tells an asked agent's hidden chat it has none", async () => {
+      const at = new Date(2026, 10, 11);
+      const item = (id: string, title: string, agent?: string) => ({
+        id,
+        title,
+        createdAt: at,
+        lastAccessedAt: at,
+        ...(agent ? { agent } : {}),
+      });
+      const juno = Object.assign(fakeChat(), {
+        agentSlug: "juno",
+        internalId: "juno-chat",
+        backendId: "claude",
+        getBackendSessionId: () => "s-now",
+      });
+      Object.assign(mockManager, {
+        getSessions: () => [juno],
+        getSessionSourcePath: (internalId: string) =>
+          internalId === "juno-chat" ? "chats/this-chat.md" : "",
+        getChatHistoryItems: async () => [
+          item("chats/this-chat.md", "This chat", "juno"),
+          item(buildNativeChatId("claude", "s-now"), "This chat, by its backend id", "juno"),
+          item("chats/plan.md", "Release video plan", "juno"),
+          item("chats/rex.md", "Podcast sponsorship", "rex"),
+        ],
+      });
+      createAgentSessionManager({} as App, plugin);
+      const listChats = jest
+        .mocked(createCopilotMcpServer)
+        .mock.calls[0][1].find(({ definition }) => definition.name === "list_chats")!;
+
+      expect((await listChats.call({}, fakeChat())).text).toContain(
+        "Another agent asked you into this chat, so it has no earlier chats with the user."
+      );
+      const { text } = await listChats.call({}, juno);
+      expect(text).toContain("- 2026-11-11 · Release video plan · /vault/chats/plan.md");
+      expect(text).not.toContain("This chat");
+      expect(text).not.toContain("Podcast sponsorship");
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/944 hands a permission request no asked agent made to the chat's own prompter", async () => {

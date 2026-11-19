@@ -1,5 +1,6 @@
 import type { App } from "obsidian";
 import type { BackendId } from "@/agentMode/session/types";
+import { buildCopilotChatRecall } from "@/agents/agentSessionPrompt";
 import { isBuiltinSkillEnabledFor } from "@/builtinSkills/builtinSkills";
 import { getExcalidrawApi } from "@/excalidraw/excalidrawApi";
 import { isMiyoParseActive, isMiyoSearchActive } from "@/miyo/miyoUtils";
@@ -106,6 +107,8 @@ export function buildAgentSystemPrompt(
     parts.push(`${COPILOT_SKILL_FIRST_LEAD} ${relayJobs.join(", ")}. ${COPILOT_SKILL_FALLBACK}`);
   }
   if (builtinPrompt && isObsidianCliEnabled()) parts.push(COPILOT_OBSIDIAN_CLI_STEERING);
+  const copilotChatRecall = buildCopilotChatRecall();
+  if (copilotChatRecall) parts.push(copilotChatRecall);
 
   return parts.join("\n\n");
 }

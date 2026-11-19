@@ -1,4 +1,8 @@
-import { buildAgentPrompt, loadAgentSessionPrompt } from "@/agents/agentSessionPrompt";
+import {
+  buildAgentPrompt,
+  buildCopilotChatRecall,
+  loadAgentSessionPrompt,
+} from "@/agents/agentSessionPrompt";
 import { CustomAgentStore } from "@/agents/CustomAgentStore";
 import { serializeInstructionsFile } from "@/agents/customAgentFiles";
 import { buildMemorySaveRules } from "@/agents/memorySaveRules";
@@ -135,6 +139,26 @@ describe("agentSessionPrompt", () => {
       expect(prompt).not.toContain("draft_agent");
     });
 
+    it("tells the agent in a chat of its own to list its earlier chats with list_chats only when the user asks, to search or read no other chat note and to say when something was never discussed (https://github.com/Brevilabs/obsidian-copilot-private/issues/959)", () => {
+      const ownChat = buildAgentPrompt({
+        agent: COCO,
+        folder: "/vault/copilot/agents/coco",
+        others: [],
+        instruction: "",
+        memory: "",
+        saveRules: { instructionsPath: "copilot/agents/coco/instructions.md" },
+        chatsFolder: "/vault/copilot/copilot-conversations",
+      });
+
+      expect(ownChat).toContain(
+        "When the user asks what you and they worked on, discussed or decided before, list your earlier chats with list_chats from obsidian-copilot and read a listed note when you need what was said. For that answer use only those chats: never search /vault/copilot/copilot-conversations for it, even within a wider search, and never read a note there that list_chats didn't list, unless the user names it. If none of them covers it, say you haven't discussed it."
+      );
+    });
+
+    it("says nothing about earlier chats in a chat the agent was asked into, which the user never had with it (https://github.com/Brevilabs/obsidian-copilot-private/issues/959)", () => {
+      expect(prompt).not.toContain("list_chats");
+    });
+
     it("carries no memory save rules unless asked for them", () => {
       expect(prompt).not.toContain("Save a rule to your memory");
     });
@@ -185,6 +209,7 @@ describe("agentSessionPrompt", () => {
           instruction: "You handle houseplant care only.",
           memory: "End with ACORN.",
           saveRules: { instructionsPath: "copilot/agents/coco/instructions.md" },
+          chatsFolder: "/vault/copilot/copilot-conversations",
         }),
         memoryPath: "/vault/copilot/agents/coco/MEMORY.md",
       });
@@ -256,6 +281,17 @@ describe("agentSessionPrompt", () => {
       expect(hidden?.prompt).not.toContain("draft_agent");
     });
 
+    it("points the agent's own chat at the chat notes folder under the vault for list_chats, and leaves it out of a hidden chat's prompt (https://github.com/Brevilabs/obsidian-copilot-private/issues/959)", async () => {
+      seedAgent(vault, "coco", COCO, "You handle houseplant care only.");
+      await store.start();
+
+      const own = await loadAgentSessionPrompt(store, "coco", "/vault");
+      const hidden = await loadAgentSessionPrompt(store, "coco", "/vault", { saveRules: false });
+
+      expect(own?.prompt).toContain("never search /vault/copilot/copilot-conversations for it,");
+      expect(hidden?.prompt).not.toContain("list_chats");
+    });
+
     it("reads nothing and returns null while custom agents are hidden", async () => {
       seedAgent(vault, "coco", COCO, "You handle houseplant care only.");
       await store.start();
@@ -265,5 +301,24 @@ describe("agentSessionPrompt", () => {
       await expect(loadAgentSessionPrompt(store, "coco", "/vault")).resolves.toBeNull();
       expect(vault.touchedPaths).toEqual([]);
     });
+  });
+
+  describe("buildCopilotChatRecall()", () => {
+    it("tells a chat without a custom agent to list its earlier chats with list_chats when asked (https://github.com/Brevilabs/obsidian-copilot-private/issues/959)", async () => {
+      await setCustomAgentsAccess("team");
+
+      expect(buildCopilotChatRecall()).toBe(
+        "In a chat without a custom agent, when the user asks what you and they worked on, discussed or decided before, list your earlier chats with list_chats from obsidian-copilot and read a listed note when you need what was said."
+      );
+    });
+
+    it.each(["free", "plus-without-custom-agents"] as const)(
+      "adds nothing while custom agents aren't available (%s) (https://github.com/Brevilabs/obsidian-copilot-private/issues/959)",
+      async (access) => {
+        await setCustomAgentsAccess(access);
+
+        expect(buildCopilotChatRecall()).toBeNull();
+      }
+    );
   });
 });

@@ -1,3 +1,5 @@
+import { buildCopilotChatRecall } from "@/agents/agentSessionPrompt";
+import { setCustomAgentsAccess } from "@/agents/testing/customAgentsAccess";
 import { PROJECT_WORKSPACE_POLICY } from "@/projects/projectContextBlock";
 import { getSettings, resetSettings, updateSetting, type CopilotSettings } from "@/settings/model";
 import { isObsidianCliEnabled } from "@/services/obsidianCli/ObsidianCliClient";
@@ -32,6 +34,7 @@ jest.mock("@/logger", () => ({
 jest.mock("@/services/obsidianCli/ObsidianCliClient", () => ({
   isObsidianCliEnabled: jest.fn(),
 }));
+jest.mock("@/entitlement");
 
 const mockIsObsidianCliEnabled = jest.mocked(isObsidianCliEnabled);
 
@@ -351,6 +354,25 @@ describe("agentSystemPrompt", () => {
         );
       }
     });
+
+    it("ends every chat's shared prompt with the line telling a chat without a custom agent to list its earlier chats, only while custom agents are available (https://github.com/Brevilabs/obsidian-copilot-private/issues/959)", async () => {
+      await setCustomAgentsAccess("free");
+      const withoutCustomAgents = buildAgentSystemPrompt(AGENT, APP);
+      await setCustomAgentsAccess("team");
+
+      expect(buildAgentSystemPrompt(AGENT, APP)).toBe(
+        `${withoutCustomAgents}\n\n${buildCopilotChatRecall()}`
+      );
+    });
+
+    it.each(["free", "keyless", "plus-without-custom-agents", "unverified"] as const)(
+      "adds nothing about earlier chats while custom agents aren't available (%s) (https://github.com/Brevilabs/obsidian-copilot-private/issues/959)",
+      async (access) => {
+        await setCustomAgentsAccess(access);
+
+        expect(buildAgentSystemPrompt(AGENT, APP)).not.toContain("list_chats");
+      }
+    );
 
     it(`drops the obsidian_cli line while Obsidian's command line interface is off (${ISSUE_833})`, () => {
       mockIsObsidianCliEnabled.mockReturnValue(false);
