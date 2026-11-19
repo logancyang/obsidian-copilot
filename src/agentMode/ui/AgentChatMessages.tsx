@@ -11,6 +11,8 @@ import { toolUseLabel } from "@/agentMode/session/copilotToolCalls";
 import { useAgentTasks } from "@/agentMode/ui/AgentTasksContext";
 import { permissionRequesterName } from "@/agentMode/ui/taskDisplay";
 import { openTurnDiff } from "@/agentMode/ui/TurnDiffView";
+import { MemorySaveLines } from "@/agents/agentMode/memorySaveCards";
+import { useMemorySaveTrail } from "@/agents/agentMode/useMemorySaveTrail";
 import { AgentTurnDurationIndicator } from "@/agentMode/ui/AgentTurnDurationIndicator";
 import ChatSingleMessage from "@/components/chat-components/ChatSingleMessage";
 import { ChatTranscriptViewport } from "@/components/chat-components/ui/ChatTranscriptViewport";
@@ -114,12 +116,19 @@ const AgentMessageRow = memo(function AgentMessageRow({
       <AgentTurnDurationIndicator status="running" startedAtMs={runningTurnStartedAtMs} />
     ) : null;
   const isStreamingPlaceholder = isAssistant && isStreaming && !hasParts && !message.message;
+  const memorySaves = useMemorySaveTrail(message, app);
   const onContinue = isAssistant && onContinueFrom ? () => onContinueFrom(message.id) : undefined;
 
   return (
     // Off-screen turns skip paint so scrolling a long chat costs what is on screen, not the whole transcript.
     // https://github.com/logancyang/obsidian-copilot/issues/3343
     <div className="tw-w-full [contain-intrinsic-size:auto_500px] [content-visibility:auto]">
+      {/* A reply opened from its note, or replayed without its tool calls, has no edit to put the save in place of. https://github.com/Brevilabs/obsidian-copilot-private/issues/942 */}
+      {memorySaves && memorySaves.anchorId === null ? (
+        <div className="tw-px-3 tw-pt-2">
+          <MemorySaveLines saves={memorySaves.saves} app={app} />
+        </div>
+      ) : null}
       {isStreamingPlaceholder ? (
         <div className="tw-px-3 tw-pt-2">{runningTurnDuration}</div>
       ) : renderTrail ? (
@@ -134,7 +143,16 @@ const AgentMessageRow = memo(function AgentMessageRow({
             turnStopReason={message.turnStopReason}
             agentCancelCause={message.agentCancelCause}
             errorText={message.isErrorMessage ? message.message : undefined}
-            fileChanges={message.fileChanges}
+            // A save line has no Undo, so the turn's changed files leave out the MEMORY.md its lines show.
+            // https://github.com/Brevilabs/obsidian-copilot-private/issues/942
+            fileChanges={
+              memorySaves
+                ? message.fileChanges?.filter(
+                    (change) => change.path !== memorySaves.saves[0].memoryPath
+                  )
+                : message.fileChanges
+            }
+            memorySaves={memorySaves}
             onContinue={onContinue}
             onOpenFileChange={(change) =>
               void openTurnDiff(app, change, message.id).catch((error: unknown) =>

@@ -778,6 +778,63 @@ describe("AgentChatPersistenceManager", () => {
   });
 
   describe("loadFile()", () => {
+    it("restores the rules a custom agent saved in a reply from its note, keeping the note the same across saves (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", async () => {
+      const memorySaves = [
+        {
+          agentName: "Coco",
+          memoryPath: "copilot/agents/coco/MEMORY.md",
+          rule: "Write summaries as short paragraphs, no bullet points.",
+          replaced: "Summarize as bullet points.",
+          contradicts: "Use bullets --> always.",
+        },
+      ];
+      const saved = await manager.saveSession(
+        [
+          makeMessage(USER_SENDER, "Stop with the bullets."),
+          { ...makeMessage(AI_SENDER, "Got it.", 1735732800001), memorySaves },
+        ],
+        "claude"
+      );
+      const file = app.files.get(saved!.path)!;
+
+      expect(file.contents).toContain(
+        '**ai**: Got it.\n<!-- copilot-message {"memorySaves":[{"agentName":"Coco","memoryPath":"copilot/agents/coco/MEMORY.md","rule":"Write summaries as short paragraphs, no bullet points.","replaced":"Summarize as bullet points.","contradicts":"Use bullets --\\u003e always."}]} -->\n'
+      );
+      const loaded = await manager.loadFile(file as unknown as TFile);
+      expect(loaded.messages[1].message).toBe("Got it.");
+      expect(loaded.messages[1].memorySaves).toEqual(memorySaves);
+
+      const before = file.contents;
+      await manager.saveSession(loaded.messages, "claude", { existingPath: saved!.path });
+      expect(file.contents).toBe(before);
+    });
+
+    it("drops a saved rule entry it cannot read and keeps the reply's text", async () => {
+      const file = addNote(app, "copilot/copilot-conversations/agent__saved.md");
+      Object.assign(file, {
+        contents: [
+          "---",
+          "backendId: claude",
+          "---",
+          "",
+          "**ai**: Got it.",
+          '<!-- copilot-message {"memorySaves":[{"rule":42},"x",{"agentName":"Coco","memoryPath":"copilot/agents/coco/MEMORY.md","rule":"Keep it short."}]} -->',
+          "[Timestamp: 2026/01/01 12:00:00]",
+        ].join("\n"),
+      });
+
+      const loaded = await manager.loadFile(file);
+
+      expect(loaded.messages[0].message).toBe("Got it.");
+      expect(loaded.messages[0].memorySaves).toEqual([
+        {
+          agentName: "Coco",
+          memoryPath: "copilot/agents/coco/MEMORY.md",
+          rule: "Keep it short.",
+        },
+      ]);
+    });
+
     it("restores the tools a reply used from its note without showing them in the message (https://github.com/Brevilabs/obsidian-copilot-private/issues/906)", async () => {
       const reply: AgentChatMessage = {
         ...makeMessage(AI_SENDER, "Here is the summary.", 1735732800001),

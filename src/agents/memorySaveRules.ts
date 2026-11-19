@@ -1,8 +1,8 @@
 const MEMORY_HEADINGS = Object.freeze(["How to work", "Where to find things"] as const);
 
-const CONTRADICTS_INSTRUCTION_MARKER = "Contradicts instruction:";
+export const CONTRADICTS_INSTRUCTION_MARKER = "Contradicts instruction:";
 
-const REPLACES_MARKER = "Replaces";
+export const REPLACES_MARKER = "Replaces";
 
 export function buildMemorySaveRules(memoryFile: string, instructionsPath: string): string {
   return [

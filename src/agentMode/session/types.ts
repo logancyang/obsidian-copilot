@@ -1,3 +1,4 @@
+import type { MemorySave } from "@/agents/memorySaves";
 import type { EffortOption } from "@/lib/model-effort";
 import type React from "react";
 import type { ModelCapability } from "@/constants";
@@ -410,6 +411,7 @@ export interface AgentMcpServer {
 export interface SessionAgent {
   slug: string;
   prompt: string;
+  name?: string;
   memoryPath?: string;
 }
 
@@ -576,6 +578,7 @@ export interface AgentChatMessage {
   turnDurationMs?: number;
   fileChanges?: TurnFileChange[];
   toolsUsed?: readonly string[];
+  memorySaves?: readonly MemorySave[];
 }
 
 export interface TurnFileChange {

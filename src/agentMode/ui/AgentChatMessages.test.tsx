@@ -17,6 +17,7 @@ import { CONNECTOR_CARDS } from "@/connectors/agentMode/connectorCards";
 import { AI_SENDER } from "@/constants";
 import { openTurnDiff } from "@/agentMode/ui/TurnDiffView";
 import { logError } from "@/logger";
+import { setCustomAgentsAccess } from "@/agents/testing/customAgentsAccess";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
 
@@ -73,6 +74,7 @@ jest.mock("@/agentMode/ui/AgentTrailView", () => ({
     errorText,
     agentCancelCause,
     fileChanges,
+    memorySaves,
     onOpenFileChange,
     onContinue,
   }: {
@@ -81,6 +83,7 @@ jest.mock("@/agentMode/ui/AgentTrailView", () => ({
     errorText?: string;
     agentCancelCause?: string;
     fileChanges?: TurnFileChange[];
+    memorySaves?: { anchorId: string | null } | null;
     onOpenFileChange?: (change: TurnFileChange) => void;
     onContinue?: () => void;
   }) => {
@@ -88,6 +91,9 @@ jest.mock("@/agentMode/ui/AgentTrailView", () => ({
     return (
       <div data-testid="agent-trail-timestamp">
         {timestamp}
+        {memorySaves ? (
+          <span data-testid="agent-trail-memory-anchor">{memorySaves.anchorId}</span>
+        ) : null}
         {onContinue ? (
           <button type="button" onClick={onContinue}>
             Continue trail
@@ -106,6 +112,8 @@ jest.mock("@/agentMode/ui/AgentTrailView", () => ({
     );
   },
 }));
+
+jest.mock("@/entitlement");
 
 jest.mock("@/agentMode/ui/TurnDiffView", () => ({
   openTurnDiff: jest.fn(() => Promise.resolve()),
@@ -737,6 +745,83 @@ describe("AgentChatMessages", () => {
 
       expect(screen.getByTestId("chat-messages").textContent).toContain("Plan plan-1");
       expect(screen.queryByTestId("agent-action-rail")).toBeNull();
+    });
+
+    describe("a custom agent's saved rules", () => {
+      const MEMORY = "copilot/agents/coco/MEMORY.md";
+      const memorySaves = [
+        { agentName: "Coco", memoryPath: MEMORY, rule: "Lead with user value." },
+      ];
+      const saveEdit = {
+        kind: "tool_call" as const,
+        id: "save",
+        title: "Edit MEMORY.md",
+        status: "completed" as const,
+        toolKind: "edit" as const,
+        locations: [{ path: MEMORY }],
+      };
+
+      afterEach(async () => {
+        await setCustomAgentsAccess("free");
+      });
+
+      it("hands the trail the saves to show in place of the edit that wrote them (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", async () => {
+        await setCustomAgentsAccess("team");
+
+        renderMessages([assistantMessage("reply", 1, { parts: [saveEdit], memorySaves })], false);
+
+        expect(screen.getByTestId("agent-trail-memory-anchor").textContent).toBe("save");
+        expect(screen.queryByText("Coco remembered")).toBeNull();
+      });
+
+      it("shows the saves above a reply opened from its note, which has no edit to stand in for (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", async () => {
+        await setCustomAgentsAccess("team");
+
+        const { container } = renderMessages(
+          [assistantMessage("reply", 1, { message: "Got it.", memorySaves })],
+          false
+        );
+
+        const text = container.textContent ?? "";
+        expect(text.indexOf("Coco remembered")).toBeGreaterThan(-1);
+        expect(text.indexOf("Coco remembered")).toBeLessThan(text.indexOf("Got it."));
+      });
+
+      it("leaves MEMORY.md out of the reply's changed files while its saves show, so a save has no Undo (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", async () => {
+        await setCustomAgentsAccess("team");
+        const fileChanges = [MEMORY, "notes/plan.md"].map((path) => ({
+          path,
+          status: "created" as const,
+          before: null,
+          after: "x",
+          additions: 1,
+          deletions: 0,
+        }));
+
+        renderMessages(
+          [assistantMessage("reply", 1, { parts: [saveEdit], memorySaves, fileChanges })],
+          false
+        );
+
+        expect(screen.getByRole("button", { name: "notes/plan.md" })).toBeTruthy();
+        expect(screen.queryByRole("button", { name: MEMORY })).toBeNull();
+      });
+
+      it("shows a reply with saves as ordinary content while custom agents are hidden", async () => {
+        await setCustomAgentsAccess("free");
+
+        renderMessages(
+          [
+            assistantMessage("note", 1, { message: "Got it.", memorySaves }),
+            assistantMessage("live", 2, { parts: [saveEdit], memorySaves }),
+          ],
+          false
+        );
+
+        expect(screen.getByText("Got it.")).toBeTruthy();
+        expect(screen.queryByText("Coco remembered")).toBeNull();
+        expect(screen.queryByTestId("agent-trail-memory-anchor")).toBeNull();
+      });
     });
   });
 });

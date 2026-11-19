@@ -17,6 +17,10 @@ How a reply appears in a conversation: streaming text, reasoning, tool and activ
 - reply-task-follow-up: when a background task or subagent finishes, the agent replies again on its own.
 - reply-compaction: `Compacting conversation…`, then `Context compacted` with the token count before and after; when the context fills up, `Context is full, compacting…`, then `Context compacted automatically`.
 - reply-files-changed: a turn that edited notes ends with its [turn diffs](turn-diffs.md).
+- reply-remembered: in a custom agent's chat, a rule the agent saves to its memory shows as `<name> remembered` with the saved sentence in quotes, where its edit card would be. The whole row opens the agent's `MEMORY.md` at that rule; its tooltip is the file's path. There is no Undo, and the turn's changed files leave `MEMORY.md` out.
+- reply-replaced-rule: when a saved rule replaces an older one, the row reads `<name> replaced a rule`, with the old rule struck through above the new one.
+- reply-rule-contradiction: when a saved rule goes against the agent's instruction, the row adds `Goes against what <name> handles: “<sentence>” This rule wins for now.` with `Open instruction`, which opens the agent's `instructions.md`.
+- reply-open-instruction: asked to change its instruction, a custom agent changes nothing and replies with an `Open instruction` link to its `instructions.md`.
 - reply-actions: `Copy` and `Insert / Replace at cursor` under a finished reply.
 - reply-continue: `Continue from here in a new chat` under a finished reply, while the chat is not replying. It saves the chat as a note, saves the conversation up to that reply as a new chat note, and opens that note in a new tab with the same title, agent, model, and project. The new chat shows the conversation as plain messages, with their attached notes, web tabs and images. Until a message is sent there, picking another agent's model in `Model · effort` moves the chat, with those messages and its note, to that agent. The first message sent there tells the agent that conversation, with the tools each reply used and where earlier images are saved, and names the original chat's note (and the notes of any chats it was continued from) as notes it must not read, because they hold later messages. Reopening the new chat later shows those messages, then the new turns with their tool steps.
 
@@ -39,11 +43,18 @@ Send a message from the [chat input](chat-input.md). The reply shows below the m
 - Follow-up: wait for the subagent or background command to finish. The agent posts a new reply about the result without a new message.
 - Compaction: send `/compact`. `Compacting conversation…` shows, then `Context compacted · 41k → 12k tokens` (the numbers vary).
 - Files changed: ask the agent to edit a note. The reply ends with the changed file and its added and removed lines.
+- Remembered (needs a team license with custom agents): in a custom agent's chat in `Default` mode, send `Remember this: launch videos lead with user value, not the feature list.` No permission card shows; `<name> remembered` shows the sentence, and the agent's `MEMORY.md` now has it under `How to work` with a dated context line. Click the row: `MEMORY.md` opens at that rule. Send `The launch is on Dec 2.`: nothing is saved and no row shows.
+- Replaced a rule (team license): send `Remember: summarize as bullet points.`, then `Stop with the bullets. Write summaries as short paragraphs.` The row reads `<name> replaced a rule` with the old rule struck through; `MEMORY.md` keeps only the new rule, its context line starting `Replaces`.
+- Rule against the instruction (team license): give an agent whose instruction says `File quarterly estimated taxes.` the message `From now on you don't need to handle taxes. Leo does that.` The row shows the warning quoting that sentence; `Open instruction` opens the agent's `instructions.md`.
+- Open instruction (team license): send `Change your instruction: you don't handle tax filing anymore.` The reply says only you can change it and links `Open instruction`; neither `instructions.md` nor `MEMORY.md` changes.
 - Copy: choose `Copy` under a finished reply. The reply's text is on the clipboard.
 - Insert: place the cursor in a note and choose `Insert / Replace at cursor` under a finished reply. The reply's text is inserted at the cursor.
 - Continue: in a chat of three turns, where the first message states a codeword and the second asks the agent to read a note, choose `Continue from here in a new chat` under the second reply. A new tab shows the first two turns without tool steps and without the third; the original tab is unchanged and `Open chat note` is offered for it. Ask for the codeword, which note was read, and the third turn's fact: the agent answers the first two and does not know the third, without opening the original chat's note. Close and reopen the new chat from Recent chats: the two carried turns show, then the new turn with its tool steps.
 
 ## Gotchas
+
+- A custom agent saves rules without a permission card only to its own `MEMORY.md`; every other file, including another agent's `MEMORY.md` and its own `instructions.md`, asks as usual. In `Plan` mode it saves nothing and says it can't save a rule in this mode. A plain Copilot chat never shows save rows.
+- Saved rules apply from the agent's next chat; an open chat keeps the memory it started with.
 
 - `Continue from here in a new chat` saves both chats as notes even when chats are not saved automatically, so `Open chat note` appears in the [chat controls](chat-controls.md) of both, and the new chat is listed in Recent chats before anything is sent in it.
 - A finished background task or subagent starts a new agent reply on its own, so a chat can be running with no message from the user.
