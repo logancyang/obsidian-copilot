@@ -11,6 +11,7 @@ A bar at the top of a chat with a custom agent: the agent's face, its name, and 
 - identity-bar-gone: a chat whose agent's folder is deleted shows no bar.
 - identity-bar-live: a renamed agent or a new face file shows in the bar without reopening the chat.
 - identity-bar-navigator: the bar stays while the [Copilot Navigator](copilot-navigator.md) hides the tabs.
+- identity-bar-detail: while a subagent's or a background task's view ([agent replies](agent-replies.md)) or an asked agent's conversation ([agent mentions](agent-mentions.md)) is open, the bar hides and the view's own header is the only one. Back or Esc brings the bar back.
 
 ## How to get to it
 
@@ -25,6 +26,7 @@ Choose an agent's face on the [start screen](agent-home.md) and send a message, 
 - Gone: delete an open agent chat's agent folder. The bar goes away and the chat stays open with no error; its tab and row show the agent logo.
 - Live: change the agent's name in its instructions file, or replace its face file. The bar shows the new name and face.
 - Navigator: open the [Copilot Navigator](copilot-navigator.md) while an agent chat shows. The tabs hide and the bar stays.
+- Detail: in an agent's chat on Claude, ask for a subagent ("Use a subagent to count the notes in this vault.") and open its card. The bar is gone and the subagent's header is the only one. `Back to chat` brings the bar back.
 
 ## Gotchas
 
