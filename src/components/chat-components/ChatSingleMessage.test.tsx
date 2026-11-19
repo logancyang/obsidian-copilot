@@ -493,26 +493,37 @@ describe("ChatSingleMessage", () => {
       expect(bar?.parentElement?.className).toContain("tw-relative");
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/971 keeps a user message's time and buttons in view under the bubble on a phone, which has no pointer to hover with", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/971 keeps a phone message's time and one Message actions button in view under the bubble, since a phone has no pointer to hover with", () => {
       const { Platform } = jest.requireMock<{ Platform: { isMobile: boolean } }>("obsidian");
       Platform.isMobile = true;
       try {
+        const sentAt = new Date(2026, 10, 18, 14, 2, 11).getTime();
         render(
           <TooltipProvider>
             <ChatSingleMessage
-              message={{ ...baseMessage, sender: "user", message: "Draft the recap" }}
+              message={{
+                ...baseMessage,
+                sender: "user",
+                message: "Which one is shortest?",
+                timestamp: { epoch: sentAt, display: "2026/11/18 14:02:11", fileName: "" },
+              }}
               app={createAppStub()}
               isStreaming={false}
+              onEdit={() => undefined}
+              onDelete={() => undefined}
             />
           </TooltipProvider>
         );
 
-        const copy = screen.getByTitle("Copy");
-        expect(copy.closest(".tw-absolute")).toBeNull();
-        expect(copy.closest(".tw-opacity-0")).toBeNull();
+        const time = screen.getByText(formatMessageClock(sentAt));
+        expect(time.className).not.toContain("tw-opacity-0");
+        expect(time.closest(".tw-absolute")).toBeNull();
         expect(
-          screen.getByText("Draft the recap").closest(".tw-border-solid")?.contains(copy)
+          screen.getByText("Which one is shortest?").closest(".tw-border-solid")?.contains(time)
         ).toBe(false);
+        expect(screen.getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual([
+          "Message actions",
+        ]);
       } finally {
         Platform.isMobile = false;
       }
@@ -543,6 +554,17 @@ describe("ChatSingleMessage", () => {
       expect(mockCopy).toHaveBeenLastCalledWith("I asked Maya.\n\nThe year is fixed.");
       expect(insert).toHaveBeenCalledWith(app, "I asked Maya.\n\nThe year is fixed.");
       insert.mockRestore();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/971 keeps a reply's row outside the box that clips its content, so the phone's larger menu button is not cut off", async () => {
+      render(
+        <TooltipProvider>
+          <ChatSingleMessage message={baseMessage} app={createAppStub()} isStreaming={false} />
+        </TooltipProvider>
+      );
+      await waitFor(() => expect(renderMarkdownMock).toHaveBeenCalled());
+
+      expect(screen.getByTitle("Copy").closest(".tw-overflow-hidden")).toBeNull();
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/971 renders no row under a reply inside a response, whose row sits at the response's end", async () => {
