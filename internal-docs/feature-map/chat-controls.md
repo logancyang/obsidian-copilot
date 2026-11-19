@@ -8,6 +8,7 @@ The bar above the [chat input](chat-input.md) once a chat has a message, with `U
 - controls-history: `Chat history` lists past chats as [chat rows](chat-rows.md), grouped by date, with a `Search...` box; choosing one opens it in the current tab.
 - controls-usage: `Usage` shows how full the context window is, and the agent plan's usage when it reports one.
 - controls-tasks: `N tasks running` lists the agent's background tasks; choose one to open it, or `Stop task`.
+- controls-mentioned-agents: while an [`@`-mentioned agent](agent-mentions.md) works for this chat, the same place reads `Maya is working · 0:20`; two or three agents are named (`Maya and Leo are working`), four or more counted (`4 agents are working`), and the chat's own tasks are added as `· 1 task`. An agent waiting on the user comes first and turns the line orange: `Leo is waiting for you`, or `Leo needs your OK` for a permission request. Hovering lists one row per agent before the tasks, with its face, what it was asked, its clock or `Waiting for you`, and `Stop Leo`.
 - controls-save-note: `Save chat as note`, shown only when chats are not saved automatically.
 - controls-more: `More actions` → `Open chat note` (once the chat is saved as a note), `Copy chat link`, and `Add to bookmarks` / `Remove from bookmarks`.
 - controls-report: `More actions` → `Report an issue` opens [Report an issue](report-issue.md) with this chat's agent, model, and session filled in.
@@ -22,6 +23,7 @@ Open Agent Chat and send a message, or open a past chat from Recent chats on the
 - History: choose `Chat history`, type part of a chat title into `Search...`, and choose the match. Its conversation shows in the current tab.
 - Usage: hover `Usage`. A tooltip shows `Context window` with used / total tokens and a percentage, plus the plan's usage windows (such as `Weekly · resets in …`) when the agent reports them.
 - Tasks: ask the agent to start a shell command in the background. `1 task running` shows at the left of the bar; choose it and the task is listed with `No output yet` or its last output line. Choose the task: its detail view opens, and `Back to chat` returns. Choose `Stop task`: the indicator goes away and the task's card reads `Stopped`.
+- Mentioned agents: send `@Maya check every claim in <note>, one by one`. Once the chat's agent answers, the bar reads `Maya is working · 0:05` with her face, counting up. Hover it: Maya's row shows what she was asked. Choose `Stop Maya`: no question is asked, the line goes away, the line under the message reads `Maya stopped`, and the chat's agent runs one turn saying how far she got, with a Files changed card for anything she changed.
 - Save: with automatic saving off, choose `Save chat as note`. A notice reads "Chat saved as note." With automatic saving on, the button is not shown.
 - Copy link: choose `More actions` → `Copy chat link`. A notice reads "Chat link copied." and the clipboard holds a link to the chat.
 - Bookmark: choose `More actions` → `Add to bookmarks`. The chat shows in Obsidian's Bookmarks, and the menu now offers `Remove from bookmarks`.
@@ -32,4 +34,5 @@ Open Agent Chat and send a message, or open a past chat from Recent chats on the
 
 - `Copy chat link` and `Add to bookmarks` save the chat as a note first, even when chats are not saved automatically, so `Open chat note` appears after either.
 - Inside a [project](projects.md), `Chat history` lists only that project's chats. Outside one, it lists every chat, and opening a project's chat enters its project.
+- The mentioned agents' line counts only agents that still work for this chat in this Obsidian session; after a restart, the line under each message says how each one ended.
 - `New chat` here replaces the chat in place; `New chat` (**+**) in the [chat tabs](chat-tabs.md) adds a tab instead.
