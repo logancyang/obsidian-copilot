@@ -1,4 +1,5 @@
 /* eslint-disable obsidianmd/no-tfile-tfolder-cast -- test fixtures; not real TFiles */
+import { formatAgentReply } from "@/agents/agentReply";
 import { AI_SENDER, USER_SENDER } from "@/constants";
 import { AgentChatPersistenceManager } from "./AgentChatPersistenceManager";
 import { GLOBAL_SCOPE } from "./scope";
@@ -807,6 +808,35 @@ describe("AgentChatPersistenceManager", () => {
       const before = file.contents;
       await manager.saveSession(loaded.messages, "claude", { existingPath: saved!.path });
       expect(file.contents).toBe(before);
+    });
+
+    it("restores the rule an @-mentioned agent saved on the relayed reply that brought it back (https://github.com/Brevilabs/obsidian-copilot-private/issues/969)", async () => {
+      const memorySaves = [
+        {
+          agentName: "Maya",
+          memoryPath: "copilot/agents/maya/MEMORY.md",
+          rule: "Flag video length first.",
+        },
+      ];
+      const relay = formatAgentReply({
+        agent: "maya",
+        name: "Maya",
+        mention: "mention-1",
+        reply: "Noted.",
+        changed: ["copilot/agents/maya/MEMORY.md"],
+      });
+      const saved = await manager.saveSession(
+        [
+          makeMessage(USER_SENDER, "@Maya from now on, flag video length first."),
+          { ...makeMessage(USER_SENDER, relay, 1735732800001), memorySaves },
+        ],
+        "claude"
+      );
+
+      const loaded = await manager.loadFile(app.files.get(saved!.path)! as unknown as TFile);
+
+      expect(loaded.messages[1].message).toBe(relay);
+      expect(loaded.messages[1].memorySaves).toEqual(memorySaves);
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/941 keeps a chat's card states on its last message only and reads them back, leaving each message's text as written", async () => {

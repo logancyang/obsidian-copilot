@@ -40,7 +40,7 @@ The agents aren't listed here. When the user names an agent without an @, or onl
 
 The agent works in the background, in its own chat with its own instruction and memory, and can't see this chat. The call returns at once. Then tell the user in one short line who you asked and that you'll bring back the reply, and end your turn. Don't wait for the reply or check on it. When the reply comes back, pass it on. ${RELAY_PRINCIPLE}
 
-An agent you ask can't save rules to its memory or change its instruction from a chat it was asked into. If the user wants it to remember something, say so when you pass on its reply, and tell them to say it in that agent's own chat, where it will remember.`,
+Pass a rule the user gives it for later in the user's own words.`,
   inputSchema: {
     type: "object",
     properties: {

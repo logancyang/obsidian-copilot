@@ -12,6 +12,7 @@ export interface AgentReplyMessageProps {
   run?: AgentMention;
   fileChanges?: TurnFileChange[];
   onOpenFileChange: (change: TurnFileChange) => void;
+  children?: React.ReactNode;
 }
 
 const ENDED_WITHOUT_WORDS: Partial<Record<AgentMention["status"], string>> = {
@@ -27,6 +28,7 @@ export const AgentReplyMessage: React.FC<AgentReplyMessageProps> = ({
   run,
   fileChanges,
   onOpenFileChange,
+  children,
 }) => {
   const agent = useChatAgents().find(({ slug }) => slug === marker.agent);
   const ended = reply || !run ? undefined : ENDED_WITHOUT_WORDS[run.status];
@@ -39,6 +41,7 @@ export const AgentReplyMessage: React.FC<AgentReplyMessageProps> = ({
         after={ended}
         run={{ runId: marker.mention }}
       />
+      {children}
       {fileChanges && fileChanges.length > 0 ? (
         <FilesChangedCard changes={fileChanges} onOpen={onOpenFileChange} />
       ) : null}

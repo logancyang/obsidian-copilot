@@ -30,6 +30,7 @@ const CONTROL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/94
 const RUNNING = "https://github.com/Brevilabs/obsidian-copilot-private/issues/948";
 const PERMISSION = "https://github.com/Brevilabs/obsidian-copilot-private/issues/946";
 const SEVERAL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/949";
+const ASKED_MEMORY = "https://github.com/Brevilabs/obsidian-copilot-private/issues/969";
 const AUTO_MODE: BackendState = { model: null, mode: { current: "auto", options: [], apply: {} } };
 const PLAN: BackendState = { model: null, mode: { current: "plan", options: [], apply: {} } };
 const PLAN_CHANGE = Object.freeze({
@@ -283,7 +284,7 @@ describe("hiddenAgentChats", () => {
         await untilAgentChatStarted();
       });
 
-      it(`starts the asked agent's chat with its own instruction and memory and no memory save rules (${ISSUE})`, async () => {
+      it(`starts the asked agent's chat with its own instruction, memory and save rules, and the path of its own MEMORY.md that it writes without a card (${ASKED_MEMORY})`, async () => {
         vault.writeByHand("copilot/agents/maya/MEMORY.md", "Flag video length first.");
         const coco = await openChat({ agentSlug: "coco" });
 
@@ -294,8 +295,9 @@ describe("hiddenAgentChats", () => {
         expect(prompt.slug).toBe("maya");
         expect(prompt.prompt).toContain("Always name the biggest risk first.");
         expect(prompt.prompt).toContain("<memory>\nFlag video length first.\n</memory>");
-        expect(prompt.prompt).not.toContain("Save a rule to your memory");
-        expect(prompt.memoryPath).toBeUndefined();
+        expect(prompt.prompt).toContain("Save a rule to your memory only when");
+        expect(prompt.prompt).not.toContain("ask_agent");
+        expect(prompt.memoryPath).toBe("/vault/copilot/agents/maya/MEMORY.md");
       });
 
       it(`starts the asked agent's chat in the project and mode of the chat that asked (${ISSUE})`, async () => {
@@ -311,16 +313,14 @@ describe("hiddenAgentChats", () => {
         expect(starts[0]).toEqual(expect.objectContaining({ projectId: "launch", mode: "auto" }));
       });
 
-      it(`sends the asked agent the message with who asked it and that it can't change its memory from there (${ISSUE})`, async () => {
+      it(`sends the asked agent the message with who asked it, and nothing that keeps it from saving a rule (${ASKED_MEMORY})`, async () => {
         const coco = await openChat({ agentSlug: "coco" });
 
         const maya = await askedAndPrompted(coco);
 
         const [sent] = fake.promptsTo(sessionIdOf(maya));
         expect(sent).toContain("Coco asked you this for the user, from another chat.");
-        expect(sent).toContain(
-          "You can't save rules to your memory or change your instruction from this chat."
-        );
+        expect(sent).not.toContain("memory");
         expect(sent).toContain(
           '<message from="Coco">\nWhat do you think of this plan?\n</message>'
         );
@@ -365,6 +365,52 @@ describe("hiddenAgentChats", () => {
         expect(relayed).toContain("Maya changed Plans/Launch plan.md.");
         const relayMessage = coco.store.getDisplayMessages().find((m) => m.message === relayed);
         expect(relayMessage?.fileChanges).toEqual([PLAN_CHANGE]);
+      });
+
+      it(`carries the rule the agent saved or replaced in its own MEMORY.md onto the relayed reply, as its own chat shows it, and names to the asking agent only the files the user sees under the reply (${ASKED_MEMORY})`, async () => {
+        const coco = await openChat({ agentSlug: "coco" });
+        const maya = await askedAndPrompted(coco, "From now on, flag the budget first.");
+        const memory = {
+          path: "copilot/agents/maya/MEMORY.md",
+          status: "modified" as const,
+          before: "## How to work\n\nFlag video length first.\n2026-11-16 · asked in Coco's chat\n",
+          after:
+            '## How to work\n\nFlag the budget first.\n2026-11-18 · Replaces "Flag video length first." (2026-11-16)\n',
+          additions: 2,
+          deletions: 2,
+        };
+        maya.store.setFileChanges(maya.store.getDisplayMessages().at(-1)!.id, [
+          memory,
+          PLAN_CHANGE,
+        ]);
+
+        answer(maya, "Noted.");
+
+        const relayed = await fake.untilPrompt(sessionIdOf(coco));
+        const relayMessage = coco.store.getDisplayMessages().find((m) => m.message === relayed);
+        expect(relayMessage?.memorySaves).toEqual([
+          {
+            agentName: "Maya",
+            memoryPath: "copilot/agents/maya/MEMORY.md",
+            rule: "Flag the budget first.",
+            replaced: "Flag video length first.",
+          },
+        ]);
+        expect(relayMessage?.fileChanges).toEqual([memory, PLAN_CHANGE]);
+        expect(relayed).toContain("Maya changed Plans/Launch plan.md.");
+        expect(relayed).not.toContain("MEMORY.md");
+      });
+
+      it(`carries no saves onto a relayed reply whose run left the agent's memory alone (${ASKED_MEMORY})`, async () => {
+        const coco = await openChat({ agentSlug: "coco" });
+        const maya = await askedAndPrompted(coco, "Add one line to the plan.");
+        maya.store.setFileChanges(maya.store.getDisplayMessages().at(-1)!.id, [PLAN_CHANGE]);
+
+        answer(maya, "Added the risk line.");
+
+        const relayed = await fake.untilPrompt(sessionIdOf(coco));
+        const relayMessage = coco.store.getDisplayMessages().find((m) => m.message === relayed);
+        expect(relayMessage?.memorySaves).toBeUndefined();
       });
 
       it(`carries the files onto a relayed reply that waited for a busy chat's turn to end (${ISSUE})`, async () => {

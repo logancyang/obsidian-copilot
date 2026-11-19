@@ -9,7 +9,7 @@ export interface AgentSessionPrompt {
   slug: string;
   prompt: string;
   name: string;
-  memoryPath?: string;
+  memoryPath: string;
 }
 
 export interface AgentPromptInput {
@@ -18,14 +18,15 @@ export interface AgentPromptInput {
   others: readonly Pick<CustomAgent, "name" | "title">[];
   instruction: string;
   memory: string;
-  saveRules?: { instructionsPath: string };
-  chatsFolder?: string;
+  instructionsPath: string;
+  ownChat?: { chatsFolder: string };
 }
 
-// Codex lists MCP tools only on search, so an agent learns from its own prompt that it can ask the others; a chat it was asked into, the one kind without save rules, has no ask_agent.
+// Codex lists MCP tools only on search, so an agent learns from its own prompt that it can ask the others; a chat it was asked into has no ask_agent. A rule the user gives the asked agent is saved by that agent, so the asking agent keeps it out of its own memory.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/969
 const ASK_OTHER_AGENTS =
-  "When the user's message @-mentions one of them by name or clearly points to one, ask that agent with the ask_agent tool from obsidian-copilot; never otherwise.";
+  "When the user's message @-mentions one of them by name or clearly points to one, ask that agent with the ask_agent tool from obsidian-copilot; never otherwise. A rule the user gives that agent is not yours to save.";
 // Codex lists MCP tools only on search, so an agent learns from its own prompt that it drafts a new agent as a card for the user to create, never creating one itself.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/941
 const DRAFT_NEW_AGENTS =
@@ -59,8 +60,8 @@ export function buildAgentPrompt({
   others,
   instruction,
   memory,
-  saveRules,
-  chatsFolder,
+  instructionsPath,
+  ownChat,
 }: AgentPromptInput): string {
   const roster = others.length > 0 ? others.map(describeAgent).join("; ") : "none";
   return [
@@ -68,12 +69,9 @@ export function buildAgentPrompt({
     `Your folder is ${folder}. Keep your own files in it, and add nothing else to the vault unless the user asks. Do not read or change other agents' folders.`,
     `Your instruction is the body of ${folder}/instructions.md, and only the user edits that file. Your memory is ${folder}/MEMORY.md. When your memory contradicts your instruction, follow your memory.`,
     `Other agents: ${roster}.`,
-    ...(others.length > 0 && saveRules ? [ASK_OTHER_AGENTS, CONTROL_ASKED_AGENTS] : []),
-    ...(saveRules ? [DRAFT_NEW_AGENTS] : []),
-    ...(chatsFolder ? [recallEarlierChats(chatsFolder)] : []),
-    ...(saveRules
-      ? [buildMemorySaveRules(`${folder}/${MEMORY_FILE_NAME}`, saveRules.instructionsPath)]
-      : []),
+    ...(others.length > 0 && ownChat ? [ASK_OTHER_AGENTS, CONTROL_ASKED_AGENTS] : []),
+    ...(ownChat ? [DRAFT_NEW_AGENTS, recallEarlierChats(ownChat.chatsFolder)] : []),
+    buildMemorySaveRules(`${folder}/${MEMORY_FILE_NAME}`, instructionsPath),
     `<instruction>\n${instruction}\n</instruction>`,
     `<memory>\n${memory}\n</memory>`,
   ].join("\n\n");
@@ -83,7 +81,7 @@ export async function loadAgentSessionPrompt(
   store: CustomAgentStore,
   slug: string,
   vaultBase: string,
-  { saveRules = true }: { saveRules?: boolean } = {}
+  { asked = false }: { asked?: boolean } = {}
 ): Promise<AgentSessionPrompt | null> {
   if (getCustomAgentsGate() !== "full") return null;
   const agents = store.getAgents();
@@ -109,13 +107,11 @@ export async function loadAgentSessionPrompt(
       others: agents.filter((other) => other !== agent),
       instruction: files.instruction,
       memory: files.memory,
-      ...(saveRules
-        ? {
-            saveRules: { instructionsPath: agent.instructionsPath },
-            chatsFolder: `${vaultBase}/${getEffectiveConversationsFolder()}`,
-          }
-        : {}),
+      instructionsPath: agent.instructionsPath,
+      ...(asked
+        ? {}
+        : { ownChat: { chatsFolder: `${vaultBase}/${getEffectiveConversationsFolder()}` } }),
     }),
-    ...(saveRules ? { memoryPath: `${vaultBase}/${agent.memoryPath}` } : {}),
+    memoryPath: `${vaultBase}/${agent.memoryPath}`,
   };
 }

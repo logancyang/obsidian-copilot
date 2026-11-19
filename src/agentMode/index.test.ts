@@ -244,7 +244,12 @@ describe("agentMode", () => {
     });
 
     it("gives the manager the plugin's custom agents to start a chat as one", async () => {
-      const agent = { slug: "coco", name: "Coco", prompt: "In this chat you are Coco." };
+      const agent = {
+        slug: "coco",
+        name: "Coco",
+        prompt: "In this chat you are Coco.",
+        memoryPath: "/vault/copilot/agents/coco/MEMORY.md",
+      };
       jest.mocked(loadAgentSessionPrompt).mockResolvedValueOnce(agent);
       const customAgents = {};
       createAgentSessionManager({} as App, { ...plugin, customAgents } as unknown as CopilotPlugin);

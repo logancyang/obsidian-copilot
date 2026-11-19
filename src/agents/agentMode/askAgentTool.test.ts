@@ -82,7 +82,15 @@ describe("askAgentTool", () => {
         "When the user names an agent without an @, or only describes its job, call this with the name or job they gave: a name no agent has answers with the agents you can ask."
       );
       expect(description).toContain(RELAY_PRINCIPLE);
-      expect(description).toContain("can't save rules to its memory or change its instruction");
+    });
+
+    it(`tells the asking agent to pass a rule for the asked agent on in the user's own words (https://github.com/Brevilabs/obsidian-copilot-private/issues/969)`, () => {
+      const description = descriptionFor(buildTool().tool, "chat-1")!;
+
+      expect(description).toContain(
+        "Pass a rule the user gives it for later in the user's own words."
+      );
+      expect(description).not.toContain("can't save");
     });
 
     it(`leaves the tool out of an asked agent's own chat (${ISSUE})`, () => {
