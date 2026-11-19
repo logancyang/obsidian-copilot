@@ -1357,6 +1357,65 @@ describe("OpencodeBackend", () => {
         }
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/937 points OPENCODE_CONFIG at Copilot's custom agents file, outside the spawn config so adding an agent never restarts OpenCode, and creates its folder first so OpenCode can watch the file", async () => {
+        setOpencodeSettings({ binaryPath: "/path/to/opencode" });
+        const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), "opencode-agents-folder-"));
+        const file = path.join(root, "vaults", "v1", "opencode-agents.json");
+        try {
+          const desc = await new OpencodeBackend({
+            ...NO_MODELS_DEPS,
+            customAgentsFile: file,
+          }).buildSpawnDescriptor({ vaultBasePath: "/vault" });
+
+          expect(desc.env.OPENCODE_CONFIG).toBe(file);
+          expect(desc.env.OPENCODE_CONFIG_CONTENT).not.toContain("copilot-agent-");
+          expect(fs.statSync(path.dirname(file)).isDirectory()).toBe(true);
+          expect(fs.existsSync(file)).toBe(false);
+        } finally {
+          await fs.promises.rm(root, { recursive: true, force: true });
+        }
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/937 still starts OpenCode when the custom agents folder cannot be created", async () => {
+        setOpencodeSettings({ binaryPath: "/path/to/opencode" });
+        const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), "opencode-agents-folder-"));
+        const blocker = path.join(root, "not-a-folder");
+        fs.writeFileSync(blocker, "");
+        try {
+          const desc = await new OpencodeBackend({
+            ...NO_MODELS_DEPS,
+            customAgentsFile: path.join(blocker, "opencode-agents.json"),
+          }).buildSpawnDescriptor({ vaultBasePath: "/vault" });
+
+          expect(desc.command).toBe("/path/to/opencode");
+        } finally {
+          await fs.promises.rm(root, { recursive: true, force: true });
+        }
+      });
+
+      it.each([
+        ["Copilot's environment settings", { envOverrides: { OPENCODE_CONFIG: "/mine.json" } }, {}],
+        ["Obsidian's environment", {}, { OPENCODE_CONFIG: "/mine.json" }],
+      ])(
+        "keeps a user's own OPENCODE_CONFIG from %s (https://github.com/Brevilabs/obsidian-copilot-private/issues/937)",
+        async (_where, settings, env) => {
+          setOpencodeSettings({ binaryPath: "/path/to/opencode", ...settings });
+          const saved = process.env.OPENCODE_CONFIG;
+          Object.assign(process.env, env);
+          try {
+            const desc = await new OpencodeBackend({
+              ...NO_MODELS_DEPS,
+              customAgentsFile: "/app-data/opencode-agents.json",
+            }).buildSpawnDescriptor({ vaultBasePath: "/vault" });
+
+            expect(desc.env.OPENCODE_CONFIG).toBe("/mine.json");
+          } finally {
+            if (saved === undefined) delete process.env.OPENCODE_CONFIG;
+            else process.env.OPENCODE_CONFIG = saved;
+          }
+        }
+      );
+
       it("skips building the generated config when an override replaces it (https://github.com/logancyang/obsidian-copilot/issues/2917)", async () => {
         setOpencodeSettings({
           binaryPath: "/path/to/opencode",
@@ -1374,6 +1433,124 @@ describe("OpencodeBackend", () => {
 
         expect(desc.env.OPENCODE_CONFIG_CONTENT).toBe('{"model":"custom"}');
         expect(resolveEnabled).not.toHaveBeenCalled();
+      });
+    });
+
+    describe("selectAgentMode()", () => {
+      const COCO = { slug: "coco", prompt: "In this chat you are Coco." };
+      let dir: string;
+      let file: string;
+
+      const modeOption = (currentValue: string) => [
+        { id: "mode", type: "select" as const, currentValue, options: [] },
+      ];
+
+      async function spawnedBackend(): Promise<OpencodeBackend> {
+        setOpencodeSettings({ binaryPath: "/path/to/opencode" });
+        const backend = new OpencodeBackend({ ...NO_MODELS_DEPS, customAgentsFile: file });
+        await backend.buildSpawnDescriptor({ vaultBasePath: "/vault" });
+        return backend;
+      }
+
+      function readAgents(): Record<
+        string,
+        { mode?: string; system?: string; permissions?: unknown }
+      > {
+        return JSON.parse(fs.readFileSync(file, "utf8")).agents;
+      }
+
+      beforeEach(async () => {
+        resetSettings();
+        seedSkills([]);
+        resetPromptState();
+        dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "opencode-agents-"));
+        file = path.join(dir, "vaults", "v1", "opencode-agents.json");
+      });
+
+      afterEach(async () => {
+        await fs.promises.rm(dir, { recursive: true, force: true });
+      });
+
+      it("defines the agent as an ask-first and an Auto OpenCode agent, each with the shared prompt followed by the agent's part, and picks the ask-first one", async () => {
+        const backend = await spawnedBackend();
+        const shared = (await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS)).agents;
+
+        const mode = await backend.selectAgentMode(COCO, modeOption("copilot-build"));
+
+        expect(mode).toEqual({ configId: "mode", value: "copilot-agent-coco/default" });
+        const agents = readAgents();
+        expect(Object.keys(agents)).toEqual([
+          "copilot-agent-coco/default",
+          "copilot-agent-coco/auto",
+        ]);
+        expect(agents["copilot-agent-coco/default"]).toEqual({
+          ...shared["copilot-build"],
+          mode: "primary",
+          system: `${shared["copilot-build"].system}\n\nIn this chat you are Coco.`,
+        });
+        expect(agents["copilot-agent-coco/auto"]).toEqual({
+          mode: "primary",
+          system: `${shared.build.system}\n\nIn this chat you are Coco.`,
+        });
+        expect(fs.readdirSync(path.dirname(file))).toEqual(["opencode-agents.json"]);
+      });
+
+      it("keeps a reopened agent chat in Auto when it last ran there", async () => {
+        const backend = await spawnedBackend();
+
+        await expect(
+          backend.selectAgentMode(COCO, modeOption("copilot-agent-coco/auto"))
+        ).resolves.toEqual({ configId: "mode", value: "copilot-agent-coco/auto" });
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/937 keeps an agent another chat started while OpenCode runs, so that chat's next turn still finds its agent after the folder is removed", async () => {
+        const backend = await spawnedBackend();
+        await backend.selectAgentMode(COCO, modeOption("copilot-build"));
+
+        await backend.selectAgentMode({ slug: "maya", prompt: "You are Maya." }, null);
+
+        expect(Object.keys(readAgents())).toEqual([
+          "copilot-agent-coco/default",
+          "copilot-agent-coco/auto",
+          "copilot-agent-maya/default",
+          "copilot-agent-maya/auto",
+        ]);
+      });
+
+      it.each([
+        ["copilot-agent-coco/default", "copilot-build"],
+        ["copilot-agent-coco/auto", "build"],
+      ])(
+        "https://github.com/Brevilabs/obsidian-copilot-private/issues/937 moves a chat reopened without its agent from %s to Copilot's %s, writing nothing",
+        async (current, copilotMode) => {
+          const backend = await spawnedBackend();
+
+          await expect(backend.selectAgentMode(null, modeOption(current))).resolves.toEqual({
+            configId: "mode",
+            value: copilotMode,
+          });
+          expect(fs.existsSync(file)).toBe(false);
+        }
+      );
+
+      it("leaves a Copilot chat's mode alone", async () => {
+        const backend = await spawnedBackend();
+
+        await expect(backend.selectAgentMode(null, modeOption("build"))).resolves.toBeNull();
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/937 refuses an agent chat while the user's own OPENCODE_CONFIG is in use", async () => {
+        setOpencodeSettings({
+          binaryPath: "/path/to/opencode",
+          envOverrides: { OPENCODE_CONFIG: "/mine.json" },
+        });
+        const backend = new OpencodeBackend({ ...NO_MODELS_DEPS, customAgentsFile: file });
+        await backend.buildSpawnDescriptor({ vaultBasePath: "/vault" });
+
+        await expect(backend.selectAgentMode(COCO, null)).rejects.toThrow(
+          "Custom agents can't run on OpenCode while OPENCODE_CONFIG is set."
+        );
+        expect(fs.existsSync(file)).toBe(false);
       });
     });
   });

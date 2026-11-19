@@ -726,29 +726,52 @@ describe("agentMode", () => {
   });
 
   describe("startCustomAgentChat()", () => {
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/937 starts the agent's chat on Claude, on the agent's model when Claude can run it", async () => {
-      const created = {};
+    function startWith(model: { baseModelId: string; effort: string | null } | null) {
       const manager = {
-        getSeedSelection: jest.fn(() => ({ baseModelId: "claude-sonnet-4-5", effort: "medium" })),
-        createSession: jest.fn(async () => created),
+        getSeedSelection: jest.fn((_backendId: string, preferred: unknown) => preferred),
+        createSession: jest.fn(async () => ({})),
       };
-      const model = { baseModelId: "claude-sonnet-4-5", effort: "medium" };
+      mockDescriptors.forEach((descriptor) =>
+        Object.assign(descriptor, {
+          getEnabledModelEntries: () => [{ baseModelId: `${descriptor.id}-model` }],
+        })
+      );
+      void startCustomAgentChat(manager as unknown as AgentSessionManager, { slug: "coco", model });
+      return manager;
+    }
 
-      const session = await startCustomAgentChat(manager as unknown as AgentSessionManager, {
-        slug: "coco",
-        model,
-      });
+    it("starts the agent's chat as that agent on the backend that runs its model, on that model", () => {
+      const model = { baseModelId: "opencode-model", effort: null };
 
-      expect(session).toBe(created);
-      expect(manager.getSeedSelection).toHaveBeenCalledWith("claude", model);
+      const manager = startWith(model);
+
       expect(manager.createSession).toHaveBeenCalledWith(
-        "claude",
+        "opencode",
         undefined,
         model,
         undefined,
         "coco"
       );
     });
+
+    it.each([
+      ["a model no backend runs", { baseModelId: "gpt-6", effort: null }],
+      ["no model", null],
+    ])(
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/937 starts an agent with %s on the default agent backend and its default model",
+      (_label, model) => {
+        const manager = startWith(model);
+
+        expect(manager.getSeedSelection).not.toHaveBeenCalled();
+        expect(manager.createSession).toHaveBeenCalledWith(
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          "coco"
+        );
+      }
+    );
   });
 });
 

@@ -12,6 +12,7 @@ import {
   type NewSessionRequest,
   type RequestPermissionRequest,
   type RequestPermissionResponse,
+  type SessionCapabilities,
   type SessionConfigOption,
   type SessionId as AcpSessionId,
   type SessionModeState,
@@ -53,6 +54,7 @@ import type {
   TurnEnd,
 } from "@/agentMode/session/types";
 import { isCompactCommand } from "@/commands/compactCommand";
+import { ENABLED_MODEL_WAIT_MS } from "@/agentMode/session/enabledModelSelection";
 import { wrapStreamsForDebug } from "./debugTap";
 import { formToQuestionPrompt } from "./elicitation";
 import { deliverSessionUpdatesInWireOrder } from "./sessionUpdateWireOrder";
@@ -67,6 +69,7 @@ import {
   acpPermissionRequestToPrompt,
   acpStateToBackendState,
   cancelInputToAcp,
+  configOptionsFromAcp,
   decisionToAcpResponse,
   listedSessionFromAcp,
   promptContentToAcp,
@@ -82,7 +85,8 @@ export type AcpCapability =
   | "session/load"
   | "session/set_mode"
   | "session/set_config_option"
-  | "mcp/http";
+  | "mcp/http"
+  | "systemPrompt";
 
 function isMethodNotFoundError(err: unknown): boolean {
   if (err instanceof RequestError) return err.code === JSONRPC_METHOD_NOT_FOUND;
@@ -107,6 +111,12 @@ function agentReportedOr(err: unknown): unknown {
   return err instanceof RequestError && !MALFORMED_REQUEST_CODES.has(err.code)
     ? new AgentReportedError(err.message, { cause: err })
     : err;
+}
+
+// The plugin's ACP SDK predates the standard per-session system prompt, so its request types lack the field.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/937
+interface SystemPromptField {
+  systemPrompt?: { mode: "append"; content: Array<{ type: "text"; text: string }> };
 }
 
 interface SessionWireState {
@@ -139,6 +149,7 @@ export class AcpBackendProcess implements BackendProcess {
   private planUsageRead: Promise<void> | null = null;
   private planUsageReadQueued = false;
   private readonly backendContextWindows = new Map<string, number>();
+  private readonly configOptionWaiters = new Map<SessionId, () => void>();
 
   constructor(
     private readonly app: App,
@@ -244,6 +255,11 @@ export class AcpBackendProcess implements BackendProcess {
       if (init.agentCapabilities?.mcpCapabilities?.http === true) {
         this.capabilities.set("mcp/http", true);
       }
+      const sessionCapabilities: (SessionCapabilities & { systemPrompt?: unknown }) | undefined =
+        init.agentCapabilities?.sessionCapabilities ?? undefined;
+      if (sessionCapabilities?.systemPrompt != null) {
+        this.capabilities.set("systemPrompt", true);
+      }
       logInfo(
         `[AgentMode] initialized backend ${this.backend.id} (negotiated protocol v${init.protocolVersion}, listSessions=${this.hasCapability("session/list")}, resumeSession=${this.hasCapability("session/resume")}, loadSession=${this.hasCapability("session/load")})`
       );
@@ -335,10 +351,10 @@ export class AcpBackendProcess implements BackendProcess {
   }
 
   async newSession(params: OpenSessionInput): Promise<OpenSessionOutput> {
-    this.requireAgentRoute(params.agent);
-    const req: NewSessionRequest = {
+    const req: NewSessionRequest & SystemPromptField = {
       cwd: params.cwd,
       mcpServers: this.mcpServersField(params.mcpServers),
+      ...this.systemPromptField(params.agent),
     };
     const wireResp = await this.requireConnection()
       .agent.request("session/new", req)
@@ -350,8 +366,15 @@ export class AcpBackendProcess implements BackendProcess {
       modes: wireResp.modes ?? null,
       configOptions: wireResp.configOptions ?? null,
     });
+    const sessionId = sessionIdFromAcp(wireResp.sessionId);
+    // A chat that fails to become its custom agent never opens, so the session it just made would sit empty in the agent's history.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/937
+    await this.applyAgentMode(sessionId, params.agent).catch(async (err: unknown) => {
+      await this.closeSession({ sessionId }).catch(() => undefined);
+      throw err;
+    });
     return {
-      sessionId: sessionIdFromAcp(wireResp.sessionId),
+      sessionId,
       state: this.computeState(wireResp.sessionId),
     };
   }
@@ -615,7 +638,7 @@ export class AcpBackendProcess implements BackendProcess {
   }
 
   async resumeSession(params: ResumeSessionInput): Promise<ResumeSessionOutput> {
-    this.requireAgentRoute(params.agent);
+    const systemPrompt = this.systemPromptField(params.agent);
     const wireResp = await this.dispatchCapability(
       "session/resume",
       (c) =>
@@ -623,6 +646,7 @@ export class AcpBackendProcess implements BackendProcess {
           sessionId: sessionIdToAcp(params.sessionId),
           cwd: params.cwd,
           mcpServers: this.mcpServersField(params.mcpServers),
+          ...systemPrompt,
         }),
       { mustBeAdvertised: true }
     );
@@ -631,6 +655,7 @@ export class AcpBackendProcess implements BackendProcess {
       modes: wireResp.modes ?? null,
       configOptions: wireResp.configOptions ?? null,
     });
+    await this.applyAgentMode(params.sessionId, params.agent);
     return {
       sessionId: params.sessionId,
       state: this.computeState(sessionIdToAcp(params.sessionId)),
@@ -638,7 +663,7 @@ export class AcpBackendProcess implements BackendProcess {
   }
 
   async loadSession(params: LoadSessionInput): Promise<LoadSessionOutput> {
-    this.requireAgentRoute(params.agent);
+    const systemPrompt = this.systemPromptField(params.agent);
     const sessionId = params.sessionId;
     this.loadingSessions.add(sessionId);
     const wireResp = await this.dispatchCapability(
@@ -648,6 +673,7 @@ export class AcpBackendProcess implements BackendProcess {
           sessionId: sessionIdToAcp(sessionId),
           cwd: params.cwd,
           mcpServers: this.mcpServersField(params.mcpServers),
+          ...systemPrompt,
         }),
       { mustBeAdvertised: true }
     ).finally(() => this.loadingSessions.delete(sessionId));
@@ -656,14 +682,60 @@ export class AcpBackendProcess implements BackendProcess {
       modes: wireResp.modes ?? null,
       configOptions: wireResp.configOptions ?? null,
     });
+    await this.applyAgentMode(sessionId, params.agent);
     return { sessionId, state: this.computeState(sessionIdToAcp(sessionId)) };
   }
 
-  // A backend that cannot take a custom agent's part in its system prompt would run the chat as Copilot under the agent's name.
+  // The agent's part rides on every session/new, load and resume, so it outlasts compaction after a resume; a backend that cannot take it would run the chat as Copilot under the agent's name.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/937
-  private requireAgentRoute(agent: SessionAgent | undefined): void {
-    if (!agent) return;
-    throw new Error(`${this.descriptor.displayName} needs an update to run custom agents.`);
+  private systemPromptField(agent: SessionAgent | undefined): SystemPromptField {
+    if (!agent || this.backend.selectAgentMode) return {};
+    if (!this.hasCapability("systemPrompt")) {
+      throw new Error(`${this.descriptor.displayName} needs an update to run custom agents.`);
+    }
+    return { systemPrompt: { mode: "append", content: [{ type: "text", text: agent.prompt }] } };
+  }
+
+  private async applyAgentMode(sessionId: SessionId, agent: SessionAgent | undefined) {
+    const configOptions = this.sessionWireState.get(sessionId)?.configOptions;
+    const mode = await this.backend.selectAgentMode?.(
+      agent ?? null,
+      configOptionsFromAcp(configOptions)
+    );
+    if (!mode) return;
+    await this.untilOffered(sessionId, mode);
+    await this.setSessionConfigOption({ sessionId, ...mode });
+  }
+
+  // OpenCode lists an agent just written to its watched config only after it reloads, in a later config update; choosing it sooner fails.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/937
+  private untilOffered(
+    sessionId: SessionId,
+    { configId, value }: { configId: string; value: string }
+  ) {
+    const offered = () => {
+      const option = configOptionsFromAcp(
+        this.sessionWireState.get(sessionId)?.configOptions
+      )?.find((candidate) => candidate.id === configId);
+      return (
+        option?.type === "select" &&
+        option.options.some((entry) =>
+          "options" in entry ? entry.options.some((o) => o.value === value) : entry.value === value
+        )
+      );
+    };
+    if (offered()) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      const finish = () => {
+        window.clearTimeout(timer);
+        this.configOptionWaiters.delete(sessionId);
+        resolve();
+      };
+      const timer = window.setTimeout(finish, ENABLED_MODEL_WAIT_MS);
+      this.configOptionWaiters.set(sessionId, () => {
+        if (offered()) finish();
+      });
+    });
   }
 
   async shutdown(): Promise<void> {
@@ -766,6 +838,7 @@ export class AcpBackendProcess implements BackendProcess {
         wire.modes = { ...seed, currentModeId: u.currentModeId };
       } else if (u.sessionUpdate === "config_option_update") {
         wire.configOptions = u.configOptions;
+        this.configOptionWaiters.get(sessionId)?.();
       }
     }
     if (update.update.sessionUpdate === "usage_update") {

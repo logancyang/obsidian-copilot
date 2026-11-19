@@ -112,16 +112,20 @@ export function applyCopilotDefaultModel(configuredModelId: string): BackendId[]
   return seedCopilotDefaultModel(listBackendDescriptors(), configuredModelId);
 }
 
-// Only Claude takes a custom agent's part so far, so an agent chat starts there whatever the agent's model.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/937
-const CUSTOM_AGENT_BACKEND_ID: BackendId = "claude";
-
 export function startCustomAgentChat(
   manager: AgentSessionManager,
-  agent: Pick<CustomAgent, "slug" | "model">
+  { slug, model }: Pick<CustomAgent, "slug" | "model">
 ): Promise<AgentSession> {
-  const seed = manager.getSeedSelection(CUSTOM_AGENT_BACKEND_ID, agent.model) ?? undefined;
-  return manager.createSession(CUSTOM_AGENT_BACKEND_ID, undefined, seed, undefined, agent.slug);
+  const settings = getSettings();
+  const backendId =
+    model &&
+    listBackendDescriptors().find((descriptor) =>
+      descriptor
+        .getEnabledModelEntries?.(settings)
+        ?.some((entry) => entry.baseModelId === model.baseModelId)
+    )?.id;
+  const seed = backendId ? (manager.getSeedSelection(backendId, model) ?? undefined) : undefined;
+  return manager.createSession(backendId || undefined, undefined, seed, undefined, slug);
 }
 
 function collectAgentSkillsDirsProjectRel(): Record<string, string> {

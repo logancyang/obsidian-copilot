@@ -13,6 +13,7 @@ import {
 } from "@/settings/model";
 import {
   OPENCODE_CANONICAL_MODE_AGENT_IDS,
+  OPENCODE_MODE_CONFIG_OPTION_ID,
   OpencodeBackend,
   OPENCODE_PROVIDER_MAP,
 } from "./OpencodeBackend";
@@ -29,6 +30,11 @@ import {
 import { OpencodeSettingsPanel } from "./OpencodeSettingsPanel";
 import { mapNodeArch, mapNodePlatform } from "./platformResolver";
 import { opencodeCopilotPluginDir } from "./opencodeCopilotPlugin";
+import {
+  customAgentModeId,
+  opencodeAgentsFilePath,
+  readCustomAgentModeId,
+} from "./opencodeCustomAgents";
 import { opencodeApprovedRules } from "./opencodeApprovedRules";
 import type { ModelSelectionSession } from "@/agentMode/session/types";
 import { simpleBinaryBackendProcess } from "@/agentMode/backends/shared/simpleBinaryBackend";
@@ -43,8 +49,6 @@ import type { BackendDescriptor, BackendProcess, InstallState } from "@/agentMod
 import { EFFORT_LEVELS_ASCENDING } from "@/agentMode/session/types";
 import { findModelEntry } from "@/agentMode/session/translateBackendState";
 import type { ManagedInstallActionState } from "@/agentMode/session/types";
-
-const OPENCODE_MODE_CONFIG_OPTION_ID = "mode";
 
 let managerRef: OpencodeBinaryManager | null = null;
 
@@ -215,6 +219,7 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
         },
         readCopilotReadOnlyToolNames: async () =>
           (await args.copilotMcpServer?.readOnlyToolNames()) ?? [],
+        customAgentsFile: opencodeAgentsFilePath(args.app),
       })
     );
   },
@@ -246,10 +251,18 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
     if (!configOptions) return null;
     const opt = configOptions.find((o) => o.id === OPENCODE_MODE_CONFIG_OPTION_ID);
     if (!opt) return null;
+    // A custom agent chat's Default and Auto are that agent's own pair of OpenCode agents.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/937
+    const agent = typeof opt.currentValue === "string" && readCustomAgentModeId(opt.currentValue);
     return {
       kind: "configOption",
       configId: OPENCODE_MODE_CONFIG_OPTION_ID,
-      canonical: { ...OPENCODE_CANONICAL_MODE_AGENT_IDS },
+      canonical: agent
+        ? {
+            default: customAgentModeId({ ...agent, auto: false }),
+            auto: customAgentModeId({ ...agent, auto: true }),
+          }
+        : { ...OPENCODE_CANONICAL_MODE_AGENT_IDS },
     };
   },
 };
