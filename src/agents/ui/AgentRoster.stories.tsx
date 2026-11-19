@@ -60,6 +60,16 @@ export const TwelveAgentsSelectedStaysInRow: StoryObj<AgentRosterProps> = {
   args: { agents: TWELVE_AGENTS, selectedSlug: "gus" },
 };
 
+export const AgentFromMoreMenuSelectedBesideNewAgentButton: StoryObj<AgentRosterProps> = {
+  render,
+  args: {
+    agents: TWELVE_AGENTS,
+    selectedSlug: "gus",
+    onOpenProfile: () => {},
+    newAgentButton: <NewAgentButton onClick={() => {}} />,
+  },
+};
+
 export const LongNameAndTitle: StoryObj<AgentRosterProps> = {
   render,
   args: { agents: [COCO, MAYA, LEO, LONG_NAMED_AGENT], selectedSlug: LONG_NAMED_AGENT.slug },

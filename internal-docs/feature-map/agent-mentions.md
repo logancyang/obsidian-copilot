@@ -58,9 +58,9 @@ All of these need a license that includes custom agents and at least two agents 
 - A mentioned agent never saves rules to its memory and never changes its instruction, whatever the mode. Rules for it belong in its own chat.
 - A mentioned agent's work can be viewed only while Obsidian keeps its chat open: after a restart, or once the chat that asked it was shut down, the conversation says its steps from that run are no longer available, until mentioning the agent again continues its conversation.
 - The mentioned agent works in a chat no list shows: not in the [chat tabs](chat-tabs.md), Recent chats or the [Copilot Navigator](copilot-navigator.md).
-- A chat can mention agents only if it was opened while custom agents were available: a chat keeps the tools it started with.
+- On Codex models, a chat can mention agents only if it was opened while custom agents were available: it keeps the tools it started with. On Claude and OpenCode models, an open chat gets the tools as soon as custom agents become available, and loses them when they stop being available.
 - Closing Obsidian, shutting the chat down, or losing the license stops the mentioned agent; its reply never comes back.
-- The chat's note saves a stopped mention as stopped, and one stopped by deleting the agent as stopped because it was deleted.
+- The chat's note saves a stopped mention as stopped, whether the user stopped it or its agent was deleted.
 - A settings change that restarts the chat's agent or the mentioned agent's waits until the mentioned agent's turn ends. While the mentioned agent waits for the user's answer, the restart goes ahead and stops it.
 - Stopping the chat's own reply doesn't drop a mentioned agent's reply that is waiting; it comes back after the stop. Stopping the turn that passes the reply on ends it there.
 - A mentioned agent's permission card stays when the chat's own reply is stopped. Stopping or deleting that agent, closing the chat, or closing Obsidian takes the card away, and the agent's request counts as turned down.
