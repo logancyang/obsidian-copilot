@@ -370,7 +370,13 @@ export interface PermissionOption {
   kind: PermissionOptionKind;
 }
 
-export type PermissionRequester = "main" | { taskId: string };
+export interface AskedAgentRequester {
+  slug: string;
+  name: string;
+  faceSrc: string;
+}
+
+export type PermissionRequester = "main" | { taskId: string } | { agent: AskedAgentRequester };
 
 export interface PermissionPrompt {
   sessionId: SessionId;

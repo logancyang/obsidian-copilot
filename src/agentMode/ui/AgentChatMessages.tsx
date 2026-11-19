@@ -15,6 +15,7 @@ import { MemorySaveLines } from "@/agents/agentMode/memorySaveCards";
 import { useMemorySaveTrail } from "@/agents/agentMode/useMemorySaveTrail";
 import { useAgentReply } from "@/agents/agentMode/useAgentReply";
 import { AgentReplyMessage } from "@/agents/agentMode/ui/AgentReplyMessage";
+import { AskedAgentRequester } from "@/agents/agentMode/ui/AskedAgentRequester";
 import { AgentTurnDurationIndicator } from "@/agentMode/ui/AgentTurnDurationIndicator";
 import ChatSingleMessage from "@/components/chat-components/ChatSingleMessage";
 import { ChatTranscriptViewport } from "@/components/chat-components/ui/ChatTranscriptViewport";
@@ -250,10 +251,15 @@ const AgentChatMessages = memo(
       [pendingPermission, pendingCopilotTool]
     );
     const tasks = useAgentTasks();
+    const requester = pendingPermission?.requester;
+    // An @-mentioned agent's card shows that agent's face and name where a subagent's shows its task.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/946
     const pendingRequester =
-      pendingPermission && tasks
-        ? permissionRequesterName(pendingPermission, tasks.tasks)
-        : undefined;
+      typeof requester === "object" && "agent" in requester ? (
+        <AskedAgentRequester agent={requester.agent} />
+      ) : pendingPermission && tasks ? (
+        permissionRequesterName(pendingPermission, tasks.tasks)
+      ) : undefined;
     // Questions take priority so the separate resolver queues have a stable
     // presentation policy without carrying cross-type sequencing state.
     // https://github.com/logancyang/obsidian-copilot/issues/2948

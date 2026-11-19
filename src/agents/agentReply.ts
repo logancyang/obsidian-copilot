@@ -14,10 +14,10 @@ export interface AgentReplyMarker {
 
 export interface AgentReplyRelay extends AgentReplyMarker {
   reply: string;
-  denied: readonly string[];
   changed: readonly string[];
   error?: string;
   stopped?: "stopped_by_user" | "agent_deleted";
+  declined?: boolean;
   question?: boolean;
 }
 
@@ -35,10 +35,10 @@ export function formatAgentReply({
   name,
   mention,
   reply,
-  denied,
   changed,
   error,
   stopped,
+  declined,
   question,
 }: AgentReplyRelay): string {
   const marker = JSON.stringify({ agent, name, mention }).replace(/>/g, "\\u003e");
@@ -54,13 +54,8 @@ export function formatAgentReply({
         : error
           ? `${name} didn't finish (${error.trim()}). Tell the user how far ${name} got and why.`
           : `${name} replied. Pass the reply on to the user now.`,
-    ...(denied.length > 0
-      ? [
-          `Copilot turned down the requests ${name} made, quoted below: this chat asks before changes, and ${name} can't get the user's approval from a chat ${name} was asked into. Tell the user what ${name} couldn't do.`,
-          // A request's title is the asked agent's text, so it can carry a note's words passing as Copilot's; no tag inside it may close or open a block.
-          // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
-          `<turned-down from="${name}">\n${denied.join("\n").replace(/</g, "&lt;")}\n</turned-down>`,
-        ]
+    ...(declined
+      ? [`The user turned down a request from ${name} on a permission card in this chat.`]
       : []),
     ...(changed.length > 0
       ? [`${name} changed ${changed.join(", ")}. The user sees these files under the reply.`]

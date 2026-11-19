@@ -3371,6 +3371,34 @@ describe("AgentSession", () => {
             ]);
           });
 
+          it("https://github.com/Brevilabs/obsidian-copilot-private/issues/946 leaves a file an @-mentioned agent asks to edit out of the chat's own turn, since that agent's reply carries it", async () => {
+            const vault = makeVault({ "notes/a.md": "before the turn\n" });
+            const mock = makeMockBackend();
+            mock.prompt.mockImplementation(async () => {
+              void session.handleToolPermission({
+                sessionId: "acp-leo",
+                requester: { agent: { slug: "leo", name: "Leo", faceSrc: "leo.webp" } },
+                toolCall: {
+                  toolCallId: "leo-write",
+                  title: "write",
+                  kind: "edit",
+                  locations: [{ path: "/vault/notes/a.md" }],
+                },
+                options: [{ optionId: "once", name: "Allow once", kind: "allow_once" }],
+              });
+              vault.files.set("notes/a.md", "written by Leo\n");
+              mock.emit(editCall("t1", "/vault/notes/b.md"));
+              return { stopReason: "end_turn" as const };
+            });
+            const session = makeSession(mock, vault.app);
+
+            await session.sendPrompt("look at b").turn;
+
+            expect(fileChangesOf(session)?.map((change) => change.path) ?? []).not.toContain(
+              "notes/a.md"
+            );
+          });
+
           it("keeps the snapshot from an earlier read so a later write's announcement cannot overtake it", async () => {
             const vault = makeVault({ "notes/a.md": "before the turn\n" });
             const mock = makeMockBackend();
@@ -6261,6 +6289,31 @@ describe("AgentSession", () => {
         expect(session.getPendingToolPermissions().map((p) => p.toolCall.toolCallId)).toEqual([
           "tc-other",
         ]);
+      });
+    });
+
+    describe("rejectToolRequestsFrom()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/946 withdraws an @-mentioned agent's waiting requests as rejected, and Stop leaves them waiting", async () => {
+        const mock = makeMockBackend();
+        const finishPrompt = holdPrompt(mock);
+        const session = makeSession(mock, { backendId: "claude" });
+        const { turn } = session.sendPrompt("edit a file");
+        const leo = { slug: "leo", name: "Leo", faceSrc: "leo.webp" };
+        const fromLeo = session.handleToolPermission({
+          ...writePermissionRequest(),
+          requester: { agent: leo },
+        });
+
+        await session.cancel();
+        expect(session.getPendingToolPermissions()).toHaveLength(1);
+        session.rejectToolRequestsFrom({ agent: leo });
+
+        await expect(fromLeo).resolves.toEqual({
+          outcome: { outcome: "selected", optionId: "reject_once" },
+        });
+        expect(session.getPendingToolPermissions()).toHaveLength(0);
+        finishPrompt();
+        await turn;
       });
     });
 

@@ -20,7 +20,7 @@ interface ToolPermissionCardProps {
    * https://github.com/Brevilabs/obsidian-copilot-private/issues/599
    */
   toolName?: string;
-  requester?: string;
+  requester?: React.ReactNode;
 }
 
 const EMPTY_OPTION_NAMES: readonly string[] = Object.freeze([]);

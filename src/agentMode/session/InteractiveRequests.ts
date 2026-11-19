@@ -197,11 +197,9 @@ export class InteractiveRequests {
   }
 
   rejectToolRequestsFrom(requester: PermissionRequester): void {
-    const taskId = typeof requester === "object" ? requester.taskId : undefined;
-    const requests = [...this.pendingToolResolvers].filter(([, { request }]) => {
-      const from = request.requester ?? "main";
-      return typeof from === "object" ? from.taskId === taskId : taskId === undefined;
-    });
+    const requests = [...this.pendingToolResolvers].filter(
+      ([, { request }]) => requesterKey(request.requester) === requesterKey(requester)
+    );
     if (requests.length === 0) return;
     for (const [toolCallId] of requests) this.pendingToolResolvers.delete(toolCallId);
     this.flushResolvers(new Map(requests));
@@ -311,6 +309,11 @@ export class InteractiveRequests {
     this.decidedPlanToolCallIds.clear();
     this.currentPlan = null;
   }
+}
+
+function requesterKey(requester: PermissionRequester = "main"): string {
+  if (requester === "main") return requester;
+  return "taskId" in requester ? `task:${requester.taskId}` : `agent:${requester.agent.slug}`;
 }
 
 function decisionFor(

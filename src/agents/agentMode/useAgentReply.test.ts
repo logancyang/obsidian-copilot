@@ -11,7 +11,7 @@ const MARKER = { agent: "maya", name: "Maya", mention: "mention-1" };
 const RELAY: AgentChatMessage = {
   id: "relay",
   sender: USER_SENDER,
-  message: formatAgentReply({ ...MARKER, reply: "I disagree.", denied: [], changed: [] }),
+  message: formatAgentReply({ ...MARKER, reply: "I disagree.", changed: [] }),
   timestamp: null,
   isVisible: true,
 };
