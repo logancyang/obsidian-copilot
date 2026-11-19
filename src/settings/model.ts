@@ -149,6 +149,7 @@ export interface CopilotSettings {
     offerFeedbackCards: boolean;
     notificationSound: boolean;
     notificationSoundId: NotificationSoundId;
+    lastCustomAgent?: string;
     skills: {
       folder: string;
       suppressMigrationConfirm?: boolean;
@@ -860,6 +861,7 @@ function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
     notificationSound,
     notificationSoundId,
     skills,
+    ...(typeof r.lastCustomAgent === "string" ? { lastCustomAgent: r.lastCustomAgent } : {}),
     ...(claudeCli ? { claudeCli } : {}),
     ...(deviceProfiles ? { deviceProfiles } : {}),
   };

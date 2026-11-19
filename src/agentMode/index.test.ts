@@ -48,6 +48,12 @@ jest.mock("./backends/shared/builtinSkillEnv", () => ({
 jest.mock("./backends/registry", () => ({
   backendRegistry: {},
   listBackendDescriptors: () => mockDescriptors,
+  findBackendForModel: (settings: unknown, baseModelId: string) =>
+    mockDescriptors.find((descriptor) =>
+      (descriptor as { getEnabledModelEntries?: (s: unknown) => { baseModelId: string }[] })
+        .getEnabledModelEntries?.(settings)
+        ?.some((entry) => entry.baseModelId === baseModelId)
+    ),
 }));
 jest.mock("./session/AgentChatPersistenceManager", () => ({
   AgentChatPersistenceManager: jest.fn(),

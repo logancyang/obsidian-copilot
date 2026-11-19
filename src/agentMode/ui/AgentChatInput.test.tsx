@@ -30,6 +30,7 @@ jest.mock("@/components/chat-components/ChatInput", () => ({
         }) => void;
         onStopGenerating?: () => void;
         isGenerating?: boolean;
+        placeholder?: string;
       },
       ref: React.ForwardedRef<import("@/components/chat-components/ChatInput").ChatInputHandle>
     ) => {
@@ -45,6 +46,7 @@ jest.mock("@/components/chat-components/ChatInput", () => ({
       return (
         <>
           <span data-testid="generating-state">{props.isGenerating ? "running" : "idle"}</span>
+          <span data-testid="placeholder">{props.placeholder}</span>
           <button type="button" onClick={() => props.handleSendMessage?.()}>
             send
           </button>
@@ -296,6 +298,22 @@ describe("AgentChatInput", () => {
         selectedTextContexts: [selection],
         webTabs: [activeTab],
       });
+    });
+
+    it("hints at @ for context and / for commands, naming the agent when one is given (https://github.com/Brevilabs/obsidian-copilot-private/issues/588)", () => {
+      const backend = { takeWithdrawnPrompts: () => [] } as unknown as AgentChatBackend;
+      const { unmount } = renderInput(backend, makeDraft());
+      expect(screen.getByTestId("placeholder").textContent).toBe(
+        "Ask anything • @ to add context • / for commands"
+      );
+      unmount();
+
+      renderInput(backend, makeDraft(), {
+        placeholder: "Ask Coco anything • @ to add context • / for commands",
+      });
+      expect(screen.getByTestId("placeholder").textContent).toBe(
+        "Ask Coco anything • @ to add context • / for commands"
+      );
     });
 
     it("sends text-only commands that expand to empty without an image-read error https://github.com/logancyang/obsidian-copilot/issues/2850", async () => {

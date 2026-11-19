@@ -884,6 +884,20 @@ describe("AgentSession", () => {
         expect(session.getState()?.model?.availableModels).toHaveLength(2);
       });
 
+      it("closes the backend session it was still creating when the chat is closed meanwhile (https://github.com/Brevilabs/obsidian-copilot-private/issues/588)", async () => {
+        const mock = makeMockBackend();
+        let created!: (value: { sessionId: string; state: BackendState }) => void;
+        mock.newSession.mockReturnValueOnce(new Promise((resolve) => (created = resolve)));
+        const session = startSession(mock);
+
+        await session.dispose();
+        created({ sessionId: "acp-1", state: emptyState() });
+        await session.ready;
+
+        expect(mock.closeSession).toHaveBeenCalledWith({ sessionId: "acp-1" });
+        expect(session.getBackendSessionId()).toBeNull();
+      });
+
       it("creates the backend session in the global scope when started with defaults", async () => {
         const mock = makeMockBackend();
         const session = startSession(mock);

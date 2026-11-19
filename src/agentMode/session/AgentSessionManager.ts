@@ -171,6 +171,7 @@ export interface ArchivedChat {
 
 export interface ReplaceSessionOptions {
   seedSelection?: ModelSelection;
+  agentSlug?: string | null;
 }
 
 export interface AgentSessionManagerOptions {
@@ -1711,7 +1712,7 @@ export class AgentSessionManager {
       replaced?.projectId ?? this.activeProjectId,
       options.seedSelection,
       replaced?.chatInputId,
-      replaced?.agentSlug ?? undefined
+      (options.agentSlug === undefined ? replaced?.agentSlug : options.agentSlug) ?? undefined
     );
     // A message sent before the other agent is up ties the chat to the agent that received it, so the switch is dropped.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/908
