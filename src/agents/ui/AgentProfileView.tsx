@@ -478,7 +478,7 @@ function InlineEdit({
           setDraft(value);
         }}
         className={cn(
-          "clickable-icon tw-relative tw-mx-4 tw-h-auto tw-whitespace-normal tw-bg-transparent tw-p-0 tw-shadow-none",
+          "clickable-icon tw-relative -tw-my-0.5 tw-mx-4 tw-h-auto tw-whitespace-normal tw-bg-transparent tw-px-1.5 tw-py-0.5 tw-shadow-none",
           NO_OBSIDIAN_TOOLTIP
         )}
       >
