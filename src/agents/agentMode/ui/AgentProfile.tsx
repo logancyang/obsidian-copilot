@@ -1,7 +1,7 @@
 import {
   agentSetupReason,
-  deleteAgentWithChats,
-  listAgentChats,
+  deleteAgentAndArchiveChats,
+  listAgentChatsToArchive,
   type AgentSetupProblem,
   type DeleteAgentResult,
 } from "@/agents/agentMode/agentChats";
@@ -42,19 +42,10 @@ export interface AgentProfileProps {
 
 export function agentDeleteNotice(
   name: string,
-  { deletedChats, failedChats, agentDeleted }: DeleteAgentResult
+  { archivedChats, agentDeleted }: DeleteAgentResult
 ): string {
-  if (agentDeleted) {
-    return `Deleted ${name}${deletedChats > 0 ? ` and ${countOf(deletedChats, "chat")}` : ""}.`;
-  }
-  if (failedChats > 0) {
-    const all = countOf(deletedChats + failedChats, "chat");
-    return `Couldn't delete ${failedChats} of ${name}'s ${all}, so ${name} was kept.`;
-  }
-  if (deletedChats > 0) {
-    return `Deleted ${countOf(deletedChats, "chat")} with ${name}, but couldn't delete ${name}.`;
-  }
-  return `Couldn't delete ${name}.`;
+  if (!agentDeleted) return `Couldn't delete ${name}.`;
+  return `Deleted ${name}${archivedChats > 0 ? ` and archived ${countOf(archivedChats, "chat")}` : ""}.`;
 }
 
 export function AgentProfile({
@@ -81,7 +72,7 @@ export function AgentProfile({
     new Notice(`Couldn't change ${name}'s ${change}.`);
   };
   const confirmDelete = async () => {
-    const chats = await listAgentChats(manager, slug);
+    const chats = await listAgentChatsToArchive(manager, slug);
     new AgentDeleteModal(
       app,
       {
@@ -95,8 +86,7 @@ export function AgentProfile({
   };
   const deleteAgent = async () => {
     try {
-      const result = await deleteAgentWithChats({
-        app,
+      const result = await deleteAgentAndArchiveChats({
         manager,
         store,
         slug,

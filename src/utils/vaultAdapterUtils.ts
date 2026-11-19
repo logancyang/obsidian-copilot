@@ -14,7 +14,7 @@ export async function trashFile(app: App, file: TAbstractFile): Promise<void> {
 export function listMarkdownFiles(app: App, folderPath: string): TFile[] {
   const folder = app.vault.getAbstractFileByPath(folderPath);
   if (!(folder instanceof TFolder)) return [];
-  // A sibling folder that shares the name's start, such as a copied backup of the chats folder, holds notes that are not chats, and deleting an agent deletes its chats.
+  // A sibling folder that shares the name's start, such as a copied backup of the chats folder, holds notes that are not chats.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/940
   return app.vault.getMarkdownFiles().filter((f) => f.path.startsWith(`${folder.path}/`));
 }

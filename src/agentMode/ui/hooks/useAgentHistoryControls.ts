@@ -6,7 +6,7 @@ import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPo
 import { logError } from "@/logger";
 import type CopilotPlugin from "@/main";
 import { buildChatDeepLink, getSavedChatDeepLinkId } from "@/utils/chatDeepLink";
-import { extractChatTitle } from "@/utils/chatHistoryUtils";
+import { extractChatTitle, parseChatTimestamp } from "@/utils/chatHistoryUtils";
 import { getUrlBookmarks, isBookmarksPluginDisabled } from "@/utils/obsidianBookmarks";
 import { type App, Notice, TFile } from "obsidian";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -42,14 +42,13 @@ async function getChatLink(app: App, notePath: string): Promise<string | null> {
   return id && buildChatDeepLink(app.vault.getName(), id);
 }
 
-export async function deleteChatAndBookmark(
+async function deleteChatAndBookmark(
   app: App,
   manager: AgentSessionManager,
-  id: string,
-  options?: Parameters<AgentSessionManager["deleteChatHistory"]>[1]
+  id: string
 ): Promise<{ bookmarkRemoved: boolean }> {
   const link = await getChatLink(app, id);
-  await manager.deleteChatHistory(id, options);
+  await manager.deleteChatHistory(id);
   if (!link) return { bookmarkRemoved: true };
   // Obsidian's Bookmarks internals have no public API, so a failure there must not undo or hide a completed delete.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/694
@@ -136,16 +135,27 @@ export function useAgentHistoryControls(
   // A chat note renamed or deleted outside Copilot would leave a row pointing at a path that no longer exists.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/801
   useEffect(() => {
-    const { vault } = plugin.app;
-    const listedIds = new Set(chatHistoryItems.map((item) => item.id));
+    const { vault, metadataCache } = plugin.app;
+    const listed = new Map(chatHistoryItems.map((item) => [item.id, item]));
     const reloadIfListed = (path: string) => {
-      if (listedIds.has(path)) void loadChatHistory();
+      if (listed.has(path)) void loadChatHistory();
     };
     const refs = [
       vault.on("rename", (_file, oldPath) => reloadIfListed(oldPath)),
       vault.on("delete", (file) => reloadIfListed(file.path)),
     ];
-    return () => refs.forEach((ref) => vault.offref(ref));
+    // A chat archived outside this list, as deleting its agent archives it, must leave the list without waiting for the next visit.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/940
+    const archiveRef = metadataCache.on("changed", (file, _data, cache) => {
+      const item = listed.get(file.path);
+      if (item && parseChatTimestamp(cache.frontmatter?.archivedAt) !== item.archivedAt) {
+        void loadChatHistory();
+      }
+    });
+    return () => {
+      refs.forEach((ref) => vault.offref(ref));
+      metadataCache.offref(archiveRef);
+    };
   }, [plugin, chatHistoryItems, loadChatHistory]);
 
   const loadChat = useCallback(
