@@ -2737,9 +2737,12 @@ export class AgentSessionManager {
     const toolsSig = last ? toolsUsedLines(last, getVaultBase(this.app)).join("|") : "";
     // A custom agent's saves reach the reply when its turn ends, after its text and tools.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/942
+    // An @-mentioned agent's run changes on the message that asked it, which later messages may follow.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
+    const mentionsSig = JSON.stringify(messages.flatMap((m) => m.agentMentions ?? []));
     return `${label ?? ""}-${sessionId ?? ""}-${messages.length}-${
       last?.message ?? ""
-    }-${toolsSig}-${last?.memorySaves?.length ?? 0}-${usage?.updatedAt ?? ""}`;
+    }-${toolsSig}-${last?.memorySaves?.length ?? 0}-${mentionsSig}-${usage?.updatedAt ?? ""}`;
   }
 
   private async drainAutoSave(session: AgentSession): Promise<void> {

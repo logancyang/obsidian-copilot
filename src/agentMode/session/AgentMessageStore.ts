@@ -1,3 +1,4 @@
+import type { AgentMention } from "@/agents/agentMentions";
 import type { MemorySave } from "@/agents/memorySaves";
 import { logInfo } from "@/logger";
 import {
@@ -32,6 +33,7 @@ interface StoredAgentMessage {
   fileChanges?: TurnFileChange[];
   toolsUsed?: readonly string[];
   memorySaves?: readonly MemorySave[];
+  agentMentions?: readonly AgentMention[];
   version: number;
 }
 
@@ -306,6 +308,7 @@ export class AgentMessageStore {
       if (row.context) msg.context = row.context;
       if (row.toolsUsed) msg.toolsUsed = row.toolsUsed;
       if (row.memorySaves) msg.memorySaves = row.memorySaves;
+      if (row.agentMentions) msg.agentMentions = row.agentMentions;
       this.touch(msg);
     }
   }
@@ -319,6 +322,14 @@ export class AgentMessageStore {
     if (!msg) return false;
     msg.fileChanges = changes;
     if (memorySaves.length > 0) msg.memorySaves = memorySaves;
+    this.touch(msg);
+    return true;
+  }
+
+  setAgentMentions(id: string, mentions: readonly AgentMention[]): boolean {
+    const msg = this.messages.find((m) => m.id === id);
+    if (!msg) return false;
+    msg.agentMentions = mentions;
     this.touch(msg);
     return true;
   }
@@ -529,6 +540,7 @@ export class AgentMessageStore {
         turnDurationMs: msg.turnDurationMs,
         toolsUsed: msg.toolsUsed,
         memorySaves: msg.memorySaves,
+        agentMentions: msg.agentMentions,
         version: 0,
       });
     }
@@ -552,6 +564,7 @@ export class AgentMessageStore {
       fileChanges: m.fileChanges,
       toolsUsed: m.toolsUsed,
       memorySaves: m.memorySaves,
+      agentMentions: m.agentMentions,
     };
   }
 }

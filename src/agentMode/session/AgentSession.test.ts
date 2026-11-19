@@ -6312,6 +6312,31 @@ describe("AgentSession", () => {
       });
     });
 
+    describe("setAgentMentions()", () => {
+      it("keeps an @-mentioned agent's run on the message that asked and tells listeners, so the chat saves it (https://github.com/Brevilabs/obsidian-copilot-private/issues/944)", async () => {
+        const mock = makeMockBackend();
+        const session = startSession(mock);
+        await session.ready;
+        const { userMessageId } = session.sendPrompt("@Maya review");
+        const onMessagesChanged = jest.fn();
+        session.subscribe({ onMessagesChanged, onStatusChanged: () => {} });
+        const mention = {
+          id: "m1",
+          agent: "maya",
+          name: "Maya",
+          status: "working" as const,
+          startedAt: 1,
+        };
+
+        session.setAgentMentions(userMessageId, [mention]);
+
+        expect(onMessagesChanged).toHaveBeenCalled();
+        expect(
+          session.getDisplayMessages().find((m) => m.id === userMessageId)?.agentMentions
+        ).toEqual([mention]);
+      });
+    });
+
     describe("getDisplayMessages()", () => {
       it("returns the transcript the chat shows", () => {
         const session = makeSession(makeMockBackend());

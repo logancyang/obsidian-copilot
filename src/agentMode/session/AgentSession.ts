@@ -90,6 +90,7 @@ import {
   upsertCompactionPart,
 } from "@/agentMode/session/messageParts";
 import { SessionHistoryReplay } from "@/agentMode/session/SessionHistoryReplay";
+import type { AgentMention } from "@/agents/agentMentions";
 import { readTurnMemorySaves } from "@/agents/memorySaves";
 import { InteractiveRequests } from "@/agentMode/session/InteractiveRequests";
 import { UsageTracker } from "@/agentMode/session/UsageTracker";
@@ -1100,6 +1101,12 @@ export class AgentSession implements ChatStateHost, ChatView {
       sessionId: this.backendSessionId,
       raisedAt: new Date().toISOString(),
     };
+  }
+
+  // An @-mentioned agent's run is saved on the message that asked it, often an earlier one.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
+  setAgentMentions(messageId: string, mentions: readonly AgentMention[]): void {
+    if (this.store.setAgentMentions(messageId, mentions)) this.notifyMessages();
   }
 
   getDisplayMessages(): readonly AgentChatMessage[] {
