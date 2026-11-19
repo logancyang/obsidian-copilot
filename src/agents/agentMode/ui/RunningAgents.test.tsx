@@ -253,6 +253,29 @@ describe("RunningAgents", () => {
       expect(screen.queryByText(/Nora/)).toBeNull();
     });
 
+    it(`leaves out a run another chat holds, as in a chat continued from the asking one while its agent works (${ISSUE})`, async () => {
+      const continued = new AgentSession({
+        backend: fake.backend,
+        cwd: "/vault",
+        internalId: "continued-chat",
+        backendId: "fake",
+        agentSlug: "coco",
+      });
+      await continued.ready;
+
+      const runs = chatRunningAgents({
+        messages: coco.store.getDisplayMessages(),
+        chat: continued,
+        hiddenChats: chats,
+        agents: store.getAgents(),
+        taskCount: 0,
+        onOpen: () => {},
+        gate: "full",
+      });
+
+      expect(runs).toBeUndefined();
+    });
+
     it(`stops the agent from its row without asking, and the chat's agent gets one turn with how far it got (${ISSUE})`, async () => {
       fake.say(sessionIdOf(started[0]), "Matched 120 of 214.");
       render(<Line chat={coco} />);

@@ -233,12 +233,13 @@ export class HiddenAgentChats {
     );
   }
 
-  // The chat's running agents list draws only runs still held here, with what each was asked; a saved run can outlive its chat.
+  // The chat's running agents list draws only runs still held here for that chat, with what each was asked; a saved run can outlive its chat, and a chat continued from another copies its runs.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/948
-  workingOn(runId: string): string | null {
+  workingOn(parent: AgentSession, runId: string): string | null {
     return (
-      Array.from(this.chats.values()).find((hidden) => hidden.run?.id === runId)?.run?.message ??
-      null
+      Array.from(this.chats.values()).find(
+        (hidden) => hidden.parent === parent && hidden.run?.id === runId
+      )?.run?.message ?? null
     );
   }
 
@@ -323,7 +324,16 @@ export class HiddenAgentChats {
       record(hidden.parent, run, { status: "working" });
     }
     void hidden.session.then(
-      (session) => session.sendPrompt(text).turn.catch(() => undefined),
+      (session) => {
+        // A message sent on while the agent's chat starts must not reach an agent stopped meanwhile, which would work on with no run to show or stop it.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/945
+        if (run?.stopped) return;
+        // A refused message, as when the agent's usage limit is reached, ends its turn before it starts, so nothing else would end the run waiting on it.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/945
+        void session
+          .sendPrompt(text)
+          .turn.catch((error: unknown) => run?.finish({ error: asError(error) }));
+      },
       () => undefined
     );
   }

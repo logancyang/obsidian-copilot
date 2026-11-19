@@ -83,3 +83,15 @@ export function restoreAgentMentions(saved: unknown): AgentMention[] {
         : mention
     );
 }
+
+// A chat continued in a new chat asks each agent afresh, as its own agent starts afresh, instead of carrying on the hidden chat the earlier chat still uses.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/945
+export function withoutAgentChats<T extends { agentMentions?: readonly AgentMention[] }>(
+  message: T
+): T {
+  if (!message.agentMentions) return message;
+  return {
+    ...message,
+    agentMentions: message.agentMentions.map((mention) => ({ ...mention, chat: undefined })),
+  };
+}

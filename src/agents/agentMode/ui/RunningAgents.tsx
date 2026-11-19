@@ -86,7 +86,7 @@ export function chatRunningAgents({
   const runs = messages
     .flatMap((message) => message.agentMentions ?? [])
     .flatMap((mention): RunningAgent[] => {
-      const message = hiddenChats?.workingOn(mention.id);
+      const message = chat && hiddenChats?.workingOn(chat, mention.id);
       if (message == null) return [];
       const faceSrc = agents.find((agent) => agent.slug === mention.agent)?.faceSrc;
       return [{ mention, message, faceSrc }];

@@ -197,6 +197,7 @@ const AskedAgentSteps: React.FC<AskedAgentStepsProps> = ({
                   parts={message.parts ?? []}
                   isStreaming={responding && index === messages.length - 1}
                   app={app}
+                  errorText={message.isErrorMessage ? message.message : undefined}
                 />
                 {message.fileChanges?.length ? (
                   <FilesChangedCard

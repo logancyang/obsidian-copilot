@@ -1,5 +1,6 @@
 import { isCompactCommand } from "@/commands/compactCommand";
 import { countAgentChatUse } from "@/agents/agentChatUsage";
+import { withoutAgentChats } from "@/agents/agentMentions";
 import { toolsUsedLines } from "@/agentMode/session/conversationHistory";
 import { getVaultBase } from "@/utils/vaultPath";
 import type {
@@ -1902,7 +1903,7 @@ export class AgentSessionManager {
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/908
     const startedAt = first.timestamp && { ...first.timestamp, epoch: Date.now() };
     const saved = await persistence.saveSession(
-      [{ ...first, timestamp: startedAt }, ...rest],
+      [{ ...first, timestamp: startedAt }, ...rest].map(withoutAgentChats),
       source.backendId,
       {
         label: source.getLabel(),

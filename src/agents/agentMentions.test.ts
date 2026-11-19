@@ -1,6 +1,7 @@
-import { restoreAgentMentions } from "@/agents/agentMentions";
+import { restoreAgentMentions, withoutAgentChats } from "@/agents/agentMentions";
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/944";
+const CONTROL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/945";
 const CHAT = { backendId: "codex", sessionId: "thread-1" };
 
 describe("agentMentions", () => {
@@ -87,6 +88,32 @@ describe("agentMentions", () => {
         ])
       ).toEqual([]);
       expect(restoreAgentMentions([{ ...run, end: { kind: "stopped_by_user" } }])).toHaveLength(1);
+    });
+  });
+
+  describe("withoutAgentChats()", () => {
+    it(`keeps each run on a message but forgets its hidden chat, so a continued chat asks the agent in a chat of its own (${CONTROL})`, () => {
+      const run = {
+        id: "a",
+        agent: "maya",
+        name: "Maya",
+        status: "finished" as const,
+        startedAt: 1,
+      };
+      const message = {
+        id: "u1",
+        message: "@Maya check this.",
+        agentMentions: [{ ...run, chat: CHAT }],
+      };
+
+      expect(withoutAgentChats(message)).toEqual({ ...message, agentMentions: [run] });
+      expect(message.agentMentions[0].chat).toBe(CHAT);
+    });
+
+    it("returns a message without runs as it is", () => {
+      const message = { id: "a1", message: "Done.", agentMentions: undefined };
+
+      expect(withoutAgentChats(message)).toBe(message);
     });
   });
 });

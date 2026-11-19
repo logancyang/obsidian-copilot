@@ -1305,6 +1305,23 @@ describe("hiddenAgentChats", () => {
         expect(startChat).toHaveBeenCalledTimes(1);
       });
 
+      it(`relays that the agent didn't finish when its chat refuses the answer, as when its model's usage limit is reached (${CONTROL})`, async () => {
+        const { coco } = await waitingOnQuestion();
+        jest
+          .spyOn(fake.backend, "prompt")
+          .mockRejectedValueOnce(new Error("Free usage limit reached"));
+
+        chats.answer(coco, "Maya", "October.");
+
+        expect(await fake.untilPrompt(sessionIdOf(coco), 3)).toContain(
+          "Maya didn't finish (Free usage limit reached)."
+        );
+        expect(mentionsOn(coco)?.[0]).toMatchObject({
+          status: "didnt_finish",
+          end: { kind: "error", message: "Free usage limit reached" },
+        });
+      });
+
       it(`passes nothing and says no question waits when the agent isn't waiting on one, including from a chat with no chat open with it, as after a restart (${CONTROL})`, async () => {
         const coco = await openChat({ agentSlug: "coco" });
         const other = await openChat();
@@ -1563,7 +1580,7 @@ describe("hiddenAgentChats", () => {
         expect(fake.cancel).not.toHaveBeenCalled();
       });
 
-      it(`sends nothing to an agent stopped before its chat started (${CONTROL})`, async () => {
+      it(`sends nothing, not even a message sent on while its chat started, to an agent stopped before its chat started (${CONTROL})`, async () => {
         const coco = await openChat({ agentSlug: "coco" });
         let finishStart: () => void = () => {};
         const startCalled = new Promise<void>((called) =>
@@ -1590,6 +1607,7 @@ describe("hiddenAgentChats", () => {
         };
         chats.ask(coco, "Maya", "Review the plan.");
         await startCalled;
+        chats.ask(coco, "Maya", "Only the budget part.");
 
         chats.stop(coco, "Maya");
         finishStart();
@@ -1597,6 +1615,7 @@ describe("hiddenAgentChats", () => {
         expect(await fake.untilPrompt(sessionIdOf(coco))).toContain(
           "Maya stopped, as the user asked."
         );
+        expect(started[0].store.getDisplayMessages()).toEqual([]);
         expect(fake.promptsTo(sessionIdOf(started[0]))).toEqual([]);
       });
       it(`stops one of two agents one message asked and leaves the other working (${SEVERAL})`, async () => {
@@ -1744,17 +1763,19 @@ describe("hiddenAgentChats", () => {
     });
 
     describe("workingOn()", () => {
-      it(`gives what a saved run's agent was asked while it still works on it, and nothing once it is done (${RUNNING})`, async () => {
+      it(`gives what a saved run's agent was asked while it still works on it for the chat that asked, nothing for another chat holding the same run, and nothing once it is done (${RUNNING})`, async () => {
         const { coco, maya } = await askFromMessage();
+        const continued = await openChat({ agentSlug: "coco" });
         const runId = mentionsOn(coco)![0].id;
 
-        expect(chats.workingOn(runId)).toBe("What do you think of this plan?");
-        expect(chats.workingOn("another-run")).toBeNull();
+        expect(chats.workingOn(coco, runId)).toBe("What do you think of this plan?");
+        expect(chats.workingOn(coco, "another-run")).toBeNull();
+        expect(chats.workingOn(continued, runId)).toBeNull();
 
         answer(maya, "Done.");
         fake.endTurn(sessionIdOf(coco));
         await fake.untilPrompt(sessionIdOf(coco), 2);
-        expect(chats.workingOn(runId)).toBeNull();
+        expect(chats.workingOn(coco, runId)).toBeNull();
       });
     });
 
