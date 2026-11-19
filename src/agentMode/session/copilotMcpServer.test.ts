@@ -225,6 +225,7 @@ describe("copilotMcpServer", () => {
       expect(provider.tools).toHaveBeenLastCalledWith({
         sessionKey: "session-a",
         backendId: "codex",
+        shared: false,
       });
       expect(provider.forget).toHaveBeenCalledWith("session-a");
     });
@@ -252,6 +253,26 @@ describe("copilotMcpServer", () => {
       await expect(listedTo("session-b")).resolves.toMatchObject({
         body: { result: { tools: [SEND_FEEDBACK_TOOL] } },
       });
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/945 tells a tool whether a listing is shared by every chat in a folder, so one only some chats may call can still reach them", async () => {
+      server.dispose();
+      const listings: unknown[] = [];
+      server = createCopilotMcpServer(
+        () => true,
+        [{ ...lookupTool(), listedAs: (listing) => (listings.push(listing), null) }]
+      );
+
+      await post(
+        await server.connect("opencode:/vault", "opencode", NO_CHAT, true),
+        rpc(2, "tools/list")
+      );
+      await post(await server.connect("session-a", "claude", NO_CHAT), rpc(3, "tools/list"));
+
+      expect(listings).toEqual([
+        { sessionKey: "opencode:/vault", backendId: "opencode", shared: true },
+        { sessionKey: "session-a", backendId: "claude", shared: false },
+      ]);
     });
 
     it(`${CONNECTORS_ISSUE} closes the connected services' connections when it is disposed`, () => {

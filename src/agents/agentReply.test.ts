@@ -72,6 +72,21 @@ describe("agentReply", () => {
       expect(byUser).not.toContain("Maya replied.");
     });
 
+    it(`says the agent has a question for the user and how to pass the answer back, quoting the question (https://github.com/Brevilabs/obsidian-copilot-private/issues/945)`, () => {
+      const text = formatAgentReply({
+        ...MAYA,
+        ...NOTHING,
+        reply: "October or November?",
+        question: true,
+      });
+
+      expect(text).toContain(
+        "Maya has a question for the user, quoted below, and waits for the answer. Ask the user in your own words, then end your turn. When the user answers, pass the answer to Maya with answer_agent."
+      );
+      expect(text).toContain('<agent-reply from="Maya">\nOctober or November?\n</agent-reply>');
+      expect(readAgentReply(text)?.reply).toBe("October or November?");
+    });
+
     it(`names each request Copilot turned down, quoted as the agent's own words, so the current agent can tell the user (${ISSUE})`, () => {
       expect(
         formatAgentReply({

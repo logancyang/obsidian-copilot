@@ -95,7 +95,7 @@ describe("agentSessionPrompt", () => {
       );
     });
 
-    it("names the tools that check on, redirect and stop an agent it asked, which Codex finds only by name (https://github.com/Brevilabs/obsidian-copilot-private/issues/945)", () => {
+    it("names the tools that check on, answer for, redirect and stop an agent it asked, which Codex finds only by name (https://github.com/Brevilabs/obsidian-copilot-private/issues/945)", () => {
       const ownChat = buildAgentPrompt({
         agent: COCO,
         folder: "/vault/copilot/agents/coco",
@@ -106,7 +106,7 @@ describe("agentSessionPrompt", () => {
       });
 
       expect(ownChat).toContain(
-        "When the user asks how an agent you asked is doing, check with check_agent; when the user gives it a new instruction while it works, send that with ask_agent; when the user tells you to stop it, use stop_agent. All are in obsidian-copilot."
+        "When the user asks how an agent you asked is doing, check with check_agent; when the user answers its question, pass the answer with answer_agent; when the user gives it a new instruction while it works, send that with ask_agent; when the user tells you to stop it, use stop_agent. All are in obsidian-copilot."
       );
       expect(prompt).not.toContain("check_agent");
     });

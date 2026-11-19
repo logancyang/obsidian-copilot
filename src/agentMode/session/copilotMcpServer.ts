@@ -116,6 +116,7 @@ export interface ProvidedToolResult {
 export interface ToolListing {
   sessionKey: string;
   backendId: BackendId;
+  shared?: boolean;
 }
 
 export interface ToolProvider {
@@ -152,7 +153,8 @@ export interface CopilotMcpServer {
   connect(
     sessionKey: string,
     backendId: BackendId,
-    findChat: FindCallingChat
+    findChat: FindCallingChat,
+    shared?: boolean
   ): Promise<AgentMcpServer>;
   readOnlyToolNames(): Promise<ReadonlyArray<string>>;
   disconnect(sessionKey: string): void;
@@ -193,7 +195,8 @@ export function createCopilotMcpServer(
     async connect(
       sessionKey: string,
       backendId: BackendId,
-      findChat: FindCallingChat
+      findChat: FindCallingChat,
+      shared = false
     ): Promise<AgentMcpServer> {
       if (disposed) throw new Error("The Copilot MCP server is closed.");
       server ??= startLoopbackServer("Copilot MCP server", (request, response) =>
@@ -208,7 +211,7 @@ export function createCopilotMcpServer(
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
       const token = tokensBySession.get(sessionKey) ?? crypto.randomBytes(32).toString("hex");
       tokensBySession.set(sessionKey, token);
-      handlersByToken.set(token, { findChat, listing: { sessionKey, backendId } });
+      handlersByToken.set(token, { findChat, listing: { sessionKey, backendId, shared } });
       return Object.freeze({
         name: COPILOT_MCP_SERVER_NAME,
         url,

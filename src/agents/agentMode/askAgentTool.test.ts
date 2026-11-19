@@ -1,6 +1,10 @@
 import type { ChatStateHost } from "@/agentMode/session/chatExtension";
 import {
+  ANSWER_AGENT_TOOL_NAME,
   ASK_AGENT_TOOL_NAME,
+  ASK_USER_TOOL_NAME,
+  createAnswerAgentTool,
+  createAskUserTool,
   createAskAgentTool,
   CHECK_AGENT_TOOL_NAME,
   createCheckAgentTool,
@@ -8,6 +12,7 @@ import {
   STOP_AGENT_TOOL_NAME,
 } from "@/agents/agentMode/askAgentTool";
 import type {
+  AnswerAgentResult,
   AskAgentResult,
   CheckAgentResult,
   HiddenAgentChats,
@@ -173,6 +178,111 @@ describe("askAgentTool", () => {
       });
       expect(ask).not.toHaveBeenCalled();
       expect(tool.definition.name).toBe(ASK_AGENT_TOOL_NAME);
+    });
+  });
+
+  describe("createAnswerAgentTool()", () => {
+    function buildAnswer(result: AnswerAgentResult) {
+      const answer = jest.fn(() => result);
+      return {
+        tool: createAnswerAgentTool({ answer } as unknown as HiddenAgentChats, HOST),
+        answer,
+      };
+    }
+
+    it(`lists the answer tool for the chats that can ask, and leaves it out of an asked agent's own chat (${CONTROL})`, () => {
+      const { tool } = buildAnswer({ kind: "answered", agent: MAYA });
+
+      expect(tool.listedAs?.({ sessionKey: "chat-1", backendId: "claude" })?.name).toBe(
+        ANSWER_AGENT_TOOL_NAME
+      );
+      expect(tool.listedAs?.({ sessionKey: "hidden-1", backendId: "claude" })).toBeNull();
+    });
+
+    it(`passes the user's answer to the named agent for the calling chat and tells the agent to say so in one line (${CONTROL})`, async () => {
+      const { tool, answer } = buildAnswer({ kind: "answered", agent: MAYA });
+
+      const result = await tool.call({ agent: "Maya", answer: "October." }, CHAT);
+
+      expect(answer).toHaveBeenCalledWith(CHAT, "Maya", "October.");
+      expect(result).toEqual({
+        text: "Passed the answer to Maya, who carries on. Tell the user in one short line, then end your turn.",
+        isError: false,
+      });
+    });
+
+    it(`marks the call failed when no answer was passed, saying the agent has no question waiting and pointing to ask_agent (${CONTROL})`, async () => {
+      const { tool } = buildAnswer({ kind: "no_question", agent: MAYA });
+
+      await expect(tool.call({ agent: "Maya", answer: "October." }, CHAT)).resolves.toEqual({
+        text: "Maya has no question waiting. To send Maya a new instruction, use ask_agent.",
+        isError: true,
+      });
+      await expect(
+        buildAnswer({ kind: "not_from_here" }).tool.call(
+          { agent: "Maya", answer: "October." },
+          CHAT
+        )
+      ).resolves.toEqual(expect.objectContaining({ isError: true }));
+    });
+
+    it("rejects a call without an answer", async () => {
+      const { tool, answer } = buildAnswer({ kind: "answered", agent: MAYA });
+
+      await expect(tool.call({ agent: "Maya", answer: " " }, CHAT)).resolves.toEqual({
+        text: "answer must be a non-empty string.",
+        isError: true,
+      });
+      expect(answer).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("createAskUserTool()", () => {
+    function buildAskUser(result: "asked" | "unavailable" | "not_from_here") {
+      const askUser = jest.fn(() => result);
+      return { tool: createAskUserTool({ askUser } as unknown as HiddenAgentChats, HOST), askUser };
+    }
+
+    it(`lists the question tool only for an asked agent's own chat, or a folder's shared listing that also reaches it, and never for a chat the user sees (${CONTROL})`, () => {
+      const { tool } = buildAskUser("asked");
+
+      expect(tool.listedAs?.({ sessionKey: "hidden-1", backendId: "claude" })?.name).toBe(
+        ASK_USER_TOOL_NAME
+      );
+      expect(
+        tool.listedAs?.({ sessionKey: "opencode:/vault", backendId: "opencode", shared: true })
+          ?.name
+      ).toBe(ASK_USER_TOOL_NAME);
+      expect(tool.listedAs?.({ sessionKey: "chat-1", backendId: "claude" })).toBeNull();
+    });
+
+    it(`leaves the question tool out while custom agents are not available (${CONTROL})`, async () => {
+      await setCustomAgentsAccess("free");
+
+      expect(
+        buildAskUser("asked").tool.listedAs?.({ sessionKey: "hidden-1", backendId: "claude" })
+      ).toBeNull();
+    });
+
+    it(`passes the question on for the calling chat and tells the asked agent to end its turn and wait for the answer (${CONTROL})`, async () => {
+      const { tool, askUser } = buildAskUser("asked");
+
+      const result = await tool.call({ question: "October or November?" }, CHAT);
+
+      expect(askUser).toHaveBeenCalledWith(CHAT, "October or November?");
+      expect(result).toEqual({
+        text: "Your question is on its way to the user. End your turn now without saying more; the answer comes back as your next message.",
+        isError: false,
+      });
+    });
+
+    it(`tells a chat the user sees to ask the user directly, marking the call failed (${CONTROL})`, async () => {
+      await expect(
+        buildAskUser("not_from_here").tool.call({ question: "October?" }, CHAT)
+      ).resolves.toEqual({
+        text: "Only an agent asked into another agent's chat can use ask_user. Ask the user directly in your reply.",
+        isError: true,
+      });
     });
   });
 

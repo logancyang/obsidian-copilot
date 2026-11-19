@@ -2021,16 +2021,20 @@ export class AgentSessionManager {
     // A folder's chats share one connection, so its token names only the folder and the agent stamps the calling session on each call.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
     const shared = descriptor.sharesMcpServersAcrossSessions === true;
+    // An asked agent's chat calls its own tools too, though no list shows it.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/945
     const findChat: FindCallingChat = (callerSessionId) =>
       (shared
         ? this.findFolderSession(descriptor.id, cwd, callerSessionId)
-        : this.sessions.get(internalId)) ?? null;
+        : (this.sessions.get(internalId) ?? this.unlistedSessions.get(internalId)?.session)) ??
+      null;
     try {
       return [
         await server.connect(
           shared ? `${descriptor.id}:${cwd}` : internalId,
           descriptor.id,
-          findChat
+          findChat,
+          shared
         ),
       ];
     } catch (err) {
@@ -2045,7 +2049,10 @@ export class AgentSessionManager {
     backendSessionId: string | null
   ): AgentSession | undefined {
     if (!backendSessionId) return undefined;
-    return Array.from(this.sessions.values()).find(
+    const unlisted = Array.from(this.unlistedSessions.values()).flatMap((entry) =>
+      entry ? [entry.session] : []
+    );
+    return [...this.sessions.values(), ...unlisted].find(
       (session) =>
         session.backendId === backendId &&
         session.cwd === cwd &&

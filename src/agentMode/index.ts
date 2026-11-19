@@ -60,7 +60,9 @@ import type { CustomAgent } from "@/agents/CustomAgentStore";
 import { agentBackend } from "@/agents/agentMode/agentChats";
 import { AGENT_DRAFT_CARD_EXTENSION } from "@/agents/agentMode/agentDraftCard";
 import {
+  createAnswerAgentTool,
   createAskAgentTool,
+  createAskUserTool,
   createCheckAgentTool,
   createStopAgentTool,
 } from "@/agents/agentMode/askAgentTool";
@@ -303,6 +305,8 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
       },
       createAskAgentTool(hiddenAgentChats, askingChatsHost),
       createCheckAgentTool(hiddenAgentChats, askingChatsHost),
+      createAnswerAgentTool(hiddenAgentChats, askingChatsHost),
+      createAskUserTool(hiddenAgentChats, askingChatsHost),
       createStopAgentTool(hiddenAgentChats, askingChatsHost),
       createDraftAgentTool({
         isUnlistedChat: (sessionKey) => managerRef?.isUnlistedSession(sessionKey) ?? false,

@@ -52,6 +52,10 @@ export type CheckAgentResult =
   | { kind: "not_asked"; agent: CustomAgent }
   | AgentRefusal;
 
+export type AnswerAgentResult =
+  | { kind: "answered" | "no_question"; agent: CustomAgent }
+  | AgentRefusal;
+
 export type StopAgentResult =
   | { kind: "stopped" | "not_working" | "not_asked"; agent: CustomAgent }
   | AgentRefusal;
@@ -81,6 +85,7 @@ interface HiddenRun {
   sawTurn: boolean;
   denied: string[];
   stopped: StopReason | null;
+  question: string | null;
   completion: AnswerCompletion;
   finish: (end: AnswerEnd) => void;
 }
@@ -128,7 +133,17 @@ export class HiddenAgentChats {
     const { parent, agent, agents, store } = asking;
     const key = chatKey(parent, agent.slug);
     const existing = this.chats.get(key);
-    if (existing?.run) return this.sendMore(existing, message);
+    if (existing?.run) {
+      this.sendMore(
+        existing,
+        `${existing.from} sent you more from the user while you work.\n\n<message from="${existing.from}">\n${message}\n</message>`
+      );
+      return {
+        kind: "sent",
+        agent,
+        now: existing.started?.acceptsMidTurnPrompts() ?? false,
+      };
+    }
     const from = agents.find((other) => other.slug === parent.agentSlug)?.name ?? "Copilot";
     const hidden =
       existing?.started && existing.started.getStatus() !== "closed"
@@ -147,6 +162,30 @@ export class HiddenAgentChats {
     const hidden = this.chats.get(chatKey(asking.parent, asking.agent.slug));
     if (!hidden) return { kind: "not_asked", agent: asking.agent };
     return { kind: "progress", agent: asking.agent, progress: describeProgress(hidden) };
+  }
+
+  // The asked agent asks the user through the agent that asked it, since the user never sees its chat.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/945
+  askUser(chat: ChatStateHost | null, question: string): "asked" | "unavailable" | "not_from_here" {
+    if (getCustomAgentsGate() !== "full") return "unavailable";
+    const run = Array.from(this.chats.values()).find(
+      (hidden) => chat !== null && hidden.started === chat
+    )?.run;
+    if (!run) return "not_from_here";
+    run.question = question;
+    return "asked";
+  }
+
+  answer(chat: ChatStateHost | null, agentName: string, answer: string): AnswerAgentResult {
+    const asking = this.resolve(chat, agentName);
+    if ("kind" in asking) return asking;
+    const hidden = this.chats.get(chatKey(asking.parent, asking.agent.slug));
+    if (hidden?.run?.question == null) return { kind: "no_question", agent: asking.agent };
+    this.sendMore(
+      hidden,
+      `${hidden.from} passed on the user's answer to your question.\n\n<answer from="user">\n${answer}\n</answer>`
+    );
+    return { kind: "answered", agent: asking.agent };
   }
 
   // The user stops an agent from the chat that asked it, by telling its agent or from the running agents list; its changes stay and its chat stays open to continue.
@@ -219,19 +258,19 @@ export class HiddenAgentChats {
     return { parent, agent, agents, store };
   }
 
-  // A new instruction for an agent still at work redirects it in the same chat instead of starting over.
+  // A new instruction for an agent still at work redirects it in the same chat instead of starting over, and a message for an agent waiting on a question answers it; its reply then starts after the answer.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/945
-  private sendMore(hidden: HiddenChat, message: string): AskAgentResult {
-    const text = `${hidden.from} sent you more from the user while you work.\n\n<message from="${hidden.from}">\n${message}\n</message>`;
+  private sendMore(hidden: HiddenChat, text: string): void {
+    const run = hidden.run;
+    if (run?.question != null) {
+      run.question = null;
+      run.reply = "";
+      record(hidden.parent, run, { status: "working" });
+    }
     void hidden.session.then(
       (session) => session.sendPrompt(text).turn.catch(() => undefined),
       () => undefined
     );
-    return {
-      kind: "sent",
-      agent: hidden.agent,
-      now: hidden.started?.acceptsMidTurnPrompts() ?? false,
-    };
   }
 
   private stopRun(hidden: HiddenChat, reason: StopReason): boolean {
@@ -299,17 +338,11 @@ export class HiddenAgentChats {
       sawTurn: false,
       denied: [],
       stopped: null,
+      question: null,
       completion: new AnswerCompletion((text) => (run.reply += text)),
       finish: () => {},
     };
-    const answer = new Promise<AnswerEnd>((resolve) => {
-      let finished = false;
-      run.finish = (end) => {
-        if (finished) return;
-        finished = true;
-        resolve(end);
-      };
-    });
+    const answer = untilFinished(run);
     hidden.run = run;
     record(hidden.parent, run, {
       id: run.id,
@@ -363,9 +396,32 @@ export class HiddenAgentChats {
         },
         (error: unknown) => run.finish({ error: asError(error) })
       );
-      const { error } = await answer;
-      if (!error) await untilSettled(session);
-      if (run.stopped) await untilReplyClosed(session);
+      let ended = answer;
+      let error: Error | undefined;
+      for (;;) {
+        ({ error } = await ended);
+        if (!error) await untilSettled(session);
+        if (run.stopped) await untilReplyClosed(session);
+        const dropped = this.chats.get(chatKey(hidden.parent, hidden.agent.slug)) !== hidden;
+        if (error || run.stopped || run.question === null || dropped) break;
+        // The asked agent's question goes to the user through the asking agent, and the run waits for the answer as the next turn.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/945
+        ended = untilFinished(run);
+        record(hidden.parent, run, { status: "question" });
+        void relay(
+          hidden.parent,
+          formatAgentReply({
+            agent: hidden.agent.slug,
+            name: hidden.agent.name,
+            mention: run.id,
+            reply: run.question,
+            denied: [],
+            changed: [],
+            question: true,
+          }),
+          []
+        );
+      }
       const messages = session.store.getDisplayMessages();
       const asked = messages.findIndex((m) => m.id === userMessageId);
       return {
@@ -546,6 +602,17 @@ function findAgent(agents: readonly CustomAgent[], name: string): CustomAgent | 
   );
 }
 
+function untilFinished(run: HiddenRun): Promise<AnswerEnd> {
+  return new Promise((resolve) => {
+    let finished = false;
+    run.finish = (end) => {
+      if (finished) return;
+      finished = true;
+      resolve(end);
+    };
+  });
+}
+
 function describeProgress({ agent: { name }, run, started }: HiddenChat): string {
   if (!run) return `${name} isn't working on anything from this chat now.`;
   const minutes = Math.floor((Date.now() - run.startedAt) / 60_000);
@@ -561,7 +628,9 @@ function describeProgress({ agent: { name }, run, started }: HiddenChat): string
     .slice(-PROGRESS_STEPS);
   const written = run.reply.trim().slice(-PROGRESS_TEXT_CHARS);
   return [
-    `${name} has been working for ${minutes < 1 ? "under a minute" : `${minutes} min`}.`,
+    run.question !== null
+      ? `${name} is waiting for the user to answer this question:\n${run.question}`
+      : `${name} has been working for ${minutes < 1 ? "under a minute" : `${minutes} min`}.`,
     written
       ? `The end of what ${name} has written so far:\n${written}`
       : `${name} hasn't written anything yet.`,
@@ -572,6 +641,7 @@ function describeProgress({ agent: { name }, run, started }: HiddenChat): string
 function hiddenJobText({ from }: HiddenChat, message: string): string {
   return [
     `${from} asked you this for the user, from another chat. Your reply goes back to ${from}, who passes it on to the user. You can't save rules to your memory or change your instruction from this chat.`,
+    `If you can't go on without the user's answer to a question, ask it with the ask_user tool from obsidian-copilot, then end your turn; the answer comes back as your next message.`,
     `<message from="${from}">\n${message}\n</message>`,
   ].join("\n\n");
 }
