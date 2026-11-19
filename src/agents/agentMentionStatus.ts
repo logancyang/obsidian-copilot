@@ -21,20 +21,24 @@ export function formatRunTime(ms: number): string {
     : `${minutes}:${seconds}`;
 }
 
-function didntFinish(mention: AgentMention): Pick<MentionStatusLine, "text" | "details"> {
-  const { name, end } = mention;
+export interface DidntFinishReason {
+  reason: string;
+  details?: string;
+}
+
+export function didntFinishReason({ end }: AgentMention): DidntFinishReason {
   switch (end?.kind) {
     case "error":
-      return { text: `${name} didn't finish · Something went wrong`, details: end.message };
+      return { reason: "Something went wrong", details: end.message };
     case "permission_denied":
       return {
-        text: `${name} didn't finish · Copilot turned down ${
+        reason: `Copilot turned down ${
           end.requests.length === 1 ? "a request" : `${end.requests.length} requests`
         }`,
         details: end.requests.join("\n"),
       };
     default:
-      return { text: `${name} didn't finish · Obsidian was closed` };
+      return { reason: "Obsidian was closed" };
   }
 }
 
@@ -62,7 +66,14 @@ export function mentionStatusLine(mention: AgentMention): MentionStatusLine {
         ...elapsed,
         seeReply: false,
       };
-    case "didnt_finish":
-      return { ...didntFinish(mention), tone: "failed", seeReply: false };
+    case "didnt_finish": {
+      const { reason, details } = didntFinishReason(mention);
+      return {
+        text: `${name} didn't finish · ${reason}`,
+        ...(details === undefined ? {} : { details }),
+        tone: "failed",
+        seeReply: false,
+      };
+    }
   }
 }

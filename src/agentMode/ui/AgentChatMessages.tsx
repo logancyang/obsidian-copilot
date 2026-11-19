@@ -13,9 +13,11 @@ import { permissionRequesterName } from "@/agentMode/ui/taskDisplay";
 import { openTurnDiff } from "@/agentMode/ui/TurnDiffView";
 import { MemorySaveLines } from "@/agents/agentMode/memorySaveCards";
 import { useMemorySaveTrail } from "@/agents/agentMode/useMemorySaveTrail";
-import { useAgentReply } from "@/agents/agentMode/useAgentReply";
 import { AgentReplyMessage } from "@/agents/agentMode/ui/AgentReplyMessage";
 import { AgentMentionStatusLines } from "@/agents/agentMode/ui/AgentMentionStatus";
+import { useRelayRuns } from "@/agents/agentMode/agentRelays";
+import type { AgentReply } from "@/agents/agentReply";
+import type { AgentMention } from "@/agents/agentMentions";
 import { AskedAgentRequester } from "@/agents/agentMode/ui/AskedAgentRequester";
 import { AgentTurnDurationIndicator } from "@/agentMode/ui/AgentTurnDurationIndicator";
 import ChatSingleMessage from "@/components/chat-components/ChatSingleMessage";
@@ -90,6 +92,9 @@ interface AgentMessageRowProps {
   isStreaming: boolean;
   trailingCard?: React.ReactNode;
   onContinueFrom?: (messageId: string) => void;
+  agentReply?: AgentReply;
+  relayRun?: AgentMention;
+  relayFollowedUp?: boolean;
 }
 
 // Completed messages retain their object identity across streaming updates, so
@@ -103,6 +108,9 @@ const AgentMessageRow = memo(function AgentMessageRow({
   isStreaming,
   trailingCard,
   onContinueFrom,
+  agentReply,
+  relayRun,
+  relayFollowedUp,
 }: AgentMessageRowProps) {
   const adaptedMessage = toChatMessageView(message);
   const isAssistant = message.sender !== USER_SENDER;
@@ -122,7 +130,6 @@ const AgentMessageRow = memo(function AgentMessageRow({
     ) : null;
   const isStreamingPlaceholder = isAssistant && isStreaming && !hasParts && !message.message;
   const memorySaves = useMemorySaveTrail(message, app);
-  const agentReply = useAgentReply(message);
   const onContinue = isAssistant && onContinueFrom ? () => onContinueFrom(message.id) : undefined;
   const openFileChange = (change: TurnFileChange) =>
     void openTurnDiff(app, change, message.id).catch((error: unknown) =>
@@ -168,12 +175,11 @@ const AgentMessageRow = memo(function AgentMessageRow({
           />
         </div>
       ) : agentReply ? (
-        // Until #947 draws the folded reply, a relayed reply shows as the agent's words under one line, never as the message the agent received.
-        // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
         <AgentReplyMessage
-          mention={agentReply.marker.mention}
-          name={agentReply.marker.name}
+          marker={agentReply.marker}
           reply={agentReply.reply}
+          run={relayRun}
+          followedUp={relayFollowedUp}
           fileChanges={message.fileChanges}
           onOpenFileChange={openFileChange}
         />
@@ -285,6 +291,7 @@ const AgentChatMessages = memo(
     );
 
     const latestAssistant = useMemo(() => lastAssistant(visible), [visible]);
+    const relays = useRelayRuns(visible);
     // A second click before the new chat opens would open it twice.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/908
     const continuing = useRef(false);
@@ -334,6 +341,9 @@ const AgentChatMessages = memo(
                 isStreaming={message.id === streamingMessageId}
                 trailingCard={chatCards.get(index)}
                 onContinueFrom={continueFrom}
+                agentReply={relays.get(message.id)?.relay}
+                relayRun={relays.get(message.id)?.run}
+                relayFollowedUp={relays.get(message.id)?.followedUp}
               />
             );
           })}

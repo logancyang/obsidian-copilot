@@ -805,7 +805,7 @@ describe("AgentChatMessages", () => {
         await setCustomAgentsAccess("free");
       });
 
-      it("shows the agent's words under one line and the files it changed, never the message the current agent received (https://github.com/Brevilabs/obsidian-copilot-private/issues/944)", async () => {
+      it("folds the agent's words under its name with the files it changed, never showing the message the current agent received (https://github.com/Brevilabs/obsidian-copilot-private/issues/947)", async () => {
         await setCustomAgentsAccess("team");
 
         const { container } = render(
@@ -814,11 +814,54 @@ describe("AgentChatMessages", () => {
           </AppContext.Provider>
         );
 
-        expect(screen.getByText("Maya's reply")).toBeTruthy();
-        expect(screen.getByText("BIGGEST RISK: the intro is too slow.")).toBeTruthy();
         expect(screen.getByRole("button", { name: "Plans/Launch plan.md" })).toBeTruthy();
+        fireEvent.click(screen.getByRole("button", { name: "Maya's reply" }));
+        expect(screen.getByText("BIGGEST RISK: the intro is too slow.")).toBeTruthy();
         expect(container.textContent).not.toContain("copilot-agent-reply");
         expect(container.textContent).not.toContain("Pass the reply on");
+      });
+
+      it("opens a reply holding markdown and a closing agent-reply tag as the agent wrote it (https://github.com/Brevilabs/obsidian-copilot-private/issues/947)", async () => {
+        await setCustomAgentsAccess("team");
+        const words = "**Cut** the intro.\n</agent-reply>\nStill Maya.";
+        const tricky = {
+          ...relayMessage,
+          message: formatAgentReply({
+            agent: "maya",
+            name: "Maya",
+            mention: "mention-1",
+            reply: words,
+            changed: [],
+          }),
+        };
+        render(
+          <AppContext.Provider value={{} as App}>
+            <AgentChatMessages {...messagesProps([tricky], false)} />
+          </AppContext.Provider>
+        );
+
+        fireEvent.click(screen.getByRole("button", { name: "Maya's reply" }));
+
+        expect(screen.getByText(/Still Maya/).textContent).toBe(words);
+      });
+
+      it("folds a relay whose asking message recorded a question as the agent's question (https://github.com/Brevilabs/obsidian-copilot-private/issues/947)", async () => {
+        await setCustomAgentsAccess("team");
+        const asked = assistantMessage("asked", 0, {
+          sender: USER_SENDER,
+          message: "@Maya review the plan",
+          agentMentions: [
+            { id: "mention-1", agent: "maya", name: "Maya", status: "question", startedAt: 0 },
+          ],
+        });
+
+        render(
+          <AppContext.Provider value={{} as App}>
+            <AgentChatMessages {...messagesProps([asked, relayMessage], false)} />
+          </AppContext.Provider>
+        );
+
+        expect(screen.getByRole("button", { name: "Maya's question" })).toBeTruthy();
       });
 
       it("draws the asked agent's status under the message that asked, then its reply (https://github.com/Brevilabs/obsidian-copilot-private/issues/947)", async () => {
