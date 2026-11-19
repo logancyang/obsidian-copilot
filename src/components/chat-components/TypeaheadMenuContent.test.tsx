@@ -5,6 +5,7 @@ import React from "react";
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/582";
 const LAPSED_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/950";
+const STILL_POINTER_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/947";
 
 const NOTES: TypeaheadOption = {
   key: "notes",
@@ -19,17 +20,23 @@ const ASK_AN_AGENT: TypeaheadOption = {
   lockedNote: "Supporter preview",
 };
 
-function renderMenu(options: TypeaheadOption[], onSelect = jest.fn()) {
+const FOLDERS: TypeaheadOption = {
+  key: "folders",
+  title: "Folders",
+  icon: <FileText className="tw-size-4" />,
+};
+
+function renderMenu(options: TypeaheadOption[], onSelect = jest.fn(), onHighlight = jest.fn()) {
   const view = render(
     <TypeaheadMenuContent
       options={options}
       selectedIndex={0}
       onSelect={onSelect}
-      onHighlight={jest.fn()}
+      onHighlight={onHighlight}
       mode="category"
     />
   );
-  return { ...view, onSelect };
+  return { ...view, onSelect, onHighlight };
 }
 
 describe("TypeaheadMenuContent", () => {
@@ -43,6 +50,24 @@ describe("TypeaheadMenuContent", () => {
 
       expect(screen.getByText("Notes")).toBeTruthy();
       expect(container.querySelector(".lucide-chevron-right")).not.toBeNull();
+    });
+
+    it(`highlights the row the pointer moves onto once, however far it moves within it (${STILL_POINTER_ISSUE})`, () => {
+      const { onHighlight } = renderMenu([NOTES, FOLDERS]);
+
+      fireEvent.mouseMove(screen.getByText("Folders"));
+      fireEvent.mouseMove(screen.getByText("Folders"));
+
+      expect(onHighlight).toHaveBeenCalledTimes(1);
+      expect(onHighlight).toHaveBeenCalledWith(1);
+    });
+
+    it(`keeps the selection when a row appears under a pointer that has not moved, so Enter picks the first result (${STILL_POINTER_ISSUE})`, () => {
+      const { onHighlight } = renderMenu([NOTES, FOLDERS]);
+
+      fireEvent.mouseEnter(screen.getByText("Folders"));
+
+      expect(onHighlight).not.toHaveBeenCalled();
     });
 
     it(`shows a locked row below a divider, with its note and a lock in place of the arrow (${ISSUE})`, () => {

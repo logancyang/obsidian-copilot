@@ -158,8 +158,10 @@ export function TypeaheadMenuContent({
                       if (isDisabled) return;
                       onSelect(option);
                     }}
-                    onMouseEnter={() => {
-                      if (isDisabled) return;
+                    // A row that appears under a resting pointer gets mouseenter without the user pointing at it, which moved Enter off the first result.
+                    // https://github.com/Brevilabs/obsidian-copilot-private/issues/947
+                    onMouseMove={() => {
+                      if (isDisabled || isHovered) return;
                       setHoveredIndex(index);
                       onHighlight(index);
                     }}
