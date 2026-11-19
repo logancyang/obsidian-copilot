@@ -160,7 +160,9 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
               />
             }
             placeholder={
-              <div className="tw-pointer-events-none tw-absolute tw-left-2 tw-top-0 tw-select-none tw-text-sm tw-text-muted/60">
+              // A hint naming a long agent cuts its end instead of running under the toolbar.
+              // https://github.com/Brevilabs/obsidian-copilot-private/issues/588
+              <div className="tw-pointer-events-none tw-absolute tw-left-2 tw-top-0 tw-line-clamp-3 tw-select-none tw-text-sm tw-text-muted/60">
                 {placeholder}
               </div>
             }

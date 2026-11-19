@@ -398,7 +398,14 @@ export class AgentSession implements ChatStateHost, ChatView {
         mcpServers: opts.mcpServers,
         agent: opts.agent ?? undefined,
       });
-      if (this.disposed) return;
+      // A new chat replaced before its session is up, as by picking another face on the new chat page, would leave that session running in the agent.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/588
+      if (this.disposed) {
+        void backend.closeSession?.({ sessionId: resp.sessionId }).catch((e) => {
+          logWarn(`[AgentMode] closing the session of a chat closed while it started failed`, e);
+        });
+        return;
+      }
       const modelLog = resp.state.model
         ? `model=${resp.state.model.current.baseModelId} (available: ${resp.state.model.availableModels
             .map((m) => m.baseModelId)

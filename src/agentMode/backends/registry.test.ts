@@ -3,6 +3,7 @@ import {
   backendDisplayOrder,
   backendNeedsSelfHostWarning,
   backendRegistry,
+  findBackendForModel,
   getActiveBackendDescriptor,
   listBackendDescriptors,
   RECOMMENDED_BACKEND_ID,
@@ -93,6 +94,23 @@ describe("registry", () => {
   describe("RECOMMENDED_BACKEND_ID", () => {
     it("names a registered backend", () => {
       expect(backendRegistry[RECOMMENDED_BACKEND_ID]).toBeDefined();
+    });
+  });
+
+  describe("findBackendForModel()", () => {
+    afterEach(() => jest.restoreAllMocks());
+
+    it("finds the backend that has the model enabled, and none when no backend has it", () => {
+      jest
+        .spyOn(ClaudeBackendDescriptor, "getEnabledModelEntries")
+        .mockReturnValue([{ baseModelId: "claude-sonnet" } as never]);
+      jest
+        .spyOn(CodexBackendDescriptor, "getEnabledModelEntries")
+        .mockReturnValue([{ baseModelId: "gpt-6" } as never]);
+      jest.spyOn(OpencodeBackendDescriptor, "getEnabledModelEntries").mockReturnValue([]);
+
+      expect(findBackendForModel(baseSettings(), "gpt-6")).toBe(CodexBackendDescriptor);
+      expect(findBackendForModel(baseSettings(), "gemini")).toBeUndefined();
     });
   });
 

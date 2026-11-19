@@ -25,7 +25,7 @@ import {
 import { isConnectorsEnabled } from "@/connectors/connectorsEntitlement";
 import { buildAgentSystemPrompt } from "./backends/shared/agentSystemPrompt";
 import { getBuiltinSkillEnvRestartPolicy } from "./backends/shared/builtinSkillEnv";
-import { backendRegistry, listBackendDescriptors } from "./backends/registry";
+import { backendRegistry, findBackendForModel, listBackendDescriptors } from "./backends/registry";
 import type { BackendId } from "./session/types";
 import { AgentChatPersistenceManager } from "./session/AgentChatPersistenceManager";
 import { AgentModelPreloader } from "./session/AgentModelPreloader";
@@ -116,14 +116,7 @@ export function startCustomAgentChat(
   manager: AgentSessionManager,
   { slug, model }: Pick<CustomAgent, "slug" | "model">
 ): Promise<AgentSession> {
-  const settings = getSettings();
-  const backendId =
-    model &&
-    listBackendDescriptors().find((descriptor) =>
-      descriptor
-        .getEnabledModelEntries?.(settings)
-        ?.some((entry) => entry.baseModelId === model.baseModelId)
-    )?.id;
+  const backendId = model && findBackendForModel(getSettings(), model.baseModelId)?.id;
   const seed = backendId ? (manager.getSeedSelection(backendId, model) ?? undefined) : undefined;
   return manager.createSession(backendId || undefined, undefined, seed, undefined, slug);
 }

@@ -2090,6 +2090,24 @@ describe("AgentSessionManager", () => {
         expect(replacement.agentSlug).toBe("coco");
       });
 
+      it("moves a new chat to the custom agent picked on the home, or back to Copilot, in the same tab (https://github.com/Brevilabs/obsidian-copilot-private/issues/588)", async () => {
+        const mgr = buildManager();
+        const chat = await mgr.createSession("opencode", GLOBAL_SCOPE);
+
+        const coco = await mgr.replaceSessionInPlace(chat.internalId, undefined, {
+          agentSlug: "coco",
+        });
+        const copilot = await mgr.replaceSessionInPlace(coco.internalId, undefined, {
+          agentSlug: null,
+        });
+
+        expect(coco.agentSlug).toBe("coco");
+        expect(coco.chatInputId).toBe(chat.chatInputId);
+        expect(copilot.agentSlug).toBeNull();
+        expect(copilot.chatInputId).toBe(chat.chatInputId);
+        expect(mgr.getActiveSession()).toBe(copilot);
+      });
+
       it("preserves the leftmost slot when replacing the first tab", async () => {
         const mgr = buildManager();
         const a = await createWorkedSession(mgr);

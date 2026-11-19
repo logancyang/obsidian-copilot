@@ -40,3 +40,14 @@ export function getActiveBackendDescriptor(settings: CopilotSettings): BackendDe
 export function listBackendDescriptors(): BackendDescriptor[] {
   return Object.values(backendRegistry);
 }
+
+export function findBackendForModel(
+  settings: CopilotSettings,
+  baseModelId: string
+): BackendDescriptor | undefined {
+  return listBackendDescriptors().find((descriptor) =>
+    descriptor
+      .getEnabledModelEntries?.(settings)
+      ?.some((entry) => entry.baseModelId === baseModelId)
+  );
+}

@@ -54,6 +54,7 @@ interface AgentChatInputProps {
   disabled?: boolean;
   projectFolderPath?: string;
   hasChatMovedFrom: (backend: AgentChatBackend) => boolean;
+  placeholder?: string;
 }
 
 const dedupeBy = <T,>(items: Iterable<T>, key: (item: T) => string): T[] => {
@@ -155,6 +156,7 @@ export const AgentChatInput = memo(function AgentChatInput({
   disabled = false,
   projectFolderPath,
   hasChatMovedFrom,
+  placeholder = "Ask anything • @ to add context • / for commands",
 }: AgentChatInputProps) {
   const eventTarget = useContext(EventTargetContext);
   const chatInputRef = useRef<ChatInputHandle>(null);
@@ -483,7 +485,7 @@ export const AgentChatInput = memo(function AgentChatInput({
           ref={chatInputRef}
           key={chatInputId}
           isAgentMode
-          placeholder="Ask anything • @ to add context • / for commands"
+          placeholder={placeholder}
           inputMessage={inputMessage}
           setInputMessage={setInputMessage}
           handleSendMessage={safeAsyncHandler(handleSendMessage)}

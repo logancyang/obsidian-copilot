@@ -52,6 +52,10 @@ import { useAgentModelPicker } from "@/agentMode/ui/useAgentModelPicker";
 import { useAgentModePicker } from "@/agentMode/ui/useAgentModePicker";
 import { useSessionBackendDescriptor } from "@/agentMode/ui/useBackendDescriptor";
 import { pickRandomGreeting } from "@/agentMode/ui/landingGreetings";
+import { findBackendForModel } from "@/agentMode/backends/registry";
+import type { CustomAgent } from "@/agents/CustomAgentStore";
+import { AgentRoster } from "@/agents/ui/AgentRoster";
+import { agentComposerHint, useAgentHomeSelection } from "@/agents/ui/useAgentHomeSelection";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { GLOBAL_SCOPE } from "@/agentMode/session/scope";
@@ -73,7 +77,7 @@ import {
   useArchivedProjects,
   useProjects,
 } from "@/projects/state";
-import { useSettingsValue } from "@/settings/model";
+import { getSettings, useSettingsValue } from "@/settings/model";
 import { FileSearch, Files, Folder, MessageSquare } from "lucide-react";
 import { Notice } from "obsidian";
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
@@ -378,6 +382,31 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
 
   const isLanding = !manager.getActiveSession()?.hasUserVisibleMessages();
   const isProjectLanding = isLanding && isProjectScope;
+
+  const switchLandingAgent = useCallback(
+    async (agent: CustomAgent | null) => {
+      const landing = manager.getActiveSession();
+      if (!landing) return;
+      const model = agent?.model;
+      const backendId = model && findBackendForModel(getSettings(), model.baseModelId)?.id;
+      const chat = await manager.replaceSessionInPlace(landing.internalId, backendId || undefined, {
+        seedSelection: (backendId && manager.getSeedSelection(backendId, model)) || undefined,
+        agentSlug: agent?.slug ?? null,
+      });
+      await chat.ready;
+    },
+    [manager]
+  );
+  const agentHome = useAgentHomeSelection(
+    plugin.customAgents,
+    {
+      sessionId,
+      chatInputId,
+      agentSlug: manager.getSession(sessionId)?.agentSlug ?? null,
+      isLanding,
+    },
+    switchLandingAgent
+  );
   const dropOverlay = isDragActive && (
     <div className="tw-pointer-events-none tw-absolute tw-inset-0 tw-z-modal tw-flex tw-items-center tw-justify-center tw-rounded-md tw-border tw-border-dashed tw-bg-primary tw-opacity-80">
       <span>Drop files here...</span>
@@ -625,7 +654,9 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       draft={draft}
       app={app}
       updateUserMessageHistory={updateUserMessageHistory}
-      isStarting={isStarting}
+      // A message sent while a picked agent's chat is still starting would reach the chat it replaces, so it waits for the agent the home shows.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/588
+      isStarting={isStarting || agentHome.switching}
       isLoading={isLoading}
       isReplyRunning={replyRunning}
       queuedPrompts={queuedPrompts}
@@ -637,6 +668,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       disabled={isOrphanedProject}
       projectFolderPath={projectFolderPath}
       hasChatMovedFrom={hasChatMovedFrom}
+      placeholder={agentComposerHint(agentHome.selected)}
     />
   );
 
@@ -669,15 +701,22 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const showProjectHero = isProjectLanding && !isOrphanedProject;
   const heroText = showProjectHero ? `Chat in ${projectName}` : greeting;
   const hero = (
-    <div className="tw-flex tw-min-w-0 tw-items-center tw-justify-center tw-gap-3">
-      <CopilotBrandIcon className="tw-size-6 tw-shrink-0 tw-text-normal" />
-      <TruncatedText
-        className="tw-min-w-0 tw-text-3xl tw-font-[330] tw-text-normal"
-        tooltipContent={heroText}
-      >
-        {heroText}
-      </TruncatedText>
-    </div>
+    <AgentRoster
+      agents={agentHome.agents}
+      selectedSlug={agentHome.selected?.slug ?? null}
+      onSelect={(slug) => void agentHome.select(slug)}
+      emptyHero={
+        <div className="tw-flex tw-min-w-0 tw-items-center tw-justify-center tw-gap-3">
+          <CopilotBrandIcon className="tw-size-6 tw-shrink-0 tw-text-normal" />
+          <TruncatedText
+            className="tw-min-w-0 tw-text-3xl tw-font-[330] tw-text-normal"
+            tooltipContent={heroText}
+          >
+            {heroText}
+          </TruncatedText>
+        </div>
+      }
+    />
   );
 
   const activeSession = manager.getSession(sessionId);
