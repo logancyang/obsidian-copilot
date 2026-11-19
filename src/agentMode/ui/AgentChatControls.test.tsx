@@ -114,12 +114,32 @@ describe("AgentChatControls", () => {
       expect(onCopyChatLink).toHaveBeenCalledTimes(1);
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/702 disables Copy chat link and Add to bookmarks in an empty chat and explains on hover that a message is needed", async () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/968 archives the open chat from the More actions menu", () => {
+      const onSetChatArchived = jest.fn(async () => {});
+      renderSessionControls({ onSetChatArchived });
+
+      fireEvent.click(within(openMoreActions()).getByRole("menuitem", { name: "Archive chat" }));
+
+      expect(onSetChatArchived).toHaveBeenCalledWith(true);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/968 offers Unarchive chat instead of Archive chat when the open chat is archived", () => {
+      const onSetChatArchived = jest.fn(async () => {});
+      renderSessionControls({ chatArchived: true, onSetChatArchived });
+
+      const menu = openMoreActions();
+      expect(within(menu).queryByRole("menuitem", { name: "Archive chat" })).toBeNull();
+      fireEvent.click(within(menu).getByRole("menuitem", { name: "Unarchive chat" }));
+
+      expect(onSetChatArchived).toHaveBeenCalledWith(false);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/702 and https://github.com/Brevilabs/obsidian-copilot-private/issues/968 disable Copy chat link, Add to bookmarks, and Archive chat in an empty chat and explains on hover that a message is needed", async () => {
       const onSetChatBookmarked = jest.fn(async () => {});
       renderSessionControls({ onSetChatBookmarked });
 
       const menu = openMoreActions();
-      for (const name of ["Copy chat link", "Add to bookmarks"]) {
+      for (const name of ["Copy chat link", "Add to bookmarks", "Archive chat"]) {
         const item = within(menu).getByRole("menuitem", { name });
         expect(item.getAttribute("aria-disabled")).toBe("true");
         fireEvent.focus(item.parentElement!);

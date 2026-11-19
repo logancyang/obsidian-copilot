@@ -24,6 +24,7 @@ const CHAT_HISTORY: ChatHistoryItem[] = [
 const withBookmarkState = (state: ChatBookmarkState): Partial<AgentChatControlsProps> => ({
   getChatBookmarkState: async () => state,
   onCopyChatLink: () => undefined,
+  onSetChatArchived: async () => {},
 });
 
 function ControlsStory({
@@ -90,11 +91,16 @@ export const MoreActionsBookmarksOff: Story = {
   args: { openMoreActions: true, ...withBookmarkState("off") },
 };
 
+export const MoreActionsArchived: Story = {
+  args: { openMoreActions: true, chatArchived: true },
+};
+
 export const MoreActionsEmptyChat: Story = {
   args: {
     openMoreActions: true,
     getChatBookmarkState: undefined,
     onCopyChatLink: undefined,
+    onSetChatArchived: undefined,
     onOpenChatNote: undefined,
   },
 };

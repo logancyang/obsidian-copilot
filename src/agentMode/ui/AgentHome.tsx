@@ -8,6 +8,7 @@ import AgentContextMeter from "@/agentMode/ui/AgentContextMeter";
 import { AgentLandingStack } from "@/agentMode/ui/AgentLandingStack";
 import { CreateProjectPanel } from "@/projects/ui/CreateProjectPanel";
 import { AgentModeStatus } from "@/agentMode/ui/AgentModeStatus";
+import { AgentStatusCard } from "@/agentMode/ui/AgentStatusCard";
 import { ConnectorsAttentionBanner } from "@/agentMode/ui/ConnectorsAttentionBanner";
 import { AgentProjectHeader } from "@/projects/ui/AgentProjectHeader";
 import { ProjectFilesView } from "@/projects/ui/ProjectFilesView";
@@ -42,6 +43,7 @@ import { useManagerSetSnapshot } from "@/agentMode/ui/hooks/useManagerSetSnapsho
 import { openSessionsSidebar } from "@/agentMode/navigator/openSessionsSidebar";
 import { useSessionsSidebarOpen } from "@/agentMode/navigator/hooks/useSessionsSidebarOpen";
 import { useAgentHistoryControls } from "@/agentMode/ui/hooks/useAgentHistoryControls";
+import { useIsChatArchived } from "@/agentMode/ui/hooks/useIsChatArchived";
 import { useAgentInputDrafts } from "@/agentMode/ui/hooks/useAgentInputDrafts";
 import { useAttentionChatIds } from "@/agentMode/ui/hooks/useAttentionChatIds";
 import { useRunningChatIds } from "@/agentMode/ui/hooks/useRunningChatIds";
@@ -292,6 +294,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     deleteChats: handleDeleteChats,
     setChatPinned: handleSetChatPinned,
     setChatArchived: handleSetChatArchived,
+    setActiveChatArchived: handleSetActiveChatArchived,
     archiveChats: handleArchiveChats,
     openSourceFile: handleOpenSourceFile,
     copyChatLink: handleCopyHistoryChatLink,
@@ -874,6 +877,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     [getChatBookmarkState, manager, sessionId]
   );
   const activeSourcePath = manager.getSessionSourcePath(sessionId);
+  const activeChatArchived = useIsChatArchived(activeSourcePath);
   const handleOpenChatNote = activeSourcePath
     ? () => handleOpenSourceFile(activeSourcePath)
     : undefined;
@@ -1004,6 +1008,18 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
               >
                 <AgentModeStatus manager={manager} plugin={plugin} onInstallClick={handleInstall} />
                 <ConnectorsAttentionBanner manager={plugin.connectionManager} />
+                {/* An archived chat stays open, so the chat says so and offers the way back to the lists.
+                    https://github.com/Brevilabs/obsidian-copilot-private/issues/968 */}
+                {!isLanding && activeChatArchived && (
+                  <AgentStatusCard
+                    layout="row"
+                    message="This chat is archived."
+                    action={{
+                      label: "Unarchive",
+                      onClick: () => safeAsyncHandler(handleSetActiveChatArchived)(false),
+                    }}
+                  />
+                )}
                 {isLanding ? (
                   <AgentLandingStack
                     hero={hero}
@@ -1108,6 +1124,12 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                             : undefined
                         }
                         onSetChatBookmarked={handleSetActiveChatBookmarked}
+                        chatArchived={activeChatArchived}
+                        onSetChatArchived={
+                          activeSession?.hasUserVisibleMessages()
+                            ? handleSetActiveChatArchived
+                            : undefined
+                        }
                         onOpenChatNote={handleOpenChatNote}
                         onReportError={handleReportError}
                         onNewChat={handleNewChat}

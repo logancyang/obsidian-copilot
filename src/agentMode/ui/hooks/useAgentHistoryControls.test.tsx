@@ -969,6 +969,62 @@ describe("useAgentHistoryControls", () => {
     });
   });
 
+  describe("setActiveChatArchived()", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/968 saves the open chat and moves its note's row from the chat list to the archived list", async () => {
+      const manager = makeManager();
+      manager.getChatHistoryItems.mockResolvedValue([item("chats/saved.md"), item("b")]);
+      const { result } = renderControls(manager);
+      await act(async () => {
+        await result.current.loadChatHistory();
+      });
+
+      await act(async () => {
+        await result.current.setActiveChatArchived(true);
+      });
+
+      expect(manager.saveActiveSession).toHaveBeenCalledTimes(1);
+      expect(manager.setChatArchived).toHaveBeenCalledWith("chats/saved.md", true);
+      expect(result.current.chatHistoryItems).toEqual([item("b")]);
+      expect(result.current.archivedChatItems).toEqual([
+        { id: "chats/saved.md", archivedAt: 7_000 },
+      ]);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/968 unarchives the open chat through its saved note without resaving the chat", async () => {
+      const manager = makeManager();
+      manager.getActiveSession.mockReturnValue({ internalId: "live-1" });
+      manager.setChatArchived.mockImplementation(async (id: string) => ({
+        id,
+        archivedAt: undefined,
+      }));
+      const { result } = renderControls(manager);
+
+      await act(async () => {
+        await result.current.setActiveChatArchived(false);
+      });
+
+      expect(manager.getSessionSourcePath).toHaveBeenCalledWith("live-1");
+      expect(manager.saveActiveSession).not.toHaveBeenCalled();
+      expect(manager.setChatArchived).toHaveBeenCalledWith("chats/saved.md", false);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/968 archives nothing, shows a notice, and rejects when the open chat cannot be saved", async () => {
+      const manager = makeManager();
+      manager.saveActiveSession.mockResolvedValue(null);
+      const { result } = renderControls(manager);
+      (Notice as unknown as jest.Mock).mockClear();
+
+      await act(async () => {
+        await expect(result.current.setActiveChatArchived(true)).rejects.toThrow(
+          "The active chat has no saved note."
+        );
+      });
+
+      expect(manager.setChatArchived).not.toHaveBeenCalled();
+      expect(Notice).toHaveBeenCalledWith("Failed to archive chat.");
+    });
+  });
+
   describe("archiveChats()", () => {
     it("https://github.com/logancyang/obsidian-copilot/issues/3553 moves every given chat from the chat list to the archived list and says how many in one notice", async () => {
       const manager = makeManager();

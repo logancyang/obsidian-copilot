@@ -24,6 +24,7 @@ export interface AgentHistoryControls {
   deleteChats: (ids: readonly string[]) => Promise<void>;
   setChatPinned: (id: string, pinned: boolean, pinnedAt?: number) => Promise<void>;
   setChatArchived: (id: string, archived: boolean) => Promise<void>;
+  setActiveChatArchived: (archived: boolean) => Promise<void>;
   archiveChats: (ids: readonly string[]) => Promise<void>;
   openSourceFile: (id: string) => Promise<void>;
   copyChatLink: (id: string) => Promise<void>;
@@ -285,6 +286,26 @@ export function useAgentHistoryControls(
     [runWithNotice, writeChatArchived]
   );
 
+  const setActiveChatArchived = useCallback(
+    async (archived: boolean) => {
+      await runWithNotice(
+        archived ? "archive chat" : "unarchive chat",
+        async () => {
+          const session = manager.getActiveSession();
+          // The archive flag lives in the chat's note, so archiving saves the chat first; an archived chat already has one.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/968
+          const path = archived
+            ? (await manager.saveActiveSession())?.path
+            : session && manager.getSessionSourcePath(session.internalId);
+          if (!path) throw new Error("The active chat has no saved note.");
+          await writeChatArchived(path, archived);
+        },
+        true
+      );
+    },
+    [manager, runWithNotice, writeChatArchived]
+  );
+
   const archiveChats = useCallback(
     async (ids: readonly string[]) => {
       let archived = 0;
@@ -399,6 +420,7 @@ export function useAgentHistoryControls(
     deleteChats,
     setChatPinned,
     setChatArchived,
+    setActiveChatArchived,
     archiveChats,
     openSourceFile,
     copyChatLink,

@@ -12,7 +12,7 @@ One chat in a list: the Navigator, Recent chats on the start screen, or the chat
 - row-pin: `Pin chat` / `Unpin chat`.
 - row-rename: `More actions` → Rename.
 - row-close: `Shut down` stops the chat's agent and keeps the chat. It is offered only while the agent is running.
-- row-archive: `Archive chat` hides the chat from the list; it stays under View archived.
+- row-archive: `Archive chat` hides the chat from the list; it stays under View archived. If that chat is open, it stays open with the [archived banner](chat-controls.md).
 - row-delete: `More actions` → Delete chat.
 - row-note: `Open chat note`, `Copy chat link`, and bookmarking, for chats saved as notes.
 - row-multi-select: in Recent chats and the Navigator, Shift-click selects the rows between the last clicked row and this one, and Cmd-click (Ctrl-click on Windows) adds or removes one row. Right-clicking a selected row offers only `Archive N chats` and `Delete N chats`, each confirmed first.
