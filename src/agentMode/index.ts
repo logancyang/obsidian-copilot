@@ -59,6 +59,7 @@ import { buildNativeChatId } from "@/utils/nativeChatId";
 import { loadAgentSessionPrompt } from "@/agents/agentSessionPrompt";
 import { agentBackend, agentSetupProblem, agentSetupReason } from "@/agents/agentMode/agentChats";
 import { AGENT_DRAFT_CARD_EXTENSION } from "@/agents/agentMode/agentDraftCard";
+import { restoreRelayedRuns } from "@/agents/agentMode/agentRelays";
 import {
   createAnswerAgentTool,
   createAskAgentTool,
@@ -404,6 +405,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
         ? loadAgentSessionPrompt(plugin.customAgents, slug, vaultBase)
         : null;
     },
+    onChatReopened: restoreRelayedRuns,
   });
   managerRef = manager;
   // Agents read Copilot's tool list once per session, so a connected or disconnected service reaches open chats through Reload.

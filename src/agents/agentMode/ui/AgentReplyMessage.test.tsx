@@ -1,6 +1,6 @@
 import type { AgentMention } from "@/agents/agentMentions";
 import { AgentReplyMessage } from "@/agents/agentMode/ui/AgentReplyMessage";
-import { ChatAgentsContext } from "@/agents/ui/chatAgents";
+import { ChatAgentsContext, ChatRunsContext } from "@/agents/ui/chatAgents";
 import { LEO, MAYA, THREE_AGENTS } from "@/agents/ui/testing/rosterFixtures";
 import { AppContext } from "@/context";
 import { fireEvent, render, screen } from "@testing-library/react";
@@ -29,7 +29,7 @@ function renderInChat(element: React.ReactElement, openRun = jest.fn()) {
   return render(
     <AppContext.Provider value={{} as App}>
       <ChatAgentsContext.Provider value={{ agents: THREE_AGENTS, self: "coco", openRun }}>
-        {element}
+        <ChatRunsContext.Provider value={() => true}>{element}</ChatRunsContext.Provider>
       </ChatAgentsContext.Provider>
     </AppContext.Provider>
   );

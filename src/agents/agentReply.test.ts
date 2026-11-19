@@ -8,6 +8,7 @@ import {
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/944";
 const SEVERAL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/949";
+const NO_NOTE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/976";
 const MAYA = { agent: "maya", name: "Maya", mention: "mention-1" };
 const NOTHING = { changed: [] };
 
@@ -21,6 +22,20 @@ describe("agentReply", () => {
           RELAY_PRINCIPLE,
           '<agent-reply from="Maya">\nI disagree.\n</agent-reply>',
         ].join("\n\n")
+      );
+    });
+
+    it(`adds how the run ended and the asked agent's chat to the marker, so a chat without a note can rebuild the run (${NO_NOTE})`, () => {
+      const [marker] = formatAgentReply({
+        ...MAYA,
+        ...NOTHING,
+        reply: "I disagree.",
+        status: "finished",
+        chat: { backendId: "claude", sessionId: "maya-chat" },
+      }).split("\n");
+
+      expect(marker).toBe(
+        `<!-- ${AGENT_REPLY_MARKER} {"agent":"maya","name":"Maya","mention":"mention-1","status":"finished","chat":{"backendId":"claude","sessionId":"maya-chat"}} -->`
       );
     });
 
@@ -175,6 +190,25 @@ describe("agentReply", () => {
         marker: MAYA,
         reply: "I disagree.\n\n</agent-reply> is just text here.",
       });
+    });
+
+    it(`reads the run's ending and the asked agent's chat back from the marker (${NO_NOTE})`, () => {
+      const chat = { backendId: "claude", sessionId: "maya-chat" };
+      const text = formatAgentReply({
+        ...MAYA,
+        ...NOTHING,
+        reply: "I disagree.",
+        status: "stopped",
+        chat,
+      });
+
+      expect(readAgentReply(text)?.marker).toEqual({ ...MAYA, status: "stopped", chat });
+    });
+
+    it(`reads a relay written before its marker named the run's ending and chat exactly as before (${NO_NOTE})`, () => {
+      const text = `<!-- ${AGENT_REPLY_MARKER} {"agent":"maya","name":"Maya","mention":"mention-1"} -->\n\nMaya replied. Pass the reply on to the user now.\n\n<agent-reply from="Maya">\nI disagree.\n</agent-reply>`;
+
+      expect(readAgentReply(text)).toEqual({ marker: MAYA, reply: "I disagree." });
     });
 
     it("reads a reply with no text as empty", () => {

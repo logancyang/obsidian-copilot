@@ -19,6 +19,10 @@ export const ChatAgentsContext = createContext<ChatAgents>(
   Object.freeze({ agents: NO_AGENTS, self: null })
 );
 
+// A card opens only a run the chat can find, which changes with each message, so the lookup has its own context and the rest of the chat doesn't render again on every message.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/976
+export const ChatRunsContext = createContext<(run: RunRef) => boolean>(() => false);
+
 export function useChatAgentsValue(
   store: CustomAgentStore | undefined,
   self: string | null,

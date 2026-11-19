@@ -1,5 +1,5 @@
 import { AgentFace } from "@/agents/ui/AgentFace";
-import { ChatAgentsContext, type RunRef } from "@/agents/ui/chatAgents";
+import { ChatAgentsContext, ChatRunsContext, type RunRef } from "@/agents/ui/chatAgents";
 import { AgentActivityCard } from "@/components/chat-components/AgentActivityCard";
 import { MessageSquare } from "lucide-react";
 import React, { useContext } from "react";
@@ -22,7 +22,9 @@ export const AgentMessageCard: React.FC<AgentMessageCardProps> = ({
   run,
 }) => {
   const { agents, self, openRun } = useContext(ChatAgentsContext);
+  const hasRun = useContext(ChatRunsContext);
   const from = agents.find((agent) => agent.slug === self)?.name ?? "Copilot";
+  const open = openRun && run && hasRun(run) ? () => openRun(run) : undefined;
   return (
     <AgentActivityCard
       icon={MessageSquare}
@@ -34,8 +36,8 @@ export const AgentMessageCard: React.FC<AgentMessageCardProps> = ({
           {after ? <span className="tw-shrink-0">{after}</span> : null}
         </>
       }
-      onOpen={openRun && run ? () => openRun(run) : undefined}
-      ariaLabel={run ? `Open ${from}'s conversation with ${name}` : undefined}
+      onOpen={open}
+      ariaLabel={open ? `Open ${from}'s conversation with ${name}` : undefined}
     />
   );
 };

@@ -470,6 +470,7 @@ interface ManagerOptions {
   copilotMcpServer?: ManagerDeps["copilotMcpServer"];
   chatExtensions?: ManagerDeps["chatExtensions"];
   resolveAgent?: ManagerDeps["resolveAgent"];
+  onChatReopened?: ManagerDeps["onChatReopened"];
 }
 
 const builtManagers: AgentSessionManager[] = [];
@@ -505,6 +506,7 @@ function buildManager(options: ManagerOptions = {}): AgentSessionManager {
       copilotMcpServer: options.copilotMcpServer,
       chatExtensions: options.chatExtensions,
       resolveAgent: options.resolveAgent ?? mockResolveAgent,
+      onChatReopened: options.onChatReopened,
     }
   );
   builtManagers.push(manager);
@@ -705,6 +707,8 @@ const replayChunk = (
   messageId: string
 ): ReplayFrame => ({ sessionUpdate, content: { type: "text", text }, messageId });
 
+const REOPENED_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/976";
+
 function senderAndText(session: AgentSession): [string, string][] {
   return session.store.getDisplayMessages().map((m) => [m.sender, m.message]);
 }
@@ -903,6 +907,7 @@ function buildHistoryHarness(opts?: {
   createBackendProcess?: jest.Mock;
   applyInitialSessionConfig?: BackendDescriptor["applyInitialSessionConfig"];
   applySelection?: BackendDescriptor["applySelection"];
+  onChatReopened?: ManagerDeps["onChatReopened"];
 }) {
   const frontmatterByPath = opts?.files ?? {};
   const hiddenByPath = opts?.hiddenFiles ?? {};
@@ -977,6 +982,7 @@ function buildHistoryHarness(opts?: {
     descriptor,
     persistence,
     sessionIndex: index,
+    onChatReopened: opts?.onChatReopened,
     preloader: {
       getWarmProcs: jest.fn(() => {
         if (!opts?.warmListSessions) return [];
@@ -7111,6 +7117,36 @@ describe("AgentSessionManager", () => {
         );
       });
 
+      it(`hands a chat reopened from its note to onChatReopened after the note's @ runs are on its messages, so the note's runs are the ones kept (${REOPENED_ISSUE})`, async () => {
+        const replay = buildReplayingBackend({
+          onLoad: (emit) => {
+            emit(replayChunk("user_message_chunk", "saved question", "u1"));
+            emit(replayChunk("agent_message_chunk", "replayed answer", "a1"));
+          },
+        });
+        const run = {
+          id: "m1",
+          agent: "maya",
+          name: "Maya",
+          status: "stopped" as const,
+          startedAt: 1,
+        };
+        const seen: unknown[] = [];
+        const onChatReopened = jest.fn((chat: AgentSession) =>
+          seen.push(chat.getDisplayMessages()[0].agentMentions)
+        );
+
+        await buildManager({
+          persistence: {
+            loadFile: savedChat([{ ...savedTurn[0], agentMentions: [run] }, savedTurn[1]]),
+          },
+          descriptor: buildDescriptor({ createBackendProcess: () => replay.backend }),
+          onChatReopened,
+        }).loadSessionFromHistory(mockTFile({ path: "chat/Saved.md" }));
+
+        expect(seen).toEqual([[run]]);
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/671 shows the replayed chat with its tool calls instead of the note's text when the session reattaches, and drops frames that arrive after the load response", async () => {
         const replay = buildReplayingBackend({
           onLoad: (emit) => {
@@ -7693,6 +7729,29 @@ describe("AgentSessionManager", () => {
           baseModelId: "opus",
           effort: "high",
         });
+      });
+
+      it(`hands a chat reopened without a note to onChatReopened once its history is replayed, so the chat's @ runs can be read back from it (${REOPENED_ISSUE})`, async () => {
+        const replay = buildReplayingBackend({
+          onLoad: (emit) => {
+            emit(replayChunk("user_message_chunk", "@Maya review the plan", "u1"));
+            emit(replayChunk("agent_message_chunk", "Asked Maya.", "a1"));
+          },
+        });
+        const replayed: string[] = [];
+        const onChatReopened = jest.fn((chat: AgentSession) =>
+          replayed.push(...chat.getDisplayMessages().map((m) => m.message))
+        );
+        const { manager } = buildHistoryHarness({
+          createBackendProcess: jest.fn(() => replay.backend),
+          onChatReopened,
+        });
+
+        const session = await manager.loadNativeSessionFromHistory("opencode", "saved-chat");
+
+        expect(onChatReopened).toHaveBeenCalledTimes(1);
+        expect(onChatReopened).toHaveBeenCalledWith(session);
+        expect(replayed).toEqual(["@Maya review the plan", "Asked Maya."]);
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/602 keeps the frames replayed before the load response as history bubbles and drops out-of-turn frames that arrive after it", async () => {

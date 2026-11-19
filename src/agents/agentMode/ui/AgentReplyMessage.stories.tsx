@@ -6,7 +6,7 @@ import {
   type AgentReplyMessageProps,
 } from "@/agents/agentMode/ui/AgentReplyMessage";
 import { MemorySaveLine } from "@/agents/agentMode/ui/MemorySaveLine";
-import { ChatAgentsContext } from "@/agents/ui/chatAgents";
+import { ChatAgentsContext, ChatRunsContext } from "@/agents/ui/chatAgents";
 import type { MemorySave } from "@/agents/memorySaves";
 import { LONG_NAMED_AGENT, THREE_AGENTS } from "@/agents/ui/testing/rosterFixtures";
 import { useApp } from "@/context";
@@ -24,20 +24,25 @@ const CHAT_AGENTS = {
   openRun: () => {},
 };
 
+const RUN_FOUND = () => true;
+const RUN_NOT_FOUND = () => false;
+
 function ReplyCard({ relay, saves, ...props }: ReplyCardProps) {
   const app = useApp();
   return (
     <ChatAgentsContext.Provider value={CHAT_AGENTS}>
-      <AgentReplyMessage {...props}>
-        {saves?.map((save) => (
-          <MemorySaveLine
-            key={save.rule}
-            {...save}
-            onOpen={() => {}}
-            onOpenInstruction={() => {}}
-          />
-        ))}
-      </AgentReplyMessage>
+      <ChatRunsContext.Provider value={props.run ? RUN_FOUND : RUN_NOT_FOUND}>
+        <AgentReplyMessage {...props}>
+          {saves?.map((save) => (
+            <MemorySaveLine
+              key={save.rule}
+              {...save}
+              onOpen={() => {}}
+              onOpenInstruction={() => {}}
+            />
+          ))}
+        </AgentReplyMessage>
+      </ChatRunsContext.Provider>
       {relay ? (
         <div className="tw-px-3 tw-pt-2">
           <AgentMarkdownText text={relay} app={app} />
@@ -151,6 +156,12 @@ export const DidntFinish: StoryObj<ReplyCardProps> = {
     }),
     reply: "",
     relay: "Leo didn't finish: his chat stopped with an error before he replied.",
+  },
+};
+
+export const RunNotFound: StoryObj<ReplyCardProps> = {
+  args: {
+    relay: "Maya says six features in 90 seconds is too many.",
   },
 };
 
