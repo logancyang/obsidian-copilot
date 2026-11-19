@@ -1,8 +1,10 @@
 import type { CustomAgent } from "@/agents/CustomAgentStore";
 import { AgentRoster } from "@/agents/ui/AgentRoster";
-import { FIVE_AGENTS } from "@/agents/ui/testing/rosterFixtures";
+import { FIVE_AGENTS, RECENT_CHATS } from "@/agents/ui/testing/rosterFixtures";
+import { useAgentRecentChats } from "@/agents/ui/useAgentRecentChats";
 import { AgentHomeShelf, type AgentHomeShelfSection } from "@/agentMode/ui/AgentHomeShelf";
 import { AgentLandingStack } from "@/agentMode/ui/AgentLandingStack";
+import { GlobalRecentChatsSection } from "@/agentMode/ui/GlobalRecentChatsSection";
 import { CopilotBrandIcon } from "@/components/ui/CopilotBrandIcon";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { Meta, StoryObj } from "@/lib/story";
@@ -213,6 +215,8 @@ export const ProjectLanding: StoryObj<AgentLandingStackProps> = {
   render: (args) => <LandingCanvas args={args} project />,
 };
 
+const noop = async () => {};
+
 function AgentHomeCanvas({
   agents,
   initialSlug,
@@ -224,6 +228,29 @@ function AgentHomeCanvas({
 }) {
   const [selectedSlug, setSelectedSlug] = useState(initialSlug);
   const selected = agents.find((agent) => agent.slug === selectedSlug) ?? null;
+  const recentChats = useAgentRecentChats(RECENT_CHATS, agents, selected);
+  const chatsSection: AgentHomeShelfSection = {
+    id: project ? "project-chats" : "chats",
+    icon: <MessageSquare className="tw-size-4" />,
+    title: "Recent chats",
+    renderBody: () => (
+      <GlobalRecentChatsSection
+        {...recentChats}
+        variant={project ? "project" : "global"}
+        onLoadChat={noop}
+        onUpdateTitle={noop}
+        onDeleteChat={noop}
+        onOpenSourceFile={noop}
+        onCopyChatLink={noop}
+        onSetChatPinned={noop}
+        onSetChatArchived={noop}
+        onDeleteChats={noop}
+        onArchiveChats={noop}
+        getChatBookmarkState={async () => "not-bookmarked"}
+        onSetChatBookmarked={noop}
+      />
+    ),
+  };
   return (
     <TooltipProvider>
       <div className="tw-flex tw-size-full tw-flex-col">
@@ -252,7 +279,16 @@ function AgentHomeCanvas({
                   : "Ask anything • @ to add context • / for commands"}
               </div>
             }
-            shelf={<AgentHomeShelf sections={project ? projectLandingSections : allSections} />}
+            shelf={
+              <AgentHomeShelf
+                sections={
+                  project
+                    ? [projectLandingSections[0], chatsSection]
+                    : [chatsSection, ...relevantNotesSections, ...projectSections]
+                }
+                activeSectionId={chatsSection.id}
+              />
+            }
           />
         </div>
       </div>
@@ -266,6 +302,10 @@ export const AgentHomeAgentSelected: StoryObj<AgentLandingStackProps> = {
 
 export const AgentHomeCopilotSelected: StoryObj<AgentLandingStackProps> = {
   render: () => <AgentHomeCanvas agents={FIVE_AGENTS} initialSlug={null} />,
+};
+
+export const AgentHomeAgentWithoutChats: StoryObj<AgentLandingStackProps> = {
+  render: () => <AgentHomeCanvas agents={FIVE_AGENTS} initialSlug="kai" />,
 };
 
 export const ProjectHomeAgentSelected: StoryObj<AgentLandingStackProps> = {

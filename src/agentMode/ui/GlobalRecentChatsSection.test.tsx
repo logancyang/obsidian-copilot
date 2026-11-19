@@ -55,6 +55,9 @@ function renderSection(
         attentionChatIds={props.attentionChatIds}
         projectNamesById={props.projectNamesById}
         sortStrategy={props.sortStrategy}
+        getIcon={props.getIcon}
+        searchPlaceholder={props.searchPlaceholder}
+        emptyState={props.emptyState}
         onLoadChat={props.onLoadChat ?? noop}
         onUpdateTitle={props.onUpdateTitle ?? noop}
         onDeleteChat={props.onDeleteChat ?? noop}
@@ -167,6 +170,38 @@ describe("GlobalRecentChatsSection", () => {
   });
 
   describe("GlobalRecentChatsSection()", () => {
+    it("shows the icon the home gives a chat, such as its agent's face, and the chat's backend icon otherwise (https://github.com/Brevilabs/obsidian-copilot-private/issues/588)", () => {
+      const Face = () => <img alt="Coco's face" />;
+      renderSection({
+        items: [makeItem("coco", { agent: "coco" }), makeItem("copilot")],
+        getIcon: (item) => (item.agent === "coco" ? Face : undefined),
+      });
+
+      expect(
+        within(rowFor("Chat coco")).queryByRole("img", { name: "Coco's face" })
+      ).not.toBeNull();
+      expect(within(rowFor("Chat copilot")).queryByRole("img")).toBeNull();
+    });
+
+    it("names whose chats the search covers (https://github.com/Brevilabs/obsidian-copilot-private/issues/588)", () => {
+      renderSection({ items: [makeItem("a")], searchPlaceholder: "Search chats with Coco..." });
+
+      expect(screen.getByPlaceholderText("Search chats with Coco...")).not.toBeNull();
+    });
+
+    it("explains an empty list with the note the home gives, and still says when a search matches nothing (https://github.com/Brevilabs/obsidian-copilot-private/issues/588)", () => {
+      const { unmount } = renderSection({ emptyState: <span>No chats with Nora yet.</span> });
+      expect(screen.getByText("No chats with Nora yet.")).not.toBeNull();
+      expect(screen.queryByRole("searchbox")).toBeNull();
+      unmount();
+
+      renderSection({ items: [makeItem("a")], emptyState: <span>No chats with Nora yet.</span> });
+      fireEvent.change(screen.getByPlaceholderText("Search chats..."), {
+        target: { value: "zzz" },
+      });
+      expect(screen.getByText("No matching chats")).not.toBeNull();
+    });
+
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/429 shows open sessions and retains saved chats after close", async () => {
       const onLoadChat = jest.fn(noop);
       const onDeleteChat = jest.fn(noop);

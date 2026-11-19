@@ -1,4 +1,5 @@
 import type { CustomAgent } from "@/agents/CustomAgentStore";
+import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 
 const SKIN = ["#e8c39e", "#c99a76", "#f0d2b4", "#8d6748", "#e2b896", "#b98c6a", "#f3d6bf"];
 const SHIRT = ["#5a7bb5", "#b5675a", "#6aa77a", "#c9a24a", "#8a6cc9", "#4fb3b0", "#d47aa8"];
@@ -39,3 +40,21 @@ export const LONG_NAMED_AGENT = fixtureAgent(
   "Family calendar and school logistics, from pickups to permission slips and the winter break rota",
   3
 );
+
+const NOW = Date.parse("2026-11-16T15:20:00Z");
+const MINUTE = 60_000;
+
+function fixtureChat(index: number, title: string, agent: string | undefined, minutesAgo: number) {
+  const at = new Date(NOW - minutesAgo * MINUTE);
+  return { id: `chat-${index}`, title, agent, createdAt: at, lastAccessedAt: at };
+}
+
+export const RECENT_CHATS: ChatHistoryItem[] = [
+  fixtureChat(0, "Draft the 4.0.21 release notes from merged PRs", undefined, 0),
+  fixtureChat(1, "What to cut from the launch video", "maya", 5),
+  fixtureChat(2, "Plan the 4.0.21 launch video, 90 seconds max", "coco", 60),
+  fixtureChat(3, "What's left on the November plan?", "coco", 120),
+  fixtureChat(4, "Reconcile October expenses against Mercury", "leo", 3 * 1440),
+  fixtureChat(5, "Kids' winter break: who picks up when", "nora", 4 * 1440),
+  fixtureChat(6, "Summarize last week's user interviews", undefined, 5 * 1440),
+];
