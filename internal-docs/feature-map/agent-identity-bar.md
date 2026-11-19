@@ -4,7 +4,7 @@ A bar at the top of a chat with a custom agent: the agent's face, its name, and 
 
 ## Sub-features
 
-- identity-bar: a chat with a custom agent shows the agent's face, name, and title under the [chat tabs](chat-tabs.md) and above the messages, with a divider under it. It stays in place while the conversation scrolls. It shows no model and no color.
+- identity-bar: a chat with a custom agent shows the agent's face, name, and title under the [chat tabs](chat-tabs.md) and above the messages, with a divider under it. It stays in place while the conversation scrolls. It shows no model and no color. An arrow at its right end shows that the whole bar opens the [agent profile](agent-profile.md); hovering it brightens the bar.
 - identity-bar-long: a long name and a long title are each cut to one line.
 - identity-bar-no-title: an agent with no title shows the first sentence of its instructions in the title's place.
 - identity-bar-copilot: a Copilot chat has no bar and looks as it does without custom agents.
@@ -18,7 +18,7 @@ Choose an agent's face on the [start screen](agent-home.md) and send a message, 
 
 ## Driving it
 
-- Bar: choose an agent on the start screen and send a message. The conversation shows the agent's face, name, and title above the messages; scrolling the conversation leaves the bar in place.
+- Bar: choose an agent on the start screen and send a message. The conversation shows the agent's face, name, and title above the messages; scrolling the conversation leaves the bar in place. Hover the bar: it brightens and says "Open <name>'s profile". Click it: the [agent profile](agent-profile.md) covers the chat.
 - Long name: start a chat with an agent whose name and title are longer than the sidebar is wide. Each is cut to one line with an ellipsis.
 - No title: start a chat with an agent whose title is empty. The bar shows the first sentence of its instructions.
 - Copilot: with Copilot selected, send a message. No bar shows.
@@ -29,4 +29,4 @@ Choose an agent's face on the [start screen](agent-home.md) and send a message, 
 ## Gotchas
 
 - The bar shows once the chat has a message. Before that, the start screen's row of faces shows who the chat is with.
-- Without a license that includes custom agents, chats look as they do without custom agents: no bar, and the [chat tabs](chat-tabs.md) and [chat rows](chat-rows.md) show the agent logo.
+- Without a license that includes custom agents, chats look as they do without custom agents: no bar, no profile, and the [chat tabs](chat-tabs.md) and [chat rows](chat-rows.md) show the agent logo.

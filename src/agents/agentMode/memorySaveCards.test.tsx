@@ -2,6 +2,7 @@ import {
   MemorySaveLines,
   memorySaveCardKind,
   memorySaveTrail,
+  openAgentFile,
   openMemoryRule,
 } from "@/agents/agentMode/memorySaveCards";
 import type { AgentChatMessage, AgentMessagePart } from "@/agentMode/session/types";
@@ -95,6 +96,34 @@ describe("memorySaveCards", () => {
 
     it("returns nothing for a reply that saved no rule", () => {
       expect(memorySaveTrail(reply({ parts: [edit("save", MEMORY)] }), "/vault")).toBeNull();
+    });
+  });
+
+  describe("openAgentFile()", () => {
+    it("opens an agent's file at the top in a new tab of the main editor area", async () => {
+      const { app, memory, newLeaf, raw } = fakeApp();
+
+      await openAgentFile(app, MEMORY);
+
+      expect(raw.workspace.getLeaf).toHaveBeenCalledWith("tab");
+      expect(newLeaf.openFile).toHaveBeenCalledWith(memory, { active: true, eState: undefined });
+    });
+
+    it("switches to the tab where the file is already open instead of opening another", async () => {
+      const { app, openFile, raw } = fakeApp([MEMORY]);
+
+      await openAgentFile(app, MEMORY);
+
+      expect(openFile).toHaveBeenCalledTimes(1);
+      expect(raw.workspace.getLeaf).not.toHaveBeenCalled();
+    });
+
+    it("does nothing for a file that is gone", async () => {
+      const { app, newLeaf } = fakeApp();
+
+      await openAgentFile(app, "copilot/agents/gone/instructions.md");
+
+      expect(newLeaf.openFile).not.toHaveBeenCalled();
     });
   });
 

@@ -54,9 +54,11 @@ import { useSessionBackendDescriptor } from "@/agentMode/ui/useBackendDescriptor
 import { pickRandomGreeting } from "@/agentMode/ui/landingGreetings";
 import { findBackendForModel, listBackendDescriptors } from "@/agentMode/backends/registry";
 import { buildAgentModelChoices } from "@/agentMode/ui/agentModelPickerHelpers";
+import { AgentProfile } from "@/agents/agentMode/ui/AgentProfile";
 import { useCustomAgentsGate } from "@/agents/customAgentsGate";
 import type { CustomAgent } from "@/agents/CustomAgentStore";
 import { AgentIdentityBar } from "@/agents/ui/AgentIdentityBar";
+import { AgentProfileCover, useAgentProfileRoute } from "@/agents/ui/AgentProfileCover";
 import { AgentRoster, NewAgentButton } from "@/agents/ui/AgentRoster";
 import { CreateAgentModal } from "@/agents/ui/CreateAgentModal";
 import {
@@ -393,19 +395,28 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const isLanding = !manager.getActiveSession()?.hasUserVisibleMessages();
   const isProjectLanding = isLanding && isProjectScope;
 
+  const agentChatStart = useCallback(
+    (agent: CustomAgent | null) => {
+      const model = agent?.model;
+      const backendId =
+        (model && findBackendForModel(getSettings(), model.baseModelId)?.id) || undefined;
+      const seedSelection = (backendId && manager.getSeedSelection(backendId, model)) || undefined;
+      return { backendId, seedSelection };
+    },
+    [manager]
+  );
   const switchLandingAgent = useCallback(
     async (agent: CustomAgent | null) => {
       const landing = manager.getActiveSession();
       if (!landing) return;
-      const model = agent?.model;
-      const backendId = model && findBackendForModel(getSettings(), model.baseModelId)?.id;
-      const chat = await manager.replaceSessionInPlace(landing.internalId, backendId || undefined, {
-        seedSelection: (backendId && manager.getSeedSelection(backendId, model)) || undefined,
+      const { backendId, seedSelection } = agentChatStart(agent);
+      const chat = await manager.replaceSessionInPlace(landing.internalId, backendId, {
+        seedSelection,
         agentSlug: agent?.slug ?? null,
       });
       await chat.ready;
     },
-    [manager]
+    [manager, agentChatStart]
   );
   const agentHome = useAgentHomeSelection(
     plugin.customAgents,
@@ -439,6 +450,28 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       <NewAgentButton emphasized={agentHome.agents.length === 0} onClick={openCreateAgentDialog} />
     ) : undefined;
   const firstAgentBannerVisible = useFirstAgentBannerVisible(agentHome.agents.length);
+  const profile = useAgentProfileRoute(agentHome.agents, sessionId);
+  const markProfileClosedByUser = useComposerFocusAfterTaskView(profile.agent !== null);
+  const closeProfile = profile.close;
+  const leaveProfile = useCallback(() => {
+    markProfileClosedByUser();
+    closeProfile();
+  }, [markProfileClosedByUser, closeProfile]);
+  const startChatFromProfile = useCallback(
+    (agent: CustomAgent) => {
+      // The new chat page already has the agent picked, so its new chat is that page.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/940
+      if (isLanding) return leaveProfile();
+      const { backendId, seedSelection } = agentChatStart(agent);
+      manager
+        .createSession(backendId, undefined, seedSelection, undefined, agent.slug)
+        .catch((e: unknown) => {
+          logError("[AgentMode] new chat from an agent's profile failed", e);
+          new Notice(`Couldn't start a chat with ${agent.name}. Please try again.`);
+        });
+    },
+    [isLanding, leaveProfile, agentChatStart, manager]
+  );
   const dropOverlay = isDragActive && (
     <div className="tw-pointer-events-none tw-absolute tw-inset-0 tw-z-modal tw-flex tw-items-center tw-justify-center tw-rounded-md tw-border tw-border-dashed tw-bg-primary tw-opacity-80">
       <span>Drop files here...</span>
@@ -738,6 +771,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       selectedSlug={agentHome.selected?.slug ?? null}
       onSelect={(slug) => void agentHome.select(slug)}
       newAgentButton={newAgentButton}
+      onOpenProfile={profile.open}
       emptyHero={
         <div className="tw-flex tw-min-w-0 tw-items-center tw-justify-center tw-gap-3">
           {!newAgentButton && <CopilotBrandIcon className="tw-size-6 tw-shrink-0 tw-text-normal" />}
@@ -826,10 +860,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
         manager={manager}
         onOpenSidebar={handleOpenSessionsSidebar}
         agents={agentHome.agents}
+        onTabClick={profile.agent ? leaveProfile : undefined}
       />
-      {/* A new chat's row of faces already shows who it is with; the bar takes over once the chat has a message.
-          https://github.com/Brevilabs/obsidian-copilot-private/issues/938 */}
-      {!isLanding && agentHome.selected && <AgentIdentityBar agent={agentHome.selected} />}
       {createAnchor && (
         <CreateProjectPanel
           anchorEl={createAnchor}
@@ -837,7 +869,27 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
           onSave={persistCreateProject}
         />
       )}
-      <div className="tw-min-h-0 tw-flex-1">
+      <AgentProfileCover
+        header={
+          // A new chat's row of faces already shows who it is with; the bar takes over once the chat has a message.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/938
+          !isLanding &&
+          agentHome.selected && (
+            <AgentIdentityBar agent={agentHome.selected} onOpenProfile={profile.open} />
+          )
+        }
+        profile={
+          profile.agent && (
+            <AgentProfile
+              agent={profile.agent}
+              app={app}
+              manager={manager}
+              onBack={leaveProfile}
+              onNewChat={startChatFromProfile}
+            />
+          )
+        }
+      >
         <div ref={chatContainerRef} className="tw-flex tw-size-full tw-flex-col tw-overflow-hidden">
           <div className="tw-h-full">
             <div className="tw-relative tw-flex tw-h-full tw-flex-col">
@@ -980,7 +1032,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
             </div>
           </div>
         </div>
-      </div>
+      </AgentProfileCover>
     </div>
   );
 };
