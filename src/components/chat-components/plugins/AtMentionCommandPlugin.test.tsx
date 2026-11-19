@@ -12,7 +12,7 @@ import { act, render } from "@testing-library/react";
 import React from "react";
 
 const LOCKED_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/582";
-const LAPSED_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/950";
+const LOCKED_AGENTS_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/950";
 const MENTION_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/947";
 const SETUP_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/962";
 
@@ -237,7 +237,7 @@ describe("AtMentionCommandPlugin", () => {
       expect(menuTitles()).toEqual(["Agents", "Notes", "Web tabs", "Folders"]);
     });
 
-    it(`keeps the one locked Agents row in a vault with agents, and lists them locked for a first-level query, each opening the locked dialog with nothing inserted (${LAPSED_ISSUE})`, () => {
+    it(`keeps the one locked Agents row in a vault with agents, and lists them locked for a first-level query, each opening the locked dialog with nothing inserted (${LOCKED_AGENTS_ISSUE})`, () => {
       jest.mocked(useLockedAgentMention).mockReturnValue({
         option: LOCKED_ROW,
         agents: THREE_AGENTS,

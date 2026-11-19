@@ -76,7 +76,7 @@ export function openLockedCustomAgents(
     app,
     (unlocked) => {
       if (unlocked) return;
-      // A vault that already has agents, lapsed or synced, shows them instead of the preview pitch.
+      // A vault that already has agents shows them instead of the preview pitch.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/950
       if (agents.length > 0) new LockedAgentsUpsellModal(app, agents).open();
       else new CustomAgentsUpsellModal(app, medium).open();

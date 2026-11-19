@@ -11,7 +11,7 @@ import React, { useState } from "react";
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/588";
 const CREATE_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/939";
 const LOCKED_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/582";
-const LAPSED_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/950";
+const LOCKED_AGENTS_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/950";
 const SETUP_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/962";
 const HEADING_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/978";
 
@@ -403,11 +403,14 @@ describe("AgentRoster", () => {
       expect(onSelect).toHaveBeenCalledWith("kai");
     });
 
-    it(`shows every agent greyed with a lock while locked, keeps Copilot selected and shown above the row, says why under the row, and opens a clicked agent's locked profile instead of picking it (${LAPSED_ISSUE})`, () => {
+    it(`shows every agent greyed with a lock while locked, keeps Copilot selected and shown above the row, says why under the row, and opens a clicked agent's locked profile instead of picking it (${LOCKED_AGENTS_ISSUE})`, () => {
       const onOpenLocked = jest.fn();
       const { onSelect } = renderRoster({
         selectedSlug: "maya",
-        locked: { onOpen: onOpenLocked, note: "Your Supporter plan ended." },
+        locked: {
+          onOpen: onOpenLocked,
+          note: "Your agents need a valid Supporter license to chat.",
+        },
       });
 
       expect(rowNames()).toEqual([
@@ -420,7 +423,9 @@ describe("AgentRoster", () => {
       expect(maya.querySelector("img")?.className).toContain("tw-grayscale");
       expect(maya.querySelector(".lucide-lock")).not.toBeNull();
       expect(screen.getByRole("button", { name: "Copilot", pressed: true })).not.toBeNull();
-      expect(screen.getByText("Your Supporter plan ended.")).not.toBeNull();
+      expect(
+        screen.getByText("Your agents need a valid Supporter license to chat.")
+      ).not.toBeNull();
       expect(pickedAgent().name).toBe("Copilot");
 
       fireEvent.click(maya);
@@ -429,7 +434,7 @@ describe("AgentRoster", () => {
       expect(onSelect).not.toHaveBeenCalled();
     });
 
-    it(`opens the locked profile of an agent picked from the More menu, which marks each agent locked (${LAPSED_ISSUE})`, () => {
+    it(`opens the locked profile of an agent picked from the More menu, which marks each agent locked (${LOCKED_AGENTS_ISSUE})`, () => {
       const onOpenLocked = jest.fn();
       const { onSelect } = renderRoster({
         agents: SIX,

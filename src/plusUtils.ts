@@ -167,27 +167,24 @@ const NO_LICENSE: LicenseState = Object.freeze({ status: "none" });
 const INACTIVE_LICENSE: LicenseState = Object.freeze({ status: "inactive" });
 const UNNAMED_ACTIVE_LICENSE: LicenseState = Object.freeze({ status: "active" });
 
-export function hasActivePaidLicense(settings: CopilotSettings = getSettings()): boolean {
-  if (hasLiveEntitlement()) return verified.paid;
-  return settings.isPaidUser === true && !isEntitlementExpired(settings);
-}
-
 export function useLicenseState(): LicenseState {
   const settings = useSettingsValue();
   const namedActive = React.useRef<LicenseState | null>(null);
   if (!settings.plusLicenseKey) {
     return NO_LICENSE;
   }
-  if (!hasActivePaidLicense(settings)) {
-    return INACTIVE_LICENSE;
+  if (hasLiveEntitlement()) {
+    if (!verified.paid) {
+      return INACTIVE_LICENSE;
+    }
+    if (namedActive.current?.plan !== verified.plan) {
+      namedActive.current = { status: "active", plan: verified.plan };
+    }
+    return namedActive.current;
   }
-  if (!hasLiveEntitlement()) {
-    return UNNAMED_ACTIVE_LICENSE;
-  }
-  if (namedActive.current?.plan !== verified.plan) {
-    namedActive.current = { status: "active", plan: verified.plan };
-  }
-  return namedActive.current;
+  return settings.isPaidUser === true && !isEntitlementExpired(settings)
+    ? UNNAMED_ACTIVE_LICENSE
+    : INACTIVE_LICENSE;
 }
 
 export function useIsSelfHostEligible(): boolean | undefined {

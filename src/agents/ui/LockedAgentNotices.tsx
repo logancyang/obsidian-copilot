@@ -1,23 +1,16 @@
 import { useCustomAgentsGate } from "@/agents/customAgentsGate";
 import type { CustomAgent } from "@/agents/CustomAgentStore";
 import { Button } from "@/components/ui/button";
-import { navigateToPlusPage } from "@/plusUtils";
 import { openCopilotSettings } from "@/settings/openSettings";
-import { ExternalLink, Lock } from "lucide-react";
+import { Lock } from "lucide-react";
 import type { App } from "obsidian";
 import React from "react";
 
-export function unlockCustomAgents(app: App, lapsed: boolean, ownerWindow: Window): void {
-  if (lapsed) navigateToPlusPage("custom_agent_renew");
-  else openCopilotSettings(app, ownerWindow, "basic");
-}
-
-export function lockedUntil(lapsed: boolean): string {
-  return lapsed ? "Locked until you renew" : "Locked until you enter a Supporter license key";
+export function unlockCustomAgents(app: App, ownerWindow: Window): void {
+  openCopilotSettings(app, ownerWindow, "basic");
 }
 
 export interface LockedProfile {
-  lapsed: boolean;
   onUnlock: (ownerWindow: Window) => void;
 }
 
@@ -32,23 +25,17 @@ const BANNER_ACTION_CLASS =
 
 export function LockedProfileBanner({
   name,
-  lapsed,
   onUnlock,
 }: LockedProfileBannerProps): React.ReactElement {
   return (
     <div className={BANNER_CLASS}>
-      <span className="tw-min-w-0 tw-flex-1">
-        {lapsed
-          ? `Your Supporter plan ended. ${name} can't chat until you renew.`
-          : `${name} can't chat until you enter a Supporter license key on this device.`}
-      </span>
+      <span className="tw-min-w-0 tw-flex-1">{`${name} can't chat without a valid Supporter license.`}</span>
       <button
         type="button"
         onClick={(event) => onUnlock(event.currentTarget.win)}
         className={BANNER_ACTION_CLASS}
       >
-        {lapsed ? "Renew" : "Enter license key"}
-        {lapsed && <ExternalLink className="tw-size-3" />}
+        Enter license key
       </button>
     </div>
   );
@@ -76,7 +63,7 @@ export function SetupLockedProfileBanner({
   );
 }
 
-// An agent chat from before the license lapsed opens read-only; a turn already running when it lapsed finishes first.
+// An agent chat opens read-only while the license isn't valid for custom agents; a turn already running when it stopped being valid finishes first.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/950
 // An agent whose model can't run on this device can't reply either, so its old chats open read-only the same way.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/962
@@ -91,7 +78,6 @@ export function useReadOnlyChatAgent(
 
 export interface LockedAgentChatProps {
   name: string;
-  lapsed: boolean;
   onNewChat: () => void;
   onUnlock: (ownerWindow: Window) => void;
   setup?: { reason: string; onOpenProfile: () => void };
@@ -99,7 +85,6 @@ export interface LockedAgentChatProps {
 
 export function LockedAgentChat({
   name,
-  lapsed,
   onNewChat,
   onUnlock,
   setup,
@@ -111,9 +96,7 @@ export function LockedAgentChat({
         <span>
           {setup
             ? `You can read this chat, but ${name} can't reply. ${setup.reason}`
-            : lapsed
-              ? `Your Supporter plan ended. You can read this chat, but ${name} can't reply.`
-              : `You can read this chat, but ${name} can't reply until you enter a Supporter license key on this device.`}
+            : `You can read this chat, but ${name} can't reply without a valid Supporter license.`}
         </span>
       </div>
       <div className="tw-flex tw-flex-wrap tw-justify-end tw-gap-2">
@@ -126,8 +109,7 @@ export function LockedAgentChat({
           </Button>
         ) : (
           <Button size="sm" onClick={(event) => onUnlock(event.currentTarget.win)}>
-            {lapsed ? "Renew" : "Enter license key"}
-            {lapsed && <ExternalLink className="tw-size-3" />}
+            Enter license key
           </Button>
         )}
       </div>
@@ -135,19 +117,16 @@ export function LockedAgentChat({
   );
 }
 
-export function LockedHomeNote({ lapsed, onUnlock }: LockedProfile): React.ReactElement {
+export function LockedHomeNote({ onUnlock }: LockedProfile): React.ReactElement {
   return (
     <>
-      {lapsed
-        ? "Your Supporter plan ended. Your agents and their files are still here. "
-        : "This vault's agents can't chat until you enter a Supporter license key on this device. "}
+      Your agents need a valid Supporter license to chat.{" "}
       <button
         type="button"
         onClick={(event) => onUnlock(event.currentTarget.win)}
         className="clickable-icon tw-inline-flex tw-h-auto tw-gap-1 tw-bg-transparent tw-p-0 tw-align-baseline tw-text-ui-small tw-text-accent tw-shadow-none"
       >
-        {lapsed ? "Renew" : "Enter license key"}
-        {lapsed && <ExternalLink className="tw-size-3" />}
+        Enter license key
       </button>
     </>
   );

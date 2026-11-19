@@ -9,7 +9,7 @@ import type { HiddenAgentChats } from "@/agents/agentMode/hiddenAgentChats";
 import { openAgentFile } from "@/agents/agentMode/memorySaveCards";
 import { useAgentProfileFacts } from "@/agents/agentMode/ui/useAgentProfileFacts";
 import type { CustomAgent, CustomAgentStore } from "@/agents/CustomAgentStore";
-import { isLicenseLapsed, useCustomAgentsGate } from "@/agents/customAgentsGate";
+import { useCustomAgentsGate } from "@/agents/customAgentsGate";
 import { findUsedPresetIds, readAgentFaces } from "@/agents/presetFaces";
 import { AgentDeleteModal } from "@/agents/ui/AgentDeleteModal";
 import { AgentFacePicker, type PickedFace } from "@/agents/ui/AgentFacePicker";
@@ -22,7 +22,6 @@ import { backendRegistry } from "@/agentMode/backends/registry";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import type { BackendId } from "@/agentMode/session/types";
 import { logError } from "@/logger";
-import { useSettingsValue } from "@/settings/model";
 import { Notice, type App } from "obsidian";
 import React, { useEffect, useState } from "react";
 
@@ -64,7 +63,6 @@ export function AgentProfile({
   const facts = useAgentProfileFacts(app, manager, agent);
   const agents = useCustomAgents(store);
   const locked = useCustomAgentsGate() === "locked";
-  const lapsed = isLicenseLapsed(useSettingsValue());
   const [models] = useState(getModels);
   const { slug, name } = agent;
   const failed = (change: string) => (error: unknown) => {
@@ -125,9 +123,7 @@ export function AgentProfile({
         )
       }
       locked={
-        locked
-          ? { lapsed, onUnlock: (ownerWindow) => unlockCustomAgents(app, lapsed, ownerWindow) }
-          : undefined
+        locked ? { onUnlock: (ownerWindow) => unlockCustomAgents(app, ownerWindow) } : undefined
       }
       setupLocked={
         setupProblem && {

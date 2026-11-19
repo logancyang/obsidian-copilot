@@ -137,7 +137,7 @@ describe("AgentProfileView", () => {
       expect(screen.getByRole("img", { hidden: true }).className).not.toContain("tw-outline");
 
       document.body.innerHTML = "";
-      renderProfile({ locked: { lapsed: true, onUnlock: jest.fn() } });
+      renderProfile({ locked: { onUnlock: jest.fn() } });
       expect(screen.getAllByRole("img", { hidden: true })[0].className).not.toContain("tw-outline");
     });
 
@@ -475,13 +475,11 @@ describe("AgentProfileView", () => {
       expect(onDelete).toHaveBeenCalledTimes(1);
     });
 
-    it(`shows a locked agent read-only under its banner: a greyed face, plain name and title, both files to open, a greyed Model row, and Delete as the only action (${LOCKED_ISSUE})`, () => {
+    it(`shows a locked agent read-only under its valid Supporter license banner: a greyed face, plain name and title, both files to open, a greyed Model row, and Delete as the only action (${LOCKED_ISSUE})`, () => {
       const onUnlock = jest.fn();
-      const { onOpenFile, onDelete } = renderProfile({ locked: { lapsed: true, onUnlock } });
+      const { onOpenFile, onDelete } = renderProfile({ locked: { onUnlock } });
 
-      expect(
-        screen.getByText("Your Supporter plan ended. Coco can't chat until you renew.")
-      ).not.toBeNull();
+      expect(screen.getByText("Coco can't chat without a valid Supporter license.")).not.toBeNull();
       const face = screen.getAllByRole("img", { hidden: true })[0];
       expect(face.className).toContain("tw-grayscale");
       expect(face.parentElement?.querySelector(".lucide-lock")).not.toBeNull();
@@ -491,7 +489,9 @@ describe("AgentProfileView", () => {
         "What Coco knows",
         "Model",
       ]);
-      expect(screen.getByText("Locked until you renew")).not.toBeNull();
+      expect(
+        screen.getByText("Locked until you enter a valid Supporter license key")
+      ).not.toBeNull();
       expect(screen.getByTitle("Model · effort").hasAttribute("disabled")).toBe(true);
       expect(
         screen
@@ -500,29 +500,19 @@ describe("AgentProfileView", () => {
           .map((button) => button.textContent)
       ).toEqual([
         "Back to chat",
-        "Renew",
+        "Enter license key",
         expect.stringContaining("What Coco handles"),
         expect.stringContaining("Rules Coco remembers"),
         "Delete Coco…",
       ]);
 
-      fireEvent.click(screen.getByRole("button", { name: "Renew" }));
+      fireEvent.click(screen.getByRole("button", { name: "Enter license key" }));
       fireEvent.click(screen.getByRole("button", { name: /Rules Coco remembers/ }));
       fireEvent.click(screen.getByRole("button", { name: "Delete Coco…" }));
 
       expect(onUnlock).toHaveBeenCalledTimes(1);
       expect(onOpenFile).toHaveBeenCalledWith("copilot/agents/coco/MEMORY.md");
       expect(onDelete).toHaveBeenCalledTimes(1);
-    });
-
-    it(`says a locked agent's model waits for a Supporter license key on a device without an active one (${LOCKED_ISSUE})`, () => {
-      renderProfile({ locked: { lapsed: false, onUnlock: jest.fn() } });
-
-      expect(
-        screen.getByText("Coco can't chat until you enter a Supporter license key on this device.")
-      ).not.toBeNull();
-      expect(screen.getByText("Locked until you enter a Supporter license key")).not.toBeNull();
-      expect(screen.getByRole("button", { name: "Enter license key" })).not.toBeNull();
     });
 
     it(`shows a setup-locked agent's reason under the header, marks the Model field with what to do, and turns New chat off with the reason as its tooltip (${SETUP_ISSUE})`, async () => {
@@ -549,13 +539,11 @@ describe("AgentProfileView", () => {
 
     it(`shows the license banner, not the setup reason, when both lock the agent (${SETUP_ISSUE})`, () => {
       renderProfile({
-        locked: { lapsed: true, onUnlock: jest.fn() },
+        locked: { onUnlock: jest.fn() },
         setupLocked: { reason: "Coco's model, gpt-6, isn't available on this device." },
       });
 
-      expect(
-        screen.getByText("Your Supporter plan ended. Coco can't chat until you renew.")
-      ).not.toBeNull();
+      expect(screen.getByText("Coco can't chat without a valid Supporter license.")).not.toBeNull();
       expect(screen.queryByText(/isn't available on this device/)).toBeNull();
       expect(screen.queryByRole("alert")).toBeNull();
     });

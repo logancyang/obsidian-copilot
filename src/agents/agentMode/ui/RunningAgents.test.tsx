@@ -289,7 +289,7 @@ describe("RunningAgents", () => {
       );
     });
 
-    it(`shows a run that keeps working after the license lapsed, without a stop, since only a license that includes custom agents can act (${ISSUE})`, () => {
+    it(`shows a run that keeps working after the license stopped being valid, without a stop, since only a license that includes custom agents can act (${ISSUE})`, () => {
       render(<Line chat={coco} gate="locked" />);
 
       expect(screen.getByText("Reconcile October against the Mercury export.")).toBeTruthy();

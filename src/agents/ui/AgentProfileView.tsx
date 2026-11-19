@@ -6,7 +6,6 @@ import { AgentFace } from "@/agents/ui/AgentFace";
 import {
   type LockedProfile,
   LockedProfileBanner,
-  lockedUntil,
   type SetupLockedProfile,
   SetupLockedProfileBanner,
 } from "@/agents/ui/LockedAgentNotices";
@@ -147,7 +146,7 @@ export function AgentProfileView({
   setupLocked,
 }: AgentProfileViewProps): React.ReactElement {
   const { name } = agent;
-  // A lapsed or synced agent keeps its files open and Delete; its face, name, title and model can't change and it can't chat.
+  // A locked agent keeps its files open and Delete; its face, name, title and model can't change and it can't chat.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/950
   const readOnly = locked !== undefined;
   const [facePickerOpen, setFacePickerOpen] = useState(false);
@@ -336,7 +335,9 @@ export function AgentProfileView({
           <span className="tw-flex tw-min-w-0 tw-flex-1 tw-flex-col">
             <span className="tw-text-sm tw-font-semibold tw-text-normal">Model</span>
             <span className="tw-text-ui-smaller tw-text-muted">
-              {locked ? lockedUntil(locked.lapsed) : "New chats and @-mentions"}
+              {locked
+                ? "Locked until you enter a valid Supporter license key"
+                : "New chats and @-mentions"}
             </span>
           </span>
           <AgentModelField
