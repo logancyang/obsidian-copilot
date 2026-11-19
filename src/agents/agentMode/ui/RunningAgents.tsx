@@ -6,15 +6,14 @@ import {
   type RunningRunsSlot,
 } from "@/agentMode/ui/RunningTasksIndicator";
 import type { AgentMention } from "@/agents/agentMentions";
-import { formatRunTime, runningAgentsLine } from "@/agents/agentMentionStatus";
+import { runningAgentsLine } from "@/agents/agentMentionStatus";
 import type { HiddenAgentChats } from "@/agents/agentMode/hiddenAgentChats";
-import { useTickingNow } from "@/agents/agentMode/ui/AgentMentionStatus";
 import type { CustomAgent } from "@/agents/CustomAgentStore";
 import type { CustomAgentsGate } from "@/agents/customAgentsGate";
 import { AgentFace } from "@/agents/ui/AgentFace";
 import { cn } from "@/lib/utils";
 import { Bot } from "lucide-react";
-import React, { useRef } from "react";
+import React from "react";
 
 const MAX_FACES = 3;
 
@@ -106,8 +105,6 @@ const RunningAgentsLabel: React.FC<{ runs: readonly RunningAgent[]; taskCount: n
     runs.map((run) => run.mention),
     taskCount
   );
-  const ref = useRef<HTMLSpanElement>(null);
-  const now = useTickingNow(line.clockFrom !== undefined, ref);
   const faces = [
     ...runs.filter((run) => run.mention.status !== "working"),
     ...runs.filter((run) => run.mention.status === "working"),
@@ -116,7 +113,6 @@ const RunningAgentsLabel: React.FC<{ runs: readonly RunningAgent[]; taskCount: n
     .slice(0, MAX_FACES);
   return (
     <span
-      ref={ref}
       className={cn(
         "tw-flex tw-min-w-0 tw-items-center tw-gap-1.5",
         line.waiting && "tw-text-warning"
@@ -134,21 +130,13 @@ const RunningAgentsLabel: React.FC<{ runs: readonly RunningAgent[]; taskCount: n
           ))}
         </span>
       )}
-      <span className="tw-truncate">
-        {line.text}
-        {line.clockFrom === undefined ? null : (
-          <span className="tw-tabular-nums"> · {formatRunTime(now - line.clockFrom)}</span>
-        )}
-      </span>
+      <span className="tw-truncate">{line.text}</span>
     </span>
   );
 };
 
 const RunningAgentRow: React.FC<{ run: RunningAgent; onOpen: () => void }> = ({ run, onOpen }) => {
   const { mention, message, faceSrc } = run;
-  const working = mention.status === "working";
-  const ref = useRef<HTMLSpanElement>(null);
-  const now = useTickingNow(working, ref);
   return (
     <RunningRow
       icon={
@@ -165,19 +153,11 @@ const RunningAgentRow: React.FC<{ run: RunningAgent; onOpen: () => void }> = ({ 
         </>
       }
       trailing={
-        <span
-          ref={ref}
-          className={cn(
-            "tw-shrink-0 tw-text-xs tw-tabular-nums",
-            working ? "tw-text-muted" : "tw-text-warning"
-          )}
-        >
-          {working
-            ? formatRunTime(now - mention.startedAt)
-            : mention.status === "permission"
-              ? "Needs your OK"
-              : "Waiting for you"}
-        </span>
+        mention.status === "working" ? null : (
+          <span className="tw-shrink-0 tw-text-xs tw-text-warning">
+            {mention.status === "permission" ? "Needs your OK" : "Waiting for you"}
+          </span>
+        )
       }
       onOpen={onOpen}
     />

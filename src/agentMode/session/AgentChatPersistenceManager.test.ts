@@ -855,7 +855,6 @@ describe("AgentChatPersistenceManager", () => {
           name: "Maya",
           status: "finished" as const,
           startedAt: 1,
-          endedAt: 2,
         },
       ];
       const saved = await manager.saveSession(
@@ -916,8 +915,6 @@ describe("AgentChatPersistenceManager", () => {
           name: "Maya",
           status: "didnt_finish" as const,
           startedAt: 1735732800000,
-          endedAt: 1735732860000,
-          end: { kind: "permission_denied" as const, requests: ["Edit Plans/Launch plan.md"] },
           chat: { backendId: "claude", sessionId: "hidden-1" },
         },
       ];
@@ -949,7 +946,7 @@ describe("AgentChatPersistenceManager", () => {
           "---",
           "",
           "**user**: @Maya review the plan",
-          '<!-- copilot-message {"agentMentions":[{"id":"m1","agent":"maya","name":"Maya","status":"working","startedAt":5,"chat":{"backendId":"claude","sessionId":"h1"}},{"id":"m2","agent":"leo","name":"Leo","status":"dancing","startedAt":5},{"id":"m3","agent":"leo","name":"Leo","status":"stopped","startedAt":5,"end":null},"x"]} -->',
+          '<!-- copilot-message {"agentMentions":[{"id":"m1","agent":"maya","name":"Maya","status":"working","startedAt":5,"chat":{"backendId":"claude","sessionId":"h1"}},{"id":"m2","agent":"leo","name":"Leo","status":"dancing","startedAt":5},"x"]} -->',
           "[Timestamp: 2026/01/01 12:00:00]",
         ].join("\n"),
       });
@@ -963,7 +960,6 @@ describe("AgentChatPersistenceManager", () => {
           agent: "maya",
           name: "Maya",
           status: "didnt_finish",
-          end: { kind: "obsidian_closed" },
           startedAt: 5,
           chat: { backendId: "claude", sessionId: "h1" },
         },

@@ -275,5 +275,17 @@ describe("TaskDetailView", () => {
       expect(onBack).toHaveBeenCalledTimes(2);
       expect(screen.getByText("Leo's steps")).toBeTruthy();
     });
+
+    it("heads the view with its title alone when it has no subtitle or status, as one row naming both agents of a conversation (https://github.com/Brevilabs/obsidian-copilot-private/issues/967)", () => {
+      render(
+        <TaskDetailFrame title="Coco and Leo" onBack={jest.fn()} backLabel="Back to Coco">
+          Leo's steps
+        </TaskDetailFrame>
+      );
+
+      expect(screen.getByRole("button", { name: "Back to Coco" }).parentElement?.textContent).toBe(
+        "Coco and Leo"
+      );
+    });
   });
 });

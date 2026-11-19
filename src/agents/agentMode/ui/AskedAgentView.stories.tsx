@@ -2,7 +2,7 @@ import type { AgentChatMessage } from "@/agentMode/session/types";
 import type { AgentMention } from "@/agents/agentMentions";
 import { AskedAgentView, type AskedAgentViewProps } from "@/agents/agentMode/ui/AskedAgentView";
 import { askedAgentChatFixture } from "@/agents/agentMode/ui/testing/askedAgentChatFixture";
-import { COCO, LEO } from "@/agents/ui/testing/rosterFixtures";
+import { COCO, LEO, LONG_NAMED_AGENT } from "@/agents/ui/testing/rosterFixtures";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useApp } from "@/context";
 import type { Meta, StoryObj } from "@/lib/story";
@@ -184,7 +184,7 @@ export const NeedsYourOk: StoryObj<ViewProps> = {
 
 export const Finished: StoryObj<ViewProps> = {
   args: {
-    run: run({ status: "finished", startedAt: ASKED_AT, endedAt: ASKED_AT + 12 * MINUTE + 4_000 }),
+    run: run({ status: "finished", startedAt: ASKED_AT }),
     chat: askedAgentChatFixture([ASKED, MATCHING, QUESTION, ANSWER, DONE], "idle"),
   },
 };
@@ -194,8 +194,6 @@ export const Stopped: StoryObj<ViewProps> = {
     run: run({
       status: "stopped",
       startedAt: ASKED_AT,
-      endedAt: ASKED_AT + 6 * MINUTE + 40_000,
-      end: { kind: "stopped_by_user" },
     }),
     chat: askedAgentChatFixture([ASKED, MATCHING], "idle"),
   },
@@ -220,8 +218,6 @@ export const DidntFinishWithAnError: StoryObj<ViewProps> = {
     run: run({
       status: "didnt_finish",
       startedAt: ASKED_AT,
-      endedAt: ASKED_AT + 15_000,
-      end: { kind: "error", message: "The model is overloaded right now." },
     }),
     chat: askedAgentChatFixture([ASKED, FAILED], "idle"),
   },
@@ -229,11 +225,19 @@ export const DidntFinishWithAnError: StoryObj<ViewProps> = {
 
 export const NoLongerAvailable: StoryObj<ViewProps> = {
   args: {
-    run: run({ status: "didnt_finish", end: { kind: "obsidian_closed" } }),
+    run: run({ status: "didnt_finish" }),
     chat: null,
   },
 };
 
 export const FromACopilotChat: StoryObj<ViewProps> = {
   args: { from: "Copilot", fromFaceSrc: undefined },
+};
+
+export const LongNames: StoryObj<ViewProps> = {
+  args: {
+    run: run({ agent: LONG_NAMED_AGENT.slug, name: LONG_NAMED_AGENT.name }),
+    from: "Coco the Quarterly Planning and Release Notes Assistant",
+    faceSrc: LONG_NAMED_AGENT.faceSrc,
+  },
 };

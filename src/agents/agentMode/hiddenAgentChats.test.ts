@@ -562,7 +562,6 @@ describe("hiddenAgentChats", () => {
             name: "Maya",
             status: "didnt_finish",
             startedAt: 1,
-            end: { kind: "obsidian_closed" },
             chat: { backendId: "claude", sessionId: "maya-earlier" },
           },
         ]);
@@ -973,7 +972,7 @@ describe("hiddenAgentChats", () => {
         expect(fake.promptsTo(sessionIdOf(coco))[1]).toContain("Too many features.");
       });
 
-      it(`saves the run as working with its hidden chat, then finished with when it ended (${ISSUE})`, async () => {
+      it(`saves the run as working with its hidden chat, then finished (${ISSUE})`, async () => {
         const { coco, maya } = await askFromMessage();
 
         const [working] = mentionsOn(coco) ?? [];
@@ -983,7 +982,6 @@ describe("hiddenAgentChats", () => {
           status: "working",
           chat: { backendId: "fake", sessionId: sessionIdOf(maya) },
         });
-        expect(working.endedAt).toBeUndefined();
 
         answer(maya, "Too many features.");
         fake.endTurn(sessionIdOf(coco));
@@ -991,10 +989,9 @@ describe("hiddenAgentChats", () => {
 
         const [finished] = mentionsOn(coco) ?? [];
         expect(finished).toMatchObject({ id: working.id, status: "finished" });
-        expect(finished.endedAt).toBeGreaterThanOrEqual(working.startedAt);
       });
 
-      it(`saves that the agent didn't finish, and why, when its chat disconnects (${ISSUE})`, async () => {
+      it(`saves that the agent didn't finish when its chat disconnects (${ISSUE})`, async () => {
         const { coco, maya } = await askFromMessage();
 
         fake.emit(sessionIdOf(maya), {
@@ -1007,7 +1004,6 @@ describe("hiddenAgentChats", () => {
         expect(mentionsOn(coco)?.[0]).toEqual(
           expect.objectContaining({
             status: "didnt_finish",
-            end: { kind: "error", message: "Claude stopped unexpectedly." },
           })
         );
       });
@@ -1140,7 +1136,6 @@ describe("hiddenAgentChats", () => {
         expect(relayed).toContain("The user turned down a request from Maya");
         expect(relayed).toContain("You said no, so the plan is unchanged.");
         expect(mentionsOn(coco)?.[0]).toEqual(expect.objectContaining({ status: "finished" }));
-        expect(mentionsOn(coco)?.[0].end).toBeUndefined();
       });
 
       it(`still says the user turned a request down in the final relay when the agent then asked a question and got its answer (${PERMISSION})`, async () => {
@@ -1261,7 +1256,6 @@ describe("hiddenAgentChats", () => {
         expect(mentionsOn(coco)?.[0]).toEqual(
           expect.objectContaining({
             status: "didnt_finish",
-            end: { kind: "error", message: "Maya's chat stopped before it finished." },
           })
         );
         expect(chats.workingIn("maya")).toBeNull();
@@ -1275,9 +1269,7 @@ describe("hiddenAgentChats", () => {
         const relayed = await fake.untilPrompt(sessionIdOf(coco), 3);
         expect(relayed).toContain("Maya stopped, as the user asked.");
         expect(relayed).toContain("Waiting for the user.");
-        expect(mentionsOn(coco)?.[0]).toEqual(
-          expect.objectContaining({ status: "stopped", end: { kind: "stopped_by_user" } })
-        );
+        expect(mentionsOn(coco)?.[0]).toEqual(expect.objectContaining({ status: "stopped" }));
       });
       it(`leaves an agent waiting on the user's answer out of who is still working when another agent's reply is passed on (${SEVERAL})`, async () => {
         const { coco, maya, leo } = await askBoth();
@@ -1386,7 +1378,6 @@ describe("hiddenAgentChats", () => {
         );
         expect(mentionsOn(coco)?.[0]).toMatchObject({
           status: "didnt_finish",
-          end: { kind: "error", message: "Free usage limit reached" },
         });
       });
 
@@ -1510,10 +1501,7 @@ describe("hiddenAgentChats", () => {
         expect(relayed).toContain("Maya changed Plans/Launch plan.md.");
         const relayMessage = coco.store.getDisplayMessages().find((m) => m.message === relayed);
         expect(relayMessage?.fileChanges).toEqual([PLAN_CHANGE]);
-        expect(mentionsOn(coco)?.[0]).toEqual(
-          expect.objectContaining({ status: "stopped", end: { kind: "stopped_by_user" } })
-        );
-        expect(mentionsOn(coco)?.[0].endedAt).toEqual(expect.any(Number));
+        expect(mentionsOn(coco)?.[0]).toEqual(expect.objectContaining({ status: "stopped" }));
       });
 
       it(`relays the files a stopped turn changed, though they are recorded after its chat goes idle (${CONTROL})`, async () => {
@@ -1611,9 +1599,7 @@ describe("hiddenAgentChats", () => {
           "Maya stopped. The user already knows, so don't mention the stop; go straight to how far Maya got."
         );
         expect(relayed).not.toContain("as the user asked");
-        expect(mentionsOn(coco)?.[0]).toEqual(
-          expect.objectContaining({ status: "stopped", end: { kind: "stopped_by_user" } })
-        );
+        expect(mentionsOn(coco)?.[0]).toEqual(expect.objectContaining({ status: "stopped" }));
       });
 
       it(`stops the run with the agent's slug, as the chat's running agents list does (${CONTROL})`, async () => {
@@ -1732,9 +1718,7 @@ describe("hiddenAgentChats", () => {
           "Maya stopped because the user deleted Maya. Maya's changes stay. Tell the user how far Maya got and what Maya changed"
         );
         expect(relayed).toContain("Halfway through.");
-        expect(mentionsOn(coco)?.[0]).toEqual(
-          expect.objectContaining({ status: "stopped", end: { kind: "agent_deleted" } })
-        );
+        expect(mentionsOn(coco)?.[0]).toEqual(expect.objectContaining({ status: "stopped" }));
         await untilStatus(maya, (status) => status === "closed");
         expect(fake.closeSession).toHaveBeenCalledWith({ sessionId: sessionIdOf(maya) });
       });

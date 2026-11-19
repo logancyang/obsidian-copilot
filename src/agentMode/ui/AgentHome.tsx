@@ -55,12 +55,13 @@ import { pickRandomGreeting } from "@/agentMode/ui/landingGreetings";
 import { findBackendForModel, listBackendDescriptors } from "@/agentMode/backends/registry";
 import { buildAgentModelChoices } from "@/agentMode/ui/agentModelPickerHelpers";
 import { AgentProfile } from "@/agents/agentMode/ui/AgentProfile";
+import { findRun } from "@/agents/agentMode/agentRelays";
 import { ChatAskedAgentView } from "@/agents/agentMode/ui/AskedAgentView";
 import { chatRunningAgents } from "@/agents/agentMode/ui/RunningAgents";
 import { isLicenseLapsed, useCustomAgentsGate } from "@/agents/customAgentsGate";
 import type { CustomAgent } from "@/agents/CustomAgentStore";
 import { AgentIdentityBar } from "@/agents/ui/AgentIdentityBar";
-import { ChatAgentsContext, useChatAgentsValue } from "@/agents/ui/chatAgents";
+import { ChatAgentsContext, useChatAgentsValue, type RunRef } from "@/agents/ui/chatAgents";
 import { AgentProfileCover, useAgentProfileRoute } from "@/agents/ui/AgentProfileCover";
 import { AgentRoster } from "@/agents/ui/AgentRoster";
 import { CreateAgentModal } from "@/agents/ui/CreateAgentModal";
@@ -169,15 +170,10 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     openedTask?.sessionId === sessionId
       ? tasks.find((task) => task.toolCallId === openedTask.toolCallId)
       : undefined;
-  const [openedRun, setOpenedRun] = useState<{ sessionId: string; runId: string } | null>(null);
-  const handleOpenRun = useCallback(
-    (runId: string) => setOpenedRun({ sessionId, runId }),
-    [sessionId]
-  );
+  const [openedRun, setOpenedRun] = useState<{ sessionId: string; run: RunRef } | null>(null);
+  const handleOpenRun = useCallback((run: RunRef) => setOpenedRun({ sessionId, run }), [sessionId]);
   const detailRun =
-    openedRun?.sessionId === sessionId
-      ? messages.flatMap((m) => m.agentMentions ?? []).find((run) => run.id === openedRun.runId)
-      : undefined;
+    openedRun?.sessionId === sessionId ? findRun(messages, openedRun.run) : undefined;
   const markTaskViewClosedByUser = useComposerFocusAfterTaskView(
     detailTask !== undefined || detailRun !== undefined
   );
@@ -850,7 +846,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     hiddenChats: plugin.hiddenAgentChats,
     agents: chatAgents.agents,
     taskCount: runningTasks(tasks).length,
-    onOpen: (run) => handleOpenRun(run.id),
+    onOpen: (run) => handleOpenRun({ runId: run.id }),
     gate: customAgentsGate,
   });
   const getActiveChatBookmarkState = useCallback(
@@ -940,7 +936,10 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
         header={
           // A new chat's row of faces already shows who it is with; the bar takes over once the chat has a message.
           // https://github.com/Brevilabs/obsidian-copilot-private/issues/938
+          // An asked agent's conversation names both agents in its own header, which takes the bar's place.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/967
           !isLanding &&
+          !detailRun &&
           agentHome.selected && (
             <AgentIdentityBar agent={agentHome.selected} onOpenProfile={profile.open} />
           )

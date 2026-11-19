@@ -35,7 +35,7 @@ describe("chatAgents", () => {
       expect(result.current).toEqual({ agents: THREE_AGENTS, self: "coco" });
     });
 
-    it("carries how the chat opens an asked agent's work, for View under each @ message (https://github.com/Brevilabs/obsidian-copilot-private/issues/948)", async () => {
+    it("carries how the chat opens an asked agent's conversation, for its cards and its running agents list (https://github.com/Brevilabs/obsidian-copilot-private/issues/948)", async () => {
       await setCustomAgentsAccess("team");
       const { store } = fakeAgentStore(THREE_AGENTS);
       const openRun = jest.fn();

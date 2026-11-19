@@ -11,7 +11,7 @@ import type { App } from "obsidian";
 import React from "react";
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/947";
-const SEVERAL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/949";
+const CARDS = "https://github.com/Brevilabs/obsidian-copilot-private/issues/967";
 const SENT = "Zero wants a blunt read of [[Launch video plan]]: six features in 90 seconds.";
 
 const ASK_CALL: ToolCallPart = {
@@ -56,7 +56,7 @@ describe("agentToolLineKind", () => {
         expect(agentToolLineKind.place(CHECK_CALL, { tasks: null })).toEqual({ joinKey: null });
       });
 
-      it(`puts asks made one after another on one line, as when one message mentions several agents (${SEVERAL})`, () => {
+      it(`gives each ask a card of its own in call order, as when one message mentions several agents (${CARDS})`, () => {
         const trail = foldActivityGroups(
           [askCall("ask-maya", "Maya"), askCall("ask-leo", "Leo"), CHECK_CALL].map((part) => ({
             type: "action" as const,
@@ -68,27 +68,13 @@ describe("agentToolLineKind", () => {
 
         expect(
           trail.map((node) => (node.type === "toolCard" ? node.members.map(({ id }) => id) : node))
-        ).toEqual([["ask-maya", "ask-leo"], ["call-check"]]);
+        ).toEqual([["ask-maya"], ["ask-leo"], ["call-check"]]);
       });
 
-      it(`keeps a failed ask out of the joined line, on its ordinary row with its error (${SEVERAL})`, () => {
-        const failed = { ...askCall("ask-leo", "Leo"), status: "failed" as const };
-        const trail = foldActivityGroups(
-          [askCall("ask-maya", "Maya"), failed, askCall("ask-nora", "Nora")].map((part) => ({
-            type: "action" as const,
-            part,
-          })),
-          { tasks: null },
-          [agentToolLineKind]
-        );
-
+      it(`leaves a failed ask, which asked nobody, on its ordinary row with its error (${ISSUE})`, () => {
         expect(
-          trail.map((node) =>
-            node.type === "toolCard"
-              ? node.members.map(({ id }) => id)
-              : node.type === "action" && node.part.id
-          )
-        ).toEqual([["ask-maya", "ask-nora"], "ask-leo"]);
+          agentToolLineKind.place({ ...ASK_CALL, status: "failed" }, { tasks: null })
+        ).toBeNull();
       });
 
       it("leaves Copilot's other tools to their own rows", () => {
@@ -99,7 +85,7 @@ describe("agentToolLineKind", () => {
     });
 
     describe("render()", () => {
-      it("draws the call as its line", () => {
+      it(`draws the ask as its card naming the asked agent (${CARDS})`, () => {
         const { container } = render(
           <ChatAgentsContext.Provider value={{ agents: THREE_AGENTS, self: "coco" }}>
             <>
@@ -114,25 +100,7 @@ describe("agentToolLineKind", () => {
           </ChatAgentsContext.Provider>
         );
 
-        expect(container.textContent).toBe(`Asked Maya· ${SENT}`);
-      });
-
-      it(`draws asks joined on one line as one line naming every agent asked (${SEVERAL})`, () => {
-        const { container } = render(
-          <ChatAgentsContext.Provider value={{ agents: THREE_AGENTS, self: "coco" }}>
-            <>
-              {agentToolLineKind.render([askCall("ask-maya", "Maya"), askCall("ask-leo", "Leo")], {
-                tasks: null,
-                app: {} as App,
-                open: false,
-                onToggle: jest.fn(),
-                renderCall: () => "ordinary row",
-              })}
-            </>
-          </ChatAgentsContext.Provider>
-        );
-
-        expect(container.textContent).toBe(`Asked Maya and Leo· ${SENT}`);
+        expect(container.textContent).toBe("MessagedMaya");
       });
     });
   });

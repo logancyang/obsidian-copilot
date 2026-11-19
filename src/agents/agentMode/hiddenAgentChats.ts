@@ -523,12 +523,6 @@ export class HiddenAgentChats {
     if (getCustomAgentsGate() === "hidden") return;
     record(hidden.parent, run, {
       status: run.stopped ? "stopped" : end.error ? "didnt_finish" : "finished",
-      endedAt: Date.now(),
-      ...(run.stopped
-        ? { end: { kind: run.stopped === "agent_deleted" ? "agent_deleted" : "stopped_by_user" } }
-        : end.error
-          ? { end: { kind: "error", message: end.error.message } }
-          : {}),
     });
     void relay(
       hidden.parent,

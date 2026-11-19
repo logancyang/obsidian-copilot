@@ -5865,7 +5865,7 @@ describe("AgentSessionManager", () => {
         handle.setMessages([asked, { message: "Asked Maya." }, { message: "Unrelated" }]);
         await mgr.saveActiveSession();
         const finished = [
-          { ...asked, agentMentions: [{ ...working, status: "finished", endedAt: 2 }] },
+          { ...asked, agentMentions: [{ ...working, status: "finished" }] },
           { message: "Asked Maya." },
           { message: "Unrelated" },
         ];

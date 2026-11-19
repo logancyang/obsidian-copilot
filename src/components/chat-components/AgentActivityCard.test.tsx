@@ -54,5 +54,26 @@ describe("AgentActivityCard", () => {
       expect(openHeader.getAttribute("aria-expanded")).toBe("true");
       expect(screen.getByText("Details")).not.toBeNull();
     });
+
+    it("opens what it stands for on click, Enter, and Space when given onOpen, under its own accessible name, without an icon or a chevron (https://github.com/Brevilabs/obsidian-copilot-private/issues/967)", () => {
+      const onOpen = jest.fn();
+      const { container } = render(
+        <AgentActivityCard
+          label="Messaged Leo"
+          onOpen={onOpen}
+          ariaLabel="Open Coco's conversation with Leo"
+        />
+      );
+
+      const card = screen.getByRole("button", { name: "Open Coco's conversation with Leo" });
+      fireEvent.click(card);
+      fireEvent.keyDown(card, { key: "Enter" });
+      fireEvent.keyDown(card, { key: " " });
+
+      expect(onOpen).toHaveBeenCalledTimes(3);
+      expect(card.textContent).toBe("Messaged Leo");
+      expect(card.getAttribute("aria-expanded")).toBeNull();
+      expect(container.querySelector("svg")).toBeNull();
+    });
   });
 });

@@ -65,21 +65,16 @@ const BACKENDS = [
 describe("agentToolCalls", () => {
   describe("agentToolCall()", () => {
     it.each(BACKENDS)(
-      `reads the asked agent and the message sent from a %s ask_agent call (${ISSUE})`,
+      `reads the asked agent from a %s ask_agent call (${ISSUE})`,
       (_backend, call) => {
-        expect(agentToolCall(call())).toEqual({
-          tool: ASK_AGENT_TOOL_NAME,
-          agent: "Maya",
-          message: SENT,
-        });
+        expect(agentToolCall(call())).toEqual({ tool: ASK_AGENT_TOOL_NAME, agent: "Maya" });
       }
     );
 
-    it("reads only the agent from the other @ tools", () => {
+    it("reads the agent from the other @ tools, without its @", () => {
       expect(agentToolCall(claudeCall(STOP_AGENT_TOOL_NAME, { agent: "@Leo" }))).toEqual({
         tool: STOP_AGENT_TOOL_NAME,
         agent: "Leo",
-        message: null,
       });
     });
 
@@ -105,12 +100,11 @@ describe("agentToolCalls", () => {
 
   describe("agentToolLineText()", () => {
     it.each([
-      [ASK_AGENT_TOOL_NAME, "Asked Leo"],
       [CHECK_AGENT_TOOL_NAME, "Checked Leo's progress"],
       [ANSWER_AGENT_TOOL_NAME, "Passed your answer to Leo"],
       [STOP_AGENT_TOOL_NAME, "Stopped Leo"],
     ])(`names what the chat's agent did with the agent for %s (${ISSUE})`, (tool, text) => {
-      expect(agentToolLineText({ tool, agent: "leo", message: null }, "Leo")).toBe(text);
+      expect(agentToolLineText({ tool, agent: "leo" }, "Leo")).toBe(text);
     });
   });
 });
