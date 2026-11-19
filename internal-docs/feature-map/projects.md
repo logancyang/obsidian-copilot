@@ -30,7 +30,7 @@ A project groups chats with its own instructions and context. Agent Chat shows t
 - Create: in `Projects`, choose `New project`, type a name, and choose `Create`. Agent Chat enters the new project: the header shows its name and the greeting reads `Chat in <project>`.
 - List: type part of a project name into `Search projects...`. Only matching projects remain.
 - Enter: choose a project in `Projects`. The header shows its name, and the home opens on `Files`. Choose `Recent chats` to see only that project's chats; enter another project and its home opens on `Recent chats` too.
-- Agent in a project: with custom agents, enter a project. "Who do you want to talk to?" shows the agents' faces with the agent of the last chat started selected. Send a message: the chat that opens is that agent's, and it is listed in the project's `Recent chats` with the agent's face.
+- Agent in a project: with custom agents, enter a project. The row of faces shows the agents, with the agent of the last chat started selected. Send a message: the chat that opens is that agent's, and it is listed in the project's `Recent chats` with the agent's face.
 - Leave with tabs: with the chat tabs showing, choose `Leave project` at the left of the header, from the project home or a project chat. The global start screen returns with its `Recent chats`, `Relevant Notes`, and `Projects` shelf. Click the project name: nothing happens, and hovering it shows no link.
 - Project home with the Navigator: open the [Copilot Navigator](copilot-navigator.md). `Leave project` disappears from the header. Inside a project chat, choose the project name: the project home returns with `Chat in <project>`.
 - Leave with the Navigator: choose `New chat` in the Navigator. The global start screen returns.
