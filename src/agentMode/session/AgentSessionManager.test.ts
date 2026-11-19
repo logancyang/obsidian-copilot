@@ -9,6 +9,7 @@ import { formatDateTime } from "@/utils";
 import { playNotificationSound } from "@/utils/notificationSound";
 import { refreshLatestVersion } from "@/hooks/useLatestVersion";
 import { AgentSessionIndex } from "./AgentSessionIndex";
+import { listAgentChats } from "@/agents/agentMode/agentChats";
 import { AgentSessionManager } from "./AgentSessionManager";
 import type { FindCallingChat } from "./copilotMcpServer";
 import { FEEDBACK_OFFER_EXTENSION } from "./feedback/feedbackOffer";
@@ -986,6 +987,7 @@ function buildHistoryHarness(opts?: {
 
 const HISTORY_PROJECT_ID = "proj-1";
 const ISSUE_977 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/977";
+const ISSUE_980 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/980";
 
 describe("AgentSessionManager", () => {
   describe("AgentSessionManager", () => {
@@ -6087,6 +6089,63 @@ describe("AgentSessionManager", () => {
         });
       });
 
+      it(`gives each chat its coding agent's chat id, from the note or the index, so an agent's list can name the chat that asked it (${ISSUE_980})`, async () => {
+        const { manager, index } = buildHistoryHarness({
+          files: {
+            "chats/agent__a.md": { epoch: 1_000, backendId: "opencode", sessionId: "s1" },
+            "chats/agent__no-ref.md": { epoch: 1_000, backendId: "opencode" },
+          },
+        });
+        await index.recordSession({
+          backendId: "claude",
+          sessionId: "s2",
+          title: "Native only chat",
+          createdAtMs: 3_000,
+          lastAccessedAtMs: 4_000,
+        });
+
+        const items = await manager.getChatHistoryItems();
+
+        expect(Object.fromEntries(items.map((item) => [item.id, item.sessionId]))).toEqual({
+          "chats/agent__a.md": "s1",
+          "chats/agent__no-ref.md": undefined,
+          [buildNativeChatId("claude", "s2")]: "s2",
+        });
+      });
+
+      it(`lists none of the conversations agents were asked into, in Recent chats, a project's chats or an agent's profile, even with the index's section of them full (${ISSUE_980})`, async () => {
+        const { manager, index } = buildHistoryHarness();
+        await index.recordSession({
+          backendId: "claude",
+          sessionId: "coco-chat",
+          title: "Launch plan",
+          createdAtMs: 1_000,
+          lastAccessedAtMs: 2_000,
+          agent: "coco",
+        });
+        for (let i = 0; i < 100; i++) {
+          await index.updateAskedConversation("claude", `maya-hidden-${i}`, () => ({
+            backendId: "claude",
+            sessionId: `maya-hidden-${i}`,
+            agent: "maya",
+            askedBy: "coco",
+            askedIn: { backendId: "claude", sessionId: "coco-chat" },
+            firstAtMs: 1_000,
+            lastAtMs: 3_000 + i,
+            asks: 1,
+            firstAsk: "Is $8k right for the launch?",
+          }));
+        }
+
+        const recent = await manager.getChatHistoryItems();
+        const inProject = await manager.getChatHistoryItems(HISTORY_PROJECT_ID);
+        const mayaProfile = await listAgentChats(manager, "maya");
+
+        expect(recent.map((item) => item.title)).toEqual(["Launch plan"]);
+        expect(inProject).toEqual([]);
+        expect(mayaProfile).toEqual([]);
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/805 reports when saved chats were archived and treats chats saved before archiving existed as not archived", async () => {
         const { manager } = buildHistoryHarness({
           files: {
@@ -6320,6 +6379,38 @@ describe("AgentSessionManager", () => {
         expect(await manager.getChatHistoryItems()).toHaveLength(0);
         expect(await index.getEntry("opencode", "s1")).toBeNull();
         expect(persistence.deleteFile).not.toHaveBeenCalled();
+      });
+
+      it(`forgets the conversations a deleted chat asked agents into, whether it had a note or not, and writes that before it resolves (${ISSUE_980})`, async () => {
+        const indexStorage = makeIndexStorage();
+        const { manager, index } = buildHistoryHarness({
+          indexStorage,
+          files: { "chats/agent__coco.md": { epoch: 1_000, backendId: "claude", sessionId: "s1" } },
+        });
+        for (const [hidden, askedIn] of [
+          ["maya-1", "s1"],
+          ["maya-2", "s2"],
+          ["maya-3", "s3"],
+        ]) {
+          await index.updateAskedConversation("claude", hidden, () => ({
+            backendId: "claude",
+            sessionId: hidden,
+            agent: "maya",
+            askedIn: { backendId: "claude", sessionId: askedIn },
+            firstAtMs: 1_000,
+            lastAtMs: 2_000,
+            asks: 1,
+            firstAsk: "Is $8k right for the launch?",
+          }));
+        }
+
+        await manager.deleteChatHistory("chats/agent__coco.md");
+        await manager.deleteChatHistory(buildNativeChatId("claude", "s2"));
+
+        const reloaded = new AgentSessionIndex(indexStorage, "plugins/copilot/index.json");
+        expect((await reloaded.getAskedConversations()).map((c) => c.sessionId)).toEqual([
+          "maya-3",
+        ]);
       });
 
       it(`keeps a deleted chat off the list after a reload while OpenCode still has the session (${ISSUE_977})`, async () => {

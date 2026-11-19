@@ -91,6 +91,7 @@ export function mergeChatHistoryItems(
       createdAt: new Date(entry.createdAtMs),
       lastAccessedAt: new Date(entry.lastAccessedAtMs),
       backendId: entry.backendId,
+      sessionId: entry.sessionId,
       projectId: entry.projectId,
       agent: entry.agent,
     });

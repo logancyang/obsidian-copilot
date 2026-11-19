@@ -243,6 +243,14 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     if (!managerRef) throw new Error("Agent Chat isn't ready yet.");
     return managerRef;
   };
+  const vaultId = getVaultId(app);
+  const indexPath = path.join(
+    copilotAppDataDir(os.homedir()),
+    "vaults",
+    vaultId,
+    "agent-chat-index.json"
+  );
+  const sessionIndex = new AgentSessionIndex(createNodeFileStorage(), indexPath);
   const hiddenAgentChats = new HiddenAgentChats({
     store: () => plugin.customAgents,
     vaultBase: () => getVaultBase(app),
@@ -265,6 +273,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
         resumeSessionId: resume && resume.backendId === backendId ? resume.sessionId : undefined,
       });
     },
+    askedConversations: sessionIndex,
   });
   plugin.register(() => hiddenAgentChats.dispose());
   plugin.hiddenAgentChats = hiddenAgentChats;
@@ -339,6 +348,8 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
           return {
             agent: session.agentSlug,
             chats: (await listAllChats(manager)).filter((item) => !own.has(item.id)),
+            askedConversations: await sessionIndex.getAskedConversations(),
+            agents: plugin.customAgents?.getAgents() ?? [],
           };
         },
         vaultBase: () => getVaultBase(app) ?? "",
@@ -364,14 +375,6 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     copilotMcpServer
   );
   const persistenceManager = new AgentChatPersistenceManager(app);
-  const vaultId = getVaultId(app);
-  const indexPath = path.join(
-    copilotAppDataDir(os.homedir()),
-    "vaults",
-    vaultId,
-    "agent-chat-index.json"
-  );
-  const sessionIndex = new AgentSessionIndex(createNodeFileStorage(), indexPath);
   const prompter = createDefaultPermissionPrompter(
     (id) => managerRef?.getSessionByBackendId(id) ?? null
   );

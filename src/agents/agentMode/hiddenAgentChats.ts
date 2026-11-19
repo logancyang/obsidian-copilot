@@ -1,4 +1,5 @@
 import type { AgentSession, AgentSessionStatus } from "@/agentMode/session/AgentSession";
+import type { AgentSessionIndex } from "@/agentMode/session/AgentSessionIndex";
 import { AnswerCompletion, type AnswerEnd } from "@/agentMode/session/answerCompletion";
 import type { ChatStateHost } from "@/agentMode/session/chatExtension";
 import { replayPersistedMode } from "@/agentMode/session/replayPersistedMode";
@@ -22,6 +23,7 @@ import { readTurnMemorySaves, type MemorySave } from "@/agents/memorySaves";
 import type { CustomAgent, CustomAgentStore } from "@/agents/CustomAgentStore";
 import { getCustomAgentsGate } from "@/agents/customAgentsGate";
 import { USER_SENDER } from "@/constants";
+import { truncateWithEllipsis } from "@/context/compactionUtils";
 import { logWarn } from "@/logger";
 import { v4 as uuidv4 } from "uuid";
 
@@ -41,6 +43,10 @@ export interface HiddenAgentChatsHost {
   listedChat: (chat: ChatStateHost) => AgentSession | null;
   unavailableReason: (agent: CustomAgent) => string | null;
   startChat: (start: HiddenChatStart) => Promise<AgentSession>;
+  askedConversations: Pick<
+    AgentSessionIndex,
+    "updateAskedConversation" | "deleteAskedConversations"
+  >;
 }
 
 export type AgentRefusal =
@@ -115,6 +121,9 @@ export interface AskedAgentChat {
   continuedAt: ReadonlyMap<string, number>;
 }
 
+// An agent later recalls each conversation it was asked into from its first ask and latest answer, so Copilot cuts both short without a model; the index file keeps them.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/980
+const ASKED_TEXT_CHARS = 300;
 const PROGRESS_TEXT_CHARS = 1500;
 const PROGRESS_STEPS = 10;
 const PROGRESS_STEP_CHARS = 120;
@@ -224,6 +233,7 @@ export class HiddenAgentChats {
   // An agent deleted while it works stops at once, and the chats it was asked into go with it.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/945
   stopAgent(slug: string): void {
+    void this.host.askedConversations.deleteAskedConversations(({ agent }) => agent === slug);
     for (const [key, hidden] of Array.from(this.chats)) {
       if (hidden.agent.slug !== slug || this.stopRun(hidden, "agent_deleted")) continue;
       this.chats.delete(key);
@@ -467,6 +477,7 @@ export class HiddenAgentChats {
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
       await replayPersistedMode(session, hidden.parent.getState()?.mode?.current ?? null);
       if (run.stopped) return { reply: "", files: [] };
+      this.rememberAsk(hidden, session, message);
       const { userMessageId, turn } = session.sendPrompt(hiddenJobText(hidden, message));
       run.since = userMessageId;
       hidden.continuedAt.set(userMessageId, run.startedAt);
@@ -522,6 +533,22 @@ export class HiddenAgentChats {
     if (this.chats.get(key) !== hidden) return;
     const status = run.stopped ? "stopped" : end.error ? "didnt_finish" : "finished";
     record(hidden.parent, run, { status });
+    // A run whose chat never started has no conversation to record.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/980
+    const chat = chatOf(hidden.started);
+    if (chat) {
+      void this.host.askedConversations.updateAskedConversation(
+        chat.backendId,
+        chat.sessionId,
+        (known) =>
+          known && {
+            ...known,
+            lastAtMs: Date.now(),
+            latestAnswer: cutAskedText(end.reply) || undefined,
+            ending: status,
+          }
+      );
+    }
     // The asking chat shows the asked agent's save as its own chat does, as a line in place of its MEMORY.md among the changed files, so the asking agent hears only the files the user sees.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/969
     const memorySaves = readTurnMemorySaves(end.files, {
@@ -557,6 +584,31 @@ export class HiddenAgentChats {
     if (run.stopped !== "agent_deleted") return;
     this.chats.delete(key);
     void hidden.session.then(stopSession, () => undefined);
+  }
+
+  // One record per asked agent's chat, written only as an ask reaches the agent, so an agent deleted while its chat starts leaves none: a second ask there counts on and keeps the first ask, and the answer and ending clear until this run records its own, so a run cut off reads as not finished.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/980
+  private rememberAsk(hidden: HiddenChat, session: AgentSession, message: string): void {
+    const chat = chatOf(session);
+    const askedIn = chatOf(hidden.parent);
+    if (!chat || !askedIn) return;
+    const now = Date.now();
+    void this.host.askedConversations.updateAskedConversation(
+      chat.backendId,
+      chat.sessionId,
+      (known) => ({
+        backendId: chat.backendId,
+        sessionId: chat.sessionId,
+        model: session.getState()?.model?.current ?? known?.model,
+        agent: hidden.agent.slug,
+        askedBy: hidden.parent.agentSlug ?? undefined,
+        askedIn,
+        firstAtMs: known?.firstAtMs ?? now,
+        lastAtMs: now,
+        asks: (known?.asks ?? 0) + 1,
+        firstAsk: known?.firstAsk ?? cutAskedText(message),
+      })
+    );
   }
 
   private watchParent(parent: AgentSession): void {
@@ -679,6 +731,10 @@ function record(parent: AgentSession, run: HiddenRun, change: Partial<AgentMenti
       ? mentions.map((mention) => (mention.id === run.id ? { ...mention, ...change } : mention))
       : [...mentions, change as AgentMention]
   );
+}
+
+function cutAskedText(text: string): string {
+  return truncateWithEllipsis(text.replace(/\s+/g, " ").trim(), ASKED_TEXT_CHARS);
 }
 
 function asError(error: unknown): Error {

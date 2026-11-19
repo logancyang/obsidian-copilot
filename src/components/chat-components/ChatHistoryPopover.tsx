@@ -30,6 +30,7 @@ export interface ChatHistoryItem {
   createdAt: Date;
   lastAccessedAt: Date;
   backendId?: string;
+  sessionId?: string;
   projectId?: string;
   agent?: string;
   needsAttention?: boolean;

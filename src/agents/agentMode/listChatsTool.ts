@@ -1,5 +1,7 @@
+import type { AskedConversation } from "@/agentMode/session/AgentSessionIndex";
 import type { ChatStateHost } from "@/agentMode/session/chatExtension";
 import type { HostedTool, McpToolDefinition } from "@/agentMode/session/copilotMcpServer";
+import type { CustomAgent } from "@/agents/CustomAgentStore";
 import { getCustomAgentsGate } from "@/agents/customAgentsGate";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { isNativeChatId } from "@/utils/nativeChatId";
@@ -19,9 +21,22 @@ function otherChats(agent: string | null): string {
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/959
 const OPEN_A_NOTE = "Open a listed note with your file or shell tools to see what was said.";
 
+// An agent asked from another chat recalls that work in its own chats, from a line per conversation, and nothing else of the chat that asked.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/980
+const MAX_LISTED_ASKED_CONVERSATIONS = 10;
+const ASKED_CONVERSATIONS =
+  "Conversations another agent or Copilot asked you into on the user's behalf, newest first. Your answers went back to the chat that asked: you know only what each line says, and there's no note to open for them.";
+const ENDINGS: Record<NonNullable<AskedConversation["ending"]>, string> = {
+  finished: "your latest answer",
+  stopped: "the user stopped you before you finished; your answer so far",
+  didnt_finish: "you didn't finish; your answer so far",
+};
+
 export interface EarlierChats {
   agent: string | null;
   chats: ChatHistoryItem[];
+  askedConversations: readonly AskedConversation[];
+  agents: readonly Pick<CustomAgent, "slug" | "name">[];
 }
 
 export interface ListChatsToolHost {
@@ -41,6 +56,27 @@ const LIST_CHATS_TOOL: McpToolDefinition = Object.freeze({
 function localDate(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+// A run that never ended, as when Obsidian closed mid-run, reads as not finished, and an asker deleted since shows by its folder name.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/980
+function askedLine(conversation: AskedConversation, { chats, agents }: EarlierChats): string {
+  const { askedBy, askedIn, latestAnswer } = conversation;
+  const asker = askedBy
+    ? (agents.find((agent) => agent.slug === askedBy)?.name ?? askedBy)
+    : "Copilot";
+  const chat = chats.find(
+    (item) => item.backendId === askedIn.backendId && item.sessionId === askedIn.sessionId
+  );
+  const where = chat ? `"${chat.title}"` : "a chat that's no longer listed";
+  const answer = latestAnswer ? `"${latestAnswer}"` : "none";
+  return [
+    `- ${localDate(new Date(conversation.lastAtMs))}`,
+    `${asker} asked you in ${where}`,
+    `times asked: ${conversation.asks}`,
+    `first ask: "${conversation.firstAsk}"`,
+    `${ENDINGS[conversation.ending ?? "didnt_finish"]}: ${answer}`,
+  ].join(" · ");
 }
 
 export function createListChatsTool(host: ListChatsToolHost): HostedTool {
@@ -65,23 +101,30 @@ export function createListChatsTool(host: ListChatsToolHost): HostedTool {
         .filter((item) => (item.agent ?? null) === caller.agent)
         .sort((a, b) => b.lastAccessedAt.getTime() - a.lastAccessedAt.getTime())
         .slice(0, MAX_LISTED_CHATS);
-      if (chats.length === 0) {
-        return {
-          text: `You have no earlier chats with the user. ${otherChats(caller.agent)}`,
-          isError: false,
-        };
-      }
       const lines = chats.map((item) => {
         const note = isNativeChatId(item.id)
           ? "not saved as a note, so only its title and date are known"
           : `${host.vaultBase()}/${item.id}`;
         return `- ${localDate(item.lastAccessedAt)} · ${item.title} · ${note}`;
       });
+      const ownChats =
+        chats.length === 0
+          ? [`You have no earlier chats with the user. ${otherChats(caller.agent)}`]
+          : [
+              `Your earlier chats with the user, newest first. ${OPEN_A_NOTE} ${otherChats(caller.agent)}`,
+              ...lines,
+            ];
+      const asked = caller.askedConversations
+        .filter((conversation) => conversation.agent === caller.agent)
+        .sort((a, b) => b.lastAtMs - a.lastAtMs)
+        .slice(0, MAX_LISTED_ASKED_CONVERSATIONS)
+        .map((conversation) => askedLine(conversation, caller));
+      // An agent never asked into another chat gets the same result as before, word for word.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/980
       return {
-        text: [
-          `Your earlier chats with the user, newest first. ${OPEN_A_NOTE} ${otherChats(caller.agent)}`,
-          ...lines,
-        ].join("\n"),
+        text: [...ownChats, ...(asked.length > 0 ? ["", ASKED_CONVERSATIONS, ...asked] : [])].join(
+          "\n"
+        ),
         isError: false,
       };
     },

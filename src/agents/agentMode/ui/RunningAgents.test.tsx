@@ -1,3 +1,4 @@
+import { createMemorySessionIndex } from "@/agentMode/session/testing/memorySessionIndex";
 import { AgentSession } from "@/agentMode/session/AgentSession";
 import type { AgentTask } from "@/agentMode/session/AgentSession";
 import { RunningTasksIndicator } from "@/agentMode/ui/RunningTasksIndicator";
@@ -224,6 +225,7 @@ describe("RunningAgents", () => {
         listedChat: (chat) => (chat === coco ? coco : null),
         unavailableReason: () => null,
         startChat,
+        askedConversations: createMemorySessionIndex(),
       });
       coco.sendPrompt("@Leo reconcile October");
       await fake.untilPrompt(sessionIdOf(coco));

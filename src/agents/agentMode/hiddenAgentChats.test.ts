@@ -1,4 +1,6 @@
 import { AgentSession, type AgentSessionStatus } from "@/agentMode/session/AgentSession";
+import type { AgentSessionIndex } from "@/agentMode/session/AgentSessionIndex";
+import { createMemorySessionIndex } from "@/agentMode/session/testing/memorySessionIndex";
 import { writePermissionRequest } from "@/agentMode/session/testing/permissionPrompts";
 import type { BackendDescriptor, BackendState, PermissionPrompt } from "@/agentMode/session/types";
 import {
@@ -32,6 +34,7 @@ const SEVERAL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/94
 const ASKED_MEMORY = "https://github.com/Brevilabs/obsidian-copilot-private/issues/969";
 const SETUP = "https://github.com/Brevilabs/obsidian-copilot-private/issues/962";
 const NO_NOTE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/976";
+const RECALL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/980";
 const AUTO_MODE: BackendState = { model: null, mode: { current: "auto", options: [], apply: {} } };
 const PLAN: BackendState = { model: null, mode: { current: "plan", options: [], apply: {} } };
 const PLAN_CHANGE = Object.freeze({
@@ -54,6 +57,7 @@ let starts: HiddenChatStart[];
 let startWaiters: Set<() => void>;
 let startChat: jest.Mock<Promise<AgentSession>, [HiddenChatStart]>;
 let unavailableReason: jest.Mock<string | null, [CustomAgent]>;
+let index: AgentSessionIndex;
 let nextChat = 1;
 
 function seedAgent(slug: string, name: string, instruction: string): void {
@@ -266,12 +270,14 @@ beforeEach(async () => {
     startWaiters.forEach((wake) => wake());
     return session;
   });
+  index = createMemorySessionIndex();
   chats = new HiddenAgentChats({
     store: () => store,
     vaultBase: () => "/vault",
     listedChat: (chat) => listed.find((session) => session === chat) ?? null,
     unavailableReason,
     startChat,
+    askedConversations: index,
   });
 });
 
@@ -511,6 +517,123 @@ describe("hiddenAgentChats", () => {
 
         expect(await fake.untilPrompt(sessionIdOf(maya), 2)).toContain("Second question.");
         expect(startChat).toHaveBeenCalledTimes(1);
+      });
+
+      it(`records the conversation when the ask starts, with the asked agent, who asked, the asking chat and the first ask, then its answer and that it finished (${RECALL})`, async () => {
+        const coco = await openChat({ agentSlug: "coco" });
+        const maya = await askedAndPrompted(coco, "Is $8k right for the launch?");
+
+        const [asked] = await index.getAskedConversations();
+        expect(asked).toEqual({
+          backendId: "fake",
+          sessionId: sessionIdOf(maya),
+          agent: "maya",
+          askedBy: "coco",
+          askedIn: { backendId: "fake", sessionId: sessionIdOf(coco) },
+          firstAtMs: asked.lastAtMs,
+          lastAtMs: asked.lastAtMs,
+          asks: 1,
+          firstAsk: "Is $8k right for the launch?",
+        });
+        expect(asked.lastAtMs).toBeGreaterThan(0);
+
+        answer(maya, "Yes, if the video\nstays under two minutes.");
+        await fake.untilPrompt(sessionIdOf(coco));
+
+        expect(await index.getAskedConversations()).toEqual([
+          expect.objectContaining({
+            latestAnswer: "Yes, if the video stays under two minutes.",
+            ending: "finished",
+          }),
+        ]);
+        expect(await index.getEntries()).toEqual([]);
+      });
+
+      it(`counts a second ask in the same conversation on its one record, keeping the first ask and clearing the earlier answer until the new run ends (${RECALL})`, async () => {
+        const coco = await openChat({ agentSlug: "coco" });
+        const maya = await askedAndPrompted(coco, "First question.");
+        answer(maya, "First answer.");
+        await fake.untilPrompt(sessionIdOf(coco));
+        fake.endTurn(sessionIdOf(coco));
+        await untilStatus(maya, (status) => status === "idle");
+
+        chats.ask(coco, "Maya", "Second question.");
+        await fake.untilPrompt(sessionIdOf(maya), 2);
+
+        expect(await index.getAskedConversations()).toEqual([
+          expect.objectContaining({ asks: 2, firstAsk: "First question." }),
+        ]);
+        expect((await index.getAskedConversations())[0].latestAnswer).toBeUndefined();
+        answer(maya, "Second answer.");
+        await fake.untilPrompt(sessionIdOf(coco), 2);
+        expect(await index.getAskedConversations()).toEqual([
+          expect.objectContaining({ asks: 2, latestAnswer: "Second answer.", ending: "finished" }),
+        ]);
+      });
+
+      it(`records Copilot as the asker, by leaving the asker out, when a chat with no agent asks (${RECALL})`, async () => {
+        const copilot = await openChat();
+
+        await askedAndPrompted(copilot);
+
+        expect((await index.getAskedConversations())[0].askedBy).toBeUndefined();
+      });
+
+      it(`cuts the ask and the answer to 300 characters at a word boundary, and one long word at the limit (${RECALL})`, async () => {
+        const words = Array.from({ length: 80 }, (_, i) => `word${i}`).join(" ");
+        const coco = await openChat({ agentSlug: "coco" });
+        const maya = await askedAndPrompted(coco, words);
+        answer(maya, "Done.");
+        await fake.untilPrompt(sessionIdOf(coco));
+        fake.endTurn(sessionIdOf(coco));
+        await untilStatus(maya, (status) => status === "idle");
+        chats.ask(coco, "Maya", "x".repeat(400));
+        await fake.untilPrompt(sessionIdOf(maya), 2);
+        answer(maya, "y".repeat(400));
+        await fake.untilPrompt(sessionIdOf(coco), 2);
+
+        const [{ firstAsk, latestAnswer }] = await index.getAskedConversations();
+        expect(firstAsk).toBe(`${words.slice(0, words.lastIndexOf(" ", 300))} ...`);
+        expect(latestAnswer).toBe(`${"y".repeat(300)}...`);
+      });
+
+      it(`cuts Chinese text without spaces at the 300-character limit (${RECALL})`, async () => {
+        const coco = await openChat({ agentSlug: "coco" });
+        const maya = await askedAndPrompted(coco, "预算够吗？");
+        answer(maya, "预算".repeat(200));
+        await fake.untilPrompt(sessionIdOf(coco));
+
+        expect((await index.getAskedConversations())[0].latestAnswer).toBe(
+          `${"预算".repeat(150)}...`
+        );
+      });
+
+      it(`records that the run didn't finish, with what the agent had written, when its chat disconnects (${RECALL})`, async () => {
+        const coco = await openChat({ agentSlug: "coco" });
+        const maya = await askedAndPrompted(coco);
+        fake.say(sessionIdOf(maya), "Halfway through.");
+
+        fake.emit(sessionIdOf(maya), {
+          sessionUpdate: "session_disconnected",
+          error: new Error("Claude stopped unexpectedly."),
+        });
+        await fake.untilPrompt(sessionIdOf(coco));
+
+        expect(await index.getAskedConversations()).toEqual([
+          expect.objectContaining({ latestAnswer: "Halfway through.", ending: "didnt_finish" }),
+        ]);
+      });
+
+      it(`keeps what a run cut off by its asking chat closing was asked, with no answer or ending, which its line reads as not finished (${RECALL})`, async () => {
+        const { coco, maya } = await askFromMessage();
+
+        await coco.dispose();
+        await untilStatus(maya, (status) => status === "closed");
+
+        const [asked] = await index.getAskedConversations();
+        expect(asked.firstAsk).toBe("What do you think of this plan?");
+        expect(asked.ending).toBeUndefined();
+        expect(asked.latestAnswer).toBeUndefined();
       });
 
       it(`switches a continued chat to the mode the asking chat is in now (${ISSUE})`, async () => {
@@ -817,6 +940,7 @@ describe("hiddenAgentChats", () => {
           listedChat: (chat) => listed.find((session) => session === chat) ?? null,
           unavailableReason,
           startChat,
+          askedConversations: index,
         });
         const coco = await openChat({ agentSlug: "coco" });
 
@@ -1417,6 +1541,19 @@ describe("hiddenAgentChats", () => {
         expect(startChat).toHaveBeenCalledTimes(1);
       });
 
+      it(`records only what the agent wrote after the user's answer as its latest answer, and the run as finished (${RECALL})`, async () => {
+        const { coco, maya } = await waitingOnQuestion();
+
+        chats.answer(coco, "Maya", "October.");
+        await fake.untilPrompt(sessionIdOf(maya), 2);
+        answer(maya, "All matched.");
+        await fake.untilPrompt(sessionIdOf(coco), 3);
+
+        expect(await index.getAskedConversations()).toEqual([
+          expect.objectContaining({ asks: 1, latestAnswer: "All matched.", ending: "finished" }),
+        ]);
+      });
+
       it(`relays that the agent didn't finish when its chat refuses the answer, as when its model's usage limit is reached (${CONTROL})`, async () => {
         const { coco } = await waitingOnQuestion();
         jest
@@ -1555,6 +1692,22 @@ describe("hiddenAgentChats", () => {
         expect(relayMessage?.fileChanges).toEqual([PLAN_CHANGE]);
         expect(mentionsOn(coco)?.[0]).toEqual(expect.objectContaining({ status: "stopped" }));
         expect(markerOf(relayed)).toMatchObject({ status: "stopped" });
+      });
+
+      it(`records a stopped run as stopped with what the agent had written, whether stopped by its agent or from the list (${RECALL})`, async () => {
+        const { coco, maya } = await askFromMessage();
+        fake.say(sessionIdOf(maya), "Matched 120 of 214 so far.");
+
+        chats.stop(coco, "Maya", { fromList: true });
+        fake.endTurn(sessionIdOf(coco));
+        await fake.untilPrompt(sessionIdOf(coco), 2);
+
+        expect(await index.getAskedConversations()).toEqual([
+          expect.objectContaining({
+            latestAnswer: "Matched 120 of 214 so far.",
+            ending: "stopped",
+          }),
+        ]);
       });
 
       it(`relays the files a stopped turn changed, though they are recorded after its chat goes idle (${CONTROL})`, async () => {
@@ -1788,6 +1941,61 @@ describe("hiddenAgentChats", () => {
 
         await untilStatus(maya, (status) => status === "closed");
         expect(fake.promptsTo(sessionIdOf(coco))).toHaveLength(1);
+      });
+
+      it(`forgets the conversations the deleted agent was asked into, even one it was working in, and keeps those it asked, so a new agent with its name starts with none (${RECALL})`, async () => {
+        const { coco, maya } = await askFromMessage();
+        await index.updateAskedConversation("fake", "leo-hidden", () => ({
+          backendId: "fake",
+          sessionId: "leo-hidden",
+          agent: "leo",
+          askedBy: "maya",
+          askedIn: { backendId: "fake", sessionId: "maya-chat" },
+          firstAtMs: 1,
+          lastAtMs: 1,
+          asks: 1,
+          firstAsk: "Check the budget.",
+        }));
+
+        chats.stopAgent("maya");
+        fake.endTurn(sessionIdOf(coco));
+        await fake.untilPrompt(sessionIdOf(coco), 2);
+        await untilStatus(maya, (status) => status === "closed");
+
+        expect((await index.getAskedConversations()).map(({ agent }) => agent)).toEqual(["leo"]);
+      });
+
+      it(`records nothing for an agent deleted while its chat was starting, since it never got the ask, so a new agent with its name starts with none (${RECALL})`, async () => {
+        const coco = await openChat({ agentSlug: "coco" });
+        let finishStart: () => void = () => {};
+        const startCalled = new Promise<void>((called) =>
+          startChat.mockImplementationOnce(async (start) => {
+            await new Promise<void>((resolve) => {
+              finishStart = resolve;
+              called();
+            });
+            const session = AgentSession.start({
+              backend: fake.backend,
+              cwd: "/vault",
+              internalId: "hidden-late",
+              backendId: "fake",
+              agent: start.prompt,
+              observeSessionEvent: start.observeSessionEvent,
+            });
+            await session.ready;
+            started.push(session);
+            return session;
+          })
+        );
+        chats.ask(coco, "Maya", "Review the plan.");
+        await startCalled;
+
+        chats.stopAgent("maya");
+        finishStart();
+
+        expect(await fake.untilPrompt(sessionIdOf(coco))).toContain("the user deleted Maya");
+        expect(fake.promptsTo(sessionIdOf(started[0]))).toEqual([]);
+        expect(await index.getAskedConversations()).toEqual([]);
       });
 
       it(`leaves other agents' chats running (${CONTROL})`, async () => {

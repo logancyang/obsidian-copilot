@@ -418,6 +418,7 @@ export class AgentSessionManager {
           return {
             item: {
               ...item,
+              sessionId: ref?.sessionId,
               pinnedAt: parseChatTimestamp(frontmatter?.pinnedAt),
               archivedAt: parseChatTimestamp(frontmatter?.archivedAt),
               ...(liveAttentionPaths.has(item.id) ? { needsAttention: true } : {}),

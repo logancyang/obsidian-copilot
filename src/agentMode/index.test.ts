@@ -64,7 +64,10 @@ jest.mock("./session/AgentChatPersistenceManager", () => ({
   AgentChatPersistenceManager: jest.fn(),
 }));
 jest.mock("./session/AgentModelPreloader", () => ({ AgentModelPreloader: jest.fn() }));
-jest.mock("./session/AgentSessionIndex", () => ({ AgentSessionIndex: jest.fn() }));
+let mockAskedConversations: unknown[] = [];
+jest.mock("./session/AgentSessionIndex", () => ({
+  AgentSessionIndex: jest.fn(() => ({ getAskedConversations: async () => mockAskedConversations })),
+}));
 jest.mock("./session/nodeFileStorage", () => ({ createNodeFileStorage: jest.fn() }));
 jest.mock("./session/AgentSessionManager", () => ({
   AgentSessionManager: jest.fn(() => mockManager),
@@ -214,6 +217,7 @@ describe("agentMode", () => {
       mockRefresh.mockImplementation(() => mockRuntime.prepare("copilot/skills"));
       mockSettingsSubscribers.length = 0;
       mockGateListeners.length = 0;
+      mockAskedConversations = [];
       mockCustomAgentsGate = "full";
       mockSettings = settingsWith({ reasoning: true });
       plugin = {
@@ -864,6 +868,57 @@ describe("agentMode", () => {
       expect(text).toContain("- 2026-11-11 · Release video plan · /vault/chats/plan.md");
       expect(text).not.toContain("This chat");
       expect(text).not.toContain("Podcast sponsorship");
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/980 lists the conversations the calling agent was asked into, naming who asked and the asking chat by its title", async () => {
+      const at = new Date(2026, 10, 11);
+      const juno = Object.assign(fakeChat(), {
+        agentSlug: "juno",
+        internalId: "juno-chat",
+        backendId: "claude",
+        getBackendSessionId: () => "s-now",
+      });
+      Object.assign(mockManager, {
+        getSessions: () => [juno],
+        getSessionSourcePath: () => "",
+        getChatHistoryItems: async () => [
+          {
+            id: "chats/rex.md",
+            title: "Podcast sponsorship",
+            createdAt: at,
+            lastAccessedAt: at,
+            agent: "rex",
+            backendId: "codex",
+            sessionId: "rex-chat",
+          },
+        ],
+      });
+      mockAskedConversations = [
+        {
+          backendId: "claude",
+          sessionId: "juno-hidden",
+          agent: "juno",
+          askedBy: "rex",
+          askedIn: { backendId: "codex", sessionId: "rex-chat" },
+          firstAtMs: at.getTime(),
+          lastAtMs: at.getTime(),
+          asks: 1,
+          firstAsk: "Which sponsor fits?",
+          latestAnswer: "The note-taking app.",
+          ending: "finished",
+        },
+      ];
+      const customAgents = { getAgents: () => [{ slug: "rex", name: "Rex" }] };
+      createAgentSessionManager({} as App, { ...plugin, customAgents } as unknown as CopilotPlugin);
+      const listChats = jest
+        .mocked(createCopilotMcpServer)
+        .mock.calls[0][1].find(({ definition }) => definition.name === "list_chats")!;
+
+      const { text } = await listChats.call({}, juno);
+
+      expect(text).toContain(
+        '- 2026-11-11 · Rex asked you in "Podcast sponsorship" · times asked: 1 · first ask: "Which sponsor fits?" · your latest answer: "The note-taking app."'
+      );
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/944 hands a permission request no asked agent made to the chat's own prompter", async () => {

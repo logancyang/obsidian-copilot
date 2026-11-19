@@ -1,4 +1,8 @@
-import { AgentSessionIndex, type AgentSessionIndexStorage } from "./AgentSessionIndex";
+import {
+  AgentSessionIndex,
+  type AgentSessionIndexStorage,
+  type AskedConversation,
+} from "./AgentSessionIndex";
 
 jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
@@ -8,6 +12,7 @@ jest.mock("@/logger", () => ({
 
 const INDEX_PATH = "config/plugins/copilot/agent-chat-index.json";
 const ISSUE_977 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/977";
+const ISSUE_980 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/980";
 
 function makeStorage(initial?: Record<string, string>): AgentSessionIndexStorage & {
   files: Map<string, string>;
@@ -34,6 +39,24 @@ function entry(overrides: Partial<Parameters<AgentSessionIndex["recordSession"]>
     title: "Refactor the daily template",
     createdAtMs: 1_000,
     lastAccessedAtMs: 2_000,
+    ...overrides,
+  };
+}
+
+function asked(overrides: Partial<AskedConversation> = {}): AskedConversation {
+  return {
+    backendId: "claude",
+    sessionId: "maya-hidden-1",
+    model: { baseModelId: "haiku", effort: null },
+    agent: "maya",
+    askedBy: "coco",
+    askedIn: { backendId: "claude", sessionId: "coco-chat-1" },
+    firstAtMs: 1_000,
+    lastAtMs: 2_000,
+    asks: 1,
+    firstAsk: "Is $8k right for the launch?",
+    latestAnswer: "Yes, if the video stays under two minutes.",
+    ending: "finished",
     ...overrides,
   };
 }
@@ -107,6 +130,121 @@ describe("AgentSessionIndex", () => {
       const reloaded = new AgentSessionIndex(storage, INDEX_PATH);
       expect((await reloaded.getEntries()).map((e) => e.sessionId)).toEqual(["kept"]);
     });
+
+    it(`removes the conversations the deleted chat asked agents into and keeps the ones other chats asked (${ISSUE_980})`, async () => {
+      const index = new AgentSessionIndex(makeStorage(), INDEX_PATH);
+      await index.recordSession(entry({ backendId: "claude", sessionId: "coco-chat-1" }));
+      await index.updateAskedConversation("claude", "maya-hidden-1", () => asked());
+      await index.updateAskedConversation("claude", "maya-hidden-2", () =>
+        asked({
+          sessionId: "maya-hidden-2",
+          askedIn: { backendId: "claude", sessionId: "copilot-chat" },
+        })
+      );
+
+      await index.deleteSession("claude", "coco-chat-1");
+
+      expect((await index.getAskedConversations()).map((c) => c.sessionId)).toEqual([
+        "maya-hidden-2",
+      ]);
+    });
+  });
+
+  describe("updateAskedConversation()", () => {
+    it(`records a conversation an agent was asked into in the file's own section, apart from the chats (${ISSUE_980})`, async () => {
+      const storage = makeStorage();
+      const index = new AgentSessionIndex(storage, INDEX_PATH);
+      await index.recordSession(entry());
+
+      await index.updateAskedConversation("claude", "maya-hidden-1", () => asked());
+      await index.flushOrThrow();
+
+      expect(await index.getAskedConversations()).toEqual([asked()]);
+      expect((await index.getEntries()).map((e) => e.sessionId)).toEqual(["s1"]);
+      const written = JSON.parse(storage.files.get(INDEX_PATH)!);
+      expect(written.entries).toHaveLength(1);
+      expect(written.askedConversations).toEqual([asked()]);
+    });
+
+    it(`hands the change the conversation already recorded, and records nothing when the change keeps none (${ISSUE_980})`, async () => {
+      const index = new AgentSessionIndex(makeStorage(), INDEX_PATH);
+      await index.updateAskedConversation("claude", "maya-hidden-1", () => asked());
+
+      await index.updateAskedConversation("claude", "maya-hidden-1", (known) =>
+        known ? { ...known, asks: known.asks + 1 } : undefined
+      );
+      await index.updateAskedConversation("claude", "unknown", (known) => known);
+
+      expect(await index.getAskedConversations()).toEqual([asked({ asks: 2 })]);
+    });
+  });
+
+  describe("deleteAskedConversations()", () => {
+    it(`removes only the asked conversations that match, and leaves the chats (${ISSUE_980})`, async () => {
+      const index = new AgentSessionIndex(makeStorage(), INDEX_PATH);
+      await index.recordSession(entry({ agent: "maya" }));
+      await index.updateAskedConversation("claude", "maya-hidden-1", () => asked());
+      await index.updateAskedConversation("claude", "leo-hidden-1", () =>
+        asked({ sessionId: "leo-hidden-1", agent: "leo" })
+      );
+
+      await index.deleteAskedConversations((conversation) => conversation.agent === "maya");
+
+      expect((await index.getAskedConversations()).map((c) => c.agent)).toEqual(["leo"]);
+      expect(await index.getEntries()).toHaveLength(1);
+    });
+  });
+
+  describe("getAskedConversations()", () => {
+    it(`has none for an index file written before asked conversations were recorded (${ISSUE_980})`, async () => {
+      const index = new AgentSessionIndex(
+        makeStorage({ [INDEX_PATH]: JSON.stringify({ version: 1, entries: [entry()] }) }),
+        INDEX_PATH
+      );
+
+      expect(await index.getAskedConversations()).toEqual([]);
+      expect(await index.getEntries()).toHaveLength(1);
+    });
+
+    it(`restores asked conversations after a reload and drops malformed ones (${ISSUE_980})`, async () => {
+      const storage = makeStorage();
+      const first = new AgentSessionIndex(storage, INDEX_PATH);
+      await first.updateAskedConversation("claude", "maya-hidden-1", () => asked());
+      await first.updateAskedConversation("codex", "copilot-asked", () =>
+        asked({
+          backendId: "codex",
+          sessionId: "copilot-asked",
+          askedBy: undefined,
+          model: undefined,
+          latestAnswer: undefined,
+          ending: undefined,
+        })
+      );
+      await first.flushOrThrow();
+      const written = JSON.parse(storage.files.get(INDEX_PATH)!);
+      written.askedConversations.push(
+        { ...asked(), sessionId: "no-asking-chat", askedIn: null },
+        { ...asked(), sessionId: "no-ask", firstAsk: 7 },
+        "garbage"
+      );
+      storage.files.set(INDEX_PATH, JSON.stringify(written));
+
+      const second = new AgentSessionIndex(storage, INDEX_PATH);
+
+      expect(await second.getAskedConversations()).toEqual([
+        asked(),
+        {
+          backendId: "codex",
+          sessionId: "copilot-asked",
+          agent: "maya",
+          askedIn: { backendId: "claude", sessionId: "coco-chat-1" },
+          firstAtMs: 1_000,
+          lastAtMs: 2_000,
+          asks: 1,
+          firstAsk: "Is $8k right for the launch?",
+        },
+      ]);
+    });
   });
 
   describe("flush()", () => {
@@ -148,6 +286,30 @@ describe("AgentSessionIndex", () => {
       expect(await second.getEntry("opencode", "chat-1")).toBeNull();
       expect(await second.getEntry("opencode", "chat-2")).not.toBeNull();
       expect(await second.getEntry("opencode", "chat-501")).not.toBeNull();
+    });
+
+    it(`keeps only the 100 asked conversations asked or answered last, beside all 500 chats (${ISSUE_980})`, async () => {
+      const storage = makeStorage();
+      const first = new AgentSessionIndex(storage, INDEX_PATH);
+      for (let i = 1; i <= 500; i++) {
+        await first.recordSession(
+          entry({ sessionId: `chat-${i}`, createdAtMs: i, lastAccessedAtMs: i })
+        );
+      }
+      for (let i = 1; i <= 101; i++) {
+        await first.updateAskedConversation("claude", `hidden-${i}`, () =>
+          asked({ sessionId: `hidden-${i}`, lastAtMs: i === 1 ? 5_000 : 1_000 + i })
+        );
+      }
+      await first.flush();
+
+      const second = new AgentSessionIndex(storage, INDEX_PATH);
+      const kept = (await second.getAskedConversations()).map((c) => c.sessionId);
+      expect(await second.getEntries()).toHaveLength(500);
+      expect(kept).toHaveLength(100);
+      expect(kept).toContain("hidden-1");
+      expect(kept).not.toContain("hidden-2");
+      expect(kept).toContain("hidden-3");
     });
 
     it("restores project scope after reload and leaves unscoped chats unscoped", async () => {
@@ -197,7 +359,11 @@ describe("AgentSessionIndex", () => {
       await index.recordSession(entry());
       await index.deleteSession("opencode", "s1");
       await index.flushOrThrow();
-      expect(JSON.parse(storage.files.get(INDEX_PATH)!)).toEqual({ version: 1, entries: [] });
+      expect(JSON.parse(storage.files.get(INDEX_PATH)!)).toEqual({
+        version: 1,
+        entries: [],
+        askedConversations: [],
+      });
     });
 
     it("rejects with the storage error when the write fails", async () => {
@@ -281,6 +447,37 @@ describe("AgentSessionIndex", () => {
       const written = JSON.parse(storage.files.get(INDEX_PATH)!);
       expect(written).not.toHaveProperty("tombstones");
       expect(written.entries).toHaveLength(2);
+    });
+
+    it(`lists the chats of an index file that holds a full section of asked conversations exactly as without it, and never one of the conversations (${ISSUE_980})`, async () => {
+      const chats = [entry(), entry({ backendId: "claude", sessionId: "s2", agent: "coco" })];
+      const conversations = Array.from({ length: 100 }, (_, i) => ({
+        backendId: "claude",
+        sessionId: `maya-hidden-${i}`,
+        agent: "maya",
+        askedIn: { backendId: "claude", sessionId: "s2" },
+        firstAtMs: 1_000 + i,
+        lastAtMs: 2_000 + i,
+        asks: 1,
+        firstAsk: "Is $8k right for the launch?",
+      }));
+      const withSection = new AgentSessionIndex(
+        makeStorage({
+          [INDEX_PATH]: JSON.stringify({
+            version: 1,
+            entries: chats,
+            askedConversations: conversations,
+          }),
+        }),
+        INDEX_PATH
+      );
+      const without = new AgentSessionIndex(
+        makeStorage({ [INDEX_PATH]: JSON.stringify({ version: 1, entries: chats }) }),
+        INDEX_PATH
+      );
+
+      expect(await withSection.getEntries()).toEqual(await without.getEntries());
+      expect((await withSection.getEntries()).map((e) => e.sessionId)).toEqual(["s1", "s2"]);
     });
   });
 });

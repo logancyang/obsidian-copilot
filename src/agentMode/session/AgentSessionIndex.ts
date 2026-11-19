@@ -13,9 +13,25 @@ export interface AgentSessionIndexEntry {
   agent?: string;
 }
 
+export interface AskedConversation {
+  backendId: BackendId;
+  sessionId: string;
+  model?: ModelSelection;
+  agent: string;
+  askedBy?: string;
+  askedIn: { backendId: BackendId; sessionId: string };
+  firstAtMs: number;
+  lastAtMs: number;
+  asks: number;
+  firstAsk: string;
+  latestAnswer?: string;
+  ending?: "finished" | "stopped" | "didnt_finish";
+}
+
 interface AgentSessionIndexFile {
   version: 1;
   entries: AgentSessionIndexEntry[];
+  askedConversations: AskedConversation[];
 }
 
 export interface AgentSessionIndexStorage {
@@ -26,6 +42,10 @@ export interface AgentSessionIndexStorage {
 
 const SAVE_DEBOUNCE_MS = 500;
 const MAX_ENTRIES = 500;
+// Each conversation holds two texts of about 300 characters, about 1 KB in the file, so 100 add at most about as much as the 500 chats.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/980
+const MAX_ASKED_CONVERSATIONS = 100;
+const ENDINGS: ReadonlySet<unknown> = new Set(["finished", "stopped", "didnt_finish"]);
 
 function entryKey(backendId: string, sessionId: string): string {
   return `${backendId}:${sessionId}`;
@@ -55,6 +75,48 @@ function sanitizeEntry(raw: unknown): AgentSessionIndexEntry | null {
   };
 }
 
+function sanitizeAskedConversation(raw: unknown): AskedConversation | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const r = raw as Record<string, unknown>;
+  const askedIn = r.askedIn as Record<string, unknown> | null | undefined;
+  const strings = [r.backendId, r.sessionId, r.agent, askedIn?.backendId, askedIn?.sessionId];
+  if (strings.some((value) => typeof value !== "string" || !value)) return null;
+  const numbers = [r.firstAtMs, r.lastAtMs, r.asks];
+  if (numbers.some((value) => typeof value !== "number") || typeof r.firstAsk !== "string") {
+    return null;
+  }
+  return {
+    backendId: r.backendId as BackendId,
+    sessionId: r.sessionId as string,
+    model: sanitizeModel(r.model),
+    agent: r.agent as string,
+    askedBy: typeof r.askedBy === "string" && r.askedBy ? r.askedBy : undefined,
+    askedIn: {
+      backendId: askedIn!.backendId as BackendId,
+      sessionId: askedIn!.sessionId as string,
+    },
+    firstAtMs: r.firstAtMs as number,
+    lastAtMs: r.lastAtMs as number,
+    asks: r.asks as number,
+    firstAsk: r.firstAsk,
+    latestAnswer: typeof r.latestAnswer === "string" ? r.latestAnswer : undefined,
+    ending: ENDINGS.has(r.ending) ? (r.ending as AskedConversation["ending"]) : undefined,
+  };
+}
+
+function keepNewest<T>(
+  items: Map<string, T>,
+  max: number,
+  at: (item: T) => number
+): Map<string, T> {
+  if (items.size <= max) return items;
+  return new Map(
+    Array.from(items)
+      .sort(([, a], [, b]) => at(b) - at(a))
+      .slice(0, max)
+  );
+}
+
 export function sanitizeModel(raw: unknown): ModelSelection | undefined {
   if (typeof raw !== "object" || raw === null) return undefined;
   const { baseModelId, effort } = raw as Record<string, unknown>;
@@ -64,6 +126,7 @@ export function sanitizeModel(raw: unknown): ModelSelection | undefined {
 
 export class AgentSessionIndex {
   private entries = new Map<string, AgentSessionIndexEntry>();
+  private askedConversations = new Map<string, AskedConversation>();
   private loadPromise: Promise<void> | null = null;
   private saveTimer: number | null = null;
   private writeChain: Promise<void> = Promise.resolve();
@@ -131,7 +194,44 @@ export class AgentSessionIndex {
   async deleteSession(backendId: BackendId, sessionId: string): Promise<void> {
     await this.ensureLoaded();
     this.entries.delete(entryKey(backendId, sessionId));
+    // An agent asked from a deleted chat forgets what it was asked there.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/980
+    this.dropAskedConversations(
+      ({ askedIn }) => askedIn.backendId === backendId && askedIn.sessionId === sessionId
+    );
     this.scheduleSave();
+  }
+
+  async getAskedConversations(): Promise<AskedConversation[]> {
+    await this.ensureLoaded();
+    return Array.from(this.askedConversations.values());
+  }
+
+  async updateAskedConversation(
+    backendId: BackendId,
+    sessionId: string,
+    change: (known: AskedConversation | undefined) => AskedConversation | undefined
+  ): Promise<void> {
+    await this.ensureLoaded();
+    const key = entryKey(backendId, sessionId);
+    const next = change(this.askedConversations.get(key));
+    if (!next) return;
+    this.askedConversations.set(key, next);
+    this.scheduleSave();
+  }
+
+  async deleteAskedConversations(
+    match: (conversation: AskedConversation) => boolean
+  ): Promise<void> {
+    await this.ensureLoaded();
+    this.dropAskedConversations(match);
+    this.scheduleSave();
+  }
+
+  private dropAskedConversations(match: (conversation: AskedConversation) => boolean): void {
+    for (const [key, conversation] of Array.from(this.askedConversations)) {
+      if (match(conversation)) this.askedConversations.delete(key);
+    }
   }
 
   async flush(): Promise<void> {
@@ -169,6 +269,16 @@ export class AgentSessionIndex {
         const entry = sanitizeEntry(candidate);
         if (entry) this.entries.set(entryKey(entry.backendId, entry.sessionId), entry);
       }
+      const asked = Array.isArray(raw.askedConversations) ? raw.askedConversations : [];
+      for (const candidate of asked) {
+        const conversation = sanitizeAskedConversation(candidate);
+        if (conversation) {
+          this.askedConversations.set(
+            entryKey(conversation.backendId, conversation.sessionId),
+            conversation
+          );
+        }
+      }
     } catch (e) {
       logWarn(`[AgentMode] failed to load agent session index at ${this.filePath}`, e);
     }
@@ -192,14 +302,17 @@ export class AgentSessionIndex {
   }
 
   private serialize(): string {
-    let entries = Array.from(this.entries.values());
-    if (entries.length > MAX_ENTRIES) {
-      entries = entries
-        .sort((a, b) => b.lastAccessedAtMs - a.lastAccessedAtMs)
-        .slice(0, MAX_ENTRIES);
-      this.entries = new Map(entries.map((e) => [entryKey(e.backendId, e.sessionId), e]));
-    }
-    const file: AgentSessionIndexFile = { version: 1, entries };
+    this.entries = keepNewest(this.entries, MAX_ENTRIES, (e) => e.lastAccessedAtMs);
+    this.askedConversations = keepNewest(
+      this.askedConversations,
+      MAX_ASKED_CONVERSATIONS,
+      (c) => c.lastAtMs
+    );
+    const file: AgentSessionIndexFile = {
+      version: 1,
+      entries: Array.from(this.entries.values()),
+      askedConversations: Array.from(this.askedConversations.values()),
+    };
     return JSON.stringify(file, null, 2);
   }
 }

@@ -24,6 +24,7 @@ Asking another custom agent from a chat with `@`: that agent works in the backgr
 - mention-remember: a standing rule given through a mention, such as `@Maya from now on, flag video length first.`, is saved to the mentioned agent's own memory under the same rules as in its own chat, without a permission card. The relayed turn shows `Maya remembered` or `Maya replaced a rule` with the saved sentence under the `Message from` card, as in her own chat; the row opens her `MEMORY.md` at that rule, and the Files changed card leaves `MEMORY.md` out. The chat's own agent saves nothing for a rule meant for another agent. In `Plan` mode nothing is saved and the reply says so.
 - mention-needs-setup: mentioning an agent whose model can't run on this device starts nothing, and no other model answers as it. The chat's agent says why, such as "Leo runs on OpenCode, which isn't set up on this device", and that another model can be picked in Leo's profile.
 - mention-no-self: an agent never asks itself; its own name is plain text in its chat.
+- mention-recall: later, in its own chat, the mentioned agent can tell who asked it, in which chat and when, what it was asked and what it answered, as part of its [earlier chats](agent-replies.md). Nothing new shows in Recent chats, the Navigator, View archived or its profile.
 
 ## How to get to it
 
@@ -53,6 +54,7 @@ All of these need a license that includes custom agents and at least two agents 
 - Remember: in `Safe` mode, send `@Maya from now on, flag video length first.` No permission card shows; the relayed turn shows `Maya remembered` with the sentence under `Message from Maya`, and her `MEMORY.md` has the rule with a dated context line. The chat agent's own `MEMORY.md` is unchanged. Click the row: Maya's `MEMORY.md` opens at that rule. Reload the plugin and reopen the chat: the row is still there. Send `@Maya actually, flag the budget first instead.`: the row reads `Maya replaced a rule`. In `Plan` mode, send `@Maya from now on, open with the hook.`: nothing is saved and the reply says she can't save a rule in this mode. A new chat with Maya follows the saved rule.
 - Needs setup: take Leo's coding agent off this device, then send `@Leo add up the October books.` from Maya's chat. Maya says Leo can't be asked here and why; no `Messaged Leo` card or reply from Leo follows.
 - Itself: in Maya's own chat, send `@Maya hello`. Maya answers directly.
+- Recall: after a relay, start a new chat with Maya and send `What have we talked about?`. She says who asked her, in which chat, and her answer; Recent chats and her profile show no new chat.
 
 ## Gotchas
 
