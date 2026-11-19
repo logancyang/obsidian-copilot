@@ -134,7 +134,7 @@ When an action needs approval, Agent Chat displays a **Permission required** car
 
 Approved rules can be shared with other chats using the same agent settings file or project. For file-backed rules, a removed rule stays on the approved-rules page, crossed out, with **Undo** until you leave the page. A restoration preserves other changes made since removal. If the file cannot be safely updated, the rule's row shows an error and keeps Undo available to retry.
 
-When Claude or Codex asks a set of questions, answer the current tab and select **Next**. On the final tab, **Submit** becomes available after every question has an answer. You can use the tabs to review or skip ahead. **Cancel** dismisses the entire request. If Codex withdraws or times out the question, its card disappears.
+When Claude or Codex asks a set of questions, answer the current tab and select **Next**. Clicking an answer to a pick-one question moves to the next tab for you. On the final tab, **Submit** becomes available after every question has an answer. You can use the tabs to review or skip ahead. **Cancel** dismisses the entire request. If Codex withdraws or times out the question, its card disappears.
 
 Codex can ask questions while the permission picker is on **Safe**, **Plan**, or **Auto**. You do not need to switch to Plan to answer a question.
 
