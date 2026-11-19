@@ -23,6 +23,7 @@ function renderStrip(
     workspace = makeFakeWorkspaceApp(),
     onOpenSidebar = jest.fn(),
     agents = undefined as readonly CustomAgent[] | undefined,
+    onTabClick = undefined as (() => void) | undefined,
   } = {}
 ) {
   return render(
@@ -36,6 +37,7 @@ function renderStrip(
           manager: manager as AgentSessionManager,
           onOpenSidebar,
           agents,
+          onTabClick,
         })
       )
     )
@@ -183,6 +185,17 @@ describe("AgentTabStrip", () => {
 
       fireEvent(tab, new MouseEvent("auxclick", { bubbles: true, button: 1 }));
       expect(manager.detachSessionFromTab).toHaveBeenCalledWith(session.internalId);
+    });
+
+    it("tells its host when the active tab is clicked, so an agent's profile covering the chat goes back to it for https://github.com/Brevilabs/obsidian-copilot-private/issues/940", () => {
+      const manager = { ...makeManagerWithOneChat(), setActiveSession: jest.fn() };
+      const onTabClick = jest.fn();
+      renderStrip(manager, { onTabClick });
+
+      fireEvent.click(screen.getByRole("tab", { selected: true }));
+
+      expect(manager.setActiveSession).toHaveBeenCalledWith("existing");
+      expect(onTabClick).toHaveBeenCalledTimes(1);
     });
 
     it("starts a new chat when the new-chat button is clicked", () => {

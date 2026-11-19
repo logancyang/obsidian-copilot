@@ -26,6 +26,7 @@ interface Props {
   manager: AgentSessionManager;
   onOpenSidebar: () => void;
   agents?: readonly CustomAgent[];
+  onTabClick?: () => void;
 }
 
 const NO_AGENTS: readonly CustomAgent[] = Object.freeze([]);
@@ -59,7 +60,12 @@ function useSessionDisplay(session: AgentSession, agents: readonly CustomAgent[]
   };
 }
 
-export const AgentTabStrip: React.FC<Props> = ({ manager, onOpenSidebar, agents = NO_AGENTS }) => {
+export const AgentTabStrip: React.FC<Props> = ({
+  manager,
+  onOpenSidebar,
+  agents = NO_AGENTS,
+  onTabClick,
+}) => {
   const isHidden = useSessionsSidebarOpen(useApp());
   const [, setTick] = React.useState(0);
   React.useEffect(() => manager.subscribe(() => setTick((v) => v + 1)), [manager]);
@@ -147,7 +153,10 @@ export const AgentTabStrip: React.FC<Props> = ({ manager, onOpenSidebar, agents 
               agents={agents}
               isActive={session.internalId === activeId}
               isRenaming={renamingId === session.internalId}
-              onActivate={() => manager.setActiveSession(session.internalId)}
+              onActivate={() => {
+                manager.setActiveSession(session.internalId);
+                onTabClick?.();
+              }}
               onClose={() => handleClose(session.internalId)}
               onStartRename={() => setRenamingId(session.internalId)}
               onSubmitRename={(label) => {

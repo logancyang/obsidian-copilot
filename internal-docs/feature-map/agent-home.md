@@ -8,7 +8,7 @@ The start screen of a new chat in Agent Chat: a greeting, the [chat input](chat-
 - home-agent-row: with custom agents, the greeting gives way to "Who do you want to talk to?" and a row of faces with names under them: Copilot first, then each agent. Agents that do not fit the sidebar go into a `+N More` menu; the selected agent and Copilot always stay in the row. Long names are cut to one line; hovering a face shows the full name and title.
 - home-new-agent: `New` (**+**) at the end of the row opens the [create agent dialog](create-agent-dialog.md); it never moves into `+N More`. With no agents yet, the greeting stays and the row holds Copilot and `New`.
 - home-first-agent-banner: with custom agents and no agents yet, a card under the chat input reads "Give each job its own agent" with `Create your first agent`, which opens the [create agent dialog](create-agent-dialog.md). `Dismiss` hides it for good, and so does the first agent, even after that agent is deleted; `New` stays in the row.
-- home-agent-line: one line under the row names the selected agent's title, or "No agent, no memory" for Copilot.
+- home-agent-line: one line under the row names the selected agent's title followed by `Profile`, which opens the [agent profile](agent-profile.md), or "No agent, no memory" for Copilot.
 - home-agent-default: a new chat starts with the agent of the last chat started, on the start screen and in every project; when that agent is gone, Copilot.
 - home-agent-hint: the chat input's hint names the selected agent: "Ask Coco anything • @ to add context • / for commands".
 - home-agent-chat: the first message starts a chat with the selected agent, on its model; with Copilot selected, a Copilot chat.
@@ -31,7 +31,7 @@ The start screen of a new chat in Agent Chat: a greeting, the [chat input](chat-
 ## Driving it
 
 - Greeting: open a new chat. A greeting shows above the chat input; the next new chat may show a different one.
-- Agent row: with custom agents, open a new chat. "Who do you want to talk to?" shows Copilot and each agent's face. Choose an agent: its face is ringed, its title shows under the row, and the chat input reads "Ask <name> anything". Choose Copilot: "No agent, no memory".
+- Agent row: with custom agents, open a new chat. "Who do you want to talk to?" shows Copilot and each agent's face. Choose an agent: its face is ringed, its title and `Profile` show under the row, and the chat input reads "Ask <name> anything". Choose `Profile`: the [agent profile](agent-profile.md) covers the start screen. Choose Copilot: "No agent, no memory", with no `Profile`.
 - New agent: with custom agents, choose `New` in the row. The [create agent dialog](create-agent-dialog.md) opens; after `Create`, the new agent is in the row, selected. In a vault with no agents, the greeting shows above Copilot and `New`.
 - First agent banner: with custom agents in a vault with no agents, open a new chat. The card shows under the chat input. Choose `Create your first agent` and create an agent: the card is gone. In another vault with no agents, choose `Dismiss`, then reload Copilot: the card stays gone and `New` is still in the row.
 - More agents: narrow the sidebar until faces no longer fit, or add more agents. `+N More` lists the rest with their titles; choose one and it joins the row, selected.
@@ -49,7 +49,7 @@ The start screen of a new chat in Agent Chat: a greeting, the [chat input](chat-
 
 ## Gotchas
 
-- The row of faces and `New` need a license that includes custom agents (a team license until launch). Without one, the start screen shows the greeting as before.
+- The row of faces, `Profile`, and `New` need a license that includes custom agents (a team license until launch). Without one, the start screen shows the greeting as before.
 - Choosing a face before the first message changes nothing in the vault; only the first message starts the agent's chat.
 - When an agent's chat cannot start, as on a Codex that needs an update, choosing its face shows a notice with the reason and the new chat stays on Copilot.
 - Opening a project's chat from Recent chats or another list outside the project enters that project.

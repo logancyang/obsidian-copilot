@@ -34,23 +34,33 @@ export function memorySaveTrail(
   return { saves, anchorId: anchor?.kind === "tool_call" ? anchor.id : null };
 }
 
+export async function openAgentFile(
+  app: App,
+  path: string,
+  eState?: Record<string, unknown>
+): Promise<void> {
+  const file = app.vault.getAbstractFileByPath(path);
+  if (!(file instanceof TFile)) return;
+  const openLeaf = app.workspace
+    .getLeavesOfType("markdown")
+    .find((leaf) => (leaf.getViewState().state as { file?: unknown })?.file === path);
+  const leaf = openLeaf ?? app.workspace.getLeaf("tab");
+  await leaf.openFile(file, { active: true, eState });
+}
+
 export async function openMemoryRule(app: App, memoryPath: string, rule: string): Promise<void> {
   const file = app.vault.getAbstractFileByPath(memoryPath);
   if (!(file instanceof TFile)) return;
   const line = readMemoryRules(await app.vault.cachedRead(file)).find(
     (candidate) => candidate.rule === rule
   )?.line;
-  const openLeaf = app.workspace
-    .getLeavesOfType("markdown")
-    .find((leaf) => (leaf.getViewState().state as { file?: unknown })?.file === memoryPath);
-  const leaf = openLeaf ?? app.workspace.getLeaf("tab");
-  await leaf.openFile(file, {
-    active: true,
-    eState:
-      line === undefined
-        ? undefined
-        : { scroll: line, cursor: { from: { line, ch: 0 }, to: { line, ch: rule.length } } },
-  });
+  await openAgentFile(
+    app,
+    memoryPath,
+    line === undefined
+      ? undefined
+      : { scroll: line, cursor: { from: { line, ch: 0 }, to: { line, ch: rule.length } } }
+  );
 }
 
 function instructionsPathOf(memoryPath: string): string {
