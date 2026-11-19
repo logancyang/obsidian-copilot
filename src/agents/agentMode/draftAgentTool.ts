@@ -8,7 +8,7 @@ import { readAgentDraft, showAgentDraft } from "@/agents/agentMode/agentDraftCar
 import { getCustomAgentsGate } from "@/agents/customAgentsGate";
 
 export const DRAFT_AGENT_TOOL_NAME = "draft_agent";
-const UNAVAILABLE_TEXT = "Custom agents aren't available right now. Tell the user.";
+const UNAVAILABLE_TEXT = "Copilot Teammates isn't available right now. Tell the user.";
 
 export interface DraftAgentToolHost {
   isUnlistedChat: (sessionKey: string) => boolean;
@@ -19,7 +19,7 @@ export interface DraftAgentToolHost {
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/941
 const DRAFT_AGENT_TOOL: McpToolDefinition = Object.freeze({
   name: DRAFT_AGENT_TOOL_NAME,
-  description: `Show the user a draft of a new custom agent when they ask you to make one or to change the draft you showed. The user reviews it, picks a face and a model, and creates it; you can't create an agent yourself, even if asked, and never write its files.
+  description: `Show the user a draft of a new agent when they ask you to make one or to change the draft you showed. The user reviews it, picks a face and a model, and creates it; you can't create an agent yourself, even if asked, and never write its files.
 
 Before the first draft, check the other agents listed for you: if you or one of them already handles the job, say so and ask whether they want a new one anyway, and call this only after they say yes.
 

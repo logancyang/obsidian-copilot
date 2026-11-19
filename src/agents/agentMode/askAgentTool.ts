@@ -24,7 +24,7 @@ import { describeAgent } from "@/agents/agentSessionPrompt";
 import { getCustomAgentsGate, subscribeToCustomAgentsGate } from "@/agents/customAgentsGate";
 
 export const ASK_USER_TOOL_NAME = "ask_user";
-const UNAVAILABLE_TEXT = "Custom agents aren't available right now. Tell the user.";
+const UNAVAILABLE_TEXT = "Copilot Teammates isn't available right now. Tell the user.";
 
 export interface AskAgentToolHost {
   isUnlistedChat: (sessionKey: string) => boolean;
@@ -34,7 +34,7 @@ export interface AskAgentToolHost {
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
 const ASK_AGENT_TOOL: McpToolDefinition = Object.freeze({
   name: ASK_AGENT_TOOL_NAME,
-  description: `Ask another custom agent only when the user's message @-mentions it by name or clearly points to it. Never call it otherwise, and never for yourself.
+  description: `Ask another agent only when the user's message @-mentions it by name or clearly points to it. Never call it otherwise, and never for yourself.
 
 The agents aren't listed here. When the user names an agent without an @, or only describes its job, call this with the name or job they gave: a name no agent has answers with the agents you can ask.
 
@@ -69,8 +69,8 @@ function refusalText(result: AgentRefusal, toolName: string): string {
       return `You can't ask another agent from this chat. Don't call ${toolName} again.`;
     case "unknown_agent":
       return result.roster.length > 0
-        ? `No custom agent has that name. Agents you can ask: ${result.roster.map(describeAgent).join("; ")}.`
-        : "There are no other custom agents to ask.";
+        ? `No agent has that name. Agents you can ask: ${result.roster.map(describeAgent).join("; ")}.`
+        : "There are no other agents to ask.";
     case "self":
       return `You are ${result.agent.name}; you can't ask yourself. Answer the user directly.`;
   }

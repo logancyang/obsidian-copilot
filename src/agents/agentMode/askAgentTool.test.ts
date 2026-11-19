@@ -121,7 +121,7 @@ describe("askAgentTool", () => {
       const { tool } = buildTool({ asked: { kind: "unknown_agent", roster: [MAYA, LEO] } });
 
       await expect(tool.call({ agent: "Nora", message: "Hi" }, CHAT)).resolves.toEqual({
-        text: "No custom agent has that name. Agents you can ask: Maya (Product critic); Leo.",
+        text: "No agent has that name. Agents you can ask: Maya (Product critic); Leo.",
         isError: true,
       });
     });
@@ -130,7 +130,7 @@ describe("askAgentTool", () => {
       const { tool } = buildTool({ asked: { kind: "unknown_agent", roster: [] } });
 
       await expect(tool.call({ agent: "Maya", message: "Hi" }, CHAT)).resolves.toEqual({
-        text: "There are no other custom agents to ask.",
+        text: "There are no other agents to ask.",
         isError: true,
       });
     });

@@ -43,7 +43,7 @@ describe("agentSessionPrompt", () => {
 
     it("names the agent with its title", () => {
       expect(prompt).toContain(
-        "In this chat you are Coco (Houseplant carer), a custom agent the user made in Copilot."
+        "In this chat you are Coco (Houseplant carer), an agent the user made in Copilot."
       );
     });
 
@@ -334,7 +334,7 @@ describe("agentSessionPrompt", () => {
       await setCustomAgentsAccess("team");
 
       expect(buildCopilotChatSteering()).toBe(
-        "In a chat without a custom agent, when the user asks what you and they worked on, discussed or decided before, list your earlier chats with list_chats from obsidian-copilot and read a listed note when you need what was said. In a chat without a custom agent, when the user asks you to make a new agent, draft it with the draft_agent tool from obsidian-copilot, which shows them a card to review and create it; you can't create an agent yourself."
+        "In a chat where you are Copilot, when the user asks what you and they worked on, discussed or decided before, list your earlier chats with list_chats from obsidian-copilot and read a listed note when you need what was said. In a chat where you are Copilot, when the user asks you to make a new agent, draft it with the draft_agent tool from obsidian-copilot, which shows them a card to review and create it; you can't create an agent yourself."
       );
     });
 

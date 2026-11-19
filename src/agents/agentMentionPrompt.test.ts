@@ -60,7 +60,7 @@ describe("agentMentionPrompt", () => {
       expect(agentMentionsBlock(["Maya", "Leo"])).toBe(
         [
           "<copilot-agents>",
-          "The user @-mentioned these custom agents in this message. Ask each of them with the ask_agent tool:",
+          "The user @-mentioned these agents in this message. Ask each of them with the ask_agent tool:",
           "- Maya",
           "- Leo",
           "</copilot-agents>",

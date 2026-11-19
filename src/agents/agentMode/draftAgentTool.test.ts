@@ -46,7 +46,7 @@ describe("draftAgentTool", () => {
 
         expect(listed?.name).toBe(DRAFT_AGENT_TOOL_NAME);
         const description = (listed as unknown as { description: string }).description;
-        expect(description.slice(0, 120)).toContain("draft of a new custom agent when they ask");
+        expect(description.slice(0, 120)).toContain("draft of a new agent when they ask");
         expect(description).toContain("you can't create an agent yourself, even if asked");
         expect(description).toContain(
           "if you or one of them already handles the job, say so and ask whether they want a new one anyway"
@@ -169,7 +169,7 @@ describe("draftAgentTool", () => {
         const result = await buildTool().call(NORA, chat);
 
         expect(result).toEqual({
-          text: "Custom agents aren't available right now. Tell the user.",
+          text: "Copilot Teammates isn't available right now. Tell the user.",
           isError: false,
         });
         expect(chat.readChatState(AGENT_DRAFT_CARD)).toBeNull();

@@ -137,7 +137,7 @@ describe("listChatsTool", () => {
 
         expect(result.text).toBe(
           [
-            "Your earlier chats with the user, newest first. Open a listed note with your file or shell tools to see what was said. Every other chat note belongs to a custom agent: unless the user names it, never search, read or cite it.",
+            "Your earlier chats with the user, newest first. Open a listed note with your file or shell tools to see what was said. Every other chat note belongs to one of the user's agents: unless the user names it, never search, read or cite it.",
             `- 2026-11-09 · Release video music · ${VAULT}/copilot/copilot-conversations/Release video music.md`,
           ].join("\n")
         );
@@ -333,7 +333,7 @@ describe("listChatsTool", () => {
         const result = await buildTool({ caller: "juno" }).call({}, fakeChat());
 
         expect(result).toEqual({
-          text: "Custom agents aren't available right now. Tell the user.",
+          text: "Copilot Teammates isn't available right now. Tell the user.",
           isError: false,
         });
       });

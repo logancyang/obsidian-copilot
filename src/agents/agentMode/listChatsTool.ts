@@ -7,14 +7,14 @@ import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPo
 import { isNativeChatId } from "@/utils/nativeChatId";
 
 export const LIST_CHATS_TOOL_NAME = "list_chats";
-const UNAVAILABLE_TEXT = "Custom agents aren't available right now. Tell the user.";
+const UNAVAILABLE_TEXT = "Copilot Teammates isn't available right now. Tell the user.";
 // "What have we been working on" and "where did we leave off" need the last weeks, and every listed line is context the agent pays for.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/959
 const MAX_LISTED_CHATS = 20;
 // Small models search the chat folder for a topic after listing and then answer from another agent's chat, so the result itself repeats the scope.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/959
 function otherChats(agent: string | null): string {
-  return `Every other chat note belongs to ${agent ? "another agent or to Copilot" : "a custom agent"}: unless the user names it, never search, read or cite it.`;
+  return `Every other chat note belongs to ${agent ? "another agent or to Copilot" : "one of the user's agents"}: unless the user names it, never search, read or cite it.`;
 }
 
 // Codex's small model took "read a listed note" to need a chat-reading tool it doesn't have, so the result says how.

@@ -48,12 +48,12 @@ export function describeAgent({ name, title }: Pick<CustomAgent, "name" | "title
   return title ? `${name} (${title})` : name;
 }
 
-// A Copilot chat asked about earlier work read every chat note, agents' included, so it lists its own with list_chats too; the shared prompt is the one prompt a Copilot chat has on every backend, and a line that limited the tool to Copilot chats stopped agents from using it. Codex learns of draft_agent only from the prompt, so a Copilot chat is told it drafts new agents too; that line names chats without a custom agent because an agent's own prompt already says it and an asked agent's hidden chat has no draft_agent.
+// A Copilot chat asked about earlier work read every chat note, agents' included, so it lists its own with list_chats too; the shared prompt is the one prompt a Copilot chat has on every backend, and a line that limited the tool to Copilot chats stopped agents from using it. Codex learns of draft_agent only from the prompt, so a Copilot chat is told it drafts new agents too; that line names chats where it is Copilot because an agent's own prompt already says it and an asked agent's hidden chat has no draft_agent.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/959
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/941
 export function buildCopilotChatSteering(): string | null {
   if (getCustomAgentsGate() !== "full") return null;
-  return `In a chat without a custom agent, when the user asks what you and they worked on, discussed or decided before, list your earlier chats with list_chats from obsidian-copilot and read a listed note when you need what was said. In a chat without a custom agent, when the user asks you to make a new agent, ${DRAFT_WITH_TOOL}; you can't create an agent yourself.`;
+  return `In a chat where you are Copilot, when the user asks what you and they worked on, discussed or decided before, list your earlier chats with list_chats from obsidian-copilot and read a listed note when you need what was said. In a chat where you are Copilot, when the user asks you to make a new agent, ${DRAFT_WITH_TOOL}; you can't create an agent yourself.`;
 }
 
 export function buildAgentPrompt({
@@ -67,7 +67,7 @@ export function buildAgentPrompt({
 }: AgentPromptInput): string {
   const roster = others.length > 0 ? others.map(describeAgent).join("; ") : "none";
   return [
-    `In this chat you are ${describeAgent(agent)}, a custom agent the user made in Copilot.`,
+    `In this chat you are ${describeAgent(agent)}, an agent the user made in Copilot.`,
     `Your folder is ${folder}. Keep your own files in it, and add nothing else to the vault unless the user asks. Do not read or change other agents' folders.`,
     `Your instruction is the body of ${folder}/instructions.md, and only the user edits that file. Your memory is ${folder}/MEMORY.md. When your memory contradicts your instruction, follow your memory.`,
     `Other agents: ${roster}.`,
