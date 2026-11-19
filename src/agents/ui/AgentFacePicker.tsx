@@ -1,0 +1,79 @@
+import type { FaceImage } from "@/agents/customAgentFiles";
+import { Button } from "@/components/ui/button";
+import { ImageIcon } from "lucide-react";
+import { Notice } from "obsidian";
+import React, { useRef } from "react";
+
+export interface PickedFace {
+  image: FaceImage;
+  src: string;
+}
+
+export interface AgentFacePickerProps {
+  onPick: (face: PickedFace) => void;
+}
+
+const UPLOAD_TYPES = "image/png,image/jpeg,image/webp";
+
+export function readAsDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error ?? new Error("Could not read the image."));
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function decodes(image: Blob): Promise<boolean> {
+  try {
+    (await createImageBitmap(image)).close();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function AgentFacePicker({ onPick }: AgentFacePickerProps): React.ReactElement {
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  const pickUpload = async (file: File | undefined) => {
+    if (!file) return;
+    // A file that is not a readable image, such as a renamed document, keeps the current face instead of a broken one.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/939
+    if (!(await decodes(file))) {
+      new Notice("Couldn't read that image. Choose a PNG, JPEG or WebP file.");
+      return;
+    }
+    onPick({ image: { kind: "upload", image: file }, src: await readAsDataUrl(file) });
+  };
+
+  return (
+    <div className="tw-flex tw-flex-col tw-gap-2">
+      <div className="tw-text-ui-smaller tw-uppercase tw-tracking-wide tw-text-faint">
+        Pick a face
+      </div>
+      <div>
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          onClick={() => fileInput.current?.click()}
+        >
+          <ImageIcon className="tw-size-3.5" />
+          Upload image
+        </Button>
+        <input
+          ref={fileInput}
+          type="file"
+          accept={UPLOAD_TYPES}
+          aria-label="Upload image"
+          className="tw-hidden"
+          onChange={(event) => {
+            void pickUpload(event.target.files?.[0]);
+            event.target.value = "";
+          }}
+        />
+      </div>
+    </div>
+  );
+}

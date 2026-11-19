@@ -2,6 +2,7 @@ import type { NewCustomAgent } from "@/agents/CustomAgentStore";
 import {
   CreateAgentCloseGuard,
   CreateAgentForm,
+  type AgentModelChoices,
   type CreateAgentFormProps,
 } from "@/agents/ui/CreateAgentForm";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -12,6 +13,38 @@ jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError:
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/939";
 const NAMES_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/936";
+
+const MODELS: AgentModelChoices = {
+  models: [
+    {
+      name: "opus",
+      displayName: "Opus 5.5",
+      provider: "agent",
+      enabled: true,
+      _group: "Claude",
+      _backendId: "claude",
+    },
+    {
+      name: "sonnet",
+      displayName: "Sonnet 5.5",
+      provider: "agent",
+      enabled: true,
+      _group: "Claude",
+      _backendId: "claude",
+    },
+  ],
+  effortOptionsByModelKey: {
+    "claude:opus|agent": [
+      { label: "medium", value: "medium" },
+      { label: "high", value: "high" },
+    ],
+    "claude:sonnet|agent": [
+      { label: "low", value: "low" },
+      { label: "medium", value: "medium" },
+    ],
+  },
+  initial: { baseModelId: "opus", effort: "high" },
+};
 
 const LEO = { slug: "leo", name: "Leo" };
 
@@ -25,6 +58,7 @@ function renderForm(props: Partial<CreateAgentFormProps> = {}) {
         agents={[LEO]}
         folderNames={["leo"]}
         agentsFolder="copilot/agents"
+        models={MODELS}
         closeGuard={closeGuard}
         onCreate={onCreate}
         onClose={onClose}
@@ -56,10 +90,11 @@ describe("CreateAgentForm", () => {
       unobserve: jest.fn(),
       disconnect: jest.fn(),
     }));
+    window.createImageBitmap = jest.fn().mockResolvedValue({ close: jest.fn() });
   });
 
   describe("CreateAgentForm()", () => {
-    it("opens empty with the name focused, an optional title, What it handles, and Create unavailable", () => {
+    it("opens empty with the name focused, an optional title, What it handles, the default model, and Create unavailable", () => {
       renderForm();
 
       expect(document.activeElement).toBe(screen.getByLabelText("Name"));
@@ -69,6 +104,8 @@ describe("CreateAgentForm", () => {
       expect(screen.getByLabelText("What it handles").getAttribute("placeholder")).toMatch(
         /^e\.g\. You keep the books for my company\./
       );
+      expect(screen.getByTitle("Model · effort").textContent).toContain("Opus 5.5");
+      expect(screen.getByTitle("Model · effort").textContent).toContain("high");
       expect(screen.getByText("Saved in copilot/agents/")).not.toBeNull();
       expect(screen.queryByRole("alert")).toBeNull();
       expect(createButton().disabled).toBe(true);
@@ -84,7 +121,7 @@ describe("CreateAgentForm", () => {
       expect(screen.getByText("Saved in copilot/agents/kai/")).not.toBeNull();
     });
 
-    it("creates the agent from the trimmed name and title and the instruction, on the default model", async () => {
+    it("creates the agent from the trimmed name and title, the instruction and the default model", async () => {
       const { onCreate } = renderForm();
 
       type("Name", "  Kai ");
@@ -96,9 +133,47 @@ describe("CreateAgentForm", () => {
         expect(onCreate).toHaveBeenCalledWith({
           name: "Kai",
           title: "Writes launch posts",
-          model: null,
+          model: { baseModelId: "opus", effort: "high" },
           instruction: "You handle marketing.",
+          face: undefined,
         })
+      );
+    });
+
+    it("creates the agent on the model and effort picked from the model list", async () => {
+      const { onCreate } = renderForm();
+      type("Name", "Kai");
+      type("What Kai handles", "You handle marketing.");
+
+      fireEvent.click(screen.getByTitle("Model · effort"));
+      fireEvent.click(await screen.findByRole("option", { name: /Sonnet 5\.5/ }));
+      fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+      fireEvent.click(createButton());
+
+      await waitFor(() =>
+        expect(onCreate.mock.calls[0][0].model).toEqual({ baseModelId: "sonnet", effort: "low" })
+      );
+    });
+
+    it("creates the agent with an uploaded image as its face, shown in place of the empty face", async () => {
+      const { onCreate } = renderForm();
+      const photo = new File(["png bytes"], "kai.png", { type: "image/png" });
+      type("Name", "Kai");
+      type("What Kai handles", "You handle marketing.");
+
+      fireEvent.click(screen.getByRole("button", { name: "Change face" }));
+      fireEvent.change(await screen.findByLabelText("Upload image"), {
+        target: { files: [photo] },
+      });
+      await waitFor(() =>
+        expect(
+          screen.getByRole("button", { name: "Change face" }).querySelector("img")?.src
+        ).toMatch(/^data:image\/png;base64,/)
+      );
+      fireEvent.click(createButton());
+
+      await waitFor(() =>
+        expect(onCreate.mock.calls[0][0].face).toEqual({ kind: "upload", image: photo })
       );
     });
 

@@ -2,6 +2,7 @@ import { customAgentsFolderPath, type CustomAgentStore } from "@/agents/CustomAg
 import {
   CreateAgentCloseGuard,
   CreateAgentForm,
+  type AgentModelChoices,
   type CreateAgentInitialValues,
 } from "@/agents/ui/CreateAgentForm";
 import { useCustomAgents } from "@/agents/ui/useCustomAgents";
@@ -14,9 +15,12 @@ import type { Root } from "react-dom/client";
 
 export interface CreateAgentDialogOptions {
   store: CustomAgentStore;
+  models: AgentModelChoices;
   initialValues?: CreateAgentInitialValues;
   onCreated: (slug: string) => void;
 }
+
+const OPEN_PICKER_SELECTOR = '[data-radix-popper-content-wrapper] > [data-state="open"]';
 
 export class CreateAgentModal extends Modal {
   private root: Root | null = null;
@@ -71,6 +75,14 @@ export class CreateAgentModal extends Modal {
     ).open();
   }
 
+  // An open face or model picker takes Esc first, so Esc closes the picker instead of the dialog.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/939
+  onEscapeKey(evt: KeyboardEvent): void {
+    if (this.modalEl.querySelector(OPEN_PICKER_SELECTOR)) return;
+    evt.preventDefault();
+    this.close();
+  }
+
   private closeForGood(): void {
     this.closingForGood = true;
     this.close();
@@ -100,6 +112,7 @@ function CreateAgentDialog({ options, closeGuard, onCreated, onCancel }: CreateA
         agents={agents}
         folderNames={options.store.folderNames()}
         agentsFolder={customAgentsFolderPath()}
+        models={options.models}
         initialValues={options.initialValues}
         closeGuard={closeGuard}
         onCreate={async (agent) => onCreated(await options.store.createAgent(agent))}

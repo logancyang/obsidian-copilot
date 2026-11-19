@@ -1,5 +1,6 @@
 import type { CustomAgent, CustomAgentStore } from "@/agents/CustomAgentStore";
 import { setCustomAgentsAccess } from "@/agents/testing/customAgentsAccess";
+import type { AgentModelChoices } from "@/agents/ui/CreateAgentForm";
 import { CreateAgentModal } from "@/agents/ui/CreateAgentModal";
 import type { FakeObsidianModal } from "@/agents/ui/testing/fakeObsidianModal";
 import { resetSettings } from "@/settings/model";
@@ -16,6 +17,12 @@ jest.mock("@/entitlement");
 jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError: jest.fn() }));
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/939";
+
+const MODELS: AgentModelChoices = {
+  models: [{ name: "opus", displayName: "Opus 5.5", provider: "agent", enabled: true }],
+  effortOptionsByModelKey: {},
+  initial: { baseModelId: "opus", effort: null },
+};
 
 function fakeStore(createAgent: CustomAgentStore["createAgent"]): CustomAgentStore {
   const agents: readonly CustomAgent[] = [];
@@ -35,6 +42,7 @@ function openDialog(createAgent = jest.fn().mockResolvedValue("kai")) {
   const onCreated = jest.fn();
   const modal = new CreateAgentModal({} as App, {
     store: fakeStore(createAgent),
+    models: MODELS,
     onCreated,
   }) as OpenedModal;
   act(() => modal.open());
@@ -128,6 +136,34 @@ describe("CreateAgentModal", () => {
       });
     });
 
+    describe("onEscapeKey()", () => {
+      it(`leaves Esc to an open face picker instead of closing or asking (${ISSUE})`, async () => {
+        const { modal } = openDialog();
+        type("Name", "Kai");
+        fireEvent.click(screen.getByRole("button", { name: "Change face" }));
+        await screen.findByRole("button", { name: /Upload image/ });
+
+        const escape = modal.pressEscape();
+
+        expect(escape.defaultPrevented).toBe(false);
+        expect(modal.isOpen).toBe(true);
+        expect(screen.queryByText("Discard Kai?")).toBeNull();
+      });
+
+      it(`asks on Esc while a picker is still fading out after closing (${ISSUE})`, () => {
+        const { modal } = openDialog();
+        type("Name", "Kai");
+        const closing = modal.modalEl.createDiv({
+          attr: { "data-radix-popper-content-wrapper": "" },
+        });
+        closing.createDiv({ attr: { "data-state": "closed" } });
+
+        act(() => void modal.pressEscape());
+
+        expect(screen.getByText("Discard Kai?")).not.toBeNull();
+      });
+    });
+
     describe("onOpen()", () => {
       it(`creates the agent in the store, closes, and hands back its folder name so the home selects it (${ISSUE})`, async () => {
         const { modal, onCreated, createAgent } = openDialog();
@@ -140,8 +176,9 @@ describe("CreateAgentModal", () => {
         expect(createAgent).toHaveBeenCalledWith({
           name: "Kai",
           title: "",
-          model: null,
+          model: { baseModelId: "opus", effort: null },
           instruction: "You handle marketing.",
+          face: undefined,
         });
         expect(modal.isOpen).toBe(false);
       });
