@@ -105,6 +105,10 @@ jest.mock("./backends/shared/ui/AgentBackendHeader", () => ({}));
 jest.mock("./session/useBackendAuthState", () => ({}));
 jest.mock("@/connectors/connectorsEntitlement", () => ({ isConnectorsEnabled: jest.fn() }));
 jest.mock("@/agents/agentSessionPrompt", () => ({ loadAgentSessionPrompt: jest.fn() }));
+jest.mock("@/agents/customAgentsGate", () => ({
+  getCustomAgentsGate: () => "full",
+  subscribeToCustomAgentsGate: () => () => {},
+}));
 jest.mock("@/utils/vaultPath", () => ({ getVaultBase: () => "/vault" }));
 
 const ISSUE = "https://github.com/logancyang/obsidian-copilot/issues/3022";
@@ -714,6 +718,13 @@ describe("agentMode", () => {
       const hosted = jest.mocked(createCopilotMcpServer).mock.calls[0][1];
       expect(hosted.map(({ definition }) => definition.name)).not.toContain("suggest_connector");
       expect(connectorCardsExtension()).toBeUndefined();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/944 offers ask_agent among Copilot's tools", () => {
+      createAgentSessionManager({} as App, plugin);
+
+      const hosted = jest.mocked(createCopilotMcpServer).mock.calls[0][1];
+      expect(hosted.map(({ definition }) => definition.name)).toContain("ask_agent");
     });
 
     it(`retains only previously ready agents during compatibility checks ${ISSUE}`, async () => {

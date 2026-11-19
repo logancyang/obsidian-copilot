@@ -78,6 +78,7 @@ interface SessionState {
   live?: ClaudeLiveQuery;
   starting?: Promise<ClaudeLiveQuery>;
   systemPromptAppend: string;
+  customAgent: boolean;
   agentMemoryPath?: string;
 }
 
@@ -291,6 +292,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       model: seedModelId,
       mcpServers: params.mcpServers,
       systemPromptAppend: this.resolveSystemPromptAppend(params.agent),
+      customAgent: params.agent !== undefined,
       agentMemoryPath: params.agent?.memoryPath,
       translator: createTranslatorState(),
     });
@@ -431,7 +433,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       : { type: "disabled" };
     // Claude Code's own auto memory would be a second place a custom agent saves rules, so its MEMORY.md stays the only one.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/942
-    options.env = session.agentMemoryPath ? { ...env, CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1" } : env;
+    options.env = session.customAgent ? { ...env, CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1" } : env;
 
     if (this.sessions.get(sessionId) !== session) {
       throw new Error(`Session ${sessionId} closed before its prompt was sent`);
@@ -661,6 +663,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       model: seedModelId,
       mcpServers: params.mcpServers,
       systemPromptAppend: this.resolveSystemPromptAppend(params.agent),
+      customAgent: params.agent !== undefined,
       agentMemoryPath: params.agent?.memoryPath,
       translator: createTranslatorState(claudeTaskPlan),
     });

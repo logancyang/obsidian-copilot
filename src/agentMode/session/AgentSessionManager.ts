@@ -87,6 +87,7 @@ import type {
   ModeApplySpec,
   ModelSelection,
   SessionAgent,
+  SessionEvent,
   PermissionDecision,
   PermissionPrompt,
   SessionId,
@@ -174,6 +175,15 @@ export interface ReplaceSessionOptions {
   agentSlug?: string | null;
 }
 
+export interface UnlistedSessionInput {
+  backendId?: BackendId;
+  projectId: ProjectScopeId;
+  seedSelection?: ModelSelection;
+  mode: CopilotMode | null;
+  agent: SessionAgent;
+  observeSessionEvent: (event: SessionEvent) => void;
+}
+
 export interface AgentSessionManagerOptions {
   permissionPrompter: PermissionPrompter;
   askUserQuestionPrompter?: AskUserQuestionPrompter;
@@ -240,6 +250,10 @@ export class AgentSessionManager {
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/812
   private readonly promptedChatInputIds = new Set<string>();
   private readonly closingSessions = new Map<string, Promise<void>>();
+  private readonly unlistedSessions = new Map<
+    string,
+    { session: AgentSession; backend: BackendProcess } | null
+  >();
   private lastShownSessionId: string | null = null;
   // A visible tab strip keeps every chat in it open until the user closes its tab, so leaving a chat there releases nothing.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/849
@@ -976,6 +990,74 @@ export class AgentSessionManager {
     }
     this.drafts.update(session.chatInputId, (draft) => ({ ...draft, input: initialDraft }));
     return session;
+  }
+
+  // A custom agent asked from another chat works in a chat with no tab that no chat list, index or note shows.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
+  async startUnlistedSession({
+    backendId,
+    projectId,
+    seedSelection,
+    mode,
+    agent,
+    observeSessionEvent,
+  }: UnlistedSessionInput): Promise<AgentSession> {
+    if (this.disposed) throw new Error("AgentSessionManager has been shut down");
+    const resolvedId = backendId ?? getSettings().agentMode?.activeBackend ?? "opencode";
+    const descriptor = this.resolveDescriptor(resolvedId);
+    const seed = seedSelection ?? this.getSeedSelection(resolvedId) ?? undefined;
+    const cwd = this.resolveSessionCwd(projectId);
+    const backend = await this.ensureBackend(resolvedId, descriptor);
+    const internalId = uuidv4();
+    this.unlistedSessions.set(internalId, null);
+    const mcpServers = await this.connectCopilotMcpServer(internalId, descriptor, cwd);
+    const session = AgentSession.start({
+      backend,
+      cwd,
+      internalId,
+      backendId: resolvedId,
+      projectId,
+      defaultModelSelection: seed,
+      defaultMode: mode,
+      getDescriptor: () => this.opts.resolveDescriptor(resolvedId),
+      getDisplayName: (id) => this.resolveDescriptor(id).displayName,
+      getApp: () => this.app,
+      mcpServers,
+      agentSlug: agent.slug,
+      agent,
+      observeSessionEvent,
+    });
+    this.unlistedSessions.set(internalId, { session, backend });
+    const unsubscribe = session.subscribe({
+      onMessagesChanged: () => {},
+      onStatusChanged: (status) => {
+        if (status !== "closed") return;
+        unsubscribe();
+        this.unlistedSessions.delete(internalId);
+        this.opts.copilotMcpServer?.disconnect(internalId);
+      },
+    });
+    try {
+      if (this.disposed)
+        throw new Error("AgentSessionManager was shut down during session creation");
+      await session.ready;
+      await descriptor
+        .applyInitialSessionConfig?.(session, getSettings(), seed)
+        .catch((e) => logWarn(`[AgentMode] applyInitialSessionConfig failed for ${resolvedId}`, e));
+      await replayPersistedMode(session, mode);
+      // OpenCode and Codex list every session in the folder, and Recent chats adds what they list unless the index tombstones it.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
+      const sessionId = session.getBackendSessionId();
+      if (sessionId) await this.opts.sessionIndex?.deleteSession(resolvedId, sessionId);
+    } catch (error) {
+      await session.dispose();
+      throw error;
+    }
+    return session;
+  }
+
+  isUnlistedSession(sessionKey: string): boolean {
+    return this.unlistedSessions.has(sessionKey);
   }
 
   async addContextNoteToActiveChat(note: TFile): Promise<void> {
@@ -1971,13 +2053,16 @@ export class AgentSessionManager {
     );
 
     const allSessions = Array.from(this.sessions.values());
+    const unlisted = Array.from(this.unlistedSessions.values()).flatMap((entry) =>
+      entry ? [entry.session] : []
+    );
     await Promise.allSettled(allSessions.map((s) => this.drainAutoSave(s)));
     for (const id of Array.from(this.sessionState.keys())) {
       this.detachAutoSave(id);
     }
 
     await Promise.allSettled(
-      allSessions.map(async (session) => {
+      [...allSessions, ...unlisted].map(async (session) => {
         try {
           await session.cancel();
         } catch (e) {
@@ -2826,6 +2911,11 @@ export class AgentSessionManager {
         // Retry spawns from current settings; a dead generation has no config left to apply.
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/475
         this.heldConfigChanges.delete(backendId);
+      }
+      for (const entry of Array.from(this.unlistedSessions.values())) {
+        if (entry?.backend !== proc) continue;
+        entry.session.cancel().catch(() => {});
+        entry.session.dispose().catch(() => {});
       }
       const dead = Array.from(this.sessions.values()).filter((s) => s.backendId === backendId);
       if (dead.length === 0) return;

@@ -26,7 +26,7 @@ import { isConnectorsEnabled } from "@/connectors/connectorsEntitlement";
 import { buildAgentSystemPrompt } from "./backends/shared/agentSystemPrompt";
 import { getBuiltinSkillEnvRestartPolicy } from "./backends/shared/builtinSkillEnv";
 import { backendRegistry, findBackendForModel, listBackendDescriptors } from "./backends/registry";
-import type { BackendId } from "./session/types";
+import type { BackendId, ModelSelection } from "./session/types";
 import { AgentChatPersistenceManager } from "./session/AgentChatPersistenceManager";
 import { AgentModelPreloader } from "./session/AgentModelPreloader";
 import { AgentSessionIndex } from "./session/AgentSessionIndex";
@@ -58,6 +58,8 @@ import { createOpenArtifactsTools } from "@/openArtifacts/openArtifactsTools";
 import { getVaultBase } from "@/utils/vaultPath";
 import { loadAgentSessionPrompt } from "@/agents/agentSessionPrompt";
 import type { CustomAgent } from "@/agents/CustomAgentStore";
+import { createAskAgentTool } from "@/agents/agentMode/askAgentTool";
+import { HiddenAgentChats } from "@/agents/agentMode/hiddenAgentChats";
 import { SkillManager } from "./skills";
 import {
   availableBuiltinAgents,
@@ -112,13 +114,23 @@ export function applyCopilotDefaultModel(configuredModelId: string): BackendId[]
   return seedCopilotDefaultModel(listBackendDescriptors(), configuredModelId);
 }
 
+const NO_CUSTOM_AGENTS: readonly CustomAgent[] = Object.freeze([]);
+
+function agentBackend(
+  manager: AgentSessionManager,
+  model: CustomAgent["model"]
+): { backendId?: BackendId; seed?: ModelSelection } {
+  const backendId = model && findBackendForModel(getSettings(), model.baseModelId)?.id;
+  if (!backendId) return {};
+  return { backendId, seed: manager.getSeedSelection(backendId, model) ?? undefined };
+}
+
 export function startCustomAgentChat(
   manager: AgentSessionManager,
   { slug, model }: Pick<CustomAgent, "slug" | "model">
 ): Promise<AgentSession> {
-  const backendId = model && findBackendForModel(getSettings(), model.baseModelId)?.id;
-  const seed = backendId ? (manager.getSeedSelection(backendId, model) ?? undefined) : undefined;
-  return manager.createSession(backendId || undefined, undefined, seed, undefined, slug);
+  const { backendId, seed } = agentBackend(manager, model);
+  return manager.createSession(backendId, undefined, seed, undefined, slug);
 }
 
 function collectAgentSkillsDirsProjectRel(): Record<string, string> {
@@ -226,6 +238,28 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   };
   const { connectionManager, connectorTools } = plugin;
   const connectorsOn = () => isConnectorsEnabled() === true;
+  let managerRef: AgentSessionManager | null = null;
+  const requireManager = (): AgentSessionManager => {
+    if (!managerRef) throw new Error("Agent Chat isn't ready yet.");
+    return managerRef;
+  };
+  const hiddenAgentChats = new HiddenAgentChats({
+    store: () => plugin.customAgents,
+    vaultBase: () => getVaultBase(app),
+    listedChat: (chat) => managerRef?.getSessions().find((session) => session === chat) ?? null,
+    startChat: ({ agent, prompt, projectId, mode, observeSessionEvent }) => {
+      const manager = requireManager();
+      const { backendId, seed } = agentBackend(manager, agent.model);
+      return manager.startUnlistedSession({
+        backendId,
+        seedSelection: seed,
+        projectId,
+        mode,
+        agent: prompt,
+        observeSessionEvent,
+      });
+    },
+  });
   const copilotMcpServer = createCopilotMcpServer(
     (toolName) => isCopilotToolOn(toolName, getSettings(), app),
     [
@@ -269,6 +303,11 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
           run: runInRunningObsidian,
         }),
       },
+      createAskAgentTool(hiddenAgentChats, {
+        agents: () => plugin.customAgents?.getAgents() ?? NO_CUSTOM_AGENTS,
+        isUnlistedChat: (sessionKey) => managerRef?.isUnlistedSession(sessionKey) ?? false,
+        agentOfChat: (sessionKey) => managerRef?.getSession(sessionKey)?.agentSlug ?? null,
+      }),
       ...(connectionManager
         ? [
             createSuggestConnectorTool({
@@ -297,7 +336,6 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     "agent-chat-index.json"
   );
   const sessionIndex = new AgentSessionIndex(createNodeFileStorage(), indexPath);
-  let managerRef: AgentSessionManager | null = null;
   const prompter = createDefaultPermissionPrompter(
     (id) => managerRef?.getSessionByBackendId(id) ?? null
   );

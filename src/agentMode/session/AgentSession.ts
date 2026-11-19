@@ -215,6 +215,7 @@ export interface AgentSessionStartOptions extends ProjectContextUpdatesHooks {
   chatExtensions?: readonly ChatExtension<unknown>[];
   agentSlug?: string;
   agent?: SessionAgent | null;
+  observeSessionEvent?: (event: SessionEvent) => void;
 }
 
 export interface AgentSessionStateOptions extends ProjectContextUpdatesHooks {
@@ -244,6 +245,7 @@ export class AgentSession implements ChatStateHost, ChatView {
   readonly projectId: ProjectScopeId;
   readonly agentSlug: string | null;
   private readonly agent: SessionAgent | null;
+  private readonly observeSessionEvent: ((event: SessionEvent) => void) | null;
   readonly ready: Promise<void>;
   private backendSessionId: SessionId | null = null;
   private readonly backend: BackendProcess;
@@ -325,6 +327,8 @@ export class AgentSession implements ChatStateHost, ChatView {
     this.projectId = opts.projectId ?? GLOBAL_SCOPE;
     this.agentSlug = opts.agentSlug ?? null;
     this.agent = opts.agent ?? null;
+    this.observeSessionEvent =
+      "observeSessionEvent" in opts ? (opts.observeSessionEvent ?? null) : null;
     this.cwd = opts.cwd ?? null;
     this.getDescriptor = opts.getDescriptor ?? null;
     this.getDisplayName = opts.getDisplayName ?? null;
@@ -1201,6 +1205,9 @@ export class AgentSession implements ChatStateHost, ChatView {
   }
 
   private handleSessionEvent(event: SessionEvent): void {
+    // A custom agent asked from another chat is done by the sub agent rule, which reads the raw events.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
+    this.observeSessionEvent?.(event);
     const update = event.update;
     // Task lifecycle updates describe the task itself, even when reported from inside a task. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
     if (event.taskToolCallId !== undefined && !isTaskLifecycleUpdate(update)) {

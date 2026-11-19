@@ -874,6 +874,34 @@ describe("AgentSession", () => {
     });
 
     describe("start()", () => {
+      it("hands each event from the agent to the observer it was started with before showing it, so an asked agent's reply can be read as it arrives (https://github.com/Brevilabs/obsidian-copilot-private/issues/944)", async () => {
+        const mock = makeMockBackend();
+        const observed: string[] = [];
+        const session = startSession(mock, {
+          observeSessionEvent: (event) => {
+            observed.push(event.update.sessionUpdate);
+            if (event.update.sessionUpdate === "agent_message_chunk") {
+              expect(bubbles(session).map(({ message }) => message)).toEqual(["Hi", ""]);
+            }
+          },
+        });
+        await session.ready;
+        const { turn } = session.sendPrompt("Hi");
+        mock.emitUpdate({
+          sessionUpdate: "agent_message_chunk",
+          content: { type: "text", text: "Hello" },
+        });
+        await turn;
+
+        expect(observed).toEqual([
+          "message_delivered",
+          "turn_started",
+          "agent_message_chunk",
+          "turn_ended",
+        ]);
+        expect(bubbles(session).map(({ message }) => message)).toEqual(["Hi", "Hello"]);
+      });
+
       it("exposes the model catalog reported by newSession through getState", async () => {
         const mock = makeMockBackend();
         const stateWithModel = sonnetAndGpt5State();

@@ -102,6 +102,9 @@ export interface McpToolDefinition {
 export interface HostedTool {
   definition: McpToolDefinition;
   turnedOffText: string;
+  // A tool offered only to some chats, or worded for the chat that lists it, answers each listing; null leaves it out.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
+  listedAs?: (listing: ToolListing) => McpToolDefinition | null;
   call: (args: unknown, chat: ChatStateHost | null) => Promise<HostedToolResult>;
 }
 
@@ -302,7 +305,9 @@ async function reply(
           tools: [
             ...hostedTools
               .filter((tool) => isToolOn(tool.definition.name))
-              .map((tool) => tool.definition),
+              .flatMap(
+                (tool) => (tool.listedAs ? tool.listedAs(handlers.listing) : tool.definition) ?? []
+              ),
             ...providedTools(hostedTools, toolProvider, handlers.listing),
           ],
         },
