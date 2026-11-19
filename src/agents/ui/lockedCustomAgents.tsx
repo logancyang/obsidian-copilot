@@ -4,17 +4,20 @@ import {
   useCustomAgentsGate,
   type CustomAgentsGate,
 } from "@/agents/customAgentsGate";
+import type { CustomAgent } from "@/agents/CustomAgentStore";
 import { NewAgentButton } from "@/agents/ui/AgentRoster";
 import {
   CustomAgentsUpsellModal,
   type CustomAgentsUpsellMedium,
 } from "@/agents/ui/CustomAgentsUpsell";
+import { LockedAgentsUpsellModal } from "@/agents/ui/LockedAgentsUpsell";
+import { CustomAgentStoreContext, useCustomAgents } from "@/agents/ui/useCustomAgents";
 import type { CategoryOption } from "@/components/chat-components/hooks/useAtMentionCategories";
 import { useApp } from "@/context";
 import { ensureEntitlement } from "@/plusUtils";
 import { UserPlus } from "lucide-react";
 import type { App } from "obsidian";
-import React, { useMemo } from "react";
+import React, { useContext, useMemo } from "react";
 
 let runningCheck: Promise<void> | null = null;
 let stopWaitingForUnlock: (() => void) | null = null;
@@ -66,12 +69,17 @@ function checkLicenseOnce(
 export function openLockedCustomAgents(
   app: App,
   medium: CustomAgentsUpsellMedium,
+  agents: readonly CustomAgent[],
   onUnlocked?: () => void
 ): Promise<void> {
   return checkLicenseOnce(
     app,
     (unlocked) => {
-      if (!unlocked) new CustomAgentsUpsellModal(app, medium).open();
+      if (unlocked) return;
+      // A vault that already has agents, lapsed or synced, shows them instead of the preview pitch.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/950
+      if (agents.length > 0) new LockedAgentsUpsellModal(app, agents).open();
+      else new CustomAgentsUpsellModal(app, medium).open();
     },
     onUnlocked
   );
@@ -91,11 +99,12 @@ function LockedNewAgentButton({
   onUnlocked,
 }: LockedNewAgentButtonProps): React.ReactElement {
   const app = useApp();
+  const agents = useCustomAgents(useContext(CustomAgentStoreContext));
   return (
     <NewAgentButton
       emphasized={emphasized}
       locked
-      onClick={() => void openLockedCustomAgents(app, "custom_agent_dialog", onUnlocked)}
+      onClick={() => void openLockedCustomAgents(app, "custom_agent_dialog", agents, onUnlocked)}
     />
   );
 }
@@ -117,7 +126,8 @@ export function renderNewAgentButton(
 }
 
 export interface LockedAgentMention {
-  option: CategoryOption;
+  option: CategoryOption | null;
+  agents: readonly CustomAgent[];
   choose: () => void;
 }
 
@@ -132,14 +142,18 @@ const LOCKED_AGENT_MENTION_OPTION: CategoryOption = {
 export function useLockedAgentMention(enabled: boolean): LockedAgentMention | null {
   const app = useApp();
   const gate = useCustomAgentsGate();
+  const agents = useCustomAgents(useContext(CustomAgentStoreContext));
   return useMemo(
     () =>
       enabled && gate === "locked"
         ? {
-            option: LOCKED_AGENT_MENTION_OPTION,
-            choose: () => void openLockedCustomAgents(app, "custom_agent_mention"),
+            // A vault with agents lists each of them locked, as typing a name that finds nothing would read as lost agents; the single row stands in only when there are none.
+            // https://github.com/Brevilabs/obsidian-copilot-private/issues/950
+            option: agents.length > 0 ? null : LOCKED_AGENT_MENTION_OPTION,
+            agents,
+            choose: () => void openLockedCustomAgents(app, "custom_agent_mention", agents),
           }
         : null,
-    [app, enabled, gate]
+    [app, enabled, gate, agents]
   );
 }

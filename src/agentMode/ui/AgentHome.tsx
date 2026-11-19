@@ -70,6 +70,7 @@ import {
 import { LockedHomeNote, unlockCustomAgents } from "@/agents/ui/LockedAgentNotices";
 import { openLockedAgentProfile, renderNewAgentButton } from "@/agents/ui/lockedCustomAgents";
 import { agentComposerHint, useAgentHomeSelection } from "@/agents/ui/useAgentHomeSelection";
+import { CustomAgentStoreContext } from "@/agents/ui/useCustomAgents";
 import { useAgentRecentChats } from "@/agents/ui/useAgentRecentChats";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
@@ -1076,7 +1077,9 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
 export const AgentHome: React.FC<AgentHomeProps> = (props) => {
   return (
     <ChatInputProvider>
-      <AgentHomeInternal {...props} />
+      <CustomAgentStoreContext.Provider value={props.plugin.customAgents}>
+        <AgentHomeInternal {...props} />
+      </CustomAgentStoreContext.Provider>
     </ChatInputProvider>
   );
 };

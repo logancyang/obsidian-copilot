@@ -4,6 +4,7 @@ import { FileText, UserPlus } from "lucide-react";
 import React from "react";
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/582";
+const LAPSED_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/950";
 
 const NOTES: TypeaheadOption = {
   key: "notes",
@@ -63,6 +64,22 @@ describe("TypeaheadMenuContent", () => {
 
       fireEvent.mouseDown(title);
       expect(onSelect).toHaveBeenCalledWith(ASK_AN_AGENT);
+    });
+    it(`shows a locked agent among the first results with a lock at its end and no divider (${LAPSED_ISSUE})`, () => {
+      const maya = {
+        key: "custom-agent-maya",
+        title: "Maya",
+        subtitle: "Product critic",
+        data: "maya",
+        lockedNote: "Supporter preview",
+      } as TypeaheadOption;
+      const { container, onSelect } = renderMenu([maya, NOTES]);
+
+      expect(screen.getByLabelText("Supporter preview")).toBeTruthy();
+      expect(container.querySelectorAll('[role="separator"]')).toHaveLength(0);
+
+      fireEvent.mouseDown(screen.getByText("Maya"));
+      expect(onSelect).toHaveBeenCalledWith(maya);
     });
   });
 });

@@ -1,5 +1,10 @@
 import * as customAgentsGate from "@/agents/customAgentsGate";
+import type { CustomAgent } from "@/agents/CustomAgentStore";
 import { CustomAgentsUpsellModal } from "@/agents/ui/CustomAgentsUpsell";
+import { LockedAgentsUpsellModal } from "@/agents/ui/LockedAgentsUpsell";
+import { fakeAgentStore } from "@/agents/ui/testing/fakeAgentStore";
+import { COCO, MAYA } from "@/agents/ui/testing/rosterFixtures";
+import { CustomAgentStoreContext } from "@/agents/ui/useCustomAgents";
 import {
   openLockedAgentProfile,
   openLockedCustomAgents,
@@ -26,6 +31,11 @@ jest.mock("@/agents/ui/CustomAgentsUpsell", () => ({
   CustomAgentsUpsellModal: jest.fn(() => ({ open: mockOpenUpsell })),
 }));
 
+const mockOpenLockedAgents = jest.fn();
+jest.mock("@/agents/ui/LockedAgentsUpsell", () => ({
+  LockedAgentsUpsellModal: jest.fn(() => ({ open: mockOpenLockedAgents })),
+}));
+
 const mockOpenExpired = jest.fn();
 jest.mock("@/components/modals/CopilotPlusExpiredModal", () => ({
   CopilotPlusExpiredModal: jest.fn(() => ({ open: mockOpenExpired })),
@@ -37,6 +47,8 @@ const { __setRequestUrlImpl: setRequestUrlImpl } = obsidianModule as unknown as 
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/582";
 const LAPSED_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/950";
+const NO_AGENTS: readonly CustomAgent[] = [];
+const AGENTS = [COCO, MAYA] as unknown as readonly CustomAgent[];
 
 interface LicenseRequest {
   url: string;
@@ -115,21 +127,29 @@ async function enterLicenseKey(key: string): Promise<void> {
 }
 
 function awaitRunningLicenseCheck(): Promise<void> {
-  return act(() => openLockedCustomAgents(new App(), "custom_agent_dialog"));
+  return act(() => openLockedCustomAgents(new App(), "custom_agent_dialog", NO_AGENTS));
 }
 
-function renderMentionHook(enabled: boolean) {
+function renderMentionHook(enabled: boolean, agents = NO_AGENTS) {
+  const { store } = fakeAgentStore(agents);
   return renderHook(() => useLockedAgentMention(enabled), {
     wrapper: ({ children }) => (
-      <AppContext.Provider value={new App()}>{children}</AppContext.Provider>
+      <AppContext.Provider value={new App()}>
+        <CustomAgentStoreContext.Provider value={store}>
+          {children}
+        </CustomAgentStoreContext.Provider>
+      </AppContext.Provider>
     ),
   });
 }
 
-function renderWithApp(element: React.ReactElement | undefined) {
+function renderWithApp(element: React.ReactElement | undefined, agents = NO_AGENTS) {
+  const { store } = fakeAgentStore(agents);
   return render(
     <AppContext.Provider value={new App()}>
-      <TooltipProvider>{element}</TooltipProvider>
+      <CustomAgentStoreContext.Provider value={store}>
+        <TooltipProvider>{element}</TooltipProvider>
+      </CustomAgentStoreContext.Provider>
     </AppContext.Provider>
   );
 }
@@ -158,7 +178,7 @@ describe("lockedCustomAgents", () => {
         mockSignedClaims([...features]);
         const { requestUrl, reply: answer } = holdLicenseCheck();
 
-        const opening = openLockedCustomAgents(new App(), "custom_agent_dialog");
+        const opening = openLockedCustomAgents(new App(), "custom_agent_dialog", NO_AGENTS);
         expect(mockOpenUpsell).not.toHaveBeenCalled();
         answer(reply);
         await opening;
@@ -192,7 +212,7 @@ describe("lockedCustomAgents", () => {
         const before = licenseState();
         answerLicenseChecks(reply);
 
-        await openLockedCustomAgents(new App(), "custom_agent_dialog");
+        await openLockedCustomAgents(new App(), "custom_agent_dialog", NO_AGENTS);
 
         expect(licenseState()).toEqual(before);
         expect(CopilotPlusExpiredModal).not.toHaveBeenCalled();
@@ -207,17 +227,33 @@ describe("lockedCustomAgents", () => {
       answerLicenseChecks(GRANTED);
       const onUnlocked = jest.fn();
 
-      await openLockedCustomAgents(new App(), "custom_agent_dialog", onUnlocked);
+      await openLockedCustomAgents(new App(), "custom_agent_dialog", NO_AGENTS, onUnlocked);
 
       expect(customAgentsGate.getCustomAgentsGate()).toBe("full");
       expect(onUnlocked).toHaveBeenCalledTimes(1);
       expect(mockOpenUpsell).not.toHaveBeenCalled();
     });
 
+    it.each([
+      { from: "+", medium: "custom_agent_dialog" },
+      { from: "the @ row", medium: "custom_agent_mention" },
+    ] as const)(
+      `shows the vault's own agents instead of the Supporter preview when $from is chosen in a vault with agents (${LAPSED_ISSUE})`,
+      async ({ medium }) => {
+        answerLicenseChecks(REFUSED_403);
+
+        await openLockedCustomAgents(new App(), medium, AGENTS);
+
+        expect(LockedAgentsUpsellModal).toHaveBeenCalledWith(expect.anything(), AGENTS);
+        expect(mockOpenLockedAgents).toHaveBeenCalledTimes(1);
+        expect(mockOpenUpsell).not.toHaveBeenCalled();
+      }
+    );
+
     it(`shows the dialog, and no error, when the license check cannot reach the server (${ISSUE})`, async () => {
       answerLicenseChecks(new Error("net::ERR_INTERNET_DISCONNECTED"));
 
-      await openLockedCustomAgents(new App(), "custom_agent_mention");
+      await openLockedCustomAgents(new App(), "custom_agent_mention", NO_AGENTS);
 
       expect(CustomAgentsUpsellModal).toHaveBeenCalledWith(
         expect.anything(),
@@ -229,8 +265,8 @@ describe("lockedCustomAgents", () => {
     it(`sends one check and shows one dialog when clicked again while the check runs (${ISSUE})`, async () => {
       const { requestUrl, reply } = holdLicenseCheck();
 
-      const first = openLockedCustomAgents(new App(), "custom_agent_dialog");
-      const second = openLockedCustomAgents(new App(), "custom_agent_dialog");
+      const first = openLockedCustomAgents(new App(), "custom_agent_dialog", NO_AGENTS);
+      const second = openLockedCustomAgents(new App(), "custom_agent_dialog", NO_AGENTS);
       reply(REFUSED_403);
       await Promise.all([first, second]);
 
@@ -241,7 +277,7 @@ describe("lockedCustomAgents", () => {
     it(`opens the create dialog by itself once the entitlement turns on after the dialog was shown from + (${ISSUE})`, async () => {
       answerLicenseChecks(REFUSED_403);
       const onUnlocked = jest.fn();
-      await openLockedCustomAgents(new App(), "custom_agent_dialog", onUnlocked);
+      await openLockedCustomAgents(new App(), "custom_agent_dialog", NO_AGENTS, onUnlocked);
       expect(onUnlocked).not.toHaveBeenCalled();
 
       setSettings({ plusLicenseKey: "supporter-key" });
@@ -257,7 +293,7 @@ describe("lockedCustomAgents", () => {
     it(`keeps waiting through license changes that do not grant custom_agents (${ISSUE})`, async () => {
       answerLicenseChecks(REFUSED_403);
       const onUnlocked = jest.fn();
-      await openLockedCustomAgents(new App(), "custom_agent_dialog", onUnlocked);
+      await openLockedCustomAgents(new App(), "custom_agent_dialog", NO_AGENTS, onUnlocked);
 
       setSettings({ plusLicenseKey: "plus-key" });
       mockSignedClaims(["multi_agent"]);
@@ -273,8 +309,8 @@ describe("lockedCustomAgents", () => {
       answerLicenseChecks(REFUSED_403);
       const firstUnlock = jest.fn();
       const latestUnlock = jest.fn();
-      await openLockedCustomAgents(new App(), "custom_agent_dialog", firstUnlock);
-      await openLockedCustomAgents(new App(), "custom_agent_dialog", latestUnlock);
+      await openLockedCustomAgents(new App(), "custom_agent_dialog", NO_AGENTS, firstUnlock);
+      await openLockedCustomAgents(new App(), "custom_agent_dialog", NO_AGENTS, latestUnlock);
 
       setSettings({ plusLicenseKey: "supporter-key" });
       mockSignedClaims(["multi_agent", "custom_agents"]);
@@ -368,6 +404,20 @@ describe("lockedCustomAgents", () => {
       expect(onCreate).not.toHaveBeenCalled();
     });
 
+    it(`opens the dialog for the vault's agents from the locked + in a vault with agents (${LAPSED_ISSUE})`, async () => {
+      answerLicenseChecks(REFUSED_403);
+      renderWithApp(
+        renderNewAgentButton("locked", { emphasized: false, onCreate: jest.fn() }),
+        AGENTS
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "New agent · Supporter preview" }));
+      await awaitRunningLicenseCheck();
+
+      expect(LockedAgentsUpsellModal).toHaveBeenCalledWith(expect.anything(), AGENTS);
+      expect(mockOpenUpsell).not.toHaveBeenCalled();
+    });
+
     it(`opens the create dialog from the locked + once the license it checks grants custom_agents (${ISSUE})`, async () => {
       await setCustomAgentsAccess("free");
       mockSignedClaims(["multi_agent", "custom_agents"]);
@@ -428,6 +478,19 @@ describe("lockedCustomAgents", () => {
         "custom_agent_mention"
       );
       expect(mockOpenUpsell).toHaveBeenCalledTimes(1);
+    });
+
+    it(`lists the vault's agents in place of the Ask an agent row, and opens the dialog for them when one is chosen (${LAPSED_ISSUE})`, async () => {
+      answerLicenseChecks(REFUSED_403);
+      const { result } = renderMentionHook(true, AGENTS);
+      expect(result.current?.option).toBeNull();
+      expect(result.current?.agents).toEqual(AGENTS);
+
+      act(() => result.current?.choose());
+      await awaitRunningLicenseCheck();
+
+      expect(LockedAgentsUpsellModal).toHaveBeenCalledWith(expect.anything(), AGENTS);
+      expect(mockOpenUpsell).not.toHaveBeenCalled();
     });
 
     it(`drops the row, opening nothing else, once a license with custom_agents is entered after the dialog (${ISSUE})`, async () => {

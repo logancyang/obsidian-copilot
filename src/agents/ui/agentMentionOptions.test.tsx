@@ -4,6 +4,7 @@ import { render } from "@testing-library/react";
 import React from "react";
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/947";
+const LOCKED_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/950";
 
 describe("agentMentionOptions", () => {
   describe("agentMentionOptions()", () => {
@@ -30,6 +31,14 @@ describe("agentMentionOptions", () => {
       const [option] = agentMentionOptions([{ ...LEO, title: "" }], "");
 
       expect(option.subtitle).toBeUndefined();
+    });
+    it(`marks each agent locked, with a greyed face, while custom agents are locked (${LOCKED_ISSUE})`, () => {
+      const [option] = agentMentionOptions([MAYA], "", true);
+
+      expect(option).toMatchObject({ title: "Maya", lockedNote: "Supporter preview" });
+      const { container } = render(<>{option.icon}</>);
+      expect(container.querySelector("img")?.className).toContain("tw-grayscale");
+      expect(agentMentionOptions([MAYA], "")[0].lockedNote).toBeUndefined();
     });
   });
 });

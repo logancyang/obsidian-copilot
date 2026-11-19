@@ -1,6 +1,8 @@
 import React from "react";
 import type { Meta, StoryObj } from "@/lib/story";
 import { FileText, Folder, Globe, Hash, UserPlus } from "lucide-react";
+import { agentMentionOptions } from "@/agents/ui/agentMentionOptions";
+import { COCO, LEO, MAYA, NORA } from "@/agents/ui/testing/rosterFixtures";
 import { composeSlashMenuItems } from "./plugins/slashMenuItems";
 import { TypeaheadMenuContent, type TypeaheadMenuContentProps } from "./TypeaheadMenuContent";
 
@@ -86,6 +88,16 @@ const askAnAgent = {
 export const AgentMentionMenuWithLockedAgents: StoryObj<TypeaheadMenuContentProps> = {
   args: {
     options: [...agentMentionCategories, askAnAgent],
+    selectedIndex: 0,
+    onSelect: () => undefined,
+    onHighlight: () => undefined,
+    mode: "category",
+  },
+};
+
+export const AgentMentionMenuAfterLicenseLapsed: StoryObj<TypeaheadMenuContentProps> = {
+  args: {
+    options: [...agentMentionOptions([COCO, MAYA, LEO, NORA], "", true), ...agentMentionCategories],
     selectedIndex: 0,
     onSelect: () => undefined,
     onHighlight: () => undefined,

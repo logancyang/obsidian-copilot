@@ -1,6 +1,6 @@
 import type { CustomAgent, CustomAgentStore } from "@/agents/CustomAgentStore";
 import { useCustomAgentsGate } from "@/agents/customAgentsGate";
-import { useSyncExternalStore } from "react";
+import { createContext, useSyncExternalStore } from "react";
 
 const NO_AGENTS: readonly CustomAgent[] = Object.freeze([]);
 const NO_STORE = { subscribe: () => () => {}, getAgents: () => NO_AGENTS };
@@ -11,3 +11,5 @@ export function useCustomAgents(store: CustomAgentStore | undefined): readonly C
   const listed = useSyncExternalStore(source.subscribe, source.getAgents);
   return gate === "full" || gate === "locked" ? listed : NO_AGENTS;
 }
+
+export const CustomAgentStoreContext = createContext<CustomAgentStore | undefined>(undefined);
