@@ -1,5 +1,7 @@
+import type { AgentChatMessage } from "@/agentMode/session/types";
 import { AgentTabStrip } from "@/agentMode/ui/AgentTabStrip";
 import type { CustomAgent } from "@/agents/CustomAgentStore";
+import type { CustomAgentsGate } from "@/agents/customAgentsGate";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SESSIONS_SIDEBAR_VIEWTYPE } from "@/constants";
@@ -16,6 +18,7 @@ import React from "react";
 jest.mock("@/entitlement");
 
 const IDENTITY_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/938";
+const DOTS_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/948";
 
 function renderStrip(
   manager: unknown,
@@ -24,6 +27,7 @@ function renderStrip(
     onOpenSidebar = jest.fn(),
     agents = undefined as readonly CustomAgent[] | undefined,
     onTabClick = undefined as (() => void) | undefined,
+    gate = undefined as CustomAgentsGate | undefined,
   } = {}
 ) {
   return render(
@@ -38,6 +42,7 @@ function renderStrip(
           onOpenSidebar,
           agents,
           onTabClick,
+          gate,
         })
       )
     )
@@ -66,18 +71,33 @@ interface FakeChat {
   label: string;
   agentSlug?: string;
   status?: string;
+  needsAttention?: boolean;
+  messages?: AgentChatMessage[];
 }
 
 function makeManagerWithChats(chats: FakeChat[]) {
-  const sessions = chats.map(({ label, agentSlug, status }) => ({
-    internalId: label,
-    backendId: "claude",
-    agentSlug: agentSlug ?? null,
-    subscribe: () => () => {},
-    getLabel: () => label,
-    getStatus: () => status ?? "idle",
-    getNeedsAttention: () => false,
-  }));
+  const sessions = chats.map(({ label, agentSlug, status, needsAttention, messages = [] }) => {
+    const listeners: Array<{ onMessagesChanged(): void }> = [];
+    const session = {
+      internalId: label,
+      backendId: "claude",
+      agentSlug: agentSlug ?? null,
+      messages,
+      subscribe: (listener?: { onMessagesChanged(): void }) => {
+        if (listener) listeners.push(listener);
+        return () => {};
+      },
+      setMessages: (next: AgentChatMessage[]) => {
+        session.messages = next;
+        listeners.forEach((listener) => listener.onMessagesChanged());
+      },
+      getLabel: () => label,
+      getStatus: () => status ?? "idle",
+      getNeedsAttention: () => needsAttention ?? false,
+      store: { getDisplayMessages: () => session.messages },
+    };
+    return session;
+  });
   return {
     subscribe: () => () => {},
     getSessionsForScope: () => sessions,
@@ -101,6 +121,27 @@ function iconOf(element: HTMLElement) {
 function tabIcon(label: string) {
   return iconOf(screen.getByRole("tab", { name: new RegExp(label) }));
 }
+
+function dotOf(element: HTMLElement): string | null {
+  const className = element.querySelector("span[aria-hidden].tw-rounded-full")?.className ?? "";
+  return (
+    className
+      .match(/--color-(orange|green)|tw-bg-(red|interactive-accent)/)
+      ?.slice(1)
+      .find(Boolean) ?? null
+  );
+}
+
+const LEO_WAITS: AgentChatMessage[] = [
+  {
+    id: "asked",
+    sender: "user",
+    timestamp: null,
+    isVisible: true,
+    message: "@Leo reconcile October",
+    agentMentions: [{ id: "run", agent: "leo", name: "Leo", status: "question", startedAt: 0 }],
+  },
+];
 
 describe("AgentTabStrip", () => {
   beforeAll(() => installRadixMenuPolyfills());
@@ -343,6 +384,85 @@ describe("AgentTabStrip", () => {
       const row = screen.getByRole("menuitem", { name: /October books/ });
       expect(iconOf(row)).toEqual({ face: "face:leo", ring: true, spinner: false });
       expect(row.querySelector("img")?.className).toContain("tw-size-5");
+    });
+
+    it(`dots a chat orange while an agent it asked waits on the user and green once it finished while the user was elsewhere, and none on a chat that doesn't want the user (${DOTS_ISSUE})`, () => {
+      jest.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(800);
+      renderStrip(
+        makeManagerWithChats([
+          { label: "School pickup", agentSlug: "nora" },
+          {
+            label: "October books",
+            agentSlug: "coco",
+            needsAttention: true,
+            messages: LEO_WAITS,
+          },
+          { label: "Release notes", needsAttention: true },
+        ]),
+        { agents: [COCO, LEO], gate: "full" }
+      );
+
+      expect(dotOf(screen.getByRole("tab", { name: /School pickup/ }))).toBeNull();
+      expect(dotOf(screen.getByRole("tab", { name: /October books/ }))).toBe("orange");
+      expect(dotOf(screen.getByRole("tab", { name: /Release notes/ }))).toBe("green");
+    });
+
+    it(`puts a dot on the "…" button when a chat with a dot sits in its menu (${DOTS_ISSUE})`, () => {
+      jest.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(400);
+      renderStrip(
+        makeManagerWithChats([
+          { label: "School pickup" },
+          { label: "Launch plan" },
+          { label: "October books", needsAttention: true, messages: LEO_WAITS },
+          { label: "Release notes", needsAttention: true },
+        ]),
+        { gate: "locked" }
+      );
+
+      expect(dotOf(screen.getByRole("button", { name: "Show 2 more chats" }))).toBe("orange");
+    });
+
+    it(`turns a background chat's tab and "…" orange as soon as an agent it asked waits for the user's OK, though no turn ran in that chat (${DOTS_ISSUE})`, () => {
+      jest.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(400);
+      const manager = makeManagerWithChats([
+        { label: "School pickup" },
+        { label: "October books" },
+        { label: "Release notes" },
+      ]);
+      renderStrip(manager, { gate: "full" });
+      const permission: AgentChatMessage[] = [
+        {
+          ...LEO_WAITS[0],
+          agentMentions: [{ ...LEO_WAITS[0].agentMentions![0], status: "permission" }],
+        },
+      ];
+      const waitFor = (label: string) =>
+        act(() =>
+          manager
+            .getSessionsForScope()
+            .find((session) => session.internalId === label)
+            ?.setMessages(permission)
+        );
+      waitFor("October books");
+      waitFor("Release notes");
+
+      expect(dotOf(screen.getByRole("tab", { name: /School pickup/ }))).toBeNull();
+      expect(dotOf(screen.getByRole("tab", { name: /October books/ }))).toBe("orange");
+      expect(dotOf(screen.getByRole("button", { name: "Show 1 more chat" }))).toBe("orange");
+    });
+
+    it(`keeps the accent dot for a chat that wants the user and no dot on "…" while custom agents are off (${DOTS_ISSUE})`, () => {
+      jest.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(400);
+      renderStrip(
+        makeManagerWithChats([
+          { label: "School pickup", needsAttention: true },
+          { label: "Launch plan" },
+          { label: "Release notes", needsAttention: true },
+        ])
+      );
+
+      expect(dotOf(screen.getByRole("tab", { name: /School pickup/ }))).toBe("interactive-accent");
+      expect(dotOf(screen.getByRole("button", { name: "Show 1 more chat" }))).toBeNull();
     });
   });
 });
