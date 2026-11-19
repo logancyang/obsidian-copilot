@@ -62,9 +62,11 @@ export function useAgentHomeSelection(
           })
           .finally(() => setPending((current) => (current === request ? null : current)));
       };
-      return switchTo(agents.find((candidate) => candidate.slug === slug) ?? null);
+      // An agent created a moment ago is in the store before this hook re-renders with it.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/939
+      return switchTo(store?.getAgents().find((candidate) => candidate.slug === slug) ?? null);
     },
-    [agents, chatInputId, switchAgent]
+    [store, chatInputId, switchAgent]
   );
 
   // A new Copilot chat opens on the agent of the last chat started; until the store lists that agent, it stays on Copilot.

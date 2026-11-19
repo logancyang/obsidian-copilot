@@ -53,9 +53,11 @@ import { useAgentModePicker } from "@/agentMode/ui/useAgentModePicker";
 import { useSessionBackendDescriptor } from "@/agentMode/ui/useBackendDescriptor";
 import { pickRandomGreeting } from "@/agentMode/ui/landingGreetings";
 import { findBackendForModel } from "@/agentMode/backends/registry";
+import { useCustomAgentsGate } from "@/agents/customAgentsGate";
 import type { CustomAgent } from "@/agents/CustomAgentStore";
 import { AgentIdentityBar } from "@/agents/ui/AgentIdentityBar";
-import { AgentRoster } from "@/agents/ui/AgentRoster";
+import { AgentRoster, NewAgentButton } from "@/agents/ui/AgentRoster";
+import { CreateAgentModal } from "@/agents/ui/CreateAgentModal";
 import { agentComposerHint, useAgentHomeSelection } from "@/agents/ui/useAgentHomeSelection";
 import { useAgentRecentChats } from "@/agents/ui/useAgentRecentChats";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
@@ -65,7 +67,7 @@ import { type ProjectConfig } from "@/aiParams";
 import { createProjectAndEnter } from "@/projects/ui/AgentProjectCreateForm";
 import { TruncatedText } from "@/components/TruncatedText";
 import { AppContext } from "@/context";
-import { ChatInputProvider } from "@/context/ChatInputContext";
+import { ChatInputProvider, useChatInput } from "@/context/ChatInputContext";
 import { useChatFileDrop } from "@/hooks/useChatFileDrop";
 import { cn } from "@/lib/utils";
 import { logError, logWarn } from "@/logger";
@@ -410,6 +412,21 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     switchLandingAgent
   );
   const recentChats = useAgentRecentChats(chatHistoryItems, agentHome.agents, agentHome.selected);
+  const customAgentsGate = useCustomAgentsGate();
+  const { focusInput } = useChatInput();
+  const selectAgent = agentHome.select;
+  const openCreateAgentDialog = useCallback(() => {
+    const store = plugin.customAgents;
+    if (!store) return;
+    new CreateAgentModal(app, {
+      store,
+      onCreated: (slug) => void selectAgent(slug).then(focusInput),
+    }).open();
+  }, [app, plugin, selectAgent, focusInput]);
+  const newAgentButton =
+    customAgentsGate === "full" && plugin.customAgents ? (
+      <NewAgentButton emphasized={agentHome.agents.length === 0} onClick={openCreateAgentDialog} />
+    ) : undefined;
   const dropOverlay = isDragActive && (
     <div className="tw-pointer-events-none tw-absolute tw-inset-0 tw-z-modal tw-flex tw-items-center tw-justify-center tw-rounded-md tw-border tw-border-dashed tw-bg-primary tw-opacity-80">
       <span>Drop files here...</span>
@@ -708,9 +725,10 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       agents={agentHome.agents}
       selectedSlug={agentHome.selected?.slug ?? null}
       onSelect={(slug) => void agentHome.select(slug)}
+      newAgentButton={newAgentButton}
       emptyHero={
         <div className="tw-flex tw-min-w-0 tw-items-center tw-justify-center tw-gap-3">
-          <CopilotBrandIcon className="tw-size-6 tw-shrink-0 tw-text-normal" />
+          {!newAgentButton && <CopilotBrandIcon className="tw-size-6 tw-shrink-0 tw-text-normal" />}
           <TruncatedText
             className="tw-min-w-0 tw-text-3xl tw-font-[330] tw-text-normal"
             tooltipContent={heroText}

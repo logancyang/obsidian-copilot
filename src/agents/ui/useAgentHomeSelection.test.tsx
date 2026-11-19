@@ -138,6 +138,22 @@ describe("useAgentHomeSelection", () => {
       expect(result.current.selected).toBe(COCO);
     });
 
+    it("switches the new chat to an agent the store lists before the home re-renders, such as one just created, for https://github.com/Brevilabs/obsidian-copilot-private/issues/939", () => {
+      const KAI = agent("kai", "Kai");
+      let listed: readonly CustomAgent[] = [COCO];
+      const store = {
+        subscribe: () => () => {},
+        getAgents: () => listed,
+      } as unknown as CustomAgentStore;
+      const { result, switchAgent } = renderSelection(store);
+      const selectFromLastRender = result.current.select;
+
+      listed = [COCO, KAI];
+      act(() => void selectFromLastRender("kai"));
+
+      expect(switchAgent).toHaveBeenCalledWith(KAI);
+    });
+
     it("shows the chat's own agent once the switch has landed", async () => {
       const { store } = fakeAgentStore([COCO, MAYA]);
       const { result, rerender } = renderSelection(store, NEW_CHAT, () => Promise.resolve());

@@ -6,6 +6,7 @@ The start screen of a new chat in Agent Chat: a greeting, the [chat input](chat-
 
 - home-greeting: a greeting such as "What can I help with?" above the chat input, picked again for each new chat; inside a project it reads `Chat in <project>`.
 - home-agent-row: with custom agents, the greeting gives way to "Who do you want to talk to?" and a row of faces with names under them: Copilot first, then each agent. Agents that do not fit the sidebar go into a `+N More` menu; the selected agent and Copilot always stay in the row. Long names are cut to one line; hovering a face shows the full name and title.
+- home-new-agent: `New` (**+**) at the end of the row opens the [create agent dialog](create-agent-dialog.md); it never moves into `+N More`. With no agents yet, the greeting stays and the row holds Copilot and `New`.
 - home-agent-line: one line under the row names the selected agent's title, or "No agent, no memory" for Copilot.
 - home-agent-default: a new chat starts with the agent of the last chat started, on the start screen and in every project; when that agent is gone, Copilot.
 - home-agent-hint: the chat input's hint names the selected agent: "Ask Coco anything • @ to add context • / for commands".
@@ -30,6 +31,7 @@ The start screen of a new chat in Agent Chat: a greeting, the [chat input](chat-
 
 - Greeting: open a new chat. A greeting shows above the chat input; the next new chat may show a different one.
 - Agent row: with custom agents, open a new chat. "Who do you want to talk to?" shows Copilot and each agent's face. Choose an agent: its face is ringed, its title shows under the row, and the chat input reads "Ask <name> anything". Choose Copilot: "No agent, no memory".
+- New agent: with custom agents, choose `New` in the row. The [create agent dialog](create-agent-dialog.md) opens; after `Create`, the new agent is in the row, selected. In a vault with no agents, the greeting shows above Copilot and `New`.
 - More agents: narrow the sidebar until faces no longer fit, or add more agents. `+N More` lists the rest with their titles; choose one and it joins the row, selected.
 - Agent chat: choose an agent and send a message. The chat that opens is that agent's and answers by its instructions.
 - Default agent: start a chat with an agent, then open a new chat, or reload Copilot and open one. That agent is selected. Delete its folder and open a new chat: Copilot is selected.
@@ -45,7 +47,7 @@ The start screen of a new chat in Agent Chat: a greeting, the [chat input](chat-
 
 ## Gotchas
 
-- The row of faces needs a license that includes custom agents (a team license until launch). Without one, or with no agents in the vault, the start screen shows the greeting as before.
+- The row of faces and `New` need a license that includes custom agents (a team license until launch). Without one, the start screen shows the greeting as before.
 - Choosing a face before the first message changes nothing in the vault; only the first message starts the agent's chat.
 - When an agent's chat cannot start, as on a Codex that needs an update, choosing its face shows a notice with the reason and the new chat stays on Copilot.
 - Opening a project's chat from Recent chats or another list outside the project enters that project.

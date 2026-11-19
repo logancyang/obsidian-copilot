@@ -1,9 +1,10 @@
-import { AgentRoster, type RosterAgent } from "@/agents/ui/AgentRoster";
+import { AgentRoster, NewAgentButton, type RosterAgent } from "@/agents/ui/AgentRoster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import React from "react";
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/588";
+const CREATE_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/939";
 
 function agent(name: string, title = `${name}'s job`): RosterAgent {
   return {
@@ -135,6 +136,19 @@ describe("AgentRoster", () => {
       expect(screen.queryByText("No agent, no memory")).toBeNull();
     });
 
+    it(`keeps the hero it is given above a row of Copilot and the new-agent button while there are no agents yet (${CREATE_ISSUE})`, () => {
+      renderRoster({ agents: [], newAgentButton: <button type="button">New</button> });
+
+      expect(screen.getByRole("heading", { name: "What are you working on?" })).not.toBeNull();
+      expect(
+        within(screen.getByRole("group", { name: "What are you working on?" }))
+          .getAllByRole("button")
+          .map((button) => button.textContent)
+      ).toEqual(["Copilot", "New"]);
+      expect(screen.getByRole("button", { name: "Copilot", pressed: true })).not.toBeNull();
+      expect(screen.queryByText("No agent, no memory")).toBeNull();
+    });
+
     it(`links the selected agent's profile only when the home can open one (${ISSUE})`, () => {
       const onOpenProfile = jest.fn();
       renderRoster({ selectedSlug: "coco", onOpenProfile });
@@ -203,6 +217,19 @@ describe("AgentRoster", () => {
       fireEvent.click(items[1]);
 
       expect(onSelect).toHaveBeenCalledWith("kai");
+    });
+  });
+
+  describe("NewAgentButton()", () => {
+    it("shows a New cell named New agent that opens the create dialog when clicked", () => {
+      const onClick = jest.fn();
+      render(<NewAgentButton onClick={onClick} />);
+
+      const button = screen.getByRole("button", { name: "New agent" });
+      expect(button.textContent).toBe("New");
+      fireEvent.click(button);
+
+      expect(onClick).toHaveBeenCalledTimes(1);
     });
   });
 });
