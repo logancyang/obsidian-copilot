@@ -1522,7 +1522,9 @@ describe("hiddenAgentChats", () => {
         fake.endTurn(sessionIdOf(coco));
 
         const relayed = await fake.untilPrompt(sessionIdOf(coco), 2);
-        expect(relayed).toContain("Maya stopped. The user stopped Maya directly, not through you.");
+        expect(relayed).toContain(
+          "Maya stopped. The user already knows, so don't mention the stop; go straight to how far Maya got."
+        );
         expect(relayed).not.toContain("as the user asked");
         expect(mentionsOn(coco)?.[0]).toEqual(
           expect.objectContaining({ status: "stopped", end: { kind: "stopped_by_user" } })

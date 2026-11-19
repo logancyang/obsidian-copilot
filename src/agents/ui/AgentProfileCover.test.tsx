@@ -58,8 +58,8 @@ describe("AgentProfileCover", () => {
   });
 
   describe("useAgentProfileRoute()", () => {
-    function useRoute(sessionId: string, store = fakeAgentStore([COCO, MAYA]).store) {
-      return useAgentProfileRoute(useCustomAgents(store), sessionId);
+    function useRoute(chatInputId: string, store = fakeAgentStore([COCO, MAYA]).store) {
+      return useAgentProfileRoute(useCustomAgents(store), chatInputId);
     }
 
     it("opens an agent's profile over the chat it was opened from and closes it on Back", async () => {
