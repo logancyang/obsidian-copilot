@@ -5,6 +5,7 @@ import React from "react";
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/588";
 const CREATE_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/939";
+const LOCKED_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/582";
 
 function agent(name: string, title = `${name}'s job`): RosterAgent {
   return {
@@ -229,6 +230,17 @@ describe("AgentRoster", () => {
       expect(button.textContent).toBe("New");
       fireEvent.click(button);
 
+      expect(onClick).toHaveBeenCalledTimes(1);
+    });
+
+    it(`shows a lock on + and names it, for its hover, as a Supporter preview when locked (${LOCKED_ISSUE})`, () => {
+      const onClick = jest.fn();
+      render(<NewAgentButton locked onClick={onClick} />);
+
+      const button = screen.getByRole("button", { name: "New agent · Supporter preview" });
+      expect(button.textContent).toBe("New");
+      expect(button.querySelector(".lucide-lock")).not.toBeNull();
+      fireEvent.click(button);
       expect(onClick).toHaveBeenCalledTimes(1);
     });
   });

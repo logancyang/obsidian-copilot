@@ -59,13 +59,14 @@ import { useCustomAgentsGate } from "@/agents/customAgentsGate";
 import type { CustomAgent } from "@/agents/CustomAgentStore";
 import { AgentIdentityBar } from "@/agents/ui/AgentIdentityBar";
 import { AgentProfileCover, useAgentProfileRoute } from "@/agents/ui/AgentProfileCover";
-import { AgentRoster, NewAgentButton } from "@/agents/ui/AgentRoster";
+import { AgentRoster } from "@/agents/ui/AgentRoster";
 import { CreateAgentModal } from "@/agents/ui/CreateAgentModal";
 import {
   dismissFirstAgentBanner,
   FirstAgentBanner,
   useFirstAgentBannerVisible,
 } from "@/agents/ui/FirstAgentBanner";
+import { renderNewAgentButton } from "@/agents/ui/lockedCustomAgents";
 import { agentComposerHint, useAgentHomeSelection } from "@/agents/ui/useAgentHomeSelection";
 import { useAgentRecentChats } from "@/agents/ui/useAgentRecentChats";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
@@ -450,10 +451,10 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       onCreated: (slug) => void selectAgent(slug).then(focusInput),
     }).open();
   }, [app, plugin, getAgentModelChoices, selectAgent, focusInput]);
-  const newAgentButton =
-    customAgentsGate === "full" && plugin.customAgents ? (
-      <NewAgentButton emphasized={agentHome.agents.length === 0} onClick={openCreateAgentDialog} />
-    ) : undefined;
+  const newAgentButton = renderNewAgentButton(customAgentsGate, {
+    emphasized: agentHome.agents.length === 0,
+    onCreate: openCreateAgentDialog,
+  });
   const firstAgentBannerVisible = useFirstAgentBannerVisible(agentHome.agents.length);
   const profile = useAgentProfileRoute(agentHome.agents, sessionId);
   const markProfileClosedByUser = useComposerFocusAfterTaskView(profile.agent !== null);
@@ -935,7 +936,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                         ) : (
                           <>
                             {composerNode}
-                            {newAgentButton && firstAgentBannerVisible && (
+                            {customAgentsGate === "full" && firstAgentBannerVisible && (
                               <FirstAgentBanner
                                 onCreate={openCreateAgentDialog}
                                 onDismiss={dismissFirstAgentBanner}

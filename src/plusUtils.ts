@@ -2,7 +2,11 @@ import { setModelKey } from "@/aiParams";
 import { CopilotPlusExpiredModal } from "@/components/modals/CopilotPlusExpiredModal";
 import { ChatModelProviders, ChatModels } from "@/constants";
 import { EntitlementFeature, verifyEntitlement } from "@/entitlement";
-import { BrevilabsClient, LicenseCheckContext } from "@/LLMProviders/brevilabsClient";
+import {
+  BrevilabsClient,
+  LicenseCheckContext,
+  LicenseCheckOptions,
+} from "@/LLMProviders/brevilabsClient";
 import { createProductUrl, PRODUCT_URLS, ProductUtmMedium } from "@/lib/productLinks";
 import { logError, logInfo, logWarn } from "@/logger";
 import {
@@ -122,11 +126,12 @@ export function useIsPaidUser(): boolean | undefined {
 export async function ensureEntitlement(
   app: App | undefined,
   feature: EntitlementFeature,
-  isGranted: () => boolean
+  isGranted: () => boolean,
+  options?: LicenseCheckOptions
 ): Promise<boolean> {
   const granted = isGranted();
   const check = BrevilabsClient.getInstance()
-    .validateLicenseKey(app, { trigger: feature })
+    .validateLicenseKey(app, { trigger: feature }, options)
     .catch((error) => logInfo(`License check for ${feature} unreachable:`, error));
   // Every use checks the license so usage is counted and the token renewed; only a missing grant waits for the fresh token.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/834

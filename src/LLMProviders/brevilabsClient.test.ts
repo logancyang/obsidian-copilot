@@ -110,6 +110,55 @@ describe("brevilabsClient", () => {
         expect(mockTurnOffPaid).not.toHaveBeenCalled();
       });
 
+      it("sends a check with only the trigger, the user id and the client version when asked to send it without a stored key, for https://github.com/Brevilabs/obsidian-copilot-private/issues/582", async () => {
+        mockGetSettings.mockReturnValue({ plusLicenseKey: "", userId: "user-1" });
+        const requestUrl = jest.fn().mockResolvedValue({ status: 400, json: {} });
+        setRequestUrlImpl(requestUrl);
+        BrevilabsClient.getInstance().setPluginVersion("4.0.20");
+
+        await BrevilabsClient.getInstance().validateLicenseKey(
+          undefined,
+          { trigger: "custom_agents" },
+          { sendWithoutKey: true }
+        );
+
+        expect(requestUrl).toHaveBeenCalledTimes(1);
+        const [request] = requestUrl.mock.calls[0] as [
+          { url: string; headers: Record<string, string>; body: string },
+        ];
+        expect(new URL(request.url).pathname).toMatch(/\/license$/);
+        expect(request.headers).toEqual({
+          "Content-Type": "application/json",
+          "X-Client-Version": "4.0.20",
+        });
+        expect(JSON.parse(request.body)).toEqual({ trigger: "custom_agents", user_id: "user-1" });
+      });
+
+      it.each([
+        ["a 403 with an API error body", licenseRejection("")],
+        ["a 400", { data: null, error: new Error("HTTP error: 400"), status: 400 }],
+        ["a 200 carrying an entitlement", { data: VALID_LICENSE_RESPONSE, error: null }],
+      ])(
+        "changes nothing for a check sent without a key that the server answers with %s, for https://github.com/Brevilabs/obsidian-copilot-private/issues/582",
+        async (_label, outcome) => {
+          mockGetSettings.mockReturnValue({ plusLicenseKey: "", userId: "user-1" });
+          const sent = jest.fn();
+          stubRequest(outcome, sent);
+
+          const result = await BrevilabsClient.getInstance().validateLicenseKey(
+            undefined,
+            { trigger: "custom_agents" },
+            { sendWithoutKey: true }
+          );
+
+          expect(sent).toHaveBeenCalledTimes(1);
+          expect(result.isValid).not.toBe(true);
+          expect(mockTurnOffPaid).not.toHaveBeenCalled();
+          expect(mockApplyEntitlement).not.toHaveBeenCalled();
+          expect(mockMarkPaidPendingEntitlement).not.toHaveBeenCalled();
+        }
+      );
+
       it("applies the signed entitlement when the license key is unchanged", async () => {
         stubRequest({ data: VALID_LICENSE_RESPONSE, error: null });
 
