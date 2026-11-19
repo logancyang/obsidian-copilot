@@ -43,7 +43,7 @@ import { extractYoutubeVideoId, insertAtCursor } from "@/utils";
 import { preprocessAIResponse } from "@/utils/markdownPreprocess";
 import { renderMarkdown } from "@/utils/renderMarkdown";
 import { StreamingTextFade } from "@/utils/streamingTextFade";
-import { App, Component, TFile } from "obsidian";
+import { App, Component, Platform, TFile } from "obsidian";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSettingsValue } from "@/settings/model";
 import {
@@ -59,6 +59,11 @@ const FOOTNOTE_SUFFIX_PATTERN = /^\d+-\d+$/;
 // Tall pasted user messages collapse behind a Show more control.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/151
 const COLLAPSED_USER_MESSAGE_CLASS_NAME = cn("tw-max-h-[12lh]");
+
+const USER_BAR = cn(
+  "tw-pointer-events-none tw-absolute tw-bottom-0 tw-right-4 tw-z-[1] tw-translate-y-1/2 tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-primary tw-pl-2 tw-pr-0.5 tw-opacity-0 tw-shadow-md tw-transition-opacity",
+  "group-focus-within/message:tw-pointer-events-auto group-focus-within/message:tw-opacity-100 group-hover/message:tw-pointer-events-auto group-hover/message:tw-opacity-100"
+);
 
 export const normalizeFootnoteRendering = (root: HTMLElement): void => {
   const footnoteSection = root.querySelector(".footnotes");
@@ -287,6 +292,8 @@ interface ChatSingleMessageProps {
   onDelete?: () => void;
   onContinue?: () => void;
   footerStart?: React.ReactNode;
+  responseText?: string;
+  hideFooter?: boolean;
 }
 
 const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
@@ -299,6 +306,8 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   onDelete,
   onContinue,
   footerStart,
+  responseText,
+  hideFooter = false,
 }) => {
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const parsedReasoningBlock = useMemo(
@@ -789,8 +798,9 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     }
   };
 
+  const replyText = responseText ?? message.message;
   const handleInsertIntoEditor = () => {
-    void insertAtCursor(app, message.message);
+    void insertAtCursor(app, replyText);
   };
 
   const mentionedFolders = message.context?.folders;
@@ -873,12 +883,35 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     );
   }
 
+  const isUserMessage = message.sender === USER_SENDER;
+  const footer =
+    isStreaming || hideFooter ? null : (
+      <AssistantResponseFooter
+        leading={footerStart}
+        timestampMs={message.timestamp?.epoch}
+        shownAtRest={isUserMessage}
+        actions={
+          <ChatButtons
+            message={message}
+            text={replyText}
+            onInsertIntoEditor={handleInsertIntoEditor}
+            onRegenerate={onRegenerate}
+            onEdit={onEdit ? handleEdit : undefined}
+            onDelete={onDelete}
+            onShowSources={handleShowSources}
+            onContinue={onContinue}
+            hasSources={message.sources && message.sources.length > 0 ? true : false}
+          />
+        }
+      />
+    );
+
   return (
-    <div className="tw-my-1 tw-flex tw-w-full tw-flex-col">
+    <div className="tw-group/message tw-relative tw-my-1 tw-flex tw-w-full tw-flex-col">
       <div
         className={cn(
-          "tw-group tw-mx-2 tw-rounded-md tw-p-2",
-          message.sender === USER_SENDER && "tw-border tw-border-solid tw-border-border"
+          "tw-mx-2 tw-rounded-md tw-p-2",
+          isUserMessage && "tw-border tw-border-solid tw-border-border"
         )}
         style={
           message.sender === USER_SENDER
@@ -907,26 +940,14 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
             )}
           </div>
 
-          {!isStreaming && (
-            <AssistantResponseFooter
-              leading={footerStart}
-              timestamp={message.timestamp?.display}
-              actions={
-                <ChatButtons
-                  message={message}
-                  onInsertIntoEditor={handleInsertIntoEditor}
-                  onRegenerate={onRegenerate}
-                  onEdit={onEdit ? handleEdit : undefined}
-                  onDelete={onDelete}
-                  onShowSources={handleShowSources}
-                  onContinue={onContinue}
-                  hasSources={message.sources && message.sources.length > 0 ? true : false}
-                />
-              }
-            />
-          )}
+          {isUserMessage ? null : footer}
         </div>
       </div>
+      {isUserMessage && footer ? (
+        // The user's time and buttons float over the gap below the bubble while it is pointed at, so the bubble keeps no space for them; a phone has no pointer, so they stay in view there.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/971
+        <div className={Platform.isMobile ? "tw-mx-2 tw-px-2 tw-pt-0.5" : USER_BAR}>{footer}</div>
+      ) : null}
     </div>
   );
 };

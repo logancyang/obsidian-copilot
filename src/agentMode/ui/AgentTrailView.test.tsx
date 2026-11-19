@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppContext } from "@/context";
 import { AgentTrail } from "@/agentMode/ui/AgentTrailView";
+import { formatMessageClock } from "@/lib/messageTime";
 import type { AgentMessagePart, TurnFileChange } from "@/agentMode/session/types";
 import { miyoSearchCall } from "@/miyo/agentMode/testing/miyoSearchCall";
 import { excalidrawToolCall } from "@/excalidraw/agentMode/testing/excalidrawToolCall";
@@ -50,6 +51,9 @@ jest.mock("obsidian", () => {
 });
 
 const { insertAtCursor } = jest.requireMock<{ insertAtCursor: jest.Mock }>("@/utils");
+
+const SENT_AT = new Date(2026, 7, 7, 20, 31, 10).getTime();
+const SENT_CLOCK = formatMessageClock(SENT_AT);
 
 const text = (value: string): AgentMessagePart => ({ kind: "text", text: value });
 
@@ -141,6 +145,27 @@ describe("AgentTrail", () => {
     expect(insertAtCursor).toHaveBeenCalledWith(app, "The final answer.");
   });
 
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/971 copies and inserts the whole response's text when the reply ends a response", () => {
+    const { app } = renderTrail({
+      parts: [text("Maya found one wrong year.")],
+      responseText: "I asked Maya.\n\nMaya found one wrong year.",
+    });
+
+    fireEvent.click(screen.getByTitle("Copy"));
+    expect(writeText).toHaveBeenCalledWith("I asked Maya.\n\nMaya found one wrong year.");
+
+    fireEvent.click(screen.getByTitle("Insert / Replace at cursor"));
+    expect(insertAtCursor).toHaveBeenCalledWith(app, "I asked Maya.\n\nMaya found one wrong year.");
+  });
+
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/971 renders no row under a reply inside a response, whose row sits at the response's end", () => {
+    renderTrail({ hideFooter: true, turnDurationMs: 12_000, timestampMs: SENT_AT });
+
+    expect(screen.queryByTitle("Copy")).toBeNull();
+    expect(screen.queryByText("Worked for")).toBeNull();
+    expect(screen.queryByText(SENT_CLOCK)).toBeNull();
+  });
+
   it("https://github.com/Brevilabs/obsidian-copilot-private/issues/908 shows Continue from here in a new chat beside Copy only when the chat offers it, and runs it on click", () => {
     const onContinue = jest.fn();
     const view = renderTrail();
@@ -211,18 +236,18 @@ describe("AgentTrail", () => {
       isStreaming: true,
       turnStopReason: undefined,
       turnStartedAtMs: Date.now() - 24_000,
-      timestamp: "2026/08/07 20:31:10",
+      timestampMs: SENT_AT,
     });
 
     expect(screen.getByText("Worked for")).toBeTruthy();
-    expect(screen.queryByText("2026/08/07 20:31:10")).toBeNull();
+    expect(screen.queryByText(SENT_CLOCK)).toBeNull();
   });
 
-  it("renders neither button when the turn was cancelled", () => {
-    renderTrail({ turnStopReason: "cancelled", timestamp: "2026/08/07 20:31:10" });
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/971 renders no row for a cancelled turn without a duration, since a row of only a hidden time would leave a blank line", () => {
+    renderTrail({ turnStopReason: "cancelled", timestampMs: SENT_AT });
     expect(screen.queryByTitle("Copy")).toBeNull();
     expect(screen.queryByTitle("Insert / Replace at cursor")).toBeNull();
-    expect(screen.getByText("2026/08/07 20:31:10")).toBeTruthy();
+    expect(screen.queryByText(SENT_CLOCK)).toBeNull();
   });
 
   it("renders neither button when the turn produced no trailing prose", () => {
@@ -232,9 +257,9 @@ describe("AgentTrail", () => {
   });
 
   it("shows the timestamp with response controls when a completed duration is unavailable", () => {
-    renderTrail({ timestamp: "2026/08/07 20:31:10" });
+    renderTrail({ timestampMs: SENT_AT });
 
-    expect(screen.getByText("2026/08/07 20:31:10")).toBeTruthy();
+    expect(screen.getByText(SENT_CLOCK)).toBeTruthy();
     expect(screen.getByTitle("Copy")).toBeTruthy();
     expect(screen.queryByText("Worked for")).toBeNull();
   });
@@ -247,12 +272,12 @@ describe("AgentTrail", () => {
       ],
       turnStopReason: "end_turn",
       turnDurationMs: 138_000,
-      timestamp: "2026/08/07 20:31:10",
+      timestampMs: SENT_AT,
     });
 
     expect(screen.getByText("Worked for")).toBeTruthy();
     expect(screen.getByText("2m 18s")).toBeTruthy();
-    expect(screen.queryByText("2026/08/07 20:31:10")).toBeNull();
+    expect(screen.queryByText(SENT_CLOCK)).toBeNull();
     expect(screen.queryByRole("button", { name: /Worked for/i })).toBeNull();
     const footer = screen.getByText("Worked for").closest(".tw-justify-between");
     expect(footer?.classList.contains("tw-items-center")).toBe(true);
@@ -315,13 +340,13 @@ describe("AgentTrail", () => {
       renderTrail({
         parts,
         turnDurationMs: 138_000,
-        timestamp: "2026/08/07 20:31:10",
+        timestampMs: SENT_AT,
       });
 
       expect(screen.getByText("Context compacted")).toBeTruthy();
       expect(screen.queryByText("Worked for")).toBeNull();
       expect(screen.queryByTitle("Copy")).toBeNull();
-      expect(screen.queryByText("2026/08/07 20:31:10")).toBeNull();
+      expect(screen.queryByText(SENT_CLOCK)).toBeNull();
     }
   );
 

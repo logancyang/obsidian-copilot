@@ -27,7 +27,7 @@ const ReplyDemo: React.FC<{ canContinue: boolean }> = ({ canContinue }) => {
           text={REPLY}
           app={app}
           durationMs={12_000}
-          timestamp="2026/11/11 10:02:11"
+          timestampMs={new Date(2026, 10, 11, 10, 2, 11).getTime()}
           onContinue={canContinue ? () => {} : undefined}
         />
       </div>
