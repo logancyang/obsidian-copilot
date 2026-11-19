@@ -82,6 +82,7 @@ export interface CopilotSettings {
   promptUsageTimestamps: Record<string, number>;
   promptSortStrategy: string;
   chatHistorySortStrategy: SortStrategy;
+  hideHomeChatsWithNavigator: boolean;
   projectsFolder: string;
   defaultOpenArea: DEFAULT_OPEN_AREA;
   defaultSendShortcut: SEND_SHORTCUT;
@@ -570,6 +571,10 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
 
   if (typeof sanitizedSettings.enableInlineCitations !== "boolean") {
     sanitizedSettings.enableInlineCitations = DEFAULT_SETTINGS.enableInlineCitations;
+  }
+
+  if (typeof sanitizedSettings.hideHomeChatsWithNavigator !== "boolean") {
+    sanitizedSettings.hideHomeChatsWithNavigator = DEFAULT_SETTINGS.hideHomeChatsWithNavigator;
   }
 
   if (typeof sanitizedSettings.enableCustomPromptTemplating !== "boolean") {
