@@ -36,11 +36,11 @@ export interface LockedRoster {
   note: React.ReactNode;
 }
 
-const CELL_PX = 52;
+const CELL_PX = 54;
 const GAP_PX = 6;
 
 const CIRCLE_CLASS =
-  "tw-flex tw-size-9 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-full tw-border tw-border-solid tw-border-border tw-bg-primary";
+  "tw-flex tw-size-[54px] tw-shrink-0 tw-items-center tw-justify-center tw-rounded-full tw-border tw-border-solid tw-border-border tw-bg-primary";
 
 export function AgentRoster({
   agents,
@@ -176,7 +176,7 @@ function FaceRow({
     >
       <RosterCell label="Copilot" selected={!selected} onClick={() => onSelect(null)}>
         <span className={cn(CIRCLE_CLASS, "tw-text-normal", !selected && SELECTED_FACE_CLASS)}>
-          <CopilotBrandIcon className="tw-size-[18px]" />
+          <CopilotBrandIcon className="tw-size-7" />
         </span>
       </RosterCell>
       {visibleIndices.map((index) => (
@@ -213,7 +213,7 @@ const RosterCell = React.forwardRef<HTMLButtonElement, RosterCellProps>(
       aria-pressed={selected}
       {...props}
       className={cn(
-        "clickable-icon tw-flex tw-h-auto tw-w-[52px] tw-shrink-0 tw-flex-col tw-items-center tw-gap-1 tw-rounded-md tw-bg-transparent tw-px-0 tw-pb-0.5 tw-pt-1 tw-opacity-100 tw-shadow-none",
+        "clickable-icon tw-flex tw-h-auto tw-w-[54px] tw-shrink-0 tw-flex-col tw-items-center tw-gap-1 tw-rounded-md tw-bg-transparent tw-px-0 tw-pb-0.5 tw-pt-1 tw-opacity-100 tw-shadow-none",
         className
       )}
     >
@@ -249,7 +249,7 @@ function AgentCell({ agent, selected, locked, onSelect }: AgentCellProps) {
           selected={locked ? undefined : selected}
           onClick={() => onSelect(agent.slug)}
         >
-          <AgentFace src={agent.faceSrc} size="l" selected={selected} locked={locked} />
+          <AgentFace src={agent.faceSrc} size="roster" selected={selected} locked={locked} />
         </RosterCell>
       </TooltipTrigger>
       <TooltipContent side="bottom" className="tw-max-w-64 tw-text-center">
@@ -271,7 +271,7 @@ function MoreAgentsMenu({ agents, locked, onSelect }: MoreAgentsMenuProps) {
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <RosterCell label="More" aria-label={`Show ${agents.length} more agents`}>
-          <span className={cn(CIRCLE_CLASS, "tw-text-ui-smaller tw-font-semibold tw-text-muted")}>
+          <span className={cn(CIRCLE_CLASS, "tw-text-ui-small tw-font-semibold tw-text-muted")}>
             +{agents.length}
           </span>
         </RosterCell>
@@ -324,7 +324,7 @@ export function NewAgentButton({
             : "tw-border-border tw-text-muted"
         )}
       >
-        <Plus className="tw-size-4" />
+        <Plus className="tw-size-6" />
         {locked && <LockBadge />}
       </span>
     </RosterCell>

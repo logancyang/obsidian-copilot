@@ -51,6 +51,14 @@ describe("AgentFace", () => {
       expect(wrapper.querySelector(".lucide-lock")).not.toBeNull();
     });
 
+    it(`rings a selected face in the theme's accent color (https://github.com/Brevilabs/obsidian-copilot-private/issues/588)`, () => {
+      const { container } = render(<AgentFace src="face:maya" size="roster" selected />);
+
+      const face = container.querySelector("img") as HTMLImageElement;
+      expect(face.className).toContain("tw-size-[54px]");
+      expect(face.className).toContain("tw-outline-[color:var(--interactive-accent)]");
+    });
+
     it("draws an unlocked face in full colour with no lock", () => {
       const { container } = render(<AgentFace src="face:maya" size="l" />);
 
