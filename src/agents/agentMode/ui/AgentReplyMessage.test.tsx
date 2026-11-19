@@ -25,7 +25,9 @@ describe("AgentReplyMessage", () => {
   describe("AgentReplyMessage()", () => {
     it("shows one line naming the agent above its words, rendered as markdown like any agent reply (https://github.com/Brevilabs/obsidian-copilot-private/issues/944)", () => {
       const reply = "**First** line.\n\n```\ncode\n```";
-      renderInApp(<AgentReplyMessage name="Maya" reply={reply} onOpenFileChange={jest.fn()} />);
+      renderInApp(
+        <AgentReplyMessage mention="m1" name="Maya" reply={reply} onOpenFileChange={jest.fn()} />
+      );
 
       expect(screen.getByText("Maya's reply")).toBeTruthy();
       expect(screen.getByTestId("agent-markdown").textContent).toBe(reply);
@@ -35,6 +37,7 @@ describe("AgentReplyMessage", () => {
       const onOpenFileChange = jest.fn();
       renderInApp(
         <AgentReplyMessage
+          mention="m1"
           name="Maya"
           reply="Added the line."
           fileChanges={[CHANGE]}
@@ -48,7 +51,9 @@ describe("AgentReplyMessage", () => {
     });
 
     it("says the agent didn't reply when its reply has no text", () => {
-      renderInApp(<AgentReplyMessage name="Maya" reply="" onOpenFileChange={jest.fn()} />);
+      renderInApp(
+        <AgentReplyMessage mention="m1" name="Maya" reply="" onOpenFileChange={jest.fn()} />
+      );
 
       expect(screen.getByText("Maya didn't reply")).toBeTruthy();
       expect(screen.queryByTestId("agent-markdown")).toBeNull();
