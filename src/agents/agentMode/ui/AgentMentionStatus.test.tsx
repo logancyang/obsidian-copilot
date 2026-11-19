@@ -4,6 +4,7 @@ import {
   AgentMentionStatusLines,
 } from "@/agents/agentMode/ui/AgentMentionStatus";
 import { setCustomAgentsLaunched } from "@/agents/testing/customAgentsLaunched";
+import { ChatAgentsContext } from "@/agents/ui/chatAgents";
 import { setCustomAgentsAccess } from "@/agents/testing/customAgentsAccess";
 import { resetSettings } from "@/settings/model";
 import { act, fireEvent, render, screen } from "@testing-library/react";
@@ -12,6 +13,7 @@ import React from "react";
 jest.mock("@/entitlement");
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/947";
+const ISSUE_948 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/948";
 const NOW = Date.parse("2026-11-16T10:05:12Z");
 
 function run(change: Partial<AgentMention> = {}): AgentMention {
@@ -69,6 +71,23 @@ describe("AgentMentionStatus", () => {
 
       expect(relay.scrollIntoView).toHaveBeenCalledWith({ block: "start", behavior: "smooth" });
       relay.remove();
+    });
+
+    it(`opens the asked agent's view of this run from View, between the clock and See reply, when the chat can show it (${ISSUE_948})`, () => {
+      const openRun = jest.fn();
+      const { container, unmount } = render(
+        <ChatAgentsContext.Provider value={{ agents: [], self: null, openRun }}>
+          <AgentMentionStatus mention={run({ status: "finished", endedAt: NOW })} />
+        </ChatAgentsContext.Provider>
+      );
+
+      fireEvent.click(screen.getByText("View"));
+
+      expect(container.textContent).toBe("Leo finished3:10ViewSee reply ↓");
+      expect(openRun).toHaveBeenCalledWith("m1");
+      unmount();
+      render(<AgentMentionStatus mention={run()} />);
+      expect(screen.queryByText("View")).toBeNull();
     });
 
     it("shows the error behind Something went wrong when Details is chosen", () => {

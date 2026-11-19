@@ -4,6 +4,7 @@ import type { BackendDescriptor, BackendState, PermissionPrompt } from "@/agentM
 import {
   HIDDEN_CHAT_DENY_MESSAGE,
   HiddenAgentChats,
+  readAskedMessage,
   type HiddenChatStart,
 } from "@/agents/agentMode/hiddenAgentChats";
 import {
@@ -1702,6 +1703,44 @@ describe("hiddenAgentChats", () => {
       });
     });
 
+    describe("askedChat()", () => {
+      it(`gives a run's chat with the message that started each run and when, so a later run reads as continued (${RUNNING})`, async () => {
+        const { coco, maya } = await askFromMessage();
+        answer(maya, "Done.");
+        fake.endTurn(sessionIdOf(coco));
+        await fake.untilPrompt(sessionIdOf(coco), 2);
+        fake.endTurn(sessionIdOf(coco));
+        coco.sendPrompt("@Maya and the intro?");
+        await fake.untilPrompt(sessionIdOf(coco), 3);
+        chats.ask(coco, "Maya", "And the intro?");
+        await fake.untilPrompt(sessionIdOf(maya), 2);
+
+        const [first, second] = coco.store
+          .getDisplayMessages()
+          .flatMap((message) => message.agentMentions ?? []);
+        const chat = chats.askedChat(coco, first);
+        const jobs = maya.store.getDisplayMessages().filter((m) => m.message.includes("<message"));
+
+        expect(chat?.session).toBe(maya);
+        expect(chats.askedChat(coco, second)?.session).toBe(maya);
+        expect(Array.from(chat!.continuedAt)).toEqual([
+          [jobs[0].id, first.startedAt],
+          [jobs[1].id, second.startedAt],
+        ]);
+      });
+
+      it(`gives nothing for a run whose chat is no longer open, as after a restart, or never opened, as when the agent couldn't start (${RUNNING})`, async () => {
+        const { coco } = await askFromMessage();
+        const [run] = mentionsOn(coco)!;
+
+        expect(
+          chats.askedChat(coco, { ...run, chat: { backendId: "fake", sessionId: "from-before" } })
+        ).toBeNull();
+        expect(chats.askedChat(coco, { ...run, chat: undefined })).toBeNull();
+        expect(chats.askedChat(coco, { ...run, agent: "coco" })).toBeNull();
+      });
+    });
+
     describe("workingOn()", () => {
       it(`gives what a saved run's agent was asked while it still works on it, and nothing once it is done (${RUNNING})`, async () => {
         const { coco, maya } = await askFromMessage();
@@ -1758,6 +1797,26 @@ describe("hiddenAgentChats", () => {
         await handed;
         expect(fake.promptsTo(sessionIdOf(coco))).toEqual([expect.stringContaining("Cut it.")]);
       });
+    });
+  });
+
+  describe("readAskedMessage()", () => {
+    it(`reads what the asking agent sent and whether it passed on the user's answer (${RUNNING})`, async () => {
+      const { coco, maya } = await waitingOnQuestion();
+      chats.answer(coco, "Maya", "October.");
+      await fake.untilPrompt(sessionIdOf(maya), 2);
+
+      const [asked, passed] = maya.store
+        .getDisplayMessages()
+        .filter((message) => message.message.includes("from="))
+        .map((message) => readAskedMessage(message.message));
+
+      expect(asked).toEqual({ answer: false, text: "What do you think of this plan?" });
+      expect(passed).toEqual({ answer: true, text: "October." });
+    });
+
+    it(`reads nothing from text the asking agent didn't send (${RUNNING})`, () => {
+      expect(readAskedMessage("Hello there.")).toBeNull();
     });
   });
 });

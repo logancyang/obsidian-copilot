@@ -5,9 +5,10 @@ import {
   type MentionStatusTone,
 } from "@/agents/agentMentionStatus";
 import { useCustomAgentsGate } from "@/agents/customAgentsGate";
+import { ChatAgentsContext } from "@/agents/ui/chatAgents";
 import { cn } from "@/lib/utils";
 import { CircleAlert, CircleCheck, CircleHelp, CircleStop, Loader2 } from "lucide-react";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useContext, useEffect, useRef, useState } from "react";
 
 const TONE_CLASS: Record<MentionStatusTone, string> = {
   working: "tw-text-muted",
@@ -56,6 +57,7 @@ export const AgentMentionStatus: React.FC<{ mention: AgentMention }> = ({ mentio
   const rootRef = useRef<HTMLDivElement>(null);
   const now = useTickingNow(line.clock === "ticking", rootRef);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const { openRun } = useContext(ChatAgentsContext);
 
   const elapsedMs = line.clock ? now - mention.startedAt : line.elapsedMs;
   return (
@@ -86,6 +88,18 @@ export const AgentMentionStatus: React.FC<{ mention: AgentMention }> = ({ mentio
             </a>
           ) : null}
         </span>
+        {openRun ? (
+          <a
+            href="#"
+            className={LINK_CLASS}
+            onClick={(event) => {
+              event.preventDefault();
+              openRun(mention.id);
+            }}
+          >
+            View
+          </a>
+        ) : null}
         {line.seeReply ? (
           <a
             href="#"

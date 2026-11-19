@@ -6,6 +6,7 @@ import { createContext, useContext, useMemo } from "react";
 export interface ChatAgents {
   agents: readonly CustomAgent[];
   self: string | null;
+  openRun?: (runId: string) => void;
 }
 
 const NO_AGENTS: readonly CustomAgent[] = Object.freeze([]);
@@ -16,10 +17,11 @@ export const ChatAgentsContext = createContext<ChatAgents>(
 
 export function useChatAgentsValue(
   store: CustomAgentStore | undefined,
-  self: string | null
+  self: string | null,
+  openRun?: (runId: string) => void
 ): ChatAgents {
   const agents = useCustomAgents(store);
-  return useMemo(() => ({ agents, self }), [agents, self]);
+  return useMemo(() => ({ agents, self, openRun }), [agents, self, openRun]);
 }
 
 export function useChatAgents(): readonly CustomAgent[] {

@@ -145,6 +145,39 @@ export const StopTaskButton: React.FC<{
   );
 };
 
+interface RunningRowProps {
+  icon: React.ReactNode;
+  label: React.ReactNode;
+  trailing: React.ReactNode;
+  onOpen: () => void;
+  children?: React.ReactNode;
+}
+
+export const RunningRow: React.FC<RunningRowProps> = ({
+  icon,
+  label,
+  trailing,
+  onOpen,
+  children,
+}) => (
+  <button
+    type="button"
+    className={cn(
+      "clickable-icon tw-flex tw-h-auto tw-min-w-0 tw-flex-1 tw-flex-col tw-items-stretch tw-gap-0.5",
+      "tw-rounded tw-bg-transparent tw-px-2 tw-py-1.5 tw-text-left tw-shadow-none",
+      "hover:tw-bg-modifier-hover focus-visible:tw-bg-modifier-hover"
+    )}
+    onClick={onOpen}
+  >
+    <span className="tw-flex tw-min-w-0 tw-items-center tw-gap-1.5 tw-text-sm">
+      {icon}
+      <span className="tw-min-w-0 tw-flex-1 tw-truncate tw-text-normal">{label}</span>
+      {trailing}
+    </span>
+    {children}
+  </button>
+);
+
 interface RunningTaskRowProps {
   task: AgentTask;
   status: ReturnType<typeof taskDisplayStatus>;
@@ -154,22 +187,14 @@ interface RunningTaskRowProps {
 const RunningTaskRow: React.FC<RunningTaskRowProps> = ({ task, status, onOpen }) => {
   const Icon = task.kind === "command" ? Terminal : Bot;
   return (
-    <button
-      type="button"
-      className={cn(
-        "clickable-icon tw-flex tw-h-auto tw-min-w-0 tw-flex-1 tw-flex-col tw-items-stretch tw-gap-0.5",
-        "tw-rounded tw-bg-transparent tw-px-2 tw-py-1.5 tw-text-left tw-shadow-none",
-        "hover:tw-bg-modifier-hover focus-visible:tw-bg-modifier-hover"
-      )}
-      onClick={onOpen}
+    <RunningRow
+      icon={<Icon className="tw-size-3.5 tw-shrink-0 tw-text-normal" />}
+      label={taskLabel(task)}
+      trailing={<TaskStatusMark status={status} className="tw-text-normal" />}
+      onOpen={onOpen}
     >
-      <span className="tw-flex tw-min-w-0 tw-items-center tw-gap-1.5 tw-text-sm">
-        <Icon className="tw-size-3.5 tw-shrink-0 tw-text-normal" />
-        <span className="tw-min-w-0 tw-flex-1 tw-truncate tw-text-normal">{taskLabel(task)}</span>
-        <TaskStatusMark status={status} className="tw-text-normal" />
-      </span>
       {task.kind === "command" ? <CommandOutputLine outputFile={task.outputFile} /> : null}
-    </button>
+    </RunningRow>
   );
 };
 

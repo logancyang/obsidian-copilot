@@ -1,6 +1,10 @@
 import type { AgentChatMessage } from "@/agentMode/session/types";
 import { TaskOutputReaderContext } from "@/agentMode/ui/hooks/useTaskOutputTail";
-import { COMMAND_OUTPUT_MAX_BYTES, TaskDetailView } from "@/agentMode/ui/TaskDetailView";
+import {
+  COMMAND_OUTPUT_MAX_BYTES,
+  TaskDetailFrame,
+  TaskDetailView,
+} from "@/agentMode/ui/TaskDetailView";
 import { makeCommandTask, makeTask, textOutputReader } from "@/agentMode/ui/testing/taskFixtures";
 import { AppContext } from "@/context";
 import { act, fireEvent, render, screen } from "@testing-library/react";
@@ -246,5 +250,30 @@ describe("TaskDetailView", () => {
     renderDetail({});
 
     expect(screen.queryByText(/The chat is waiting for your answer/)).toBeNull();
+  });
+
+  describe("TaskDetailFrame()", () => {
+    it(`names Back after the chat it returns to, and its banner's action goes back there (https://github.com/Brevilabs/obsidian-copilot-private/issues/948)`, () => {
+      const onBack = jest.fn();
+      render(
+        <TaskDetailFrame
+          icon={null}
+          title="Leo"
+          subtitle="Sent by Coco"
+          status="Working"
+          onBack={onBack}
+          backLabel="Back to Coco"
+          banner={{ text: "Leo asked a question in Coco's chat.", action: "Answer there" }}
+        >
+          Leo's steps
+        </TaskDetailFrame>
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "Answer there" }));
+      fireEvent.click(screen.getByRole("button", { name: "Back to Coco" }));
+
+      expect(onBack).toHaveBeenCalledTimes(2);
+      expect(screen.getByText("Leo's steps")).toBeTruthy();
+    });
   });
 });

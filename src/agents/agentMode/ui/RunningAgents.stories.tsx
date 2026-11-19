@@ -45,7 +45,7 @@ const RunningLine: React.FC<LineProps> = ({ runs, taskCount, defaultOpen }) => (
         permissions={[]}
         onOpenTask={() => {}}
         defaultOpen={defaultOpen}
-        runs={runningAgentsSlot({ runs, taskCount, onStop: () => {} })}
+        runs={runningAgentsSlot({ runs, taskCount, onOpen: () => {}, onStop: () => {} })}
       />
     </div>
   </TooltipProvider>
