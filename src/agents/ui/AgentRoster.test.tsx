@@ -13,6 +13,7 @@ const CREATE_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issu
 const LOCKED_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/582";
 const LAPSED_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/950";
 const SETUP_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/962";
+const HEADING_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/978";
 
 function agent(name: string, title = `${name}'s job`): RosterAgent {
   return {
@@ -114,10 +115,11 @@ describe("AgentRoster", () => {
   afterEach(() => jest.restoreAllMocks());
 
   describe("AgentRoster()", () => {
-    it("asks who to talk to above Copilot's face and then each agent's face, each with its name under it", () => {
+    it(`shows Copilot's face and then each agent's face, each with its name under it, under no heading; screen readers hear the row as "Who do you want to talk to?" (${HEADING_ISSUE})`, () => {
       renderRoster();
 
-      expect(screen.getByRole("heading", { name: "Who do you want to talk to?" })).not.toBeNull();
+      expect(screen.queryByRole("heading")).toBeNull();
+      expect(screen.queryByText("Who do you want to talk to?")).toBeNull();
       expect(rowNames()).toEqual(["Copilot", "Coco", "Maya", "Leo"]);
     });
 
