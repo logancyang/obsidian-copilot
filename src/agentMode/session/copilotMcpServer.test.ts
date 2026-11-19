@@ -47,6 +47,36 @@ function post(
   });
 }
 
+interface EventStream {
+  status: number;
+  contentType: string | undefined;
+  nextEvent: () => Promise<string>;
+  ended: Promise<void>;
+  close: () => void;
+}
+
+function openEventStream(server: AgentMcpServer): Promise<EventStream> {
+  const http = jest.requireActual<typeof import("node:http")>("node:http");
+  return new Promise((resolve, reject) => {
+    const request = http.request(
+      server.url,
+      { method: "GET", headers: { ...server.headers, Accept: "text/event-stream" } },
+      (response) => {
+        response.setEncoding("utf8");
+        resolve({
+          status: response.statusCode ?? 0,
+          contentType: response.headers["content-type"],
+          nextEvent: () => new Promise((data) => response.once("data", data)),
+          ended: new Promise((done) => response.once("end", done)),
+          close: () => request.destroy(),
+        });
+      }
+    );
+    request.on("error", reject);
+    request.end();
+  });
+}
+
 function rpc(id: number, method: string, params?: Record<string, unknown>) {
   return { jsonrpc: "2.0", id, method, ...(params ? { params } : {}) };
 }
@@ -316,7 +346,7 @@ describe("copilotMcpServer", () => {
       });
     });
 
-    it("completes the MCP handshake by echoing a supported protocol version and advertising tools", async () => {
+    it("completes the MCP handshake by echoing a supported protocol version and advertising tools that can change", async () => {
       const channel = await server.connect("session-a", "claude", NO_CHAT);
 
       const result = await post(channel, rpc(1, "initialize", { protocolVersion: "2025-03-26" }));
@@ -328,7 +358,7 @@ describe("copilotMcpServer", () => {
           id: 1,
           result: {
             protocolVersion: "2025-03-26",
-            capabilities: { tools: {} },
+            capabilities: { tools: { listChanged: true } },
             serverInfo: { name: COPILOT_MCP_SERVER_NAME, version: "1.0.0" },
           },
         },
@@ -734,12 +764,47 @@ describe("copilotMcpServer", () => {
       expect(findChat).not.toHaveBeenCalled();
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 declines the optional SSE stream with 405", async () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/944 refuses an event stream without a session's token, so nothing else on the machine can hold one open", async () => {
       const channel = await server.connect("session-a", "claude", NO_CHAT);
 
-      const result = await post(channel, "", { method: "GET" });
+      const results = await Promise.all([
+        post(channel, "", { method: "GET", headers: { Authorization: "Bearer forged" } }),
+        post(channel, "", { method: "GET", headers: { Authorization: "" } }),
+      ]);
 
-      expect(result.status).toBe(405);
+      expect(results.map((result) => result.status)).toEqual([401, 401]);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/944 tells the agents still listening when one closed its event stream, and does nothing when no stream is open", async () => {
+      expect(() => server.notifyToolsChanged()).not.toThrow();
+      const gone = await openEventStream(await server.connect("session-a", "claude", NO_CHAT));
+      const open = await openEventStream(await server.connect("session-b", "claude", NO_CHAT));
+
+      gone.close();
+      const event = open.nextEvent();
+      server.notifyToolsChanged();
+
+      await expect(event).resolves.toContain("notifications/tools/list_changed");
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/944 tells each agent holding an event stream open to list the tools again, and ends a session's stream when it disconnects", async () => {
+      const opencode = await openEventStream(
+        await server.connect("opencode:/vault", "opencode", NO_CHAT, true)
+      );
+      const claude = await openEventStream(await server.connect("session-a", "claude", NO_CHAT));
+
+      const events = Promise.all([opencode.nextEvent(), claude.nextEvent()]);
+      server.notifyToolsChanged();
+      server.disconnect("session-a");
+
+      expect([opencode.status, opencode.contentType]).toEqual([200, "text/event-stream"]);
+      await expect(events).resolves.toEqual([
+        'event: message\ndata: {"jsonrpc":"2.0","method":"notifications/tools/list_changed"}\n\n',
+        'event: message\ndata: {"jsonrpc":"2.0","method":"notifications/tools/list_changed"}\n\n',
+      ]);
+      await expect(claude.ended).resolves.toBeUndefined();
+      server.dispose();
+      await expect(opencode.ended).resolves.toBeUndefined();
     });
 
     it("rejects a request body over 16 MiB of UTF-8 without raising a card, even when it has fewer characters", async () => {

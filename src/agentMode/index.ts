@@ -57,7 +57,6 @@ import { createOpenArtifactsTools } from "@/openArtifacts/openArtifactsTools";
 import { getVaultBase } from "@/utils/vaultPath";
 import { buildNativeChatId } from "@/utils/nativeChatId";
 import { loadAgentSessionPrompt } from "@/agents/agentSessionPrompt";
-import type { CustomAgent } from "@/agents/CustomAgentStore";
 import { agentBackend } from "@/agents/agentMode/agentChats";
 import { AGENT_DRAFT_CARD_EXTENSION } from "@/agents/agentMode/agentDraftCard";
 import {
@@ -66,6 +65,7 @@ import {
   createAskUserTool,
   createCheckAgentTool,
   createStopAgentTool,
+  relistOnCustomAgentsGateChange,
 } from "@/agents/agentMode/askAgentTool";
 import { createDraftAgentTool } from "@/agents/agentMode/draftAgentTool";
 import { createListChatsTool } from "@/agents/agentMode/listChatsTool";
@@ -126,8 +126,6 @@ function isAgentModeEnabled(): boolean {
 export function applyCopilotDefaultModel(configuredModelId: string): BackendId[] {
   return seedCopilotDefaultModel(listBackendDescriptors(), configuredModelId);
 }
-
-const NO_CUSTOM_AGENTS: readonly CustomAgent[] = Object.freeze([]);
 
 function collectAgentSkillsDirsProjectRel(): Record<string, string> {
   const out: Record<string, string> = {};
@@ -261,9 +259,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   plugin.register(() => hiddenAgentChats.dispose());
   plugin.hiddenAgentChats = hiddenAgentChats;
   const askingChatsHost = {
-    agents: () => plugin.customAgents?.getAgents() ?? NO_CUSTOM_AGENTS,
     isUnlistedChat: (sessionKey: string) => managerRef?.isUnlistedSession(sessionKey) ?? false,
-    agentOfChat: (sessionKey: string) => managerRef?.getSession(sessionKey)?.agentSlug ?? null,
   };
   const copilotMcpServer = createCopilotMcpServer(
     (toolName) => isCopilotToolOn(toolName, getSettings(), app),
@@ -348,6 +344,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     ],
     connectorTools
   );
+  plugin.register(relistOnCustomAgentsGateChange(() => copilotMcpServer.notifyToolsChanged()));
   const preloader = new AgentModelPreloader(
     app,
     plugin,

@@ -11,6 +11,7 @@ import {
   createAskAgentTool,
   createCheckAgentTool,
   createStopAgentTool,
+  relistOnCustomAgentsGateChange,
 } from "@/agents/agentMode/askAgentTool";
 import type {
   AnswerAgentResult,
@@ -23,37 +24,26 @@ import { ASK_AGENT_TOOL_NAME } from "@/agents/agentMentionPrompt";
 import { RELAY_PRINCIPLE } from "@/agents/agentReply";
 import type { CustomAgent } from "@/agents/CustomAgentStore";
 import { setCustomAgentsAccess } from "@/agents/testing/customAgentsAccess";
+import { setSettings } from "@/settings/model";
 
 jest.mock("@/entitlement");
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/944";
 const CONTROL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/945";
-const COCO = { slug: "coco", name: "Coco", title: "Keeps the whole vault in view" } as CustomAgent;
 const MAYA = { slug: "maya", name: "Maya", title: "Product critic" } as CustomAgent;
 const LEO = { slug: "leo", name: "Leo", title: "" } as CustomAgent;
 const CHAT = {} as ChatStateHost;
 
-function buildTool(
-  options: {
-    agents?: readonly CustomAgent[];
-    unlisted?: string[];
-    agentOfChat?: Record<string, string>;
-    asked?: AskAgentResult;
-  } = {}
-) {
+function buildTool(options: { unlisted?: string[]; asked?: AskAgentResult } = {}) {
   const ask = jest.fn(() => options.asked ?? { kind: "asked" as const, agent: MAYA });
   const tool = createAskAgentTool({ ask } as unknown as HiddenAgentChats, {
-    agents: () => options.agents ?? [COCO, MAYA, LEO],
     isUnlistedChat: (key) => options.unlisted?.includes(key) ?? false,
-    agentOfChat: (key) => options.agentOfChat?.[key] ?? null,
   });
   return { tool, ask };
 }
 
 const HOST = {
-  agents: () => [COCO, MAYA, LEO],
   isUnlistedChat: (key: string) => key.startsWith("hidden"),
-  agentOfChat: () => null,
 };
 
 function descriptionFor(
@@ -68,24 +58,18 @@ describe("askAgentTool", () => {
   beforeEach(() => setCustomAgentsAccess("team"));
 
   describe("createAskAgentTool()", () => {
-    it(`lists the tool for an agent's chat with every other agent by name and title, leaving the chat's own agent out (${ISSUE})`, () => {
-      const { tool } = buildTool({ agentOfChat: { "chat-1": "coco" } });
-
-      const description = descriptionFor(tool, "chat-1");
-
-      expect(description).toContain("- Maya (Product critic)\n- Leo");
-      expect(description).not.toContain("- Coco");
-    });
-
-    it(`lists the tool for a Copilot chat with every agent (${ISSUE})`, () => {
+    it(`lists one definition naming no agent for every chat the user sees, so an agent created, renamed or deleted after an agent listed its tools is asked by its current name (${ISSUE})`, () => {
       const { tool } = buildTool();
 
-      expect(descriptionFor(tool, "chat-1")).toContain(
-        "- Coco (Keeps the whole vault in view)\n- Maya (Product critic)\n- Leo"
+      const listed = ["coco-chat", "copilot-chat", "opencode:/vault"].map((sessionKey) =>
+        tool.listedAs?.({ sessionKey, backendId: "opencode" })
       );
+
+      expect(listed).toEqual([tool.definition, tool.definition, tool.definition]);
+      expect(descriptionFor(tool, "coco-chat")).not.toContain("Agents you can ask");
     });
 
-    it(`says when to call it in the opening that OpenCode's catalog shows, then to answer in one line and end the turn (${ISSUE})`, () => {
+    it(`says when to call it in the opening that OpenCode's catalog shows, to call it with the name or job the user gave since no agent is listed, then to answer in one line and end the turn (${ISSUE})`, () => {
       const description = descriptionFor(buildTool().tool, "chat-1")!;
 
       expect(description.slice(0, 120)).toContain(
@@ -93,6 +77,9 @@ describe("askAgentTool", () => {
       );
       expect(description).toContain(
         "tell the user in one short line who you asked and that you'll bring back the reply, and end your turn"
+      );
+      expect(description).toContain(
+        "When the user names an agent without an @, or only describes its job, call this with the name or job they gave: a name no agent has answers with the agents you can ask."
       );
       expect(description).toContain(RELAY_PRINCIPLE);
       expect(description).toContain("can't save rules to its memory or change its instruction");
@@ -102,18 +89,6 @@ describe("askAgentTool", () => {
       const { tool } = buildTool({ unlisted: ["hidden-1"] });
 
       expect(tool.listedAs?.({ sessionKey: "hidden-1", backendId: "claude" })).toBeNull();
-    });
-
-    it(`leaves the tool out when there is no other agent to ask (${ISSUE})`, () => {
-      expect(
-        buildTool({ agents: [] }).tool.listedAs?.({ sessionKey: "c", backendId: "x" })
-      ).toBeNull();
-      expect(
-        buildTool({ agents: [COCO], agentOfChat: { c: "coco" } }).tool.listedAs?.({
-          sessionKey: "c",
-          backendId: "x",
-        })
-      ).toBeNull();
     });
 
     it(`leaves the tool out while custom agents are not available (${ISSUE})`, async () => {
@@ -134,11 +109,20 @@ describe("askAgentTool", () => {
       });
     });
 
-    it("names the agents to ask when the name matches none", async () => {
+    it(`names the agents to ask, each with its title, when the name matches none, so a chat that knows only a job finds the agent from the answer (${ISSUE})`, async () => {
       const { tool } = buildTool({ asked: { kind: "unknown_agent", roster: [MAYA, LEO] } });
 
       await expect(tool.call({ agent: "Nora", message: "Hi" }, CHAT)).resolves.toEqual({
-        text: "No custom agent has that name. Agents you can ask: Maya, Leo.",
+        text: "No custom agent has that name. Agents you can ask: Maya (Product critic); Leo.",
+        isError: true,
+      });
+    });
+
+    it(`tells a chat with no other agent that there is no one to ask, since the tool is listed before any other agent exists (${ISSUE})`, async () => {
+      const { tool } = buildTool({ asked: { kind: "unknown_agent", roster: [] } });
+
+      await expect(tool.call({ agent: "Maya", message: "Hi" }, CHAT)).resolves.toEqual({
+        text: "There are no other custom agents to ask.",
         isError: true,
       });
     });
@@ -397,6 +381,25 @@ describe("askAgentTool", () => {
         isError: true,
       });
       expect(stop).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("relistOnCustomAgentsGateChange()", () => {
+    it(`asks agents to list the tools again each time custom agents turn available or unavailable, and not on other settings changes, so a license entered while OpenCode runs offers the asking tools (${ISSUE})`, async () => {
+      await setCustomAgentsAccess("free");
+      const relist = jest.fn();
+      const stop = relistOnCustomAgentsGateChange(relist);
+
+      setSettings({ userId: "user-2" });
+      expect(relist).not.toHaveBeenCalled();
+      await setCustomAgentsAccess("team");
+      expect(relist).toHaveBeenCalledTimes(1);
+      await setCustomAgentsAccess("free");
+      expect(relist).toHaveBeenCalledTimes(2);
+
+      stop();
+      await setCustomAgentsAccess("team");
+      expect(relist).toHaveBeenCalledTimes(2);
     });
   });
 });

@@ -42,7 +42,7 @@ function recallEarlierChats(chatsFolder: string): string {
   return `When the user asks what you and they worked on, discussed or decided before, list your earlier chats with list_chats from obsidian-copilot and read a listed note when you need what was said. For that answer use only those chats: never search ${chatsFolder} for it, even within a wider search, and never read a note there that list_chats didn't list, unless the user names it. If none of them covers it, say you haven't discussed it.`;
 }
 
-function describeAgent({ name, title }: Pick<CustomAgent, "name" | "title">): string {
+export function describeAgent({ name, title }: Pick<CustomAgent, "name" | "title">): string {
   return title ? `${name} (${title})` : name;
 }
 
