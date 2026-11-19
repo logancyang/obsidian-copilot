@@ -1,4 +1,5 @@
 import { isCompactCommand } from "@/commands/compactCommand";
+import { withoutAgentChats } from "@/agents/agentMentions";
 import { toolsUsedLines } from "@/agentMode/session/conversationHistory";
 import { getVaultBase } from "@/utils/vaultPath";
 import type {
@@ -7,7 +8,11 @@ import type {
   BackendState,
   SessionUsage,
 } from "@/agentMode/session/types";
-import type { ChatExtension } from "@/agentMode/session/chatExtension";
+import {
+  NO_SAVED_CHAT_STATES,
+  type ChatExtension,
+  type SavedChatStates,
+} from "@/agentMode/session/chatExtension";
 import type { CopilotMcpServer, FindCallingChat } from "@/agentMode/session/copilotMcpServer";
 import { refreshLatestVersion } from "@/hooks/useLatestVersion";
 import { resolveEffort } from "@/lib/model-effort";
@@ -35,7 +40,7 @@ import {
 import { readFrontmatterViaAdapter } from "@/utils/vaultAdapterUtils";
 import { App, FileSystemAdapter, Notice, Platform, TFile } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
-import { AgentSession, ATTENTION_TRIGGER_STATUSES, DEFAULT_TITLE_PREFIX } from "./AgentSession";
+import { AgentSession, ATTENTION_TRIGGER_STATUSES } from "./AgentSession";
 import type { AgentChatPersistenceManager, LoadedAgentChat } from "./AgentChatPersistenceManager";
 import type { AgentModelPreloader } from "./AgentModelPreloader";
 import { buildNativeChatId, parseNativeChatId } from "@/utils/nativeChatId";
@@ -50,20 +55,9 @@ import {
 import { MethodUnsupportedError } from "./errors";
 import { replayPersistedMode } from "./replayPersistedMode";
 import { applyModeSpec } from "./modeApply";
-import {
-  FanoutOrchestrator,
-  type FanoutHost,
-  type FanoutRunInput,
-} from "./fanout/FanoutOrchestrator";
-import type { FanoutTurn } from "./fanout/fanoutTypes";
 import { modelCatalogSignature } from "./translateBackendState";
 import { GLOBAL_SCOPE, type ProjectScopeId } from "./scope";
-import {
-  OrphanedProjectError,
-  pickScopeNeighbor,
-  resolveProjectIdForCwd,
-  resolveScopeCwd,
-} from "./sessionScope";
+import { OrphanedProjectError, pickScopeNeighbor, resolveScopeCwd } from "./sessionScope";
 import {
   getCachedProjectRecordById,
   getCachedProjectRecords,
@@ -89,32 +83,18 @@ import type {
   BackendProcess,
   CopilotMode,
   EffortOption,
+  LoadSessionInput,
   LoadSessionOutput,
   ModeApplySpec,
   ModelSelection,
+  SessionAgent,
+  SessionEvent,
   PermissionDecision,
   PermissionPrompt,
   SessionId,
 } from "./types";
 
 const AUTOSAVE_DEBOUNCE_MS = 500;
-const LIST_SESSIONS_TIMEOUT_MS = 1_500;
-
-function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
-  return new Promise<T>((resolve) => {
-    const timer = window.setTimeout(() => resolve(fallback), ms);
-    promise.then(
-      (value) => {
-        window.clearTimeout(timer);
-        resolve(value);
-      },
-      () => {
-        window.clearTimeout(timer);
-        resolve(fallback);
-      }
-    );
-  });
-}
 
 function sessionRefFromFrontmatter(
   frontmatter: Record<string, unknown> | undefined
@@ -123,11 +103,6 @@ function sessionRefFromFrontmatter(
   const sessionId = typeof frontmatter?.sessionId === "string" ? frontmatter.sessionId.trim() : "";
   if (!backendId || !sessionId) return null;
   return { backendId, sessionId };
-}
-
-function isSameCwd(a: string, b: string): boolean {
-  const norm = (p: string) => p.replace(/[/\\]+$/, "");
-  return norm(a) === norm(b);
 }
 
 const EMPTY_SESSIONS = Object.freeze([]) as unknown as AgentSession[];
@@ -176,6 +151,18 @@ export interface ArchivedChat {
 
 export interface ReplaceSessionOptions {
   seedSelection?: ModelSelection;
+  agentSlug?: string | null;
+}
+
+export interface UnlistedSessionInput {
+  backendId?: BackendId;
+  projectId: ProjectScopeId;
+  seedSelection?: ModelSelection;
+  mode: CopilotMode | null;
+  agent: SessionAgent;
+  observeSessionEvent: (event: SessionEvent) => void;
+  resumeSessionId?: SessionId;
+  askedFrom?: BackendId;
 }
 
 export interface AgentSessionManagerOptions {
@@ -188,6 +175,8 @@ export interface AgentSessionManagerOptions {
   sessionIndex?: AgentSessionIndex;
   copilotMcpServer?: CopilotMcpServer;
   chatExtensions?: readonly ChatExtension<unknown>[];
+  resolveAgent?: (slug: string) => Promise<SessionAgent | null>;
+  onChatReopened?: (chat: AgentSession) => void;
 }
 
 export class AgentSessionManager {
@@ -243,6 +232,10 @@ export class AgentSessionManager {
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/812
   private readonly promptedChatInputIds = new Set<string>();
   private readonly closingSessions = new Map<string, Promise<void>>();
+  private readonly unlistedSessions = new Map<
+    string,
+    { session: AgentSession; backend: BackendProcess; askedFrom?: BackendId } | null
+  >();
   private lastShownSessionId: string | null = null;
   // A visible tab strip keeps every chat in it open until the user closes its tab, so leaving a chat there releases nothing.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/849
@@ -271,9 +264,7 @@ export class AgentSessionManager {
     }
   >();
 
-  private readonly readOnlyFanoutSessions = new Set<SessionId>();
   private readonly defaultApplyChains = new Map<string, Promise<void>>();
-  private readonly fanoutOrchestrator: FanoutOrchestrator;
   private readonly settingsUnsub: () => void;
 
   private getSessionState(internalId: string) {
@@ -297,7 +288,6 @@ export class AgentSessionManager {
     this.drafts = new AgentInputDraftStore(app, (chatInputId) =>
       this.getLiveChatInputIds().includes(chatInputId)
     );
-    this.fanoutOrchestrator = new FanoutOrchestrator(this.createFanoutHost());
     this.settingsUnsub = subscribeToSettingsChange((prev, next) =>
       this.onDefaultSelectionsChanged(prev, next)
     );
@@ -344,38 +334,6 @@ export class AgentSessionManager {
         }
       });
     this.defaultApplyChains.set(session.internalId, next);
-  }
-
-  isReadOnlyFanoutSession(backendSessionId: SessionId): boolean {
-    return this.readOnlyFanoutSessions.has(backendSessionId);
-  }
-
-  runFanoutTurn(input: FanoutRunInput): Promise<FanoutTurn> {
-    return this.fanoutOrchestrator.run(input);
-  }
-
-  private createFanoutHost(): FanoutHost {
-    return {
-      ensureBackendForFanout: async (backendId) => {
-        const descriptor = this.resolveDescriptor(backendId);
-        const proc = await this.ensureBackend(backendId, descriptor);
-        return { proc, descriptor };
-      },
-      getDefaultSelection: (backendId) => this.getSeedSelection(backendId),
-      onSelectionApplied: (backendId, state) => this.repairDefaultEffort(backendId, state),
-      getDisplayName: (backendId) => this.resolveDescriptor(backendId).displayName,
-      getCwd: () => {
-        const adapter = this.app.vault.adapter;
-        return adapter instanceof FileSystemAdapter ? adapter.getBasePath() : null;
-      },
-      registerReadOnlySession: (sessionId) => {
-        this.readOnlyFanoutSessions.add(sessionId);
-        return () => this.readOnlyFanoutSessions.delete(sessionId);
-      },
-      excludeSubSessionFromHistory: (backendId, sessionId) => {
-        void this.opts.sessionIndex?.deleteSession(backendId, sessionId);
-      },
-    };
   }
 
   private setupProjectRecordChangeMonitor(): void {
@@ -460,6 +418,7 @@ export class AgentSessionManager {
           return {
             item: {
               ...item,
+              sessionId: ref?.sessionId,
               pinnedAt: parseChatTimestamp(frontmatter?.pinnedAt),
               archivedAt: parseChatTimestamp(frontmatter?.archivedAt),
               ...(liveAttentionPaths.has(item.id) ? { needsAttention: true } : {}),
@@ -484,7 +443,6 @@ export class AgentSessionManager {
         const items = scopedMarkdown.map((e) => e.item);
         return items.length === 0 ? EMPTY_HISTORY_ITEMS : items;
       }
-      await this.refreshNativeSessionsFromBackends();
       const scopedNative = (await index.getEntries()).filter((e) => e.projectId === scope);
       const merged = mergeChatHistoryItems(scopedMarkdown, scopedNative);
       return merged.length === 0 ? EMPTY_HISTORY_ITEMS : merged;
@@ -492,7 +450,6 @@ export class AgentSessionManager {
 
     if (!index) return this.hideArchivedProjectChats(markdownEntries.map((e) => e.item));
 
-    await this.refreshNativeSessionsFromBackends();
     const nativeEntries = await index.getEntries();
     return this.hideArchivedProjectChats(mergeChatHistoryItems(markdownEntries, nativeEntries));
   }
@@ -780,78 +737,6 @@ export class AgentSessionManager {
     }
   }
 
-  private async refreshNativeSessionsFromBackends(): Promise<void> {
-    const index = this.opts.sessionIndex;
-    if (!index) return;
-    const adapter = this.app.vault.adapter;
-    if (!(adapter instanceof FileSystemAdapter)) return;
-    const vaultBasePath = adapter.getBasePath();
-    const procs = this.getRunningProcsByBackend();
-    if (procs.size === 0) return;
-    const sweeps = Array.from(procs, ([backendId, proc]) =>
-      this.sweepNativeSessions(backendId, proc, vaultBasePath)
-    );
-    await withTimeout(
-      Promise.allSettled(sweeps).then(() => undefined),
-      LIST_SESSIONS_TIMEOUT_MS,
-      undefined
-    );
-  }
-
-  private getRunningProcsByBackend(): Map<BackendId, BackendProcess> {
-    const procs = new Map<BackendId, BackendProcess>();
-    for (const { backendId, proc } of this.preloader.getWarmProcs()) {
-      if (proc.isRunning()) procs.set(backendId, proc);
-    }
-    for (const [backendId, proc] of this.backends) {
-      if (proc.isRunning()) procs.set(backendId, proc);
-    }
-    return procs;
-  }
-
-  private async sweepNativeSessions(
-    backendId: BackendId,
-    proc: BackendProcess,
-    vaultBasePath: string
-  ): Promise<void> {
-    const index = this.opts.sessionIndex;
-    if (!index) return;
-    const descriptor = this.opts.resolveDescriptor(backendId);
-    if (!descriptor?.summarizesSessionTitle) return;
-    let sessions;
-    try {
-      ({ sessions } = await proc.listSessions({ cwd: vaultBasePath }));
-    } catch (err) {
-      if (!(err instanceof MethodUnsupportedError)) {
-        logWarn(`[AgentMode] listSessions sweep failed for ${backendId}`, err);
-      }
-      return;
-    }
-    const probeSessionId = descriptor.getProbeSessionId?.(getSettings());
-    const now = Date.now();
-    const discovered = [];
-    for (const s of sessions) {
-      const inVaultRoot = isSameCwd(s.cwd, vaultBasePath);
-      const projectId = inVaultRoot ? undefined : resolveProjectIdForCwd(vaultBasePath, s.cwd);
-      if (!inVaultRoot && !projectId) continue;
-      if (probeSessionId && s.sessionId === probeSessionId) continue;
-      if (this.readOnlyFanoutSessions.has(s.sessionId)) continue;
-      const title = s.title?.trim();
-      if (!title || title.startsWith(DEFAULT_TITLE_PREFIX)) continue;
-      const updatedAtMs = s.updatedAt ? Date.parse(s.updatedAt) : NaN;
-      const timestamp = Number.isFinite(updatedAtMs) && updatedAtMs > 0 ? updatedAtMs : now;
-      discovered.push({
-        backendId,
-        sessionId: s.sessionId,
-        title,
-        createdAtMs: timestamp,
-        lastAccessedAtMs: timestamp,
-        projectId,
-      });
-    }
-    if (discovered.length > 0) await index.mergeDiscoveredSessions(discovered);
-  }
-
   async getOrCreateActiveSession(): Promise<AgentSession> {
     if (this.disposed) {
       throw new Error("AgentSessionManager has been shut down");
@@ -876,7 +761,8 @@ export class AgentSessionManager {
     backendId?: BackendId,
     projectId: ProjectScopeId = this.activeProjectId,
     seedSelection?: ModelSelection,
-    chatInputId?: string
+    chatInputId?: string,
+    agentSlug?: string
   ): Promise<AgentSession> {
     if (this.disposed) {
       throw new Error("AgentSessionManager has been shut down");
@@ -904,6 +790,7 @@ export class AgentSessionManager {
       : undefined;
 
     const cwd = this.resolveSessionCwd(projectId);
+    const agent = await this.loadAgent(agentSlug);
 
     this.pendingCreates++;
     this.startingBackendId = resolvedId;
@@ -937,11 +824,12 @@ export class AgentSessionManager {
       defaultModelSelection: resolvedSeed,
       defaultMode: this.getDefaultMode(resolvedId),
       getDescriptor: () => this.opts.resolveDescriptor(resolvedId),
-      runFanoutTurn: (input) => this.runFanoutTurn(input),
       getDisplayName: (backendId) => this.resolveDescriptor(backendId).displayName,
       getApp: () => this.app,
       chatExtensions: this.opts.chatExtensions,
       mcpServers,
+      agentSlug,
+      agent,
       ...(projectId !== GLOBAL_SCOPE
         ? {
             getProjectContextBlock: () => this.buildFirstProjectContextBlock(internalId, projectId),
@@ -1014,6 +902,87 @@ export class AgentSessionManager {
     return session;
   }
 
+  // A custom agent asked from another chat works in a chat with no tab that no chat list, index or note shows.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
+  async startUnlistedSession({
+    backendId,
+    projectId,
+    seedSelection,
+    mode,
+    agent,
+    observeSessionEvent,
+    resumeSessionId,
+    askedFrom,
+  }: UnlistedSessionInput): Promise<AgentSession> {
+    if (this.disposed) throw new Error("AgentSessionManager has been shut down");
+    const resolvedId = backendId ?? getSettings().agentMode?.activeBackend ?? "opencode";
+    const descriptor = this.resolveDescriptor(resolvedId);
+    const seed = seedSelection ?? this.getSeedSelection(resolvedId) ?? undefined;
+    const cwd = this.resolveSessionCwd(projectId);
+    const backend = await this.ensureBackend(resolvedId, descriptor);
+    const internalId = uuidv4();
+    this.unlistedSessions.set(internalId, null);
+    const mcpServers = await this.connectCopilotMcpServer(internalId, descriptor, cwd);
+    const options = {
+      backend,
+      cwd,
+      internalId,
+      backendId: resolvedId,
+      projectId,
+      defaultModelSelection: seed,
+      defaultMode: mode,
+      getDescriptor: () => this.opts.resolveDescriptor(resolvedId),
+      getDisplayName: (id: BackendId) => this.resolveDescriptor(id).displayName,
+      getApp: () => this.app,
+      agentSlug: agent.slug,
+      agent,
+      observeSessionEvent,
+    };
+    // Asking the same agent again, as after a restart, carries on its earlier conversation while its agent still keeps it.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/945
+    const session =
+      (resumeSessionId &&
+        (await this.reopenSession(
+          new AgentSession({ ...options, backendSessionId: resumeSessionId }),
+          backend,
+          { sessionId: resumeSessionId, cwd, projectId, mcpServers, agent }
+        ))) ||
+      AgentSession.start({ ...options, mcpServers });
+    this.unlistedSessions.set(internalId, { session, backend, askedFrom });
+    const unsubscribe = session.subscribe({
+      onMessagesChanged: () => {},
+      onStatusChanged: (status) => {
+        // The asking chat's backend restarts only after the turn that passes the asked agent's reply on, which that chat's own status change runs.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/945
+        if (askedFrom !== resolvedId) void this.flushDeferredBackendRestartIfReady(resolvedId);
+        if (status !== "closed") return;
+        unsubscribe();
+        this.unlistedSessions.delete(internalId);
+        this.opts.copilotMcpServer?.disconnect(internalId);
+        // A closed asked agent passes no reply on, so no turn of the asking chat releases the restart it held.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/945
+        if (askedFrom) void this.flushDeferredBackendRestartIfReady(askedFrom);
+      },
+    });
+    try {
+      if (this.disposed)
+        throw new Error("AgentSessionManager was shut down during session creation");
+      await session.ready;
+      await descriptor
+        .applyInitialSessionConfig?.(session, getSettings(), seed)
+        .catch((e) => logWarn(`[AgentMode] applyInitialSessionConfig failed for ${resolvedId}`, e));
+      await replayPersistedMode(session, mode);
+    } catch (error) {
+      await session.dispose();
+      throw error;
+    }
+    return session;
+  }
+
+  isUnlistedSession(sessionKey: string): boolean {
+    return this.unlistedSessions.has(sessionKey);
+  }
+
   async addContextNoteToActiveChat(note: TFile): Promise<void> {
     const session = await this.getOrCreateActiveSession();
     this.drafts.addContextNote(session.chatInputId, note);
@@ -1036,6 +1005,13 @@ export class AgentSessionManager {
       throw new Error(`Unknown backend "${backendId}". Did you forget to register it?`);
     }
     return descriptor;
+  }
+
+  // A chat whose agent cannot load (custom agents not available, or its folder removed outside Copilot) runs as a Copilot chat and keeps naming its agent.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/937
+  private async loadAgent(slug: string | null | undefined): Promise<SessionAgent | null> {
+    if (!slug || !this.opts.resolveAgent) return null;
+    return this.opts.resolveAgent(slug);
   }
 
   private resolveSessionCwd(projectId: ProjectScopeId): string {
@@ -1740,7 +1716,8 @@ export class AgentSessionManager {
       backendId,
       replaced?.projectId ?? this.activeProjectId,
       options.seedSelection,
-      replaced?.chatInputId
+      replaced?.chatInputId,
+      (options.agentSlug === undefined ? replaced?.agentSlug : options.agentSlug) ?? undefined
     );
     // A message sent before the other agent is up ties the chat to the agent that received it, so the switch is dropped.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/908
@@ -1813,13 +1790,14 @@ export class AgentSessionManager {
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/908
     const startedAt = first.timestamp && { ...first.timestamp, epoch: Date.now() };
     const saved = await persistence.saveSession(
-      [{ ...first, timestamp: startedAt }, ...rest],
+      [{ ...first, timestamp: startedAt }, ...rest].map(withoutAgentChats),
       source.backendId,
       {
         label: source.getLabel(),
         projectId: source.projectId,
         model: source.getState()?.model?.current,
         continuedFrom: [...continuedFrom, sourceNote.path],
+        agent: source.agentSlug,
       }
     );
     const note = saved && this.app.vault.getAbstractFileByPath(saved.path);
@@ -1954,16 +1932,20 @@ export class AgentSessionManager {
     // A folder's chats share one connection, so its token names only the folder and the agent stamps the calling session on each call.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
     const shared = descriptor.sharesMcpServersAcrossSessions === true;
+    // An asked agent's chat calls its own tools too, though no list shows it.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/945
     const findChat: FindCallingChat = (callerSessionId) =>
       (shared
         ? this.findFolderSession(descriptor.id, cwd, callerSessionId)
-        : this.sessions.get(internalId)) ?? null;
+        : (this.sessions.get(internalId) ?? this.unlistedSessions.get(internalId)?.session)) ??
+      null;
     try {
       return [
         await server.connect(
           shared ? `${descriptor.id}:${cwd}` : internalId,
           descriptor.id,
-          findChat
+          findChat,
+          shared
         ),
       ];
     } catch (err) {
@@ -1978,7 +1960,10 @@ export class AgentSessionManager {
     backendSessionId: string | null
   ): AgentSession | undefined {
     if (!backendSessionId) return undefined;
-    return Array.from(this.sessions.values()).find(
+    const unlisted = Array.from(this.unlistedSessions.values()).flatMap((entry) =>
+      entry ? [entry.session] : []
+    );
+    return [...this.sessions.values(), ...unlisted].find(
       (session) =>
         session.backendId === backendId &&
         session.cwd === cwd &&
@@ -1998,13 +1983,16 @@ export class AgentSessionManager {
     );
 
     const allSessions = Array.from(this.sessions.values());
+    const unlisted = Array.from(this.unlistedSessions.values()).flatMap((entry) =>
+      entry ? [entry.session] : []
+    );
     await Promise.allSettled(allSessions.map((s) => this.drainAutoSave(s)));
     for (const id of Array.from(this.sessionState.keys())) {
       this.detachAutoSave(id);
     }
 
     await Promise.allSettled(
-      allSessions.map(async (session) => {
+      [...allSessions, ...unlisted].map(async (session) => {
         try {
           await session.cancel();
         } catch (e) {
@@ -2085,19 +2073,34 @@ export class AgentSessionManager {
     let resumed: AgentSession | null;
     try {
       resumed = loaded.sessionId
-        ? await this.tryResumeSessionFromHistory(loaded.backendId, loaded.sessionId, projectId)
+        ? await this.tryResumeSessionFromHistory(
+            loaded.backendId,
+            loaded.sessionId,
+            projectId,
+            undefined,
+            undefined,
+            loaded.agent
+          )
         : null;
       // A note with no agent session to resume keeps its own record of the model it ran.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/908
       const noteModel = loaded.model && this.getSeedSelection(loaded.backendId, loaded.model);
       session =
-        resumed ?? (await this.createSession(loaded.backendId, projectId, noteModel ?? undefined));
+        resumed ??
+        (await this.createSession(
+          loaded.backendId,
+          projectId,
+          noteModel ?? undefined,
+          undefined,
+          loaded.agent
+        ));
     } catch (err) {
       this.rollbackOptimisticScopeSwitch(previousActiveProjectId, scopeSeq);
       throw err;
     }
 
     this.restoreFromNote(session, resumed !== null, file, loaded);
+    this.opts.onChatReopened?.(session);
     if (loaded.label) session.setLabel(loaded.label);
     if (loaded.sessionId) {
       void this.opts.sessionIndex?.touch(loaded.backendId, loaded.sessionId);
@@ -2130,7 +2133,7 @@ export class AgentSessionManager {
       (m) => m.isVisible && m.sender === USER_SENDER && !isCompactCommand(m.message)
     ).length;
     const state = this.getSessionState(session.internalId);
-    // A multi-agent mention sends the history again on any later turn, including after the agent's own session reattaches.
+    // History sent again to the agent names the earlier chats this one continues.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/908
     session.setContinuedFrom(loaded.continuedFrom);
     if (replayedUserTurns > 0 && replayedUserTurns >= savedUserTurns) {
@@ -2148,6 +2151,7 @@ export class AgentSessionManager {
       }
     }
     session.seedSessionUsage(loaded.usage);
+    session.restoreNoteChatStates(loaded.chatStates ?? NO_SAVED_CHAT_STATES);
     state.source = file;
     state.savedLabel = loaded.label;
     // A fresh session has no transcript until its first prompt; saving it earlier repoints the note away from the session
@@ -2163,7 +2167,8 @@ export class AgentSessionManager {
       loaded.label ?? null,
       state.withholdsSessionId ? null : (loaded.sessionId ?? null),
       loaded.messages,
-      loaded.usage ?? null
+      loaded.usage ?? null,
+      session.getNoteChatStates()
     );
   }
 
@@ -2237,10 +2242,18 @@ export class AgentSessionManager {
     entry: AgentSessionIndexEntry | null,
     projectId: ProjectScopeId
   ): Promise<AgentSession> {
-    const session = await this.tryResumeSessionFromHistory(backendId, sessionId, projectId);
+    const session = await this.tryResumeSessionFromHistory(
+      backendId,
+      sessionId,
+      projectId,
+      undefined,
+      undefined,
+      entry?.agent
+    );
     if (!session) {
       throw new Error(`Could not resume session ${sessionId} from the ${backendId} session store.`);
     }
+    this.opts.onChatReopened?.(session);
     if (entry?.title) {
       session.restoreLabel(entry.title, entry.titleSource === "user" ? "user" : "agent");
     }
@@ -2252,7 +2265,8 @@ export class AgentSessionManager {
     sessionId: SessionId,
     projectId: ProjectScopeId,
     chatInputId?: string,
-    seedSelection?: ModelSelection
+    seedSelection?: ModelSelection,
+    agentSlug?: string
   ): Promise<AgentSession | null> {
     // A failed Shut down leaves the chat's session live, so reopening waits for the shutdown before deciding whether to reuse it.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/812
@@ -2269,7 +2283,8 @@ export class AgentSessionManager {
       sessionId,
       projectId,
       chatInputId,
-      seedSelection
+      seedSelection,
+      agentSlug
     ).finally(() => {
       if (this.resumedSessionPromiseById.get(key) === resume) {
         this.resumedSessionPromiseById.delete(key);
@@ -2277,6 +2292,40 @@ export class AgentSessionManager {
     });
     this.resumedSessionPromiseById.set(key, resume);
     return resume;
+  }
+
+  private async reopenSession(
+    session: AgentSession,
+    backend: BackendProcess,
+    openInput: LoadSessionInput
+  ): Promise<AgentSession | null> {
+    let resumeResult: LoadSessionOutput | null = null;
+    let loadFailed = false;
+    try {
+      resumeResult = await backend.loadSession(openInput);
+    } catch (err) {
+      loadFailed = !(err instanceof MethodUnsupportedError);
+      if (loadFailed) logWarn(`[AgentMode] loadSession failed for ${openInput.sessionId}`, err);
+    }
+    if (!resumeResult && !loadFailed) {
+      try {
+        resumeResult = await backend.resumeSession(openInput);
+      } catch (err) {
+        if (err instanceof MethodUnsupportedError) {
+          logInfo(
+            `[AgentMode] backend ${session.backendId} does not support session resume; falling back to fresh session`
+          );
+        } else {
+          logWarn(`[AgentMode] resumeSession failed for ${openInput.sessionId}`, err);
+        }
+      }
+    }
+    if (!resumeResult) {
+      await session.dispose();
+      return null;
+    }
+    session.completeResume(resumeResult.state);
+    return session;
   }
 
   private async untilChatClosed(backendId: BackendId, sessionId: SessionId): Promise<void> {
@@ -2291,7 +2340,8 @@ export class AgentSessionManager {
     sessionId: SessionId,
     projectId: ProjectScopeId,
     chatInputId?: string,
-    carriedSelection?: ModelSelection
+    carriedSelection?: ModelSelection,
+    agentSlug?: string
   ): Promise<AgentSession | null> {
     // A reopened chat continues on the model it last ran, not the agent's default.
     // https://github.com/logancyang/obsidian-copilot/issues/4274
@@ -2304,6 +2354,7 @@ export class AgentSessionManager {
     );
     const cwd = this.resolveSessionCwd(projectId);
     const descriptor = this.resolveDescriptor(backendId);
+    const agent = await this.loadAgent(agentSlug);
 
     this.pendingCreates++;
     this.startingBackendId = backendId;
@@ -2342,10 +2393,11 @@ export class AgentSessionManager {
       defaultMode: this.getDefaultMode(backendId),
       cwd,
       getDescriptor: () => this.opts.resolveDescriptor(backendId),
-      runFanoutTurn: (input) => this.runFanoutTurn(input),
       getDisplayName: (id) => this.resolveDescriptor(id).displayName,
       getApp: () => this.app,
       chatExtensions: this.opts.chatExtensions,
+      agentSlug,
+      agent,
       ...(projectId !== GLOBAL_SCOPE
         ? {
             getProjectContextUpdates: () => this.getProjectContextUpdates(internalId, projectId),
@@ -2355,36 +2407,11 @@ export class AgentSessionManager {
         : {}),
     });
 
-    const openInput = { sessionId, cwd, projectId, mcpServers };
-    let resumeResult: LoadSessionOutput | null = null;
-    try {
-      resumeResult = await backend.loadSession(openInput);
-    } catch (err) {
-      if (!(err instanceof MethodUnsupportedError)) {
-        logWarn(`[AgentMode] loadSession failed for ${sessionId}`, err);
-        await session.dispose();
-        this.opts.copilotMcpServer?.disconnect(internalId);
-        this.finishPendingCreate();
-        return null;
-      }
-    }
-
-    if (!resumeResult) {
-      try {
-        resumeResult = await backend.resumeSession(openInput);
-      } catch (err) {
-        if (err instanceof MethodUnsupportedError) {
-          logInfo(
-            `[AgentMode] backend ${backendId} does not support session resume; falling back to fresh session`
-          );
-        } else {
-          logWarn(`[AgentMode] resumeSession failed for ${sessionId}`, err);
-        }
-        await session.dispose();
-        this.opts.copilotMcpServer?.disconnect(internalId);
-        this.finishPendingCreate();
-        return null;
-      }
+    const openInput = { sessionId, cwd, projectId, mcpServers, agent: agent ?? undefined };
+    if (!(await this.reopenSession(session, backend, openInput))) {
+      this.opts.copilotMcpServer?.disconnect(internalId);
+      this.finishPendingCreate();
+      return null;
     }
 
     if (this.disposed) {
@@ -2392,8 +2419,6 @@ export class AgentSessionManager {
       this.finishPendingCreate();
       return null;
     }
-
-    session.completeResume(resumeResult.state);
 
     // Apply the seed before replaying backend-specific startup config.
     // https://github.com/logancyang/obsidian-copilot/issues/3319
@@ -2536,6 +2561,7 @@ export class AgentSessionManager {
       lastAccessedAtMs: now,
       projectId: session.projectId === GLOBAL_SCOPE ? undefined : session.projectId,
       model: session.getState()?.model?.current,
+      agent: session.agentSlug ?? undefined,
     });
     // The note now points at the session that replaced its unresumable one, so the old entry would list the chat twice.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/902
@@ -2604,7 +2630,8 @@ export class AgentSessionManager {
     const label = session.getLabel();
     const sessionId = state.withholdsSessionId ? null : session.getBackendSessionId();
     const usage = session.getSessionUsage();
-    const signature = this.saveSignature(label, sessionId, messages, usage);
+    const chatStates = session.getNoteChatStates();
+    const signature = this.saveSignature(label, sessionId, messages, usage, chatStates);
     if (state.signature === signature) {
       return state.source ?? null;
     }
@@ -2617,6 +2644,8 @@ export class AgentSessionManager {
       usage: usage ?? undefined,
       model: session.getState()?.model?.current,
       carriedMessages: state.withholdsSessionId ? undefined : state.carriedMessages,
+      agent: session.agentSlug,
+      chatStates,
     });
     if (result) {
       state.source = this.app.vault.getAbstractFileByPath(result.path) ?? result;
@@ -2635,20 +2664,23 @@ export class AgentSessionManager {
     label: string | null,
     sessionId: string | null,
     messages: readonly AgentChatMessage[],
-    usage: SessionUsage | null
+    usage: SessionUsage | null,
+    chatStates: SavedChatStates
   ): string {
     const last = messages[messages.length - 1];
-    const fanoutSig = last?.fanout
-      ? Object.values(last.fanout.answers)
-          .map((a) => `${a.status}:${a.text.length}`)
-          .join(",") + `|${last.fanout.summary.status}:${last.fanout.summary.text.length}`
-      : "";
     // The note lists each reply's tools, so a tool call that adds no text still needs a save.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/906
     const toolsSig = last ? toolsUsedLines(last, getVaultBase(this.app)).join("|") : "";
+    // A custom agent's saves reach the reply when its turn ends, after its text and tools.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/942
+    // An @-mentioned agent's run changes on the message that asked it, which later messages may follow.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
+    const mentionsSig = JSON.stringify(messages.flatMap((m) => m.agentMentions ?? []));
+    // Dismissing a card changes only the state the note keeps for it, which still needs a save.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/941
     return `${label ?? ""}-${sessionId ?? ""}-${messages.length}-${
       last?.message ?? ""
-    }-${fanoutSig}-${toolsSig}-${usage?.updatedAt ?? ""}`;
+    }-${toolsSig}-${last?.memorySaves?.length ?? 0}-${mentionsSig}-${usage?.updatedAt ?? ""}-${JSON.stringify(chatStates)}`;
   }
 
   private async drainAutoSave(session: AgentSession): Promise<void> {
@@ -2765,7 +2797,6 @@ export class AgentSessionManager {
     if (this.opts.askUserQuestionPrompter) {
       proc.setAskUserQuestionPrompter?.(this.opts.askUserQuestionPrompter);
     }
-    proc.setReadOnlySessionPredicate?.((sessionId) => this.isReadOnlyFanoutSession(sessionId));
   }
 
   private async ensureBackend(
@@ -2830,6 +2861,11 @@ export class AgentSessionManager {
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/475
         this.heldConfigChanges.delete(backendId);
       }
+      for (const entry of Array.from(this.unlistedSessions.values())) {
+        if (entry?.backend !== proc) continue;
+        entry.session.cancel().catch(() => {});
+        entry.session.dispose().catch(() => {});
+      }
       const dead = Array.from(this.sessions.values()).filter((s) => s.backendId === backendId);
       if (dead.length === 0) return;
       for (const s of dead) {
@@ -2866,8 +2902,7 @@ export class AgentSessionManager {
   }
 
   private hasBusySession(backendId: BackendId): boolean {
-    return Array.from(this.sessions.values()).some((session) => {
-      if (session.backendId !== backendId) return false;
+    const busy = (session: AgentSession) => {
       const status = session.getStatus();
       return (
         status === "starting" ||
@@ -2875,7 +2910,21 @@ export class AgentSessionManager {
         status === "awaiting_permission" ||
         hasRunningSubagent(session)
       );
-    });
+    };
+    // A restart closes the chat that asked an agent and stops the agent, so a working asked agent holds a deferred restart of either backend.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/945
+    const askedAgentBusy = Array.from(this.unlistedSessions.values()).some(
+      (entry) =>
+        entry !== null &&
+        (entry.session.backendId === backendId || entry.askedFrom === backendId) &&
+        busy(entry.session)
+    );
+    return (
+      askedAgentBusy ||
+      Array.from(this.sessions.values()).some(
+        (session) => session.backendId === backendId && busy(session)
+      )
+    );
   }
 
   private async flushDeferredBackendRestartIfReady(backendId: BackendId): Promise<void> {
@@ -2904,7 +2953,8 @@ export class AgentSessionManager {
     resumableSessionId: SessionId | undefined,
     label: string | null,
     labelSource: "user" | "agent" | null,
-    carriedSelection?: ModelSelection
+    carriedSelection?: ModelSelection,
+    agentSlug?: string
   ): Promise<AgentSession> {
     // A model-setting change can trigger this restart, so validate the carried
     // selection before seeding either the resumed or the fallback session.
@@ -2918,7 +2968,8 @@ export class AgentSessionManager {
         resumableSessionId,
         projectId,
         chatInputId,
-        seedSelection
+        seedSelection,
+        agentSlug
       ).catch((e) => {
         logWarn(`[AgentMode] resume after ${backendId} restart failed`, e);
         return null;
@@ -2928,7 +2979,13 @@ export class AgentSessionManager {
         return resumed;
       }
     }
-    const created = await this.createSession(backendId, projectId, seedSelection, chatInputId);
+    const created = await this.createSession(
+      backendId,
+      projectId,
+      seedSelection,
+      chatInputId,
+      agentSlug
+    );
     if (label) created.restoreLabel(label, labelSource ?? "agent");
     return created;
   }
@@ -2985,6 +3042,7 @@ export class AgentSessionManager {
             // The displayed selection is otherwise lost when the process restarts.
             // https://github.com/logancyang/obsidian-copilot/issues/3319
             seedSelection: session.getState()?.model?.current,
+            agentSlug: session.agentSlug ?? undefined,
             detached: this.detachedFromTabIds.has(session.internalId),
             recoveryMessages:
               session.getStatus() === "error" ? session.store.getDisplayMessages() : undefined,
@@ -3026,7 +3084,8 @@ export class AgentSessionManager {
               replacement.resumableSessionId,
               replacement.label,
               replacement.labelSource,
-              replacement.seedSelection
+              replacement.seedSelection,
+              replacement.agentSlug
             );
             const resumed = rebuilt.getBackendSessionId() === replacement.resumableSessionId;
             const note = this.app.vault.getAbstractFileByPath(replacement.notePath);

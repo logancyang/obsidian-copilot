@@ -1,11 +1,15 @@
 import { BottomLoadingIndicator } from "@/components/chat-components/BottomLoadingIndicator";
 import ChatSingleMessage from "@/components/chat-components/ChatSingleMessage";
+import { ChatDayLabel } from "@/components/chat-components/ui/ChatDayLabel";
 import { ChatTranscriptViewport } from "@/components/chat-components/ui/ChatTranscriptViewport";
+import { USER_SENDER } from "@/constants";
+import { useDayLabels } from "@/hooks/useDayLabels";
 import { useChatScrolling } from "@/hooks/useChatScrolling";
 import { useSmoothedText } from "@/hooks/useSmoothedText";
+import { groupResponses, joinResponseText } from "@/lib/chatResponses";
 import { ChatMessage } from "@/types/message";
 import { App } from "obsidian";
-import React, { memo } from "react";
+import React, { memo, useMemo } from "react";
 
 // The agent's reasoning marker is metadata the message parses, not reply text, so pacing it would hide the reasoning indicator. https://github.com/Brevilabs/obsidian-copilot-private/issues/886
 const LEADING_REASONING_MARKER = /^<!--AGENT_REASONING:\w+:\d+:.+?-->/;
@@ -50,6 +54,16 @@ const ChatMessages = memo(
     } = useChatScrolling({ chatHistory });
     const reasoningMarker = LEADING_REASONING_MARKER.exec(currentAiMessage)?.[0] ?? "";
     const shownReply = useSmoothedText(currentAiMessage.slice(reasoningMarker.length), true);
+    const dayLabels = useDayLabels(chatHistory);
+    const responses = useMemo(
+      () =>
+        groupResponses(
+          chatHistory.map((m) =>
+            !m.isVisible ? "other" : m.sender === USER_SENDER ? "typed" : "reply"
+          )
+        ),
+      [chatHistory]
+    );
 
     if (isChatEmpty(chatHistory, currentAiMessage)) {
       return (
@@ -68,23 +82,39 @@ const ChatMessages = memo(
           isScrollPaused={isScrollPaused}
           scrollToEnd={scrollToEnd}
         >
-          {chatHistory.map((message, index) => {
-            return (
-              message.isVisible && (
-                <div key={getMessageKey(message, index)} className="tw-w-full">
-                  <ChatSingleMessage
-                    message={message}
-                    sourcePath={sourcePath}
-                    app={app}
-                    isStreaming={false}
-                    onRegenerate={() => onRegenerate(index)}
-                    onEdit={(newMessage) => onEdit(index, newMessage)}
-                    onDelete={() => onDelete(index)}
-                  />
-                </div>
-              )
-            );
-          })}
+          {responses.map(({ messages, replies }) => (
+            <div
+              key={getMessageKey(chatHistory[messages[0]], messages[0])}
+              className="tw-group/response"
+            >
+              {messages.map((index) => {
+                const message = chatHistory[index];
+                const endsResponse = index === replies.at(-1);
+                return (
+                  message.isVisible && (
+                    <div key={getMessageKey(message, index)} className="tw-w-full">
+                      {dayLabels.has(index) ? <ChatDayLabel label={dayLabels.get(index)!} /> : null}
+                      <ChatSingleMessage
+                        message={message}
+                        sourcePath={sourcePath}
+                        app={app}
+                        isStreaming={false}
+                        responseText={
+                          endsResponse
+                            ? joinResponseText(replies.map((i) => chatHistory[i].message))
+                            : undefined
+                        }
+                        hideFooter={replies.includes(index) && !endsResponse}
+                        onRegenerate={() => onRegenerate(index)}
+                        onEdit={(newMessage) => onEdit(index, newMessage)}
+                        onDelete={() => onDelete(index)}
+                      />
+                    </div>
+                  )
+                );
+              })}
+            </div>
+          ))}
           {currentAiMessage ? (
             <div className="tw-w-full">
               <ChatSingleMessage

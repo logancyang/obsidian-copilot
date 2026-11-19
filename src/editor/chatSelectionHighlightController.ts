@@ -2,7 +2,7 @@ import { EditorView } from "@codemirror/view";
 import { MarkdownView, type WorkspaceLeaf } from "obsidian";
 
 import type CopilotPlugin from "@/main";
-import { CHAT_VIEWTYPE } from "@/constants";
+import { CHAT_AGENT_VIEWTYPE, CHAT_VIEWTYPE } from "@/constants";
 import type { SelectedTextContext } from "@/types/message";
 import { logError, logWarn } from "@/logger";
 import {
@@ -64,6 +64,7 @@ export class ChatSelectionHighlightController {
   handleActiveLeafChange(leaf: WorkspaceLeaf | null): void {
     const prevWasMarkdown = this.lastActiveLeafWasMarkdown;
     const nextType = leaf?.getViewState().type ?? null;
+    const nextIsChat = nextType === CHAT_VIEWTYPE || nextType === CHAT_AGENT_VIEWTYPE;
     const nextIsMarkdown = !!(leaf?.view instanceof MarkdownView);
 
     this.lastActiveLeafWasMarkdown = nextIsMarkdown;
@@ -71,11 +72,11 @@ export class ChatSelectionHighlightController {
       this.lastActiveMarkdownLeaf = leaf;
     }
 
-    if (this.snapshot && nextType !== CHAT_VIEWTYPE) {
+    if (this.snapshot && !nextIsChat) {
       this.clear();
     }
 
-    if (nextType === CHAT_VIEWTYPE && prevWasMarkdown) {
+    if (nextIsChat && prevWasMarkdown) {
       if (this.closeQuickAskOnChatFocus) {
         this.plugin.quickAskController?.close(false);
       }

@@ -1,3 +1,5 @@
+import { buildCopilotChatSteering } from "@/agents/agentSessionPrompt";
+import { setCustomAgentsAccess } from "@/agents/testing/customAgentsAccess";
 import { PROJECT_WORKSPACE_POLICY } from "@/projects/projectContextBlock";
 import { getSettings, resetSettings, updateSetting, type CopilotSettings } from "@/settings/model";
 import { isObsidianCliEnabled } from "@/services/obsidianCli/ObsidianCliClient";
@@ -32,6 +34,7 @@ jest.mock("@/logger", () => ({
 jest.mock("@/services/obsidianCli/ObsidianCliClient", () => ({
   isObsidianCliEnabled: jest.fn(),
 }));
+jest.mock("@/entitlement");
 
 const mockIsObsidianCliEnabled = jest.mocked(isObsidianCliEnabled);
 
@@ -92,7 +95,7 @@ describe("agentSystemPrompt", () => {
         for (const enableMiyoSearchSkill of [false, true]) {
           updateSetting("enableMiyoSearchSkill", enableMiyoSearchSkill);
           const prompt = buildAgentSystemPrompt(AGENT, APP, undefined, "win32");
-          expect(Buffer.byteLength(prompt, "utf8")).toBeLessThan(3000);
+          expect(Buffer.byteLength(prompt, "utf8")).toBeLessThan(3100);
           expect(prompt).not.toMatch(
             /NEVER search for the same|After 1-2 searches|Never claim you do not have access|delimiter row of dashes|## Task planning/
           );
@@ -121,7 +124,7 @@ describe("agentSystemPrompt", () => {
       setDisableBuiltinSystemPrompt(true);
       const prompt = buildAgentSystemPrompt(AGENT, APP);
       expect(prompt).not.toContain(COPILOT_PROMPT_BASE);
-      expect(prompt).not.toContain("You are Obsidian Copilot");
+      expect(prompt).not.toContain("You work inside Obsidian Copilot");
       expect(prompt).toContain(COPILOT_FOLDER_MENTION_DIRECTIVE);
     });
 
@@ -351,6 +354,26 @@ describe("agentSystemPrompt", () => {
         );
       }
     });
+
+    it("ends every chat's shared prompt with the line telling a chat without a custom agent to list its earlier chats (https://github.com/Brevilabs/obsidian-copilot-private/issues/959) and draft new agents (https://github.com/Brevilabs/obsidian-copilot-private/issues/941), only while custom agents are available", async () => {
+      await setCustomAgentsAccess("free");
+      const withoutCustomAgents = buildAgentSystemPrompt(AGENT, APP);
+      await setCustomAgentsAccess("team");
+
+      expect(buildAgentSystemPrompt(AGENT, APP)).toBe(
+        `${withoutCustomAgents}\n\n${buildCopilotChatSteering()}`
+      );
+    });
+
+    it.each(["free", "keyless", "plus-without-custom-agents", "unverified"] as const)(
+      "adds nothing about earlier chats or drafting agents while custom agents aren't available (%s) (https://github.com/Brevilabs/obsidian-copilot-private/issues/959)",
+      async (access) => {
+        await setCustomAgentsAccess(access);
+
+        expect(buildAgentSystemPrompt(AGENT, APP)).not.toContain("list_chats");
+        expect(buildAgentSystemPrompt(AGENT, APP)).not.toContain("draft_agent");
+      }
+    );
 
     it(`drops the obsidian_cli line while Obsidian's command line interface is off (${ISSUE_833})`, () => {
       mockIsObsidianCliEnabled.mockReturnValue(false);

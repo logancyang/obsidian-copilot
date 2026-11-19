@@ -123,7 +123,7 @@ const ExcalidrawTrailDemo: React.FC<{ parts: AgentMessagePart[]; isStreaming?: b
         isStreaming={isStreaming}
         turnStartedAtMs={isStreaming ? Date.now() - 18_000 : undefined}
         turnDurationMs={isStreaming ? undefined : 25_000}
-        timestamp="2026/10/29 19:48:25"
+        timestampMs={new Date(2026, 9, 29, 19, 48, 25).getTime()}
         app={app}
         turnStopReason={isStreaming ? undefined : "end_turn"}
       />

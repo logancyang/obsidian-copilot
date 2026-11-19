@@ -89,7 +89,7 @@ export const AskUserQuestionCard: React.FC<AskUserQuestionCardProps> = ({ reques
     onResolve(requestId, {});
   };
 
-  const togglePreset = (label: string): void => {
+  const togglePreset = (label: string, pickedWithPointer: boolean): void => {
     if (active.multiSelect) {
       setSelections((prev) => {
         const cur = prev[activeIdx];
@@ -102,6 +102,10 @@ export const AskUserQuestionCard: React.FC<AskUserQuestionCardProps> = ({ reques
     }
     setSelections((prev) => ({ ...prev, [activeIdx]: label }));
     setOtherActive((prev) => ({ ...prev, [activeIdx]: false }));
+    // A clicked pick-one answer is complete, so a separate Next click adds nothing. Arrow keys
+    // also select a radio on every move, so advancing on those would strand keyboard users.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/975
+    if (pickedWithPointer && !isFinalQuestion) setActiveTab(activeIdx + 1);
   };
 
   const toggleOther = (): void => {
@@ -187,7 +191,7 @@ interface QuestionPanelProps {
   otherActive: boolean;
   customText: string;
   disabled: boolean;
-  onTogglePreset: (label: string) => void;
+  onTogglePreset: (label: string, pickedWithPointer: boolean) => void;
   onToggleOther: () => void;
   onCustomTextChange: (text: string) => void;
   onPrimaryActionShortcut: () => void;
@@ -225,7 +229,7 @@ const QuestionPanel: React.FC<QuestionPanelProps> = ({
                   name={name}
                   checked={checked}
                   disabled={disabled}
-                  onChange={() => onTogglePreset(opt.label)}
+                  onChange={(e) => onTogglePreset(opt.label, (e.nativeEvent as UIEvent).detail > 0)}
                   className="tw-m-0"
                 />
               </span>

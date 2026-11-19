@@ -39,7 +39,6 @@ function RestoredComposer() {
         onClick={() => {
           ref.current?.prependContent(
             "Summarize the findings.\n\nReview the supporting evidence.",
-            ["claude"],
             [{ url: "https://example.com/report", title: "Research report" }]
           );
           setNotes([note]);

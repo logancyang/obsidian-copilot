@@ -19,6 +19,8 @@ import path from "node:path";
 const queryMock = jest.fn();
 const createSdkMcpServerMock = jest.fn((opts: unknown) => ({ type: "sdk", instance: opts }));
 
+jest.mock("@/agents/customAgentsGate", () => ({ getCustomAgentsGate: () => "full" }));
+
 jest.mock("@anthropic-ai/claude-agent-sdk", () => ({
   query: (...args: unknown[]) => queryMock(...args),
   createSdkMcpServer: (opts: unknown) => createSdkMcpServerMock(opts),
@@ -1082,6 +1084,121 @@ describe("ClaudeSdkBackendProcess", () => {
         });
       });
 
+      it("appends a custom agent's part after the shared prompt for a chat started as that agent", async () => {
+        queryMock.mockImplementation(answering([resultMessage()]));
+        const proc = makeProc({ getSystemPromptAppend: () => "SHARED PROMPT" });
+
+        const { sessionId } = await proc.newSession({
+          cwd: "/vault",
+          agent: { slug: "coco", prompt: "In this chat you are Coco." },
+        });
+        await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "hi" }] });
+
+        const opts = (getPromptQueryCalls()[0][0] as { options: Record<string, unknown> }).options;
+        expect(opts.systemPrompt).toMatchObject({
+          append: "SHARED PROMPT\n\nIn this chat you are Coco.",
+        });
+      });
+
+      describe("in a custom agent chat that saves rules", () => {
+        let folder: string;
+
+        beforeEach(async () => {
+          folder = await mkdtemp(path.join(os.tmpdir(), "claude-agent-memory-"));
+        });
+
+        afterEach(() => rm(folder, { recursive: true, force: true }));
+
+        async function startAgentChat(proc: ClaudeSdkBackendProcess, { savesMemory = true } = {}) {
+          const memoryPath = path.join(folder, "MEMORY.md");
+          const { sessionId } = await proc.newSession({
+            cwd: "/vault",
+            agent: {
+              slug: "coco",
+              prompt: "In this chat you are Coco.",
+              ...(savesMemory ? { memoryPath } : {}),
+            },
+          });
+          proc.registerSessionHandler(sessionId, () => {});
+          await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "hi" }] });
+          const { options } = getPromptQueryCalls()[0][0] as {
+            options: { canUseTool: CanUseTool; env: Record<string, string> };
+          };
+          return { sessionId, memoryPath, options };
+        }
+
+        const toolCtx = { signal: new AbortController().signal, toolUseID: "tool-1" } as never;
+
+        it("lets the agent write its own MEMORY.md without a permission card, and still asks for any other file (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", async () => {
+          queryMock.mockImplementation(answering([resultMessage()]));
+          const proc = makeProc();
+          const permissionPrompter = jest.fn(async () => ({
+            outcome: { outcome: "selected" as const, optionId: "allow_once" },
+          }));
+          proc.setPermissionPrompter(permissionPrompter);
+          const { memoryPath, options } = await startAgentChat(proc);
+
+          const save = await options.canUseTool(
+            "Write",
+            { file_path: memoryPath, content: "## How to work\n" },
+            toolCtx
+          );
+          await options.canUseTool(
+            "Write",
+            { file_path: path.join(folder, "instructions.md"), content: "x" },
+            toolCtx
+          );
+
+          expect(save?.behavior).toBe("allow");
+          expect(permissionPrompter).toHaveBeenCalledTimes(1);
+          expect(permissionPrompter).toHaveBeenCalledWith(
+            expect.objectContaining({
+              toolCall: expect.objectContaining({
+                rawInput: { file_path: path.join(folder, "instructions.md"), content: "x" },
+              }),
+            })
+          );
+        });
+
+        it("refuses a save after the chat switches to Plan mode (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", async () => {
+          queryMock.mockImplementation(answering([resultMessage()]));
+          const proc = makeProc();
+          const permissionPrompter = jest.fn(async () => ({
+            outcome: { outcome: "selected" as const, optionId: "allow_once" },
+          }));
+          proc.setPermissionPrompter(permissionPrompter);
+          const { sessionId, memoryPath, options } = await startAgentChat(proc);
+
+          await proc.setSessionMode({ sessionId, modeId: "plan" });
+          const save = await options.canUseTool(
+            "Write",
+            { file_path: memoryPath, content: "## How to work\n" },
+            toolCtx
+          );
+
+          expect(save?.behavior).toBe("deny");
+          expect(permissionPrompter).not.toHaveBeenCalled();
+        });
+
+        it.each([
+          ["a chat that saves to the agent's MEMORY.md", true],
+          [
+            "an asked agent's hidden chat, which saves nowhere (https://github.com/Brevilabs/obsidian-copilot-private/issues/944)",
+            false,
+          ],
+        ])(
+          "turns Claude Code's own auto memory off whatever Copilot's auto memory choice in %s, so the agent's MEMORY.md is its only memory (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)",
+          async (_chat, savesMemory) => {
+            queryMock.mockImplementation(answering([resultMessage()]));
+            const proc = makeProc({ getAutoMemoryEnabled: () => true });
+
+            const { options } = await startAgentChat(proc, { savesMemory });
+
+            expect(options.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY).toBe("1");
+          }
+        );
+      });
+
       it("captures the system prompt at newSession time and ignores later setting changes mid-session", async () => {
         queryMock.mockImplementation(
           answering([streamEvent({ type: "message_start", message: {} }), resultMessage()])
@@ -1716,6 +1833,56 @@ describe("ClaudeSdkBackendProcess", () => {
         const { options } = getPromptQueryCalls()[0][0] as { options: Record<string, unknown> };
         expect(options.resume).toBe(sessionId);
         expect(options.sessionId).toBeUndefined();
+      });
+
+      it("resumes a custom agent chat with the agent's part after the shared prompt", async () => {
+        queryMock.mockImplementation(answering([resultMessage()]));
+        const proc = makeProc({ getSystemPromptAppend: () => "SHARED PROMPT" });
+
+        await proc.resumeSession({
+          sessionId: "resumed-session",
+          cwd: "/vault",
+          agent: { slug: "coco", prompt: "In this chat you are Coco." },
+        });
+        await promptTurn(proc, {
+          sessionId: "resumed-session",
+          prompt: [{ type: "text", text: "continue" }],
+        });
+
+        const opts = (getPromptQueryCalls()[0][0] as { options: Record<string, unknown> }).options;
+        expect(opts.systemPrompt).toMatchObject({
+          append: "SHARED PROMPT\n\nIn this chat you are Coco.",
+        });
+      });
+
+      it("lets a resumed custom agent chat save to its own MEMORY.md without a permission card (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", async () => {
+        const folder = await mkdtemp(path.join(os.tmpdir(), "claude-agent-memory-"));
+        queryMock.mockImplementation(answering([resultMessage()]));
+        const proc = makeProc();
+        const permissionPrompter = jest.fn();
+        proc.setPermissionPrompter(permissionPrompter);
+        const memoryPath = path.join(folder, "MEMORY.md");
+
+        await proc.resumeSession({
+          sessionId: "resumed-session",
+          cwd: "/vault",
+          agent: { slug: "coco", prompt: "In this chat you are Coco.", memoryPath },
+        });
+        await promptTurn(proc, {
+          sessionId: "resumed-session",
+          prompt: [{ type: "text", text: "continue" }],
+        });
+        const { canUseTool } = (
+          getPromptQueryCalls()[0][0] as { options: { canUseTool: CanUseTool } }
+        ).options;
+        const save = await canUseTool("Edit", { file_path: memoryPath }, {
+          signal: new AbortController().signal,
+          toolUseID: "tool-1",
+        } as never);
+        await rm(folder, { recursive: true, force: true });
+
+        expect(save?.behavior).toBe("allow");
+        expect(permissionPrompter).not.toHaveBeenCalled();
       });
 
       it(`resumes the chat's query in Default, the mode the picker shows, whatever defaultMode Claude settings set (${ISSUE_870})`, async () => {

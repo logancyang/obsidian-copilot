@@ -24,6 +24,7 @@ const MCP_PATH = "/mcp";
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/746
 const MAX_REQUEST_BYTES = 16 * 1024 * 1024;
 const LATEST_PROTOCOL_VERSION = "2025-06-18";
+const TOOLS_CHANGED_EVENT = `event: message\ndata: ${JSON.stringify({ jsonrpc: "2.0", method: "notifications/tools/list_changed" })}\n\n`;
 const SUPPORTED_PROTOCOL_VERSIONS = new Set([
   "2025-11-25",
   LATEST_PROTOCOL_VERSION,
@@ -102,6 +103,9 @@ export interface McpToolDefinition {
 export interface HostedTool {
   definition: McpToolDefinition;
   turnedOffText: string;
+  // A tool offered only to some chats, or worded for the chat that lists it, answers each listing; null leaves it out.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
+  listedAs?: (listing: ToolListing) => McpToolDefinition | null;
   call: (args: unknown, chat: ChatStateHost | null) => Promise<HostedToolResult>;
 }
 
@@ -113,6 +117,7 @@ export interface ProvidedToolResult {
 export interface ToolListing {
   sessionKey: string;
   backendId: BackendId;
+  shared?: boolean;
 }
 
 export interface ToolProvider {
@@ -149,10 +154,12 @@ export interface CopilotMcpServer {
   connect(
     sessionKey: string,
     backendId: BackendId,
-    findChat: FindCallingChat
+    findChat: FindCallingChat,
+    shared?: boolean
   ): Promise<AgentMcpServer>;
   readOnlyToolNames(): Promise<ReadonlyArray<string>>;
   disconnect(sessionKey: string): void;
+  notifyToolsChanged(): void;
   dispose(): void;
 }
 
@@ -173,6 +180,13 @@ export function createCopilotMcpServer(
   const hostedTools: readonly HostedTool[] = Object.freeze([SEND_FEEDBACK_HOSTED_TOOL, ...tools]);
   const handlersByToken = new Map<string, SessionHandlers>();
   const tokensBySession = new Map<string, string>();
+  const streams = new Map<ServerResponse, string>();
+  const endStreams = (token?: string): void =>
+    streams.forEach((owner, stream) => {
+      if (token !== undefined && owner !== token) return;
+      streams.delete(stream);
+      stream.end();
+    });
   let server: LoopbackServer | null = null;
   let disposed = false;
   const refreshProvidedTools = async (): Promise<void> =>
@@ -190,11 +204,20 @@ export function createCopilotMcpServer(
     async connect(
       sessionKey: string,
       backendId: BackendId,
-      findChat: FindCallingChat
+      findChat: FindCallingChat,
+      shared = false
     ): Promise<AgentMcpServer> {
       if (disposed) throw new Error("The Copilot MCP server is closed.");
       server ??= startLoopbackServer("Copilot MCP server", (request, response) =>
-        handleHttpRequest(request, response, handlersByToken, isToolOn, hostedTools, toolProvider)
+        handleHttpRequest(
+          request,
+          response,
+          handlersByToken,
+          streams,
+          isToolOn,
+          hostedTools,
+          toolProvider
+        )
       );
       // Agents read the tool list once per session, so each new session first brings connected services up to date.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/857
@@ -205,7 +228,7 @@ export function createCopilotMcpServer(
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
       const token = tokensBySession.get(sessionKey) ?? crypto.randomBytes(32).toString("hex");
       tokensBySession.set(sessionKey, token);
-      handlersByToken.set(token, { findChat, listing: { sessionKey, backendId } });
+      handlersByToken.set(token, { findChat, listing: { sessionKey, backendId, shared } });
       return Object.freeze({
         name: COPILOT_MCP_SERVER_NAME,
         url,
@@ -222,12 +245,17 @@ export function createCopilotMcpServer(
       if (!token) return;
       tokensBySession.delete(sessionKey);
       handlersByToken.delete(token);
+      endStreams(token);
       toolProvider?.forget(sessionKey);
+    },
+    notifyToolsChanged(): void {
+      streams.forEach((_owner, stream) => stream.write(TOOLS_CHANGED_EVENT));
     },
     dispose(): void {
       disposed = true;
       handlersByToken.clear();
       tokensBySession.clear();
+      endStreams();
       server?.close();
       server = null;
       void toolProvider?.dispose();
@@ -239,6 +267,7 @@ async function handleHttpRequest(
   request: IncomingMessage,
   response: ServerResponse,
   handlersByToken: ReadonlyMap<string, SessionHandlers>,
+  streams: Map<ServerResponse, string>,
   isToolOn: ToolSwitch,
   hostedTools: readonly HostedTool[],
   toolProvider: ToolProvider | undefined
@@ -248,9 +277,16 @@ async function handleHttpRequest(
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
   const token = /^Bearer (.+)$/.exec(request.headers.authorization ?? "")?.[1];
   const handlers = token ? handlersByToken.get(token) : undefined;
-  if (!handlers) return writeJson(response, 401, { error: "Unauthorized." });
-  // Copilot never pushes server-initiated messages, so the optional SSE stream is declined.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
+  if (!token || !handlers) return writeJson(response, 401, { error: "Unauthorized." });
+  // OpenCode lists a folder's tools once for every chat in it, so the stream it keeps open is how it learns to list them again.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
+  if (request.method === "GET") {
+    response.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" });
+    response.flushHeaders();
+    streams.set(response, token);
+    response.on("close", () => streams.delete(response));
+    return;
+  }
   if (request.method !== "POST") return writeJson(response, 405, { error: "Method not allowed." });
 
   let message: JsonRpcRequest;
@@ -289,7 +325,7 @@ async function reply(
             typeof requested === "string" && SUPPORTED_PROTOCOL_VERSIONS.has(requested)
               ? requested
               : LATEST_PROTOCOL_VERSION,
-          capabilities: { tools: {} },
+          capabilities: { tools: { listChanged: true } },
           serverInfo: { name: COPILOT_MCP_SERVER_NAME, version: "1.0.0" },
         },
       };
@@ -302,7 +338,9 @@ async function reply(
           tools: [
             ...hostedTools
               .filter((tool) => isToolOn(tool.definition.name))
-              .map((tool) => tool.definition),
+              .flatMap(
+                (tool) => (tool.listedAs ? tool.listedAs(handlers.listing) : tool.definition) ?? []
+              ),
             ...providedTools(hostedTools, toolProvider, handlers.listing),
           ],
         },

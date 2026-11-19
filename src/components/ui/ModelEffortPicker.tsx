@@ -32,6 +32,7 @@ export interface ModelEffortPickerOverride {
 interface ModelEffortPickerProps {
   override: ModelEffortPickerOverride;
   className?: string;
+  container?: HTMLElement | null;
 }
 
 interface EffortOpt {
@@ -39,7 +40,7 @@ interface EffortOpt {
   value: string | null;
 }
 
-export function ModelEffortPicker({ override, className }: ModelEffortPickerProps) {
+export function ModelEffortPicker({ override, className, container }: ModelEffortPickerProps) {
   const { models, value, effort, effortOptionsByModelKey, commitSelection, disabled } = override;
 
   const [open, setOpen] = useState(false);
@@ -201,6 +202,7 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
         align="start"
         side="top"
         sideOffset={4}
+        container={container}
         onKeyDown={handleKeyDown}
       >
         <div className="tw-max-h-72 tw-overflow-y-auto tw-py-1" role="listbox" aria-label="Model">

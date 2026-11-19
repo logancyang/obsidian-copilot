@@ -8,7 +8,9 @@ import { taskKindLabel, taskTitle, type TaskDisplayStatus } from "@/agentMode/ui
 import { openTurnDiff } from "@/agentMode/ui/TurnDiffView";
 import ChatSingleMessage from "@/components/chat-components/ChatSingleMessage";
 import { Button } from "@/components/ui/button";
+import { SLIDE_IN_PAGE_CLASS } from "@/components/ui/slideIn";
 import { USER_SENDER } from "@/constants";
+import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
 import { ArrowLeft, Bot, Terminal } from "lucide-react";
 import type { App } from "obsidian";
@@ -26,6 +28,59 @@ export interface TaskDetailViewProps {
   chatAwaitsAnswer?: boolean;
 }
 
+export interface TaskDetailFrameProps {
+  icon?: React.ReactNode;
+  title: React.ReactNode;
+  subtitle?: React.ReactNode;
+  status?: React.ReactNode;
+  onBack: () => void;
+  backLabel?: string;
+  banner?: { text: string; action: string } | null;
+  children: React.ReactNode;
+}
+
+export const TaskDetailFrame: React.FC<TaskDetailFrameProps> = ({
+  icon,
+  title,
+  subtitle,
+  status,
+  onBack,
+  backLabel = "Back to chat",
+  banner,
+  children,
+}) => (
+  <div
+    className={cn("tw-flex tw-size-full tw-min-h-0 tw-flex-col", SLIDE_IN_PAGE_CLASS)}
+    data-testid="agent-task-detail"
+    onKeyDown={(event) => {
+      if (event.key === "Escape") onBack();
+    }}
+  >
+    <div className="copilot-divider-b tw-flex tw-items-center tw-gap-2 tw-px-2 tw-py-1.5">
+      <Button variant="ghost2" size="icon" aria-label={backLabel} onClick={onBack} autoFocus>
+        <ArrowLeft className="tw-size-4" />
+      </Button>
+      {icon}
+      <div className="tw-flex tw-min-w-0 tw-flex-1 tw-flex-col">
+        <span className="tw-truncate tw-text-sm tw-font-medium tw-text-normal">{title}</span>
+        {/* An asked agent's conversation heads with one row naming both agents, with no subtitle. https://github.com/Brevilabs/obsidian-copilot-private/issues/967 */}
+        {subtitle ? <span className="tw-truncate tw-text-xs tw-text-muted">{subtitle}</span> : null}
+      </div>
+      {status}
+    </div>
+    {/* Permission requests and questions show only in the main chat, so a task's view must point there. https://github.com/Brevilabs/obsidian-copilot-private/issues/749 */}
+    {banner ? (
+      <div className="tw-flex tw-items-center tw-justify-between tw-gap-2 tw-bg-callout-warning/10 tw-px-3 tw-py-1 tw-text-xs tw-text-warning">
+        {banner.text}
+        <Button variant="link" size="fit" className="tw-shrink-0" onClick={onBack}>
+          {banner.action}
+        </Button>
+      </div>
+    ) : null}
+    {children}
+  </div>
+);
+
 export const TaskDetailView: React.FC<TaskDetailViewProps> = ({
   task,
   status = task.status,
@@ -41,41 +96,24 @@ export const TaskDetailView: React.FC<TaskDetailViewProps> = ({
       : [taskKindLabel(task), task.model].filter(Boolean).join(" · ");
 
   return (
-    <div
-      className="tw-flex tw-size-full tw-min-h-0 tw-flex-col"
-      data-testid="agent-task-detail"
-      onKeyDown={(event) => {
-        if (event.key === "Escape") onBack();
-      }}
+    <TaskDetailFrame
+      icon={<Icon className="tw-size-4 tw-shrink-0 tw-text-normal" />}
+      title={taskTitle(task)}
+      subtitle={subtitle}
+      status={<TaskStatusMark status={status} className="tw-text-muted" />}
+      onBack={onBack}
+      banner={
+        chatAwaitsAnswer
+          ? { text: "The chat is waiting for your answer.", action: "Open chat" }
+          : null
+      }
     >
-      <div className="copilot-divider-b tw-flex tw-items-center tw-gap-2 tw-px-2 tw-py-1.5">
-        <Button variant="ghost2" size="icon" aria-label="Back to chat" onClick={onBack} autoFocus>
-          <ArrowLeft className="tw-size-4" />
-        </Button>
-        <Icon className="tw-size-4 tw-shrink-0 tw-text-normal" />
-        <div className="tw-flex tw-min-w-0 tw-flex-1 tw-flex-col">
-          <span className="tw-truncate tw-text-sm tw-font-medium tw-text-normal">
-            {taskTitle(task)}
-          </span>
-          <span className="tw-truncate tw-text-xs tw-text-muted">{subtitle}</span>
-        </div>
-        <TaskStatusMark status={status} className="tw-text-muted" />
-      </div>
-      {/* Permission requests and questions show only in the main chat, so a task's view must point there. https://github.com/Brevilabs/obsidian-copilot-private/issues/749 */}
-      {chatAwaitsAnswer ? (
-        <div className="tw-flex tw-items-center tw-justify-between tw-gap-2 tw-bg-callout-warning/10 tw-px-3 tw-py-1 tw-text-xs tw-text-warning">
-          The chat is waiting for your answer.
-          <Button variant="link" size="fit" className="tw-shrink-0" onClick={onBack}>
-            Open chat
-          </Button>
-        </div>
-      ) : null}
       {task.kind === "command" ? (
         <CommandDetail task={task} />
       ) : (
         <SubagentDetail task={task} messages={messages} app={app} />
       )}
-    </div>
+    </TaskDetailFrame>
   );
 };
 
@@ -156,20 +194,29 @@ const CommandDetail: React.FC<{ task: AgentTask }> = ({ task }) => {
   );
 };
 
-function useStickToBottom() {
+export function useStickToBottom() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const endRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const el = scrollRef.current;
     const content = contentRef.current;
     if (!el || !content) return;
+    // An asked agent's conversation opened from an earlier run rests at that run's end, where its reply is, instead of the latest run's, until the user scrolls to the real bottom to follow the newest run. https://github.com/Brevilabs/obsidian-copilot-private/issues/967
+    const toRealBottom = () => el.scrollHeight - el.scrollTop - el.clientHeight;
+    let marked = true;
+    const belowView = () =>
+      marked && endRef.current
+        ? endRef.current.getBoundingClientRect().top - el.getBoundingClientRect().bottom
+        : toRealBottom();
     let atBottom = true;
     const onScroll = () => {
-      atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < STICK_TO_BOTTOM_PX;
+      if (toRealBottom() < STICK_TO_BOTTOM_PX) marked = false;
+      atBottom = Math.abs(belowView()) < STICK_TO_BOTTOM_PX;
     };
     // Markdown renders after React commits, so the view follows the content's size, not its data. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
     const resizes = new ResizeObserver(() => {
-      if (atBottom) el.scrollTop = el.scrollHeight;
+      if (atBottom) el.scrollTop += belowView();
     });
     el.addEventListener("scroll", onScroll);
     resizes.observe(content);
@@ -178,5 +225,5 @@ function useStickToBottom() {
       resizes.disconnect();
     };
   }, []);
-  return { scrollRef, contentRef };
+  return { scrollRef, contentRef, endRef };
 }

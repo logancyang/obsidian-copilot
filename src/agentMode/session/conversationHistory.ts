@@ -1,10 +1,5 @@
 import type { AgentChatMessage } from "@/agentMode/session/types";
 import { diffTargetPaths, editTargetPaths } from "@/agentMode/session/editTargets";
-import {
-  parseFanoutComposite,
-  renderFanoutComposite,
-  trimHead,
-} from "@/agentMode/session/fanout/fanoutTypes";
 import { USER_SENDER } from "@/constants";
 import { escapeXml } from "@/LLMProviders/chainRunner/utils/xmlParsing";
 import { CHAT_IMAGE_EMBED } from "@/utils/chatImagePersistence";
@@ -14,8 +9,6 @@ import {
   isWebSelectedTextContext,
   type MessageContext,
 } from "@/types/message";
-
-export const MENTION_HISTORY_MAX_CHARS = 48_000;
 
 export const SAVED_HISTORY_MAX_CHARS = 200_000;
 
@@ -80,9 +73,9 @@ function renderMessageContext(context: MessageContext | undefined): string[] {
   return [`[context]\n${lines.join("\n")}`];
 }
 
-function historyProse(message: AgentChatMessage): string {
-  const turn = message.fanout ?? parseFanoutComposite(message.message);
-  return turn ? renderFanoutComposite(turn, (id) => id) : message.message;
+function trimHead(s: string, max: number, marker: string): string {
+  if (s.length <= max) return s;
+  return `${s.slice(0, max)}\n${marker}`;
 }
 
 function renderTurnContent(
@@ -94,7 +87,7 @@ function renderTurnContent(
   // The agent gets the saved file of each earlier image so it can open it, never the image data; a reopened chat holds its images as note embeds.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/907
   const images = attachedImages(message.content);
-  const prose = historyProse(message)
+  const prose = message.message
     .replace(CHAT_IMAGE_EMBED, (embed) => {
       images.push(embed);
       return "";

@@ -2,6 +2,7 @@ import type React from "react";
 import type { App } from "obsidian";
 import type { RenderNode, ThoughtPart, ToolCallPart } from "@/agentMode/ui/agentTrail";
 import type { AgentTasksContextValue } from "@/agentMode/ui/AgentTasksContext";
+import type { MemorySaveTrail } from "@/agents/agentMode/memorySaveCards";
 import { TOOL_CARD_KINDS } from "@/agentMode/ui/toolCardKinds";
 import { pluralize } from "@/agentMode/ui/toolSummaries";
 import { formatDuration } from "@/lib/duration";
@@ -18,6 +19,7 @@ export interface ActivityGroupNode {
 
 export interface ToolCardContext {
   tasks: AgentTasksContextValue | null;
+  memorySaves?: MemorySaveTrail | null;
 }
 
 export interface ToolCardRenderContext extends ToolCardContext {

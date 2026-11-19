@@ -177,6 +177,36 @@ describe("model", () => {
       );
     });
 
+    it("keeps the custom agent of the last chat started and drops a value that is not a name (https://github.com/Brevilabs/obsidian-copilot-private/issues/588)", () => {
+      const base = { byok: {}, activeBackend: "opencode", backends: {} };
+      const kept = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        agentMode: { ...base, lastCustomAgent: "coco" },
+      } as unknown as CopilotSettings);
+      const dropped = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        agentMode: { ...base, lastCustomAgent: 7 },
+      } as unknown as CopilotSettings);
+
+      expect(kept.agentMode.lastCustomAgent).toBe("coco");
+      expect(dropped.agentMode).not.toHaveProperty("lastCustomAgent");
+    });
+
+    it("keeps a dismissed first-agent banner dismissed and adds nothing for a user who never dismissed it (https://github.com/Brevilabs/obsidian-copilot-private/issues/939)", () => {
+      const base = { byok: {}, activeBackend: "opencode", backends: {} };
+      const dismissed = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        agentMode: { ...base, firstAgentBannerDismissed: true },
+      } as unknown as CopilotSettings);
+      const untouched = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        agentMode: { ...base, firstAgentBannerDismissed: "yes" },
+      } as unknown as CopilotSettings);
+
+      expect(dismissed.agentMode.firstAgentBannerDismissed).toBe(true);
+      expect(untouched.agentMode).not.toHaveProperty("firstAgentBannerDismissed");
+    });
+
     it("preserves an explicit notificationSound=false (a user who muted it stays muted)", () => {
       const sanitized = sanitizeSettings({
         ...DEFAULT_SETTINGS,

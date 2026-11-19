@@ -1,4 +1,6 @@
+import type { AgentChatMessage } from "@/agentMode/session/types";
 import { AgentTabStrip } from "@/agentMode/ui/AgentTabStrip";
+import type { CustomAgent } from "@/agents/CustomAgentStore";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SESSIONS_SIDEBAR_VIEWTYPE } from "@/constants";
@@ -8,14 +10,23 @@ import {
   type FakeWorkspaceApp,
 } from "@/agentMode/ui/testing/fakeWorkspaceApp";
 import { setNavigatorAccess } from "@/agentMode/ui/testing/navigatorAccess";
+import { installRadixMenuPolyfills } from "@/agentMode/ui/testing/radixMenuPolyfills";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 
 jest.mock("@/entitlement");
 
+const IDENTITY_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/938";
+const DOTS_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/948";
+
 function renderStrip(
   manager: unknown,
-  { workspace = makeFakeWorkspaceApp(), onOpenSidebar = jest.fn() } = {}
+  {
+    workspace = makeFakeWorkspaceApp(),
+    onOpenSidebar = jest.fn(),
+    agents = undefined as readonly CustomAgent[] | undefined,
+    onTabClick = undefined as (() => void) | undefined,
+  } = {}
 ) {
   return render(
     React.createElement(
@@ -27,6 +38,8 @@ function renderStrip(
         React.createElement(AgentTabStrip, {
           manager: manager as AgentSessionManager,
           onOpenSidebar,
+          agents,
+          onTabClick,
         })
       )
     )
@@ -51,7 +64,85 @@ function makeManagerWithOneChat() {
   };
 }
 
+interface FakeChat {
+  label: string;
+  agentSlug?: string;
+  status?: string;
+  needsAttention?: boolean;
+  messages?: AgentChatMessage[];
+}
+
+function makeManagerWithChats(chats: FakeChat[]) {
+  const sessions = chats.map(({ label, agentSlug, status, needsAttention, messages = [] }) => {
+    const listeners: Array<{ onMessagesChanged(): void }> = [];
+    const session = {
+      internalId: label,
+      backendId: "claude",
+      agentSlug: agentSlug ?? null,
+      messages,
+      subscribe: (listener?: { onMessagesChanged(): void }) => {
+        if (listener) listeners.push(listener);
+        return () => {};
+      },
+      setMessages: (next: AgentChatMessage[]) => {
+        session.messages = next;
+        listeners.forEach((listener) => listener.onMessagesChanged());
+      },
+      getLabel: () => label,
+      getStatus: () => status ?? "idle",
+      getNeedsAttention: () => needsAttention ?? false,
+      store: { getDisplayMessages: () => session.messages },
+    };
+    return session;
+  });
+  return {
+    subscribe: () => () => {},
+    getSessionsForScope: () => sessions,
+    getActiveProjectId: () => null,
+    getActiveSession: () => sessions[0],
+    getIsStarting: () => false,
+  };
+}
+
+const COCO = { slug: "coco", name: "Coco", faceSrc: "face:coco" } as CustomAgent;
+const LEO = { slug: "leo", name: "Leo", faceSrc: "face:leo" } as CustomAgent;
+
+function iconOf(element: HTMLElement) {
+  return {
+    face: element.querySelector("img")?.getAttribute("src") ?? null,
+    ring: element.querySelector('[data-agent-face-ring="running"]') !== null,
+    spinner: element.querySelector("svg.tw-animate-spin") !== null,
+  };
+}
+
+function tabIcon(label: string) {
+  return iconOf(screen.getByRole("tab", { name: new RegExp(label) }));
+}
+
+function dotOf(element: HTMLElement): string | null {
+  const className = element.querySelector("span[aria-hidden].tw-rounded-full")?.className ?? "";
+  return (
+    className
+      .match(/--color-(orange|green)|tw-bg-(red)/)
+      ?.slice(1)
+      .find(Boolean) ?? null
+  );
+}
+
+const LEO_WAITS: AgentChatMessage[] = [
+  {
+    id: "asked",
+    sender: "user",
+    timestamp: null,
+    isVisible: true,
+    message: "@Leo reconcile October",
+    agentMentions: [{ id: "run", agent: "leo", name: "Leo", status: "question", startedAt: 0 }],
+  },
+];
+
 describe("AgentTabStrip", () => {
+  beforeAll(() => installRadixMenuPolyfills());
+
   describe("AgentTabStrip()", () => {
     beforeEach(() => setNavigatorAccess("supporter"));
     afterEach(() => jest.restoreAllMocks());
@@ -64,6 +155,7 @@ describe("AgentTabStrip", () => {
         getLabel: () => label,
         getStatus: () => "idle",
         getNeedsAttention: () => false,
+        store: { getDisplayMessages: () => [] },
       }));
       const manager = {
         subscribe: () => () => {},
@@ -132,6 +224,17 @@ describe("AgentTabStrip", () => {
 
       fireEvent(tab, new MouseEvent("auxclick", { bubbles: true, button: 1 }));
       expect(manager.detachSessionFromTab).toHaveBeenCalledWith(session.internalId);
+    });
+
+    it("tells its host when the active tab is clicked, so an agent's profile covering the chat goes back to it for https://github.com/Brevilabs/obsidian-copilot-private/issues/940", () => {
+      const manager = { ...makeManagerWithOneChat(), setActiveSession: jest.fn() };
+      const onTabClick = jest.fn();
+      renderStrip(manager, { onTabClick });
+
+      fireEvent.click(screen.getByRole("tab", { selected: true }));
+
+      expect(manager.setActiveSession).toHaveBeenCalledWith("existing");
+      expect(onTabClick).toHaveBeenCalledTimes(1);
     });
 
     it("starts a new chat when the new-chat button is clicked", () => {
@@ -203,6 +306,146 @@ describe("AgentTabStrip", () => {
 
       expect(screen.getByRole("tab", { name: /Existing chat/ })).toBeTruthy();
       expect(screen.getByRole("button", { name: "Open Copilot Navigator" })).toBeTruthy();
+    });
+
+    it(`shows an agent chat's face as its tab icon and keeps the backend icon on a Copilot chat (${IDENTITY_ISSUE})`, () => {
+      jest.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(600);
+      renderStrip(
+        makeManagerWithChats([
+          { label: "Launch video plan", agentSlug: "coco" },
+          { label: "Notes" },
+        ]),
+        { agents: [COCO, LEO] }
+      );
+
+      expect(tabIcon("Launch video plan")).toEqual({
+        face: "face:coco",
+        ring: false,
+        spinner: false,
+      });
+      expect(tabIcon("Notes")).toEqual({ face: null, ring: false, spinner: false });
+    });
+
+    it(`keeps the backend icon on a chat whose agent is gone and on every chat while no agents are listed (${IDENTITY_ISSUE})`, () => {
+      jest.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(600);
+      const manager = makeManagerWithChats([
+        { label: "Taxes", agentSlug: "gone" },
+        { label: "Launch video plan", agentSlug: "coco" },
+      ]);
+
+      const { unmount } = renderStrip(manager, { agents: [COCO] });
+      expect(tabIcon("Taxes").face).toBeNull();
+      unmount();
+
+      renderStrip(manager);
+      expect(tabIcon("Taxes").face).toBeNull();
+      expect(tabIcon("Launch video plan").face).toBeNull();
+    });
+
+    it(`keeps a running agent chat's face and spins a ring around it, while a running Copilot chat keeps its spinner (${IDENTITY_ISSUE})`, () => {
+      jest.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(600);
+      renderStrip(
+        makeManagerWithChats([
+          { label: "October books", agentSlug: "leo", status: "running" },
+          { label: "Notes", status: "running" },
+        ]),
+        { agents: [COCO, LEO] }
+      );
+
+      expect(tabIcon("October books")).toEqual({ face: "face:leo", ring: true, spinner: false });
+      expect(tabIcon("Notes")).toEqual({ face: null, ring: false, spinner: true });
+    });
+
+    it(`keeps the 128px tabs and shows each agent chat's face, ring included, at 20px in the overflow menu (${IDENTITY_ISSUE})`, () => {
+      jest.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(400);
+      renderStrip(
+        makeManagerWithChats([
+          { label: "Launch video plan", agentSlug: "coco" },
+          { label: "Release notes" },
+          { label: "October books", agentSlug: "leo", status: "running" },
+        ]),
+        { agents: [COCO, LEO] }
+      );
+      expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
+        "Launch video plan",
+        "Release notes",
+      ]);
+      const tab = screen.getByRole("tab", { name: /Launch video plan/ });
+      expect(tab.className).toContain("tw-w-32");
+      expect(tab.querySelector("img")?.className).toContain("tw-size-4");
+
+      fireEvent.pointerDown(screen.getByRole("button", { name: "Show 1 more chat" }), {
+        button: 0,
+        ctrlKey: false,
+      });
+
+      const row = screen.getByRole("menuitem", { name: /October books/ });
+      expect(iconOf(row)).toEqual({ face: "face:leo", ring: true, spinner: false });
+      expect(row.querySelector("img")?.className).toContain("tw-size-5");
+    });
+
+    it(`dots a chat orange while an agent it asked waits on the user and green once it finished while the user was elsewhere, and none on a chat that doesn't want the user (${DOTS_ISSUE})`, () => {
+      jest.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(800);
+      renderStrip(
+        makeManagerWithChats([
+          { label: "School pickup", agentSlug: "nora" },
+          {
+            label: "October books",
+            agentSlug: "coco",
+            needsAttention: true,
+            messages: LEO_WAITS,
+          },
+          { label: "Release notes", needsAttention: true },
+        ]),
+        { agents: [COCO, LEO] }
+      );
+
+      expect(dotOf(screen.getByRole("tab", { name: /School pickup/ }))).toBeNull();
+      expect(dotOf(screen.getByRole("tab", { name: /October books/ }))).toBe("orange");
+      expect(dotOf(screen.getByRole("tab", { name: /Release notes/ }))).toBe("green");
+    });
+
+    it(`puts a dot on the "…" button when a chat with a dot sits in its menu (${DOTS_ISSUE})`, () => {
+      jest.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(400);
+      renderStrip(
+        makeManagerWithChats([
+          { label: "School pickup" },
+          { label: "Launch plan" },
+          { label: "October books", needsAttention: true, messages: LEO_WAITS },
+          { label: "Release notes", needsAttention: true },
+        ])
+      );
+
+      expect(dotOf(screen.getByRole("button", { name: "Show 2 more chats" }))).toBe("orange");
+    });
+
+    it(`turns a background chat's tab and "…" orange as soon as an agent it asked waits for the user's OK, though no turn ran in that chat (${DOTS_ISSUE})`, () => {
+      jest.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(400);
+      const manager = makeManagerWithChats([
+        { label: "School pickup" },
+        { label: "October books" },
+        { label: "Release notes" },
+      ]);
+      renderStrip(manager);
+      const permission: AgentChatMessage[] = [
+        {
+          ...LEO_WAITS[0],
+          agentMentions: [{ ...LEO_WAITS[0].agentMentions![0], status: "permission" }],
+        },
+      ];
+      const waitFor = (label: string) =>
+        act(() =>
+          manager
+            .getSessionsForScope()
+            .find((session) => session.internalId === label)
+            ?.setMessages(permission)
+        );
+      waitFor("October books");
+      waitFor("Release notes");
+
+      expect(dotOf(screen.getByRole("tab", { name: /School pickup/ }))).toBeNull();
+      expect(dotOf(screen.getByRole("tab", { name: /October books/ }))).toBe("orange");
+      expect(dotOf(screen.getByRole("button", { name: "Show 1 more chat" }))).toBe("orange");
     });
   });
 });

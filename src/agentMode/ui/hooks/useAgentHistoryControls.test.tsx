@@ -60,6 +60,12 @@ function emitVault(event: "rename" | "delete", ...args: unknown[]) {
   for (const listener of vaultListeners.get(event) ?? []) listener(...args);
 }
 
+const metadataListeners = new Set<VaultListener>();
+
+function emitMetadataChanged(path: string, frontmatter: Record<string, unknown>) {
+  for (const listener of metadataListeners) listener({ path }, "", { frontmatter });
+}
+
 function makeBookmarkingPlugin(bookmarks: ReturnType<typeof makeBookmarks> | null) {
   const epochs: Record<string, number> = { "chats/agent__a.md": 1_000, "chats/saved.md": 3_000 };
   const app = {
@@ -78,6 +84,11 @@ function makeBookmarkingPlugin(bookmarks: ReturnType<typeof makeBookmarks> | nul
         path in epochs ? new (TFile as unknown as new (path: string) => TFile)(path) : null,
     },
     metadataCache: {
+      on: (_event: "changed", listener: VaultListener) => {
+        metadataListeners.add(listener);
+        return listener;
+      },
+      offref: (listener: VaultListener) => metadataListeners.delete(listener),
       getCache: (path: string) =>
         path in epochs ? { frontmatter: { epoch: epochs[path] } } : null,
       getFileCache: (file: TFile) =>
@@ -135,6 +146,33 @@ describe("useAgentHistoryControls", () => {
 
       await act(async () => {
         emitVault("delete", { path: "b" });
+      });
+      expect(manager.getChatHistoryItems).toHaveBeenCalledTimes(2);
+    });
+
+    it("reloads when a listed chat's note gains or loses its archive mark outside the list, as deleting the chat's agent archives it, and not for other note changes (https://github.com/Brevilabs/obsidian-copilot-private/issues/940)", async () => {
+      const manager = makeManager() as AgentSessionManager & { getChatHistoryItems: jest.Mock };
+      manager.getChatHistoryItems.mockResolvedValue([item("a"), { ...item("b"), archivedAt: 5 }]);
+      const { result } = renderControls(manager);
+      await act(async () => {
+        await result.current.loadChatHistory();
+      });
+      manager.getChatHistoryItems.mockClear();
+
+      await act(async () => {
+        emitMetadataChanged("a", { topic: "Renamed" });
+        emitMetadataChanged("b", { archivedAt: 5 });
+        emitMetadataChanged("notes/other.md", { archivedAt: 9 });
+      });
+      expect(manager.getChatHistoryItems).not.toHaveBeenCalled();
+
+      await act(async () => {
+        emitMetadataChanged("a", { archivedAt: 9 });
+      });
+      expect(manager.getChatHistoryItems).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        emitMetadataChanged("b", {});
       });
       expect(manager.getChatHistoryItems).toHaveBeenCalledTimes(2);
     });

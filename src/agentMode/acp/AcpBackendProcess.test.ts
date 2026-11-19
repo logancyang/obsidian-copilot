@@ -1,4 +1,7 @@
 import { FileSystemAdapter, App } from "obsidian";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import type {
   BackendDescriptor,
   PermissionOption,
@@ -9,6 +12,7 @@ import { AcpBackendProcess } from "./AcpBackendProcess";
 import { AcpProcessManager } from "./AcpProcessManager";
 import type { AcpBackend } from "./types";
 import type { VaultClient } from "./VaultClient";
+import { buildCodexModeState } from "@/agentMode/backends/codex/codexModeMapping";
 import { AgentReportedError, MethodUnsupportedError } from "@/agentMode/session/errors";
 import { RequestError, type SessionConfigOption } from "@agentclientprotocol/sdk";
 
@@ -118,6 +122,8 @@ jest.mock("@agentclientprotocol/sdk", () => {
 
 const exitListeners = new Set<() => void>();
 let mockProcessIsRunning = true;
+
+jest.mock("@/agents/customAgentsGate", () => ({ getCustomAgentsGate: () => "full" }));
 
 jest.mock("./AcpProcessManager", () => ({
   AcpProcessManager: jest.fn().mockImplementation(() => ({
@@ -1106,6 +1112,185 @@ describe("AcpBackendProcess", () => {
         } as unknown as Parameters<typeof client.requestPermission>[0]);
         expect(response).toEqual({ outcome: { outcome: "cancelled" } });
       });
+
+      describe("in a custom agent chat that saves rules", () => {
+        let folder: string;
+        let memoryPath: string;
+
+        beforeEach(() => {
+          folder = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "acp-agent-memory-")));
+          memoryPath = path.join(folder, "MEMORY.md");
+          mockInitializeResult = {
+            protocolVersion: 1,
+            agentCapabilities: { sessionCapabilities: { systemPrompt: {}, resume: {} } },
+          };
+        });
+
+        afterEach(() => fs.rmSync(folder, { recursive: true, force: true }));
+
+        const OPTIONS = [
+          { optionId: "approved", name: "Allow once", kind: "allow_once" },
+          { optionId: "approved-for-session", name: "Allow always", kind: "allow_always" },
+          { optionId: "abort", name: "Reject", kind: "reject_once" },
+        ];
+
+        async function agentChat(descriptor = buildStubDescriptor()) {
+          const backend = new AcpBackendProcess(
+            buildApp(),
+            buildStubBackend(),
+            "1.0.0",
+            descriptor
+          );
+          await backend.start();
+          const prompter = jest.fn().mockResolvedValue({
+            outcome: { outcome: "selected", optionId: "abort" },
+          });
+          backend.setPermissionPrompter(prompter);
+          const { sessionId } = await backend.newSession({
+            cwd: "/vault",
+            agent: { slug: "coco", prompt: "You are Coco.", memoryPath },
+          });
+          const ask = (toolCall: Record<string, unknown>, onSession = sessionId) =>
+            getVaultClient(backend).requestPermission({
+              sessionId: onSession,
+              toolCall: { toolCallId: "tc1", title: "Edit", ...toolCall },
+              options: OPTIONS,
+            } as unknown as Parameters<VaultClient["requestPermission"]>[0]);
+          return { backend, prompter, sessionId, ask };
+        }
+
+        it("allows an edit of the agent's own MEMORY.md once, without a permission card (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", async () => {
+          const { prompter, ask } = await agentChat();
+
+          const response = await ask({ kind: "edit", locations: [{ path: memoryPath }] });
+
+          expect(response).toEqual({ outcome: { outcome: "selected", optionId: "approved" } });
+          expect(prompter).not.toHaveBeenCalled();
+        });
+
+        it("allows the save named only by the edit's diff or input path (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", async () => {
+          const { prompter, ask } = await agentChat();
+
+          await ask({
+            kind: "edit",
+            content: [{ type: "diff", path: memoryPath, oldText: null, newText: "x" }],
+          });
+          await ask({ kind: "edit", rawInput: { filePath: memoryPath } });
+
+          expect(prompter).not.toHaveBeenCalled();
+        });
+
+        it("asks with a card for the agent's own MEMORY.md in Plan mode, as Codex does in a project chat whose agent folder is outside the writable project folder (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", async () => {
+          mockNewSession.mockResolvedValue({
+            sessionId: "codex-plan",
+            modes: {
+              currentModeId: "agent",
+              availableModes: [
+                { id: "read-only", name: "Read Only" },
+                { id: "agent", name: "Agent" },
+              ],
+            },
+            configOptions: [
+              {
+                id: "collaboration_mode",
+                type: "select",
+                name: "Collaboration mode",
+                currentValue: "plan",
+                options: [
+                  { value: "default", name: "Default" },
+                  { value: "plan", name: "Plan" },
+                ],
+              },
+            ],
+          } as { sessionId: string });
+          const { prompter, ask } = await agentChat(
+            buildStubDescriptor({ getModeState: buildCodexModeState })
+          );
+
+          const response = await ask({ kind: "edit", locations: [{ path: memoryPath }] });
+
+          expect(prompter).toHaveBeenCalledTimes(1);
+          expect(response).toEqual({ outcome: { outcome: "selected", optionId: "abort" } });
+        });
+
+        it("asks as usual for another file, an edit that also touches another file, an edit naming no file, and a command (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", async () => {
+          const { prompter, ask } = await agentChat();
+          const instructions = path.join(folder, "instructions.md");
+
+          await ask({ kind: "edit", locations: [{ path: instructions }] });
+          await ask({ kind: "edit", locations: [{ path: memoryPath }, { path: instructions }] });
+          await ask({ kind: "edit" });
+          await ask({ kind: "execute", locations: [{ path: memoryPath }] });
+
+          expect(prompter).toHaveBeenCalledTimes(4);
+        });
+
+        it("asks for an edit whose request names only MEMORY.md while the tool call it started with moves the file elsewhere, as Codex reports a patch with a Move to (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", async () => {
+          const { backend, prompter, sessionId, ask } = await agentChat();
+          await getVaultClient(backend).sessionUpdate({
+            sessionId,
+            update: {
+              sessionUpdate: "tool_call",
+              toolCallId: "tc1",
+              title: "Editing files",
+              kind: "edit",
+              status: "pending",
+              content: [
+                { type: "diff", path: path.join(folder, "moved.md"), oldText: "", newText: "" },
+              ],
+            },
+          } as unknown as Parameters<VaultClient["sessionUpdate"]>[0]);
+
+          await ask({ kind: "edit", locations: [{ path: memoryPath }] });
+
+          expect(prompter).toHaveBeenCalledTimes(1);
+        });
+
+        it("asks for an input that names the agent's MEMORY.md and another file (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", async () => {
+          const { prompter, ask } = await agentChat();
+
+          await ask({
+            kind: "edit",
+            rawInput: { filePath: memoryPath, path: path.join(folder, "notes.md") },
+          });
+
+          expect(prompter).toHaveBeenCalledTimes(1);
+        });
+
+        it("reads a backslashed path as the platform writes it: asks where a backslash is part of a file name, and allows it on Windows, where it names the agent's own MEMORY.md (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", async () => {
+          const { prompter, ask } = await agentChat();
+          const backslashed = `${path.dirname(folder)}\\${path.basename(folder)}\\MEMORY.md`;
+
+          const response = await ask({ kind: "edit", locations: [{ path: backslashed }] });
+
+          const separates = path.sep === "\\";
+          expect(response).toEqual({
+            outcome: { outcome: "selected", optionId: separates ? "approved" : "abort" },
+          });
+          expect(prompter).toHaveBeenCalledTimes(separates ? 0 : 1);
+        });
+
+        it("asks as usual in another chat on the same agent process", async () => {
+          const { prompter, ask } = await agentChat();
+
+          await ask({ kind: "edit", locations: [{ path: memoryPath }] }, "plain-chat");
+
+          expect(prompter).toHaveBeenCalledTimes(1);
+        });
+
+        it("allows the save again after the agent chat is resumed", async () => {
+          const { backend, prompter, ask } = await agentChat();
+          await backend.resumeSession({
+            sessionId: "resumed",
+            cwd: "/vault",
+            agent: { slug: "coco", prompt: "You are Coco.", memoryPath },
+          });
+
+          await ask({ kind: "edit", locations: [{ path: memoryPath }] }, "resumed");
+
+          expect(prompter).not.toHaveBeenCalled();
+        });
+      });
     });
 
     describe("setAskUserQuestionPrompter()", () => {
@@ -1218,6 +1403,215 @@ describe("AcpBackendProcess", () => {
         headers: { Authorization: "Bearer t0k3n" },
         readOnlyToolNames: [],
       };
+
+      it("appends a custom agent's part to the system prompt on session/new when the agent takes a system prompt", async () => {
+        mockInitializeResult = {
+          protocolVersion: 1,
+          agentCapabilities: { sessionCapabilities: { systemPrompt: {} } },
+        };
+        const backend = await startBackend();
+
+        await backend.newSession({
+          cwd: "/vault",
+          agent: { slug: "coco", prompt: "You are Coco." },
+        });
+
+        expect(mockNewSession.mock.calls[0][0]).toMatchObject({
+          cwd: "/vault",
+          systemPrompt: { mode: "append", content: [{ type: "text", text: "You are Coco." }] },
+        });
+      });
+
+      it("sends no system prompt for a Copilot chat", async () => {
+        mockInitializeResult = {
+          protocolVersion: 1,
+          agentCapabilities: { sessionCapabilities: { systemPrompt: {} } },
+        };
+        const backend = await startBackend();
+
+        await backend.newSession({ cwd: "/vault" });
+
+        expect(mockNewSession.mock.calls[0][0]).not.toHaveProperty("systemPrompt");
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/937 refuses a custom agent chat, without opening a session, and says the backend needs an update when it cannot take the agent's part", async () => {
+        const backend = new AcpBackendProcess(
+          buildApp(),
+          buildStubBackend({ id: "codex", displayName: "Codex" }),
+          "1.0.0",
+          buildStubDescriptor({ id: "codex", displayName: "Codex" })
+        );
+        await backend.start();
+
+        await expect(
+          backend.newSession({ cwd: "/vault", agent: { slug: "coco", prompt: "You are Coco." } })
+        ).rejects.toThrow("Codex needs an update to run Copilot Teammates.");
+        expect(mockNewSession).not.toHaveBeenCalled();
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/937 runs a custom agent chat as the backend's own agent for it, chosen through a session config option right after session/new", async () => {
+        const modeOptions = [
+          {
+            id: "mode",
+            type: "select",
+            currentValue: "copilot-build",
+            options: [
+              { value: "copilot-build", name: "Copilot" },
+              { value: "copilot-agent-coco/default", name: "Coco" },
+            ],
+          },
+        ];
+        mockNewSession.mockResolvedValueOnce({
+          sessionId: "test-session",
+          configOptions: modeOptions,
+        } as never);
+        const agent = { slug: "coco", prompt: "You are Coco." };
+        const selectAgentMode = jest.fn(async () => ({
+          configId: "mode",
+          value: "copilot-agent-coco/default",
+        }));
+        const backend = new AcpBackendProcess(
+          buildApp(),
+          buildStubBackend({ selectAgentMode }),
+          "1.0.0",
+          modelDescriptor()
+        );
+        await backend.start();
+
+        await backend.newSession({ cwd: "/vault", agent });
+
+        expect(selectAgentMode).toHaveBeenCalledWith(agent, [
+          expect.objectContaining({ id: "mode", currentValue: "copilot-build" }),
+        ]);
+        expect(mockSetSessionConfigOption).toHaveBeenCalledWith({
+          sessionId: "test-session",
+          configId: "mode",
+          value: "copilot-agent-coco/default",
+        });
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/937 waits for a later config update to offer the custom agent's mode before choosing it", async () => {
+        const modeOption = (values: string[]) => [
+          {
+            id: "mode",
+            type: "select",
+            currentValue: "copilot-build",
+            options: values.map((value) => ({ value, name: value })),
+          },
+        ];
+        mockNewSession.mockResolvedValueOnce({
+          sessionId: "test-session",
+          configOptions: modeOption(["copilot-build"]),
+        } as never);
+        let markSelected!: () => void;
+        const selected = new Promise<void>((resolve) => (markSelected = resolve));
+        const backend = new AcpBackendProcess(
+          buildApp(),
+          buildStubBackend({
+            selectAgentMode: async () => {
+              markSelected();
+              return { configId: "mode", value: "copilot-agent-coco/default" };
+            },
+          }),
+          "1.0.0",
+          modelDescriptor()
+        );
+        await backend.start();
+
+        const opening = backend.newSession({
+          cwd: "/vault",
+          agent: { slug: "coco", prompt: "You are Coco." },
+        });
+        await selected;
+        const chosenBeforeUpdate = mockSetSessionConfigOption.mock.calls.length;
+        await (
+          getVaultClient(backend) as unknown as { sessionUpdate: (n: unknown) => Promise<void> }
+        ).sessionUpdate({
+          sessionId: "test-session",
+          update: {
+            sessionUpdate: "config_option_update",
+            configOptions: modeOption(["copilot-build", "copilot-agent-coco/default"]),
+          },
+        });
+        await opening;
+
+        expect(chosenBeforeUpdate).toBe(0);
+        expect(mockSetSessionConfigOption).toHaveBeenCalledWith(
+          expect.objectContaining({ configId: "mode", value: "copilot-agent-coco/default" })
+        );
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/937 still tries the custom agent's mode, so the chat fails instead of hanging, when no update ever offers it", async () => {
+        const backend = new AcpBackendProcess(
+          buildApp(),
+          buildStubBackend({
+            selectAgentMode: async () => ({
+              configId: "mode",
+              value: "copilot-agent-coco/default",
+            }),
+          }),
+          "1.0.0",
+          modelDescriptor()
+        );
+        await backend.start();
+        mockSetSessionConfigOption.mockRejectedValueOnce(
+          new Error("Invalid params: mode not found: copilot-agent-coco/default")
+        );
+        jest.useFakeTimers();
+        try {
+          const opening = backend.newSession({
+            cwd: "/vault",
+            agent: { slug: "coco", prompt: "You are Coco." },
+          });
+          const failed = expect(opening).rejects.toThrow("mode not found");
+          await jest.advanceTimersByTimeAsync(10_000);
+          await failed;
+        } finally {
+          jest.useRealTimers();
+        }
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/937 closes the just-opened session when the custom agent cannot be chosen, so no empty session is left behind", async () => {
+        mockInitializeResult = {
+          protocolVersion: 1,
+          agentCapabilities: { sessionCapabilities: { close: {} } },
+        };
+        mockNewSession.mockResolvedValueOnce({ sessionId: "orphan" });
+        const backend = new AcpBackendProcess(
+          buildApp(),
+          buildStubBackend({
+            selectAgentMode: async () => {
+              throw new Error(
+                "Copilot Teammates can't run on OpenCode while OPENCODE_CONFIG is set."
+              );
+            },
+          }),
+          "1.0.0",
+          modelDescriptor()
+        );
+        await backend.start();
+
+        await expect(
+          backend.newSession({ cwd: "/vault", agent: { slug: "coco", prompt: "You are Coco." } })
+        ).rejects.toThrow("Copilot Teammates can't run on OpenCode while OPENCODE_CONFIG is set.");
+        expect(mockCloseSession).toHaveBeenCalledWith({ sessionId: "orphan" });
+      });
+
+      it("leaves a Copilot chat's mode alone when the backend picks no agent of its own for it", async () => {
+        const selectAgentMode = jest.fn(async () => null);
+        const backend = new AcpBackendProcess(
+          buildApp(),
+          buildStubBackend({ selectAgentMode }),
+          "1.0.0",
+          buildStubDescriptor()
+        );
+        await backend.start();
+
+        await backend.newSession({ cwd: "/vault" });
+
+        expect(selectAgentMode).toHaveBeenCalledWith(null, null);
+        expect(mockSetSessionConfigOption).not.toHaveBeenCalled();
+      });
 
       it("passes Copilot's MCP servers to session/new as HTTP servers when the agent advertises HTTP MCP", async () => {
         mockInitializeResult = {
@@ -1332,6 +1726,41 @@ describe("AcpBackendProcess", () => {
         ]);
       });
 
+      it("appends the custom agent's part again when it resumes an agent chat, so the agent outlasts compaction after the resume", async () => {
+        mockInitializeResult = {
+          protocolVersion: 1,
+          agentCapabilities: { sessionCapabilities: { resume: {}, systemPrompt: {} } },
+        };
+        const backend = await startBackend();
+
+        await backend.resumeSession({
+          sessionId: "s1",
+          cwd: "/vault",
+          agent: { slug: "coco", prompt: "You are Coco." },
+        });
+
+        expect(mockResumeSession.mock.calls[0][0]).toMatchObject({
+          systemPrompt: { mode: "append", content: [{ type: "text", text: "You are Coco." }] },
+        });
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/937 refuses to resume a chat as its custom agent when the backend cannot take the agent's part", async () => {
+        mockInitializeResult = {
+          protocolVersion: 1,
+          agentCapabilities: { sessionCapabilities: { resume: {} } },
+        };
+        const backend = await startBackend();
+
+        await expect(
+          backend.resumeSession({
+            sessionId: "s1",
+            cwd: "/vault",
+            agent: { slug: "coco", prompt: "You are Coco." },
+          })
+        ).rejects.toThrow("opencode needs an update to run Copilot Teammates.");
+        expect(mockResumeSession).not.toHaveBeenCalled();
+      });
+
       it("sends the session's cwd with no MCP servers to session/resume", async () => {
         mockInitializeResult = {
           protocolVersion: 1,
@@ -1389,6 +1818,70 @@ describe("AcpBackendProcess", () => {
         expect(req.mcpServers).toEqual([
           { type: "http", name: "obsidian-copilot", url: "http://127.0.0.1:1/mcp", headers: [] },
         ]);
+      });
+
+      it("appends the custom agent's part again when it loads an agent chat", async () => {
+        mockInitializeResult = {
+          protocolVersion: 1,
+          agentCapabilities: { loadSession: true, sessionCapabilities: { systemPrompt: {} } },
+        };
+        const backend = await startBackend();
+
+        await backend.loadSession({
+          sessionId: "ses_load",
+          cwd: "/vault",
+          agent: { slug: "coco", prompt: "You are Coco." },
+        });
+
+        expect(mockLoadSession.mock.calls[0][0]).toMatchObject({
+          systemPrompt: { mode: "append", content: [{ type: "text", text: "You are Coco." }] },
+        });
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/937 refuses to load a chat as its custom agent when the backend cannot take the agent's part", async () => {
+        const backend = await startLoadCapableBackend();
+
+        await expect(
+          backend.loadSession({
+            sessionId: "ses_load",
+            cwd: "/vault",
+            agent: { slug: "coco", prompt: "You are Coco." },
+          })
+        ).rejects.toThrow("opencode needs an update to run Copilot Teammates.");
+        expect(mockLoadSession).not.toHaveBeenCalled();
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/937 moves a reopened chat to the mode the backend picks for it, such as off a custom agent that can no longer load", async () => {
+        mockInitializeResult = { protocolVersion: 1, agentCapabilities: { loadSession: true } };
+        mockLoadSession.mockResolvedValueOnce({
+          configOptions: [
+            {
+              id: "mode",
+              type: "select",
+              currentValue: "copilot-agent-coco/default",
+              options: [{ value: "copilot-build", name: "Copilot" }],
+            },
+          ],
+        });
+        const selectAgentMode = jest.fn(async () => ({ configId: "mode", value: "copilot-build" }));
+        const backend = new AcpBackendProcess(
+          buildApp(),
+          buildStubBackend({ selectAgentMode }),
+          "1.0.0",
+          modelDescriptor()
+        );
+        await backend.start();
+
+        await backend.loadSession({ sessionId: "ses_load", cwd: "/vault" });
+
+        expect(selectAgentMode).toHaveBeenCalledWith(null, [
+          expect.objectContaining({ currentValue: "copilot-agent-coco/default" }),
+        ]);
+        expect(mockSetSessionConfigOption).toHaveBeenCalledWith({
+          sessionId: "ses_load",
+          configId: "mode",
+          value: "copilot-build",
+        });
       });
 
       it("returns the session id and the state the agent reports", async () => {

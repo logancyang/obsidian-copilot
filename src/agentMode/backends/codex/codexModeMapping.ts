@@ -13,7 +13,6 @@ export function buildCodexModeMapping(): ModeMapping {
     // replace the live session's translated ids with guessed legacy ids here.
     // https://github.com/logancyang/obsidian-copilot/issues/2916
     canonical: {},
-    readOnlyModeId: "read-only",
   };
 }
 

@@ -350,6 +350,34 @@ describe("InteractiveRequests", () => {
           outcome: { outcome: "selected", optionId: "allow_once" },
         });
       });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/946 keeps an @-mentioned agent's request when the chat's own are rejected, and rejects it with that agent's", async () => {
+        const { requests } = makeRequests();
+        const leo = { slug: "leo", name: "Leo", faceSrc: "leo.webp" };
+        const fromAgent = (slug: string) =>
+          requests.handleToolPermission({
+            ...writePermissionRequest(),
+            requester: { agent: { ...leo, slug } },
+            toolCall: { ...writePermissionRequest().toolCall, toolCallId: `tc-${slug}` },
+          });
+        void requests.handleToolPermission(writePermissionRequest());
+        const fromLeo = fromAgent("leo");
+        void fromAgent("maya");
+
+        requests.rejectToolRequestsFrom("main");
+        expect(requests.getPendingToolPermissions().map((p) => p.toolCall.toolCallId)).toEqual([
+          "tc-leo",
+          "tc-maya",
+        ]);
+        requests.rejectToolRequestsFrom({ agent: leo });
+
+        await expect(fromLeo).resolves.toEqual({
+          outcome: { outcome: "selected", optionId: "reject_once" },
+        });
+        expect(requests.getPendingToolPermissions().map((p) => p.toolCall.toolCallId)).toEqual([
+          "tc-maya",
+        ]);
+      });
     });
 
     describe("handleAskUserQuestion()", () => {

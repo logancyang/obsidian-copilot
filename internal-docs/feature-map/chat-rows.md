@@ -7,7 +7,7 @@ One chat in a list: the Navigator, Recent chats on the start screen, or the chat
 - row-open: click a row to show its chat in Agent Chat. A saved chat the agent still has shows its tool steps along with the times, images and attached context saved in its note, and opening it leaves the note's messages unchanged.
 - row-open-saved: a saved chat the agent no longer has, such as one saved on another computer, opens from its note on the model the chat last ran. On the next message the agent is told the earlier messages, the notes and web tabs attached to each, which tools and files each reply used, and where each earlier image is saved. The chat shows the same messages and their attached context, with no tool steps. When the chat is too long to tell in full, the agent is told only the most recent messages and a notice says the oldest ones were left out. Once a message is sent, reopening the chat again shows the earlier messages, then the new turns with their tool steps.
 - row-status: the row shows `Running` (a green dot), a spinner while responding, `Waiting for permission`, or `Unread result`.
-- row-agent: in the Navigator, the row starts with the logo of the agent that runs the chat.
+- row-agent: in the Navigator, the row starts with the logo of the agent that runs the chat. A chat with one of the user's agents starts with that agent's face instead, in the Navigator and in Recent chats.
 - row-attention: in the Navigator, a chat with an unread result shows a bell in the accent color in place of the green `Running` dot. It and a chat waiting for permission show a bold title; other chats are dimmed except the current one.
 - row-pin: `Pin chat` / `Unpin chat`.
 - row-rename: `More actions` → Rename.
@@ -35,6 +35,7 @@ One chat in a list: the Navigator, Recent chats on the start screen, or the chat
 - Rename: choose `More actions` → Rename, type a name, confirm. The row shows the new name.
 - Close: on a row offering `Shut down`, choose it. The button goes away, the chat's tab closes, and the row stays.
 - Agent: open the Navigator with chats from two agents. Each row starts with its own agent's logo.
+- Agent face: open the Navigator with chats from two agents the user made and a Copilot chat. Each agent chat's row starts with its agent's face; the Copilot chat keeps the logo. Delete one agent's folder: its rows show the logo.
 - Attention: let a chat finish while another chat is open. In the Navigator, its title turns bold and a bell replaces its green dot; opening the chat clears both.
 - Archive: choose `Archive chat`. The row leaves the list and shows under View archived.
 - Multi-select: in Recent chats, Cmd-click one row and Shift-click another. Those rows and every row between them are outlined. Right-click one: the menu offers only `Archive N chats` and `Delete N chats`. Choose `Delete N chats` and confirm; the rows leave the list and one notice gives the count. Repeat in the Navigator with a range from Pinned into Recents.
@@ -43,4 +44,5 @@ One chat in a list: the Navigator, Recent chats on the start screen, or the chat
 ## Gotchas
 
 - A row's `Shut down` also closes the chat's [tab](chat-tabs.md), if it has one.
+- A row shows its agent's face with every license, and with none; a chat whose agent's folder is gone shows the logo.
 - A Shift-click range covers only rows on screen: chats in a folded group, a collapsed project, or behind `Show more` are skipped. Changing the search text, a plain click, or Esc clears the selection. `Chat history` has no multi-select.

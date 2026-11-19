@@ -34,6 +34,10 @@ const submitButton = (): HTMLElement => screen.getByRole("button", { name: /subm
 const nextButton = (): HTMLElement => screen.getByRole("button", { name: /next/i });
 const cancelButton = (): HTMLElement => screen.getByRole("button", { name: /cancel/i });
 const otherTextarea = (): HTMLElement => screen.getByPlaceholderText(/type your response/i);
+const selectedTab = (): HTMLElement => screen.getByRole("tab", { selected: true });
+const clickWithPointer = (control: HTMLElement): boolean => fireEvent.click(control, { detail: 1 });
+const chooseWithKeyboard = (control: HTMLElement): boolean =>
+  fireEvent.click(control, { detail: 0 });
 
 describe("AskUserQuestionCard", () => {
   describe("AskUserQuestionCard()", () => {
@@ -191,6 +195,65 @@ describe("AskUserQuestionCard", () => {
       fireEvent.keyDown(otherTextarea(), { key: "Enter", metaKey: true });
 
       expect(screen.getByText("Which format?")).not.toBeNull();
+      expect(onResolve).not.toHaveBeenCalled();
+    });
+
+    it("shows the next question when a pick-one answer is clicked on a non-final question (https://github.com/Brevilabs/obsidian-copilot-private/issues/975)", () => {
+      const onResolve = jest.fn();
+      renderCard(makeRequest(NAVIGATION_QUESTIONS), onResolve);
+
+      clickWithPointer(screen.getByRole("radio", { name: "Vault" }));
+
+      expect(selectedTab().textContent).toBe("Format");
+      expect(screen.getByText("Which format?")).not.toBeNull();
+      expect(onResolve).not.toHaveBeenCalled();
+
+      clickWithPointer(screen.getByRole("radio", { name: "Outline" }));
+      fireEvent.click(submitButton());
+
+      expect(onResolve).toHaveBeenCalledWith(REQUEST_ID, {
+        "Which scope?": "Vault",
+        "Which format?": "Outline",
+      });
+    });
+
+    it("stays on a pick-one question when its answer is chosen from the keyboard, so arrow keys can reach every option (https://github.com/Brevilabs/obsidian-copilot-private/issues/975)", () => {
+      renderCard(makeRequest(NAVIGATION_QUESTIONS), jest.fn());
+
+      chooseWithKeyboard(screen.getByRole("radio", { name: "Current note" }));
+      chooseWithKeyboard(screen.getByRole("radio", { name: "Vault" }));
+
+      expect(selectedTab().textContent).toBe("Scope");
+      expect(screen.getByRole<HTMLInputElement>("radio", { name: "Vault" }).checked).toBe(true);
+    });
+
+    it("stays on a multi-select question when an answer is clicked, so more answers can be added (https://github.com/Brevilabs/obsidian-copilot-private/issues/975)", () => {
+      renderCard(
+        makeRequest([
+          {
+            header: "Checks",
+            question: "Which checks are required?",
+            multiSelect: true,
+            options: [{ label: "Unit tests" }, { label: "End-to-end test" }],
+          },
+          NAVIGATION_QUESTIONS[1],
+        ]),
+        jest.fn()
+      );
+
+      clickWithPointer(screen.getByRole("checkbox", { name: "Unit tests" }));
+
+      expect(selectedTab().textContent).toBe("Checks");
+    });
+
+    it("waits for Submit when a pick-one answer is clicked on the final question (https://github.com/Brevilabs/obsidian-copilot-private/issues/975)", () => {
+      const onResolve = jest.fn();
+      renderCard(makeRequest(NAVIGATION_QUESTIONS), onResolve);
+
+      clickWithPointer(screen.getByRole("radio", { name: "Vault" }));
+      clickWithPointer(screen.getByRole("radio", { name: "Outline" }));
+
+      expect(selectedTab().textContent).toBe("Format");
       expect(onResolve).not.toHaveBeenCalled();
     });
 

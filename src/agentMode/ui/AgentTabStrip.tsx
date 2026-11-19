@@ -1,4 +1,7 @@
 import { backendRegistry } from "@/agentMode/backends/registry";
+import { overflowDot, tabDot, type TabDot } from "@/agents/agentMode/tabDot";
+import type { CustomAgent } from "@/agents/CustomAgentStore";
+import { AgentFace } from "@/agents/ui/AgentFace";
 import { TruncatedText } from "@/components/TruncatedText";
 import { computeVisibleTabIndices } from "@/components/ui/tabOverflow";
 import { Button } from "@/components/ui/button";
@@ -23,37 +26,83 @@ import React from "react";
 interface Props {
   manager: AgentSessionManager;
   onOpenSidebar: () => void;
+  agents?: readonly CustomAgent[];
+  onTabClick?: () => void;
 }
+
+const NO_AGENTS: readonly CustomAgent[] = Object.freeze([]);
 
 const TAB_GAP_PX = 4;
 const TAB_WIDTH_PX = 128;
 const PLUS_BUTTON_PX = 28 + TAB_GAP_PX;
 const OVERFLOW_BUTTON_PX = 28;
 
-function useSessionDisplay(session: AgentSession) {
+const DOT_CLASS: Record<TabDot, string> = {
+  waiting: "tw-bg-[var(--color-orange)]",
+  done: "tw-bg-[var(--color-green)]",
+  error: "tw-bg-red",
+};
+
+function useSessionDisplay(session: AgentSession, agents: readonly CustomAgent[], active: boolean) {
   const [, setTick] = React.useState(0);
+  const dot = tabDot(session, active);
+  const dotRef = React.useRef(dot);
+  dotRef.current = dot;
   React.useEffect(
     () =>
       session.subscribe({
-        onMessagesChanged: () => {},
+        onMessagesChanged: () => {
+          if (tabDot(session, active) !== dotRef.current) setTick((v) => v + 1);
+        },
         onStatusChanged: () => setTick((v) => v + 1),
         onLabelChanged: () => setTick((v) => v + 1),
         onNeedsAttentionChanged: () => setTick((v) => v + 1),
       }),
-    [session]
+    [session, active]
   );
   const label = session.getLabel();
   const descriptor = backendRegistry[session.backendId] as BackendDescriptor | undefined;
   return {
     status: session.getStatus(),
     label,
-    needsAttention: session.getNeedsAttention(),
+    dot,
     descriptor,
+    faceSrc: agents.find((agent) => agent.slug === session.agentSlug)?.faceSrc,
     displayLabel: label ?? descriptor?.displayName ?? "Chat",
   };
 }
 
-export const AgentTabStrip: React.FC<Props> = ({ manager, onOpenSidebar }) => {
+function overflowDotOf(sessions: readonly AgentSession[]) {
+  return overflowDot(sessions.map((session) => tabDot(session)));
+}
+
+function useOverflowDot(sessions: readonly AgentSession[]) {
+  const [, setTick] = React.useState(0);
+  const dot = overflowDotOf(sessions);
+  const dotRef = React.useRef(dot);
+  dotRef.current = dot;
+  React.useEffect(() => {
+    const check = () => {
+      if (overflowDotOf(sessions) !== dotRef.current) setTick((v) => v + 1);
+    };
+    const unsubscribes = sessions.map((session) =>
+      session.subscribe({
+        onMessagesChanged: check,
+        onStatusChanged: check,
+        onNeedsAttentionChanged: check,
+      })
+    );
+    return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
+  }, [sessions]);
+  return dot;
+}
+
+export const AgentTabStrip: React.FC<Props> = ({
+  manager,
+  onOpenSidebar,
+  agents = NO_AGENTS,
+  onTabClick,
+}) => {
   const isHidden = useSessionsSidebarOpen(useApp());
   const [, setTick] = React.useState(0);
   React.useEffect(() => manager.subscribe(() => setTick((v) => v + 1)), [manager]);
@@ -138,9 +187,13 @@ export const AgentTabStrip: React.FC<Props> = ({ manager, onOpenSidebar }) => {
             <SessionTab
               key={session.internalId}
               session={session}
+              agents={agents}
               isActive={session.internalId === activeId}
               isRenaming={renamingId === session.internalId}
-              onActivate={() => manager.setActiveSession(session.internalId)}
+              onActivate={() => {
+                manager.setActiveSession(session.internalId);
+                onTabClick?.();
+              }}
               onClose={() => handleClose(session.internalId)}
               onStartRename={() => setRenamingId(session.internalId)}
               onSubmitRename={(label) => {
@@ -154,6 +207,7 @@ export const AgentTabStrip: React.FC<Props> = ({ manager, onOpenSidebar }) => {
         {overflowSessions.length > 0 && (
           <OverflowMenu
             sessions={overflowSessions}
+            agents={agents}
             activeId={activeId}
             onActivate={(id) => manager.setActiveSession(id)}
             onClose={handleClose}
@@ -181,6 +235,7 @@ export const AgentTabStrip: React.FC<Props> = ({ manager, onOpenSidebar }) => {
 
 interface TabProps {
   session: AgentSession;
+  agents: readonly CustomAgent[];
   isActive: boolean;
   isRenaming: boolean;
   onActivate: () => void;
@@ -192,6 +247,7 @@ interface TabProps {
 
 const SessionTab: React.FC<TabProps> = ({
   session,
+  agents,
   isActive,
   isRenaming,
   onActivate,
@@ -200,7 +256,11 @@ const SessionTab: React.FC<TabProps> = ({
   onSubmitRename,
   onCancelRename,
 }) => {
-  const { status, label, needsAttention, descriptor, displayLabel } = useSessionDisplay(session);
+  const { status, label, dot, descriptor, faceSrc, displayLabel } = useSessionDisplay(
+    session,
+    agents,
+    isActive
+  );
 
   const [menuOpen, setMenuOpen] = React.useState(false);
 
@@ -250,8 +310,9 @@ const SessionTab: React.FC<TabProps> = ({
         >
           <BrandIcon
             descriptor={descriptor}
+            faceSrc={faceSrc}
             status={status}
-            needsAttention={needsAttention}
+            dot={dot}
             onCloseOnHover={onClose}
           />
           <TruncatedText
@@ -305,27 +366,39 @@ const RenameInput: React.FC<RenameInputProps> = ({ initialValue, onSubmit, onCan
 
 interface BrandIconProps {
   descriptor: BackendDescriptor | undefined;
+  faceSrc?: string;
+  faceSize?: "xs" | "s";
   status: AgentSessionStatus;
-  needsAttention?: boolean;
+  dot: TabDot | null;
   onCloseOnHover?: () => void;
 }
 
 const BrandIcon: React.FC<BrandIconProps> = ({
   descriptor,
+  faceSrc,
+  faceSize = "xs",
   status,
-  needsAttention,
+  dot,
   onCloseOnHover,
 }) => {
   const Icon = descriptor?.Icon;
   const isInProgress = status === "running";
-  const isError = status === "error";
-  const showStatusDot = !isInProgress && (needsAttention || isError);
-
-  const dotColorClass = needsAttention ? "tw-bg-interactive-accent" : "tw-bg-red";
 
   return (
-    <span className="tw-relative tw-flex tw-size-4 tw-shrink-0 tw-items-center tw-justify-center">
-      {isInProgress ? (
+    <span
+      className={cn(
+        "tw-relative tw-flex tw-size-4 tw-shrink-0 tw-items-center tw-justify-center",
+        faceSrc && faceSize === "s" && "tw-size-5"
+      )}
+    >
+      {faceSrc ? (
+        <AgentFace
+          src={faceSrc}
+          size={faceSize}
+          running={isInProgress}
+          className={cn(onCloseOnHover && "group-hover:tw-hidden")}
+        />
+      ) : isInProgress ? (
         <Loader2
           className={cn(
             "tw-size-4 tw-animate-spin tw-text-loading",
@@ -356,13 +429,13 @@ const BrandIcon: React.FC<BrandIconProps> = ({
           <X className="tw-size-4" />
         </Button>
       )}
-      {showStatusDot && (
+      {dot && (
         <span
           aria-hidden
           className={cn(
             "tw-absolute -tw-right-0.5 -tw-top-0.5 tw-size-1.5 tw-rounded-full tw-ring-1 tw-ring-[var(--background-primary)]",
             onCloseOnHover && "group-hover:tw-hidden",
-            dotColorClass
+            DOT_CLASS[dot]
           )}
         />
       )}
@@ -372,23 +445,40 @@ const BrandIcon: React.FC<BrandIconProps> = ({
 
 interface OverflowMenuProps {
   sessions: AgentSession[];
+  agents: readonly CustomAgent[];
   activeId: string | null;
   onActivate: (id: string) => void;
   onClose: (id: string) => void;
 }
 
-const OverflowMenu: React.FC<OverflowMenuProps> = ({ sessions, activeId, onActivate, onClose }) => {
+const OverflowMenu: React.FC<OverflowMenuProps> = ({
+  sessions,
+  agents,
+  activeId,
+  onActivate,
+  onClose,
+}) => {
   const [open, setOpen] = React.useState(false);
+  const dot = useOverflowDot(sessions);
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost2"
           size="icon"
-          className="tw-my-1 tw-shrink-0"
+          className="tw-relative tw-my-1 tw-shrink-0"
           aria-label={`Show ${sessions.length} more chat${sessions.length === 1 ? "" : "s"}`}
         >
           <MoreHorizontal className="tw-size-4" />
+          {dot && (
+            <span
+              aria-hidden
+              className={cn(
+                "tw-absolute tw-right-1 tw-top-1 tw-size-1.5 tw-rounded-full tw-ring-1 tw-ring-[var(--background-primary)]",
+                DOT_CLASS[dot]
+              )}
+            />
+          )}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="tw-w-64">
@@ -396,6 +486,7 @@ const OverflowMenu: React.FC<OverflowMenuProps> = ({ sessions, activeId, onActiv
           <OverflowRow
             key={session.internalId}
             session={session}
+            agents={agents}
             isActive={session.internalId === activeId}
             onActivate={() => {
               onActivate(session.internalId);
@@ -411,13 +502,24 @@ const OverflowMenu: React.FC<OverflowMenuProps> = ({ sessions, activeId, onActiv
 
 interface OverflowRowProps {
   session: AgentSession;
+  agents: readonly CustomAgent[];
   isActive: boolean;
   onActivate: () => void;
   onClose: () => void;
 }
 
-const OverflowRow: React.FC<OverflowRowProps> = ({ session, isActive, onActivate, onClose }) => {
-  const { status, needsAttention, descriptor, displayLabel } = useSessionDisplay(session);
+const OverflowRow: React.FC<OverflowRowProps> = ({
+  session,
+  agents,
+  isActive,
+  onActivate,
+  onClose,
+}) => {
+  const { status, dot, descriptor, faceSrc, displayLabel } = useSessionDisplay(
+    session,
+    agents,
+    isActive
+  );
 
   return (
     <div
@@ -429,7 +531,7 @@ const OverflowRow: React.FC<OverflowRowProps> = ({ session, isActive, onActivate
         isActive && "tw-bg-interactive-accent/10"
       )}
     >
-      <BrandIcon descriptor={descriptor} status={status} needsAttention={needsAttention} />
+      <BrandIcon descriptor={descriptor} faceSrc={faceSrc} faceSize="s" status={status} dot={dot} />
       <TruncatedText
         className="tw-min-w-0 tw-flex-1 !tw-text-current"
         tooltipContent={displayLabel}

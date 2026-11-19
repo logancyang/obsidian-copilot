@@ -134,6 +134,23 @@ describe("searchUtils", () => {
       ).toBe(false);
     });
 
+    it.each(["instructions.md", "MEMORY.md"])(
+      "skips a custom agent's %s under a custom Copilot folder, keeping it out of search and relevant notes (https://github.com/Brevilabs/obsidian-copilot-private/issues/936)",
+      (fileName) => {
+        (settingsModel.getSettings as jest.Mock).mockReturnValue({
+          qaInclusions: "",
+          qaExclusions: "",
+          copilotFolder: "ai",
+          copilotRootHistory: [],
+        });
+
+        const file = createTestFile(`ai/agents/coco/${fileName}`);
+
+        expect(shouldIndexFile(window.app, file, null, null)).toBe(false);
+        expect(createCopilotPatternFilter(window.app)(file.path)).toBe(false);
+      }
+    );
+
     it("skips a file inside an excluded folder", () => {
       const file = createTestFile("private/secret.md");
       const exclusions = {

@@ -3,8 +3,8 @@ import {
   backendDisplayOrder,
   backendNeedsSelfHostWarning,
   backendRegistry,
+  findBackendForModel,
   getActiveBackendDescriptor,
-  getCloudAgentIds,
   listBackendDescriptors,
   RECOMMENDED_BACKEND_ID,
 } from "./registry";
@@ -97,6 +97,23 @@ describe("registry", () => {
     });
   });
 
+  describe("findBackendForModel()", () => {
+    afterEach(() => jest.restoreAllMocks());
+
+    it("finds the backend that has the model enabled, and none when no backend has it", () => {
+      jest
+        .spyOn(ClaudeBackendDescriptor, "getEnabledModelEntries")
+        .mockReturnValue([{ baseModelId: "claude-sonnet" } as never]);
+      jest
+        .spyOn(CodexBackendDescriptor, "getEnabledModelEntries")
+        .mockReturnValue([{ baseModelId: "gpt-6" } as never]);
+      jest.spyOn(OpencodeBackendDescriptor, "getEnabledModelEntries").mockReturnValue([]);
+
+      expect(findBackendForModel(baseSettings(), "gpt-6")).toBe(CodexBackendDescriptor);
+      expect(findBackendForModel(baseSettings(), "gemini")).toBeUndefined();
+    });
+  });
+
   describe("backendNeedsSelfHostWarning()", () => {
     it("never warns when Self-Host Mode is off", () => {
       const off = baseSettings("opencode", false);
@@ -110,14 +127,6 @@ describe("registry", () => {
       expect(backendNeedsSelfHostWarning(OpencodeBackendDescriptor, on)).toBe(false);
       expect(backendNeedsSelfHostWarning(ClaudeBackendDescriptor, on)).toBe(true);
       expect(backendNeedsSelfHostWarning(CodexBackendDescriptor, on)).toBe(true);
-    });
-  });
-
-  describe("getCloudAgentIds()", () => {
-    it("contains exactly the non-self-hostable backends and returns the same set on every call", () => {
-      const ids = getCloudAgentIds();
-      expect([...ids].sort()).toEqual(["claude", "codex"]);
-      expect(getCloudAgentIds()).toBe(ids);
     });
   });
 });

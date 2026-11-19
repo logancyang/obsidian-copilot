@@ -6,6 +6,7 @@ describe("codexConfigEnv", () => {
       expect(JSON.parse(mergeCodexConfigEnv(undefined, "Use the vault."))).toEqual({
         model_context_window: 1_000_000,
         model_auto_compact_token_limit: 500_000,
+        suppress_unstable_features_warning: true,
         features: { default_mode_request_user_input: true },
         developer_instructions: "Use the vault.",
         approval_policy: "on-request",
@@ -29,6 +30,7 @@ describe("codexConfigEnv", () => {
         model: "custom-model",
         model_context_window: 400_000,
         model_auto_compact_token_limit: 300_000,
+        suppress_unstable_features_warning: true,
         features: { default_mode_request_user_input: true },
         developer_instructions: "Use the vault.",
         approval_policy: "on-request",
@@ -52,6 +54,21 @@ describe("codexConfigEnv", () => {
       expect(JSON.parse(mergeCodexConfigEnv(existing, "Use the vault.")).features).toEqual({
         default_mode_request_user_input: false,
       });
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/956 keeps Codex's warning about the question feature out of a reopened chat's reply unless CODEX_CONFIG asks for it", () => {
+      expect(
+        JSON.parse(mergeCodexConfigEnv(undefined, "Use the vault."))
+          .suppress_unstable_features_warning
+      ).toBe(true);
+      expect(
+        JSON.parse(
+          mergeCodexConfigEnv(
+            JSON.stringify({ suppress_unstable_features_warning: false }),
+            "Use the vault."
+          )
+        ).suppress_unstable_features_warning
+      ).toBe(false);
     });
 
     it.each(["not-json", "[]", "null"])(

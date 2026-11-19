@@ -16,6 +16,11 @@ const ROW_OUTPUT_BYTES = 4096;
 export const STOP_UNAVAILABLE_UNTIL_STARTED = "Can stop once the task starts";
 const HOVER_CLOSE_MS = 150;
 
+export interface RunningRunsSlot {
+  label: React.ReactNode;
+  rows: (close: () => void) => React.ReactNode;
+}
+
 interface RunningTasksIndicatorProps {
   tasks: readonly AgentTask[];
   permissions: readonly PermissionPrompt[];
@@ -23,6 +28,7 @@ interface RunningTasksIndicatorProps {
   onStopTask?: (taskId: string) => void;
   container?: HTMLElement | null;
   defaultOpen?: boolean;
+  runs?: RunningRunsSlot;
 }
 
 export const RunningTasksIndicator: React.FC<RunningTasksIndicatorProps> = ({
@@ -32,11 +38,12 @@ export const RunningTasksIndicator: React.FC<RunningTasksIndicatorProps> = ({
   onStopTask,
   container,
   defaultOpen = false,
+  runs,
 }) => {
   const [open, setOpen] = useState(defaultOpen);
   const closeTimer = useRef<number | null>(null);
   const running = runningTasks(tasks);
-  if (running.length === 0) {
+  if (running.length === 0 && !runs) {
     // The list unmounts under the pointer when the last task ends, so no hover-out ever closes it. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
     if (open) setOpen(false);
     return null;
@@ -61,12 +68,16 @@ export const RunningTasksIndicator: React.FC<RunningTasksIndicatorProps> = ({
         <Button
           variant="ghost2"
           size="fit"
-          className="tw-flex tw-shrink-0 tw-items-center tw-gap-1 tw-text-ui-smaller tw-text-muted hover:tw-text-normal"
+          className="tw-flex tw-min-w-0 tw-items-center tw-gap-1 tw-text-ui-smaller tw-text-muted hover:tw-text-normal"
           onPointerEnter={show}
           onPointerLeave={hideSoon}
         >
-          <Loader2 className="tw-size-3 tw-animate-spin tw-text-loading" />
-          {pluralize(running.length, "task")} running
+          {runs?.label ?? (
+            <>
+              <Loader2 className="tw-size-3 tw-animate-spin tw-text-loading" />
+              {pluralize(running.length, "task")} running
+            </>
+          )}
         </Button>
       </PopoverTrigger>
       <PopoverContent
@@ -81,6 +92,7 @@ export const RunningTasksIndicator: React.FC<RunningTasksIndicatorProps> = ({
         onOpenAutoFocus={(event) => event.preventDefault()}
       >
         <ul className="tw-m-0 tw-flex tw-list-none tw-flex-col tw-p-0">
+          {runs?.rows(() => setOpen(false))}
           {running.map((task) => (
             <li key={task.toolCallId} className="tw-flex tw-items-start tw-gap-1">
               <RunningTaskRow
@@ -101,10 +113,11 @@ export const RunningTasksIndicator: React.FC<RunningTasksIndicatorProps> = ({
 };
 
 // Stopping needs the id the agent gives a task once it starts; until then the control stays in place, disabled, and says why. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
-const StopTaskButton: React.FC<{
+export const StopTaskButton: React.FC<{
   taskId: string | undefined;
   onStopTask: (taskId: string) => void;
-}> = ({ taskId, onStopTask }) => {
+  label?: string;
+}> = ({ taskId, onStopTask, label = "Stop task" }) => {
   const disabled = taskId === undefined;
   return (
     <Tooltip>
@@ -116,7 +129,7 @@ const StopTaskButton: React.FC<{
             "tw-mt-2 tw-shrink-0 tw-p-1 tw-text-muted",
             disabled ? "tw-cursor-not-allowed tw-opacity-50" : "hover:tw-text-error"
           )}
-          aria-label="Stop task"
+          aria-label={label}
           aria-disabled={disabled || undefined}
           onClick={() => {
             if (!disabled) onStopTask(taskId);
@@ -132,6 +145,39 @@ const StopTaskButton: React.FC<{
   );
 };
 
+interface RunningRowProps {
+  icon: React.ReactNode;
+  label: React.ReactNode;
+  trailing: React.ReactNode;
+  onOpen: () => void;
+  children?: React.ReactNode;
+}
+
+export const RunningRow: React.FC<RunningRowProps> = ({
+  icon,
+  label,
+  trailing,
+  onOpen,
+  children,
+}) => (
+  <button
+    type="button"
+    className={cn(
+      "clickable-icon tw-flex tw-h-auto tw-min-w-0 tw-flex-1 tw-flex-col tw-items-stretch tw-gap-0.5",
+      "tw-rounded tw-bg-transparent tw-px-2 tw-py-1.5 tw-text-left tw-shadow-none",
+      "hover:tw-bg-modifier-hover focus-visible:tw-bg-modifier-hover"
+    )}
+    onClick={onOpen}
+  >
+    <span className="tw-flex tw-min-w-0 tw-items-center tw-gap-1.5 tw-text-sm">
+      {icon}
+      <span className="tw-min-w-0 tw-flex-1 tw-truncate tw-text-normal">{label}</span>
+      {trailing}
+    </span>
+    {children}
+  </button>
+);
+
 interface RunningTaskRowProps {
   task: AgentTask;
   status: ReturnType<typeof taskDisplayStatus>;
@@ -141,22 +187,14 @@ interface RunningTaskRowProps {
 const RunningTaskRow: React.FC<RunningTaskRowProps> = ({ task, status, onOpen }) => {
   const Icon = task.kind === "command" ? Terminal : Bot;
   return (
-    <button
-      type="button"
-      className={cn(
-        "clickable-icon tw-flex tw-h-auto tw-min-w-0 tw-flex-1 tw-flex-col tw-items-stretch tw-gap-0.5",
-        "tw-rounded tw-bg-transparent tw-px-2 tw-py-1.5 tw-text-left tw-shadow-none",
-        "hover:tw-bg-modifier-hover focus-visible:tw-bg-modifier-hover"
-      )}
-      onClick={onOpen}
+    <RunningRow
+      icon={<Icon className="tw-size-3.5 tw-shrink-0 tw-text-normal" />}
+      label={taskLabel(task)}
+      trailing={<TaskStatusMark status={status} className="tw-text-normal" />}
+      onOpen={onOpen}
     >
-      <span className="tw-flex tw-min-w-0 tw-items-center tw-gap-1.5 tw-text-sm">
-        <Icon className="tw-size-3.5 tw-shrink-0 tw-text-normal" />
-        <span className="tw-min-w-0 tw-flex-1 tw-truncate tw-text-normal">{taskLabel(task)}</span>
-        <TaskStatusMark status={status} className="tw-text-normal" />
-      </span>
       {task.kind === "command" ? <CommandOutputLine outputFile={task.outputFile} /> : null}
-    </button>
+    </RunningRow>
   );
 };
 

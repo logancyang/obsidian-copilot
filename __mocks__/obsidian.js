@@ -1,4 +1,21 @@
-import { parse as parseYamlString } from "yaml";
+import { parse as parseYamlString, stringify as stringifyYamlObject } from "yaml";
+
+const FRONTMATTER_BLOCK = /^---\r?\n([\s\S]*?)^---[ \t]*(?:\r?\n|$)/m;
+
+function getFrontMatterInfo(content) {
+  const match = content.startsWith("---") ? FRONTMATTER_BLOCK.exec(content) : null;
+  if (!match || match.index !== 0) {
+    return { exists: false, frontmatter: "", from: 0, to: 0, contentStart: 0 };
+  }
+  const from = match[0].indexOf("\n") + 1;
+  return {
+    exists: true,
+    frontmatter: match[1],
+    from,
+    to: from + match[1].length,
+    contentStart: match[0].length,
+  };
+}
 
 let requestUrlImpl = jest.fn().mockResolvedValue({
   status: 200,
@@ -69,6 +86,8 @@ module.exports = {
   parseYaml: jest.fn().mockImplementation((content) => {
     return parseYamlString(content);
   }),
+  stringifyYaml: (value) => stringifyYamlObject(value),
+  getFrontMatterInfo,
   Modal: class Modal {
     constructor(app) {
       this.app = app;

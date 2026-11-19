@@ -97,3 +97,17 @@ export const SavedNoteLink: StoryObj<UserMessageProps> = {
     message: { ...baseMessage, message: "Review [[Findings]] beside this saved conversation." },
   },
 };
+
+export const FloatingBarOnHover: StoryObj<UserMessageProps> = {
+  args: {
+    message: {
+      ...baseMessage,
+      message: "Cut the summary down to three bullets.",
+      timestamp: {
+        epoch: new Date(2026, 10, 18, 14, 2, 11).getTime(),
+        display: "2026/11/18 14:02:11",
+        fileName: "",
+      },
+    },
+  },
+};

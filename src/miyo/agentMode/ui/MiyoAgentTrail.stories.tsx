@@ -102,7 +102,7 @@ const MiyoTrailDemo: React.FC<{
         isStreaming={isStreaming}
         turnStartedAtMs={isStreaming ? Date.now() - 138_000 : undefined}
         turnDurationMs={isStreaming ? undefined : 138_000}
-        timestamp="2026/08/07 20:31:10"
+        timestampMs={new Date(2026, 7, 7, 20, 31, 10).getTime()}
         app={app}
         turnStopReason={isStreaming ? undefined : "end_turn"}
       />

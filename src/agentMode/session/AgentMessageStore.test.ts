@@ -1,6 +1,5 @@
 import { AI_SENDER, USER_SENDER } from "@/constants";
 import { AgentMessagePart, TurnFileChange } from "@/agentMode/session/types";
-import { serializeFanoutComposite, type FanoutTurn } from "@/agentMode/session/fanout/fanoutTypes";
 import { formatDateTime } from "@/utils";
 import { AgentMessageStore } from "./AgentMessageStore";
 
@@ -9,6 +8,21 @@ jest.mock("@/logger", () => ({
   logWarn: jest.fn(),
   logError: jest.fn(),
 }));
+
+const MEMORY_SAVE = {
+  agentName: "Coco",
+  memoryPath: "copilot/agents/coco/MEMORY.md",
+  rule: "Launch videos lead with user value, not the feature list.",
+};
+
+const MAYA_MENTION = Object.freeze({
+  id: "mention-1",
+  agent: "maya",
+  name: "Maya",
+  status: "finished" as const,
+  startedAt: 1,
+  chat: { backendId: "claude", sessionId: "hidden-1" },
+});
 
 describe("AgentMessageStore", () => {
   afterEach(() => {
@@ -32,14 +46,6 @@ describe("AgentMessageStore", () => {
     trigger: "manual",
     startedAtMs: 1_000,
     ...overrides,
-  });
-
-  const liveTurn = (summaryText = "the summary"): FanoutTurn => ({
-    answers: {
-      opencode: { backendId: "opencode", status: "done", text: "opencode answer" },
-      codex: { backendId: "codex", status: "done", text: "codex answer" },
-    },
-    summary: { status: "done", text: summaryText },
   });
 
   const change = (path: string): TurnFileChange => ({
@@ -639,27 +645,26 @@ describe("AgentMessageStore", () => {
       expect(store.getDisplayMessages()[0].timestamp).toEqual(sent);
     });
 
-    it("rebuilds fanout from an assistant composite but not a user or plain body", () => {
+    it("loads a reply saved as a multi-agent answer as ordinary text, keeping its headings and markers (https://github.com/Brevilabs/obsidian-copilot-private/issues/935)", () => {
       const store = new AgentMessageStore();
-      const body = serializeFanoutComposite(liveTurn("loaded summary"), (x) => x.toUpperCase());
+      const body = [
+        "<!--copilot:multi-agent v=1-->",
+        "<!--copilot:summary-->",
+        "### Summary",
+        "Both agents say Paris.",
+        '<!--copilot:agent id="claude" name="Claude" status="done"-->',
+        "### Claude",
+        "Paris.",
+        "<!--copilot:multi-agent-end-->",
+      ].join("\n");
       store.loadMessages([
-        { id: "u1", sender: USER_SENDER, message: body, timestamp: null, isVisible: true },
         { id: "a1", sender: AI_SENDER, message: body, timestamp: null, isVisible: true },
-        {
-          id: "a2",
-          sender: AI_SENDER,
-          message: "just a normal reply",
-          timestamp: null,
-          isVisible: true,
-        },
       ]);
-      const display = store.getDisplayMessages();
-      const assistant = display.find((m) => m.id === "a1");
-      expect(assistant?.message).toBe(body);
-      expect(assistant?.fanout?.summary.text).toBe("loaded summary");
-      expect(Object.keys(assistant?.fanout?.answers ?? {})).toEqual(["opencode", "codex"]);
-      expect(display.find((m) => m.id === "a2")?.fanout).toBeUndefined();
-      expect(display.find((m) => m.id === "u1")?.fanout).toBeUndefined();
+
+      const [reply] = store.getDisplayMessages();
+
+      expect(reply.message).toBe(body);
+      expect(reply).not.toHaveProperty("fanout");
     });
 
     it("keeps the tools list a reply restored from its note", () => {
@@ -677,6 +682,40 @@ describe("AgentMessageStore", () => {
       ]);
 
       expect(store.getDisplayMessages()[0].toolsUsed).toEqual(["Read a.md (read): notes/a.md"]);
+    });
+
+    it("keeps the rules a custom agent saved in a loaded reply (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", () => {
+      const store = new AgentMessageStore();
+
+      store.loadMessages([
+        {
+          id: "a1",
+          sender: AI_SENDER,
+          message: "Got it.",
+          timestamp: null,
+          isVisible: true,
+          memorySaves: [MEMORY_SAVE],
+        },
+      ]);
+
+      expect(store.getDisplayMessages()[0].memorySaves).toEqual([MEMORY_SAVE]);
+    });
+
+    it("keeps each @-mentioned agent's run on a loaded message (https://github.com/Brevilabs/obsidian-copilot-private/issues/944)", () => {
+      const store = new AgentMessageStore();
+
+      store.loadMessages([
+        {
+          id: "u1",
+          sender: USER_SENDER,
+          message: "@Maya review",
+          timestamp: null,
+          isVisible: true,
+          agentMentions: [MAYA_MENTION],
+        },
+      ]);
+
+      expect(store.getDisplayMessages()[0].agentMentions).toEqual([MAYA_MENTION]);
     });
 
     it("drops file changes from a loaded chat so a reopened turn shows none", () => {
@@ -772,7 +811,33 @@ describe("AgentMessageStore", () => {
       expect(reply.parts?.map((p) => p.kind)).toEqual(["tool_call", "text"]);
     });
 
-    it(`${issue} leaves messages unchanged from the first position where the note's sender differs`, () => {
+    it("gives a replayed message the @-mentioned agents' runs its note saved (https://github.com/Brevilabs/obsidian-copilot-private/issues/944)", () => {
+      const store = new AgentMessageStore();
+      store.addMessage(replayed(USER_SENDER, "q"));
+      store.addMessage(replayed(AI_SENDER, "a"));
+
+      store.adoptNoteRows([
+        noteRow(USER_SENDER, "q", { agentMentions: [MAYA_MENTION] }),
+        noteRow(AI_SENDER, "a"),
+      ]);
+
+      expect(store.getDisplayMessages()[0].agentMentions).toEqual([MAYA_MENTION]);
+    });
+
+    it("gives a replayed reply the rules its note says the custom agent saved (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", () => {
+      const store = new AgentMessageStore();
+      store.addMessage(replayed(USER_SENDER, "q"));
+      store.addMessage(replayed(AI_SENDER, "a"));
+
+      store.adoptNoteRows([
+        noteRow(USER_SENDER, "q"),
+        noteRow(AI_SENDER, "a", { memorySaves: [MEMORY_SAVE] }),
+      ]);
+
+      expect(store.getDisplayMessages()[1].memorySaves).toEqual([MEMORY_SAVE]);
+    });
+
+    it(`${issue} leaves messages unchanged from a note user message where the replay has a reply`, () => {
       const store = new AgentMessageStore();
       store.addMessage(replayed(USER_SENDER, "q"));
       store.addMessage(replayed(AI_SENDER, "a"));
@@ -817,6 +882,30 @@ describe("AgentMessageStore", () => {
         ["a", noteAt, undefined, undefined],
         ["sent after the last save", replayAt, undefined, undefined],
         ["a2", replayAt, undefined, undefined],
+      ]);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/942 skips a reply only the note has, such as a failed turn's error, and gives the later messages their saved rules, @ runs and times", () => {
+      const store = new AgentMessageStore();
+      store.addMessage(replayed(USER_SENDER, "q"));
+      store.addMessage(replayed(USER_SENDER, "remember this"));
+      store.addMessage(replayed(AI_SENDER, "saved"));
+
+      store.adoptNoteRows([
+        noteRow(USER_SENDER, "q"),
+        noteRow(AI_SENDER, "**Error:** the turn returned nothing"),
+        noteRow(USER_SENDER, "remember this", { agentMentions: [MAYA_MENTION] }),
+        noteRow(AI_SENDER, "saved", { memorySaves: [MEMORY_SAVE] }),
+      ]);
+
+      expect(
+        store
+          .getDisplayMessages()
+          .map((m) => [m.message, m.timestamp, m.agentMentions, m.memorySaves])
+      ).toEqual([
+        ["q", noteAt, undefined, undefined],
+        ["remember this", noteAt, [MAYA_MENTION], undefined],
+        ["saved", noteAt, undefined, [MEMORY_SAVE]],
       ]);
     });
 
@@ -970,28 +1059,20 @@ describe("AgentMessageStore", () => {
     });
   });
 
-  describe("setFanout()", () => {
-    it("surfaces a fresh snapshot each tick so React state updates do not bail", () => {
+  describe("setAgentMentions()", () => {
+    it("publishes the @-mentioned agents' runs on the message that asked them (https://github.com/Brevilabs/obsidian-copilot-private/issues/944)", () => {
       const store = new AgentMessageStore();
-      const id = store.addMessage(placeholder());
-      expect(store.getDisplayMessages().find((m) => m.id === id)?.fanout).toBeUndefined();
+      const id = store.addMessage({ ...placeholder(), sender: USER_SENDER });
+      const before = store.getDisplayMessages();
 
-      const turn = liveTurn();
-      expect(store.setFanout(id, turn)).toBe(true);
-      const after = store.getDisplayMessages().find((m) => m.id === id)?.fanout;
-      expect(after?.summary.text).toBe("the summary");
-      expect(after).not.toBe(turn);
-      expect(after?.answers).not.toBe(turn.answers);
+      expect(store.setAgentMentions(id, [MAYA_MENTION])).toBe(true);
 
-      store.setFanout(id, liveTurn("updated summary"));
-      const second = store.getDisplayMessages().find((m) => m.id === id)?.fanout;
-      expect(second).not.toBe(after);
-      expect(second?.summary.text).toBe("updated summary");
+      expect(store.getDisplayMessages()).not.toBe(before);
+      expect(store.getMessage(id)?.agentMentions).toEqual([MAYA_MENTION]);
     });
 
     it("returns false for an unknown message", () => {
-      const store = new AgentMessageStore();
-      expect(store.setFanout("nope", liveTurn())).toBe(false);
+      expect(new AgentMessageStore().setAgentMentions("nope", [MAYA_MENTION])).toBe(false);
     });
   });
 
@@ -1020,6 +1101,24 @@ describe("AgentMessageStore", () => {
     it("returns false for an unknown message", () => {
       const store = new AgentMessageStore();
       expect(store.setFileChanges("nope", [change("notes/a.md")])).toBe(false);
+    });
+
+    it("publishes the rules a custom agent saved in the turn beside its file changes (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", () => {
+      const store = new AgentMessageStore();
+      const id = store.addMessage(placeholder());
+
+      store.setFileChanges(id, [change("copilot/agents/coco/MEMORY.md")], [MEMORY_SAVE]);
+
+      expect(store.getMessage(id)?.memorySaves).toEqual([MEMORY_SAVE]);
+    });
+
+    it("publishes no saved rules for a turn that saved none", () => {
+      const store = new AgentMessageStore();
+      const id = store.addMessage(placeholder());
+
+      store.setFileChanges(id, [change("notes/a.md")], []);
+
+      expect(store.getMessage(id)?.memorySaves).toBeUndefined();
     });
   });
 });

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { TFile } from "obsidian";
 import { useApp } from "@/context";
@@ -10,24 +10,25 @@ import {
 } from "@/components/chat-components/utils/lexicalTextUtils";
 import {
   useAtMentionCategories,
-  AgentMentionBrand,
   AtMentionCategory,
   AtMentionOption,
   CategoryOption,
-  EMPTY_AGENT_MENTION_BRANDS,
 } from "@/components/chat-components/hooks/useAtMentionCategories";
 import { useAtMentionSearch } from "@/components/chat-components/hooks/useAtMentionSearch";
+import { AGENTS_MENTION_CATEGORY, agentMentionOptions } from "@/agents/ui/agentMentionOptions";
+import { ChatAgentsContext, useMentionableAgents } from "@/agents/ui/chatAgents";
+import { useLockedAgentMention } from "@/agents/ui/lockedCustomAgents";
 
 interface AtMentionCommandPluginProps {
   showTools?: boolean;
   currentActiveFile?: TFile | null;
-  agentBrands?: ReadonlyArray<AgentMentionBrand>;
+  isAgentMode?: boolean;
 }
 
 export function AtMentionCommandPlugin({
   showTools = false,
   currentActiveFile = null,
-  agentBrands = EMPTY_AGENT_MENTION_BRANDS,
+  isAgentMode = false,
 }: AtMentionCommandPluginProps): JSX.Element {
   const app = useApp();
   const [editor] = useLexicalComposerContext();
@@ -40,11 +41,16 @@ export function AtMentionCommandPlugin({
 
   const [currentPreviewContent, setCurrentPreviewContent] = useState<string>("");
 
-  const allCategoryOptions = useAtMentionCategories(showTools, agentBrands.length > 0);
-  const availableCategoryOptions = useMemo(
-    () => allCategoryOptions.filter((c) => !c.isAction),
-    [allCategoryOptions]
-  );
+  const allCategoryOptions = useAtMentionCategories(showTools);
+  const lockedAgentMention = useLockedAgentMention(isAgentMode);
+  const mentionableAgents = useMentionableAgents();
+  const { needsSetup, openProfile } = useContext(ChatAgentsContext);
+  const agentsCategory =
+    lockedAgentMention?.option ?? (mentionableAgents.length > 0 ? AGENTS_MENTION_CATEGORY : null);
+  const availableCategoryOptions = useMemo(() => {
+    const categories = allCategoryOptions.filter((c) => !c.isAction);
+    return agentsCategory ? [agentsCategory, ...categories] : categories;
+  }, [allCategoryOptions, agentsCategory]);
 
   const loadNoteContentForPreview = useCallback(
     async (file: TFile | null) => {
@@ -77,15 +83,34 @@ export function AtMentionCommandPlugin({
 
   const [currentQuery, setCurrentQuery] = useState("");
 
-  const searchResults = useAtMentionSearch(
+  const contextResults = useAtMentionSearch(
     currentQuery,
     extendedState.mode,
     extendedState.selectedCategory,
     showTools,
     availableCategoryOptions,
-    currentActiveFile,
-    agentBrands
+    currentActiveFile
   );
+  const searchResults = useMemo(() => {
+    const inAgents = extendedState.selectedCategory === "agents";
+    if (!inAgents && (extendedState.mode === "search" || !currentQuery)) return contextResults;
+    const agentOptions = lockedAgentMention
+      ? agentMentionOptions(lockedAgentMention.agents, currentQuery, () => "Supporter preview")
+      : agentMentionOptions(mentionableAgents, currentQuery, (agent) =>
+          needsSetup?.has(agent.slug) ? "Needs setup" : undefined
+        );
+    // A first-level search lists matching agents above notes: a vault has few agents, and a name match is almost always the one meant.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/947
+    return inAgents ? agentOptions : [...agentOptions, ...contextResults];
+  }, [
+    extendedState.selectedCategory,
+    extendedState.mode,
+    lockedAgentMention,
+    mentionableAgents,
+    needsSetup,
+    currentQuery,
+    contextResults,
+  ]);
 
   const isAtMentionOption = useCallback(
     (option: CategoryOption | AtMentionOption): option is AtMentionOption => {
@@ -101,8 +126,23 @@ export function AtMentionCommandPlugin({
     []
   );
 
+  const closeMenuRef = useRef(() => {});
   const handleSelect = useCallback(
     (option: CategoryOption | AtMentionOption) => {
+      // The locked row opens the upsell and puts nothing in the message; it closes the menu itself because a license check that grants custom agents opens no dialog to take focus.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/582
+      if (lockedAgentMention && option.lockedNote) {
+        closeMenuRef.current();
+        lockedAgentMention.choose();
+        return;
+      }
+      // An agent whose model can't run on this device opens its profile, which says why and what to fix, instead of joining the message.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/962
+      if (option.lockedNote && option.category === "customAgent" && isAtMentionOption(option)) {
+        closeMenuRef.current();
+        openProfile?.(option.data as string);
+        return;
+      }
       if (extendedState.mode === "category" && isCategoryOption(option) && !currentQuery) {
         setExtendedState((prev) => ({
           ...prev,
@@ -130,7 +170,15 @@ export function AtMentionCommandPlugin({
         }
       }
     },
-    [extendedState.mode, currentQuery, isCategoryOption, isAtMentionOption, editor]
+    [
+      lockedAgentMention,
+      openProfile,
+      extendedState.mode,
+      currentQuery,
+      isCategoryOption,
+      isAtMentionOption,
+      editor,
+    ]
   );
 
   const onStateChangeCallback = useCallback((newState: { query: string; isOpen: boolean }) => {
@@ -143,7 +191,7 @@ export function AtMentionCommandPlugin({
     }
   }, []);
 
-  const { state, handleHighlight } = useTypeaheadPlugin({
+  const { state, handleHighlight, closeMenu } = useTypeaheadPlugin({
     triggerConfig: {
       char: "@",
       allowWhitespace: true,
@@ -152,6 +200,7 @@ export function AtMentionCommandPlugin({
     onSelect: handleSelect,
     onStateChange: onStateChangeCallback,
   });
+  closeMenuRef.current = closeMenu;
 
   const selectedFile = useMemo<TFile | null>(() => {
     const selectedOption = searchResults[state.selectedIndex];

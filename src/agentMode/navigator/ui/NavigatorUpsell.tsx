@@ -1,8 +1,10 @@
 import { ReactModal } from "@/components/modals/ReactModal";
+import {
+  EnterLicenseKeyButton,
+  SupporterPreviewUpsell,
+} from "@/components/modals/SupporterPreviewUpsell";
 import { Button } from "@/components/ui/button";
-import { useApp } from "@/context";
 import { navigateToPlusPage } from "@/plusUtils";
-import { openCopilotSettings } from "@/settings/openSettings";
 import { ExternalLink } from "lucide-react";
 import type { App } from "obsidian";
 import * as React from "react";
@@ -10,26 +12,12 @@ import * as React from "react";
 export const NAVIGATOR_HIGHLIGHT_URL =
   "https://images.brevilabs.com/newsletters/copilot-plugin/navigator/navigator-lift-67838ace.webp";
 
-interface EnterLicenseKeyButtonProps {
-  onOpenSettings?: () => void;
-}
-
-function EnterLicenseKeyButton({ onOpenSettings }: EnterLicenseKeyButtonProps): React.ReactElement {
-  const app = useApp();
-  return (
-    <Button
-      variant="secondary"
-      className="tw-h-auto tw-min-h-9 tw-whitespace-normal"
-      onClick={(event) => {
-        const ownerWindow = event.currentTarget.win;
-        onOpenSettings?.();
-        openCopilotSettings(app, ownerWindow, "basic");
-      }}
-    >
-      Already a Supporter? Enter your license key
-    </Button>
-  );
-}
+const NAVIGATOR_POINTS = [
+  "See every chat at a glance, grouped into Pinned, Projects and Recents",
+  "Keep each Project's chats together in its own folder",
+  "Spot which chats are running, waiting for you, or have a new result",
+  "Pin, archive, search and reorder chats without leaving your conversation",
+];
 
 export interface NavigatorUpsellContentProps {
   onClose: () => void;
@@ -39,37 +27,22 @@ export function NavigatorUpsellContent({
   onClose,
 }: NavigatorUpsellContentProps): React.ReactElement {
   return (
-    <div className="tw-flex tw-flex-col tw-gap-4 tw-text-sm">
-      <p className="tw-m-0">
-        Copilot Navigator keeps all your agent chats in one sidebar, so long-running work stays easy
-        to find and manage.
-      </p>
-      <ul className="tw-m-0 tw-flex tw-flex-col tw-gap-1 tw-pl-5">
-        <li>See every chat at a glance, grouped into Pinned, Projects and Recents</li>
-        <li>Keep each Project&apos;s chats together in its own folder</li>
-        <li>Spot which chats are running, waiting for you, or have a new result</li>
-        <li>Pin, archive, search and reorder chats without leaving your conversation</li>
-      </ul>
-      {/* Width cap keeps the 4:3 animation under 40vh tall so the footer buttons fit short windows: https://github.com/Brevilabs/obsidian-copilot-private/issues/819 */}
-      <img
-        alt="The Copilot Navigator sidebar lifts out of the Obsidian workspace, fills with pinned chats, projects and recent chats, then a chat finishes and another gets pinned"
-        className="tw-mx-auto tw-block tw-h-auto tw-w-full tw-max-w-[calc(40vh*4/3)] tw-rounded-md tw-border tw-border-solid tw-border-border"
-        height={900}
-        src={NAVIGATOR_HIGHLIGHT_URL}
-        width={1200}
-      />
-      <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-2">
-        <EnterLicenseKeyButton onOpenSettings={onClose} />
-        <Button
-          onClick={() => {
-            navigateToPlusPage("navigator_dialog");
-            onClose();
-          }}
-        >
-          See plans <ExternalLink className="tw-size-4" />
-        </Button>
-      </div>
-    </div>
+    <SupporterPreviewUpsell
+      description="Copilot Navigator keeps all your agent chats in one sidebar, so long-running work stays easy to find and manage."
+      points={NAVIGATOR_POINTS}
+      media={
+        // Width cap keeps the 4:3 animation under 40vh tall so the footer buttons fit short windows: https://github.com/Brevilabs/obsidian-copilot-private/issues/819
+        <img
+          alt="The Copilot Navigator sidebar lifts out of the Obsidian workspace, fills with pinned chats, projects and recent chats, then a chat finishes and another gets pinned"
+          className="tw-mx-auto tw-block tw-h-auto tw-w-full tw-max-w-[calc(40vh*4/3)] tw-rounded-md tw-border tw-border-solid tw-border-border"
+          height={900}
+          src={NAVIGATOR_HIGHLIGHT_URL}
+          width={1200}
+        />
+      }
+      medium="navigator_dialog"
+      onClose={onClose}
+    />
   );
 }
 

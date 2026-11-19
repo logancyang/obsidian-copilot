@@ -8,6 +8,7 @@ import type {
 import AgentChatMessages from "@/agentMode/ui/AgentChatMessages";
 import type { ChatStates } from "@/agentMode/session/chatExtension";
 import type { FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
+import { relayedReply } from "@/agents/agentMode/ui/testing/relayedReply";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useApp } from "@/context";
 import type { Meta, StoryObj } from "@/lib/story";
@@ -497,6 +498,130 @@ export const FeedbackAfterFileChanges: StoryObj<AgentChatMessagesProps> = {
       afterUserMessageId: "complaint",
       status: "open",
     }),
+    isLoading: false,
+  },
+  render: (props) => <QueuedActionsDemo {...actionRailArgs} {...props} />,
+};
+
+function sentDaysAgo(days: number, hour: number, minute: number): AgentChatMessage["timestamp"] {
+  const now = new Date();
+  const epoch = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate() - days,
+    hour,
+    minute
+  ).getTime();
+  return { epoch, display: "", fileName: "" };
+}
+
+export const SpansTwoDays: StoryObj<AgentChatMessagesProps> = {
+  args: {
+    ...actionRailArgs,
+    pendingToolPermissions: [],
+    pendingAskUserQuestions: [],
+    messages: [
+      {
+        ...message,
+        id: "recap-request",
+        sender: "user",
+        message: "Draft the Q4 recap from this week's notes.",
+        timestamp: sentDaysAgo(1, 14, 2),
+      },
+      {
+        ...message,
+        id: "recap-reply",
+        message: "",
+        timestamp: sentDaysAgo(1, 14, 3),
+        turnStopReason: "end_turn",
+        parts: [{ kind: "text", text: "The draft is in Q4 recap, with the three decisions." }],
+      },
+      {
+        ...message,
+        id: "trim-request",
+        sender: "user",
+        message: "Cut the summary down to three bullets.",
+        timestamp: sentDaysAgo(0, 9, 15),
+      },
+      {
+        ...message,
+        id: "trim-reply",
+        message: "",
+        timestamp: sentDaysAgo(0, 9, 16),
+        turnDurationMs: 18_000,
+        turnStopReason: "end_turn",
+        parts: [{ kind: "text", text: "Done. The summary is now three bullets." }],
+      },
+    ],
+    isLoading: false,
+  },
+  render: (props) => <QueuedActionsDemo {...actionRailArgs} {...props} />,
+};
+
+const askedMaya: AgentChatMessage[] = [
+  {
+    ...message,
+    id: "ask-maya",
+    sender: "user",
+    message: "Draft the Q4 recap from this week's notes, then ask @Maya to check the citations.",
+    timestamp: sentDaysAgo(0, 14, 2),
+  },
+  {
+    ...message,
+    id: "asked-maya-reply",
+    message: "",
+    timestamp: sentDaysAgo(0, 14, 2),
+    turnDurationMs: 46_000,
+    turnStopReason: "end_turn",
+    parts: [
+      {
+        kind: "text",
+        text: "The draft is in Q4 recap. I asked Maya to check its three citations and will pass on what she finds.",
+      },
+    ],
+  },
+];
+
+export const OneReply: StoryObj<AgentChatMessagesProps> = {
+  args: {
+    ...actionRailArgs,
+    pendingToolPermissions: [],
+    pendingAskUserQuestions: [],
+    messages: askedMaya,
+    isLoading: false,
+  },
+  render: (props) => <QueuedActionsDemo {...actionRailArgs} {...props} />,
+};
+
+export const GrewAfterAnotherAgent: StoryObj<AgentChatMessagesProps> = {
+  args: {
+    ...actionRailArgs,
+    pendingToolPermissions: [],
+    pendingAskUserQuestions: [],
+    messages: [
+      ...askedMaya,
+      {
+        ...message,
+        id: "maya-relay",
+        sender: "user",
+        message: relayedReply("Maya", "One wrong year: Thinking, Fast and Slow is 2011, not 2012."),
+        timestamp: sentDaysAgo(0, 14, 4),
+      },
+      {
+        ...message,
+        id: "passed-on-reply",
+        message: "",
+        timestamp: sentDaysAgo(0, 14, 4),
+        turnDurationMs: 12_000,
+        turnStopReason: "end_turn",
+        parts: [
+          {
+            kind: "text",
+            text: "Maya found one wrong year: Thinking, Fast and Slow is 2011, not 2012. I fixed it in the recap.",
+          },
+        ],
+      },
+    ],
     isLoading: false,
   },
   render: (props) => <QueuedActionsDemo {...actionRailArgs} {...props} />,

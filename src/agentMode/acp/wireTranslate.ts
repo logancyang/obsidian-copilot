@@ -56,7 +56,7 @@ function modeStateFromAcp(state: SessionModeState | null | undefined): RawModeSt
   };
 }
 
-function configOptionsFromAcp(
+export function configOptionsFromAcp(
   options: SessionConfigOption[] | null | undefined
 ): BackendConfigOption[] | null {
   if (!options) return null;

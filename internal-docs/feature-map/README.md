@@ -24,10 +24,13 @@ The feature file a change touches defines its coverage set. Also drive every jou
 ## Start
 
 - [agent-home](agent-home.md): the start screen: a greeting, the chat input for the first message, and the Recent chats / Relevant Notes / Projects shelf.
+- [create-agent-dialog](create-agent-dialog.md): the `New agent` dialog that makes an agent.
 
 ## Chats
 
 - [chat-tabs](chat-tabs.md): tabs across the top of Agent Chat, one per open chat.
+- [agent-identity-bar](agent-identity-bar.md): the face, name, and title of an agent the user made, at the top of its chat.
+- [agent-profile](agent-profile.md): an agent's page in the sidebar: its two files, a new chat with it.
 - [copilot-navigator](copilot-navigator.md): the sidebar listing chats and projects.
 - [chat-rows](chat-rows.md): one chat in a list, wherever chats are listed.
 - [chat-controls](chat-controls.md): the bar above the chat input: New chat, Chat history, Usage, More actions.
@@ -37,6 +40,7 @@ The feature file a change touches defines its coverage set. Also drive every jou
 - [chat-input](chat-input.md): model, mode, and effort pickers, mentions, note context, images, send, stop.
 - [queued-messages](queued-messages.md): messages queued while the agent works.
 - [agent-replies](agent-replies.md): streaming text, reasoning, tool and activity cards, subagents, tasks.
+- [agent-mentions](agent-mentions.md): `@` another agent, the one line while it works, and its relayed reply.
 - [permission-requests](permission-requests.md): `Permission required` cards that wait for the user to allow or deny a tool call.
 - [agent-questions](agent-questions.md): `Question from agent` cards that wait for the user's answer.
 - [plan-proposals](plan-proposals.md): Plan mode cards to approve, reject, or redirect a plan.

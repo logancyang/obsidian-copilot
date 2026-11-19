@@ -1,9 +1,6 @@
+import type { AgentMention } from "@/agents/agentMentions";
+import type { MemorySave } from "@/agents/memorySaves";
 import { logInfo } from "@/logger";
-import {
-  parseFanoutComposite,
-  snapshotFanoutTurn,
-  type FanoutTurn,
-} from "@/agentMode/session/fanout/fanoutTypes";
 import {
   AgentCancelCause,
   AgentChatMessage,
@@ -33,9 +30,10 @@ interface StoredAgentMessage {
   declinedPermission?: boolean;
   agentCancelCause?: AgentCancelCause;
   turnDurationMs?: number;
-  fanout?: FanoutTurn;
   fileChanges?: TurnFileChange[];
   toolsUsed?: readonly string[];
+  memorySaves?: readonly MemorySave[];
+  agentMentions?: readonly AgentMention[];
   version: number;
 }
 
@@ -283,18 +281,16 @@ export class AgentMessageStore {
   adoptNoteRows(saved: readonly AgentChatMessage[]): void {
     const visible = this.messages.filter((m) => m.isVisible);
     let next = 0;
-    let afterCompact = false;
     for (const row of saved) {
       // Claude's replay drops a /compact turn, which the note keeps.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/635
-      if (row.sender === USER_SENDER && isCompactCommand(row.message)) {
-        afterCompact = true;
-        continue;
-      }
+      if (row.sender === USER_SENDER && isCompactCommand(row.message)) continue;
       const msg = visible[next];
       if (!msg) return;
       if (msg.sender !== row.sender) {
-        if (afterCompact && row.sender !== USER_SENDER) continue;
+        // A reply only the note has, such as a failed turn's error, is skipped so the rows after it keep their saved rules, @ runs and times.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/942
+        if (row.sender !== USER_SENDER) continue;
         return;
       }
       const isUser = msg.sender === USER_SENDER;
@@ -303,28 +299,34 @@ export class AgentMessageStore {
       if (isUser && row.message.replace(CHAT_IMAGE_EMBED, "").trim() !== msg.displayText.trim()) {
         return;
       }
-      afterCompact = false;
       next += 1;
       if (row.timestamp) msg.timestamp = row.timestamp;
       if (isUser) msg.displayText = row.message;
       if (row.context) msg.context = row.context;
       if (row.toolsUsed) msg.toolsUsed = row.toolsUsed;
+      if (row.memorySaves) msg.memorySaves = row.memorySaves;
+      if (row.agentMentions) msg.agentMentions = row.agentMentions;
       this.touch(msg);
     }
   }
 
-  setFanout(id: string, turn: FanoutTurn): boolean {
+  setFileChanges(
+    id: string,
+    changes: TurnFileChange[],
+    memorySaves: readonly MemorySave[] = []
+  ): boolean {
     const msg = this.messages.find((m) => m.id === id);
     if (!msg) return false;
-    msg.fanout = turn;
+    msg.fileChanges = changes;
+    if (memorySaves.length > 0) msg.memorySaves = memorySaves;
     this.touch(msg);
     return true;
   }
 
-  setFileChanges(id: string, changes: TurnFileChange[]): boolean {
+  setAgentMentions(id: string, mentions: readonly AgentMention[]): boolean {
     const msg = this.messages.find((m) => m.id === id);
     if (!msg) return false;
-    msg.fileChanges = changes;
+    msg.agentMentions = mentions;
     this.touch(msg);
     return true;
   }
@@ -521,8 +523,6 @@ export class AgentMessageStore {
   loadMessages(messages: AgentChatMessage[]): void {
     this.clear();
     for (const msg of messages) {
-      const fanout =
-        msg.sender === USER_SENDER ? undefined : (parseFanoutComposite(msg.message) ?? undefined);
       this.messages.push({
         id: msg.id || this.generateId(),
         displayText: msg.message,
@@ -535,8 +535,9 @@ export class AgentMessageStore {
         parts: msg.parts,
         turnStopReason: msg.turnStopReason,
         turnDurationMs: msg.turnDurationMs,
-        fanout,
         toolsUsed: msg.toolsUsed,
+        memorySaves: msg.memorySaves,
+        agentMentions: msg.agentMentions,
         version: 0,
       });
     }
@@ -559,7 +560,8 @@ export class AgentMessageStore {
       turnDurationMs: m.turnDurationMs,
       fileChanges: m.fileChanges,
       toolsUsed: m.toolsUsed,
-      ...(m.fanout ? { fanout: snapshotFanoutTurn(m.fanout) } : {}),
+      memorySaves: m.memorySaves,
+      agentMentions: m.agentMentions,
     };
   }
 }

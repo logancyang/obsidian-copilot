@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface TypeaheadOption {
@@ -9,9 +9,9 @@ export interface TypeaheadOption {
   content?: string;
   category?: string;
   icon?: React.ReactNode;
-  trailingContent?: React.ReactNode;
   disabled?: boolean;
   disabledReason?: string;
+  lockedNote?: string;
 }
 
 export interface TypeaheadMenuContentProps {
@@ -142,6 +142,7 @@ export function TypeaheadMenuContent({
                     isDisabled
                       ? "tw-cursor-not-allowed tw-text-muted tw-opacity-50"
                       : "tw-cursor-pointer tw-text-normal",
+                    option.lockedNote && "tw-text-muted",
                     shouldHighlight && "tw-bg-modifier-hover"
                   )}
                   title={isDisabled ? option.disabledReason : undefined}
@@ -150,8 +151,10 @@ export function TypeaheadMenuContent({
                     if (isDisabled) return;
                     onSelect(option);
                   }}
-                  onMouseEnter={() => {
-                    if (isDisabled) return;
+                  // A row that appears under a resting pointer gets mouseenter without the user pointing at it, which moved Enter off the first result.
+                  // https://github.com/Brevilabs/obsidian-copilot-private/issues/947
+                  onMouseMove={() => {
+                    if (isDisabled || isHovered) return;
                     setHoveredIndex(index);
                     onHighlight(index);
                   }}
@@ -162,8 +165,15 @@ export function TypeaheadMenuContent({
                       <div className="tw-flex tw-items-center tw-gap-2">
                         {option.icon}
                         <span className="tw-font-medium">{option.title}</span>
+                        {option.lockedNote && !("data" in option) && (
+                          <span className="tw-text-xs">{option.lockedNote}</span>
+                        )}
                       </div>
-                      <ChevronRight className="tw-size-4 tw-text-muted" />
+                      {option.lockedNote ? (
+                        <Lock className="tw-size-4 tw-text-faint" />
+                      ) : (
+                        <ChevronRight className="tw-size-4 tw-text-muted" />
+                      )}
                     </div>
                   ) : (
                     <div className="tw-flex tw-min-w-0 tw-flex-1 tw-items-center tw-gap-2">
@@ -173,11 +183,8 @@ export function TypeaheadMenuContent({
                         </div>
                       )}
                       <div className="tw-flex tw-min-w-0 tw-flex-1 tw-flex-col tw-gap-0.5">
-                        <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-1">
-                          <span className="tw-truncate tw-font-medium tw-text-normal">
-                            {option.title}
-                          </span>
-                          {option.trailingContent}
+                        <div className="tw-truncate tw-font-medium tw-text-normal">
+                          {option.title}
                         </div>
                         {option.subtitle && (
                           <div className="tw-truncate tw-text-xs tw-text-muted">
@@ -185,6 +192,12 @@ export function TypeaheadMenuContent({
                           </div>
                         )}
                       </div>
+                      {option.lockedNote && (
+                        <Lock
+                          aria-label={option.lockedNote}
+                          className="tw-size-4 tw-shrink-0 tw-text-faint"
+                        />
+                      )}
                     </div>
                   )}
                 </div>

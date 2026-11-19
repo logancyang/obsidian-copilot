@@ -2,10 +2,13 @@ import { PILL_BADGE_CLASS } from "@/components/chat-components/pills/PillBadge";
 import { badgeVariants } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-// The Markdown renderer leaves a folder mention as plain `{path}` text, and a mentioned folder gets no badge, so the sent message styles it as a pill.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/932
-export function renderFolderMentions(container: HTMLElement, folders: readonly string[]): void {
-  const mentions = folders.map((folder) => `{${folder}}`);
+export const MENTION_PILL_CLASS = cn(badgeVariants({ variant: "secondary" }), PILL_BADGE_CLASS);
+
+export function renderMentionPills(
+  container: HTMLElement,
+  mentions: readonly string[],
+  createPill: (doc: Document, mention: string) => Node
+): void {
   if (mentions.length === 0) return;
   const doc = container.doc;
   const walker = doc.createTreeWalker(container, NodeFilter.SHOW_TEXT);
@@ -23,16 +26,21 @@ export function renderFolderMentions(container: HTMLElement, folders: readonly s
         .sort((a, b) => a.index - b.index || b.mention.length - a.mention.length)[0];
       if (!next) break;
       fragment.append(rest.slice(0, next.index));
-      fragment.appendChild(
-        doc.win.createSpan({
-          cls: cn(badgeVariants({ variant: "secondary" }), PILL_BADGE_CLASS),
-          text: next.mention,
-        })
-      );
+      fragment.appendChild(createPill(doc, next.mention));
       rest = rest.slice(next.index + next.mention.length);
     }
     if (fragment.childNodes.length === 0) continue;
     fragment.append(rest);
     node.replaceWith(fragment);
   }
+}
+
+// The Markdown renderer leaves a folder mention as plain `{path}` text, and a mentioned folder gets no badge, so the sent message styles it as a pill.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/932
+export function renderFolderMentions(container: HTMLElement, folders: readonly string[]): void {
+  renderMentionPills(
+    container,
+    folders.map((folder) => `{${folder}}`),
+    (doc, mention) => doc.win.createSpan({ cls: MENTION_PILL_CLASS, text: mention })
+  );
 }

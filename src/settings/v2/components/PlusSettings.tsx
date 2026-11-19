@@ -50,9 +50,8 @@ export function PlusSettings() {
           >
             Copilot paid plans
           </a>{" "}
-          add <strong className="tw-font-semibold tw-text-normal">premium chat models</strong>,{" "}
-          <strong className="tw-font-semibold tw-text-normal">advanced web search</strong>, and{" "}
-          <strong className="tw-font-semibold tw-text-normal">multi-agent answers</strong> to your
+          add <strong className="tw-font-semibold tw-text-normal">premium chat models</strong> and{" "}
+          <strong className="tw-font-semibold tw-text-normal">advanced web search</strong> to your
           Copilot agentic experience. Pair it with{" "}
           <a
             href={createProductUrl(PRODUCT_URLS.MIYO, "license_settings")}

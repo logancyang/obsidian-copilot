@@ -30,11 +30,10 @@ const availableModes = ["read-only", "workspace-write", "agent", "agent-full-acc
 
 describe("codexModeMapping", () => {
   describe("buildCodexModeMapping()", () => {
-    it("https://github.com/logancyang/obsidian-copilot/issues/2916 names only the inventory-free fan-out preset", () => {
+    it("https://github.com/logancyang/obsidian-copilot/issues/2916 names no canonical mode ids, leaving the live session's ids to the mode state", () => {
       expect(buildCodexModeMapping()).toEqual({
         kind: "setMode",
         canonical: {},
-        readOnlyModeId: "read-only",
       });
     });
   });

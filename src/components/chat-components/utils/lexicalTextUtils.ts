@@ -16,7 +16,7 @@ import { $createToolPillNode } from "@/components/chat-components/pills/ToolPill
 import { $createFolderPillNode } from "@/components/chat-components/pills/FolderPillNode";
 import { $createWebTabPillNode } from "@/components/chat-components/pills/WebTabPillNode";
 import { $createActiveWebTabPillNode } from "@/components/chat-components/pills/ActiveWebTabPillNode";
-import { $createAgentPillNode } from "@/components/chat-components/pills/AgentPillNode";
+import { $createAgentMentionPillNode } from "@/agents/ui/AgentMentionPillNode";
 import { logInfo } from "@/logger";
 import { AVAILABLE_TOOLS } from "@/components/chat-components/constants/tools";
 
@@ -27,7 +27,7 @@ export type PillType =
   | "active-note"
   | "webTabs"
   | "activeWebTab"
-  | "agents";
+  | "customAgent";
 
 export type ParsedContentType =
   | "text"
@@ -75,9 +75,9 @@ function $createPillNode(pillData: PillData) {
       break;
     case "activeWebTab":
       return $createActiveWebTabPillNode();
-    case "agents":
-      if (typeof data === "string") {
-        return $createAgentPillNode(data, title ?? data);
+    case "customAgent":
+      if (typeof data === "string" && title) {
+        return $createAgentMentionPillNode(data, title);
       }
       break;
   }

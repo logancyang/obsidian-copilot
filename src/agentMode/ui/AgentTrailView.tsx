@@ -26,6 +26,7 @@ import { miyoResultPaths } from "@/miyo/agentMode/miyoSearchRun";
 import { useThinkingClock } from "@/agentMode/ui/useThinkingClock";
 import { useTrailExpansion, type TrailExpansion } from "@/agentMode/ui/useTrailExpansion";
 import { AgentTurnDurationIndicator } from "@/agentMode/ui/AgentTurnDurationIndicator";
+import type { MemorySaveTrail } from "@/agents/agentMode/memorySaveCards";
 import { useAgentTasks, type AgentTasksContextValue } from "@/agentMode/ui/AgentTasksContext";
 import { AssistantResponseFooter } from "@/components/ui/AssistantResponseFooter";
 import { getVaultBase } from "@/utils/vaultPath";
@@ -36,12 +37,15 @@ interface AgentTrailProps {
   isStreaming: boolean;
   turnStartedAtMs?: number;
   turnDurationMs?: number;
-  timestamp?: string;
+  timestampMs?: number;
+  responseText?: string;
+  hideFooter?: boolean;
   app: App;
   turnStopReason?: StopReason;
   agentCancelCause?: AgentCancelCause;
   errorText?: string;
   fileChanges?: TurnFileChange[];
+  memorySaves?: MemorySaveTrail | null;
   onOpenFileChange?: (change: TurnFileChange) => void;
   onContinue?: () => void;
 }
@@ -79,12 +83,15 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({
   isStreaming,
   turnStartedAtMs,
   turnDurationMs,
-  timestamp,
+  timestampMs,
+  responseText,
+  hideFooter = false,
   app,
   turnStopReason,
   agentCancelCause,
   errorText,
   fileChanges,
+  memorySaves,
   onOpenFileChange = noopOpenFileChange,
   onContinue,
 }) => {
@@ -101,13 +108,14 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({
   const trailNodes = buildAgentTrail(parts);
   const compactionOnly =
     trailNodes.length > 0 && trailNodes.every((node) => node.type === "compaction");
+  const copyText = responseText ?? answer;
   const footer =
-    !isStreaming && turnStopReason !== "cancelled" && answer.length > 0 ? (
+    !isStreaming && turnStopReason !== "cancelled" && copyText.length > 0 ? (
       <AgentMessageActions
-        text={answer}
+        text={copyText}
         app={app}
         durationMs={turnDurationMs}
-        timestamp={timestamp}
+        timestampMs={timestampMs}
         onContinue={onContinue}
       />
     ) : turnDurationMs !== undefined ? (
@@ -116,13 +124,16 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({
           <AgentTurnDurationIndicator status="complete" durationMs={turnDurationMs} inline />
         }
       />
-    ) : !hasRunningDuration && timestamp ? (
-      <AssistantResponseFooter timestamp={timestamp} />
     ) : null;
 
   return (
-    <div className="tw-group tw-flex tw-flex-col tw-gap-1">
-      <LinearTrail parts={parts} isStreaming={isStreaming} app={app} />
+    <div className="tw-group/response tw-flex tw-flex-col tw-gap-1">
+      <LinearTrail
+        parts={parts}
+        isStreaming={isStreaming}
+        app={app}
+        memorySaves={memorySaves ?? null}
+      />
       {notice ? (
         <div className="tw-text-error">
           <AgentMarkdownText text={notice} app={app} />
@@ -134,7 +145,7 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({
       {hasRunningDuration && !compactionOnly ? (
         <AgentTurnDurationIndicator status="running" startedAtMs={turnStartedAtMs} />
       ) : null}
-      {compactionOnly ? null : footer}
+      {compactionOnly || hideFooter ? null : footer}
     </div>
   );
 };
@@ -146,13 +157,15 @@ interface TrailContext {
   summaryCtx: ToolSummaryContext;
   miyoPaths: readonly string[];
   tasks: AgentTasksContextValue | null;
+  memorySaves: MemorySaveTrail | null;
 }
 
 const LinearTrail: React.FC<{
   parts: AgentMessagePart[];
   isStreaming: boolean;
   app: App;
-}> = ({ parts, isStreaming, app }) => {
+  memorySaves: MemorySaveTrail | null;
+}> = ({ parts, isStreaming, app, memorySaves }) => {
   const expansion = useTrailExpansion();
   const tasks = useAgentTasks();
   const summaryCtx = useMemo(() => ({ vaultBase: getVaultBase(app) }), [app]);
@@ -163,6 +176,7 @@ const LinearTrail: React.FC<{
     summaryCtx,
     miyoPaths: miyoResultPaths(parts),
     tasks,
+    memorySaves,
   };
   const nodes = foldActivityGroups(buildAgentTrail(parts), ctx);
   return (
@@ -200,6 +214,7 @@ function renderNode(
           {node.kind.render(node.members, {
             app: ctx.app,
             tasks: ctx.tasks,
+            memorySaves: ctx.memorySaves,
             open: ctx.expansion.isOpen(expansionId),
             onToggle: () => ctx.expansion.toggle(expansionId),
             renderCall: (part) =>

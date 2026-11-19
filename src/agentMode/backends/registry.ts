@@ -41,17 +41,13 @@ export function listBackendDescriptors(): BackendDescriptor[] {
   return Object.values(backendRegistry);
 }
 
-let cloudAgentIdsCache: ReadonlySet<BackendId> | null = null;
-
-export function getCloudAgentIds(): ReadonlySet<BackendId> {
-  if (!cloudAgentIdsCache) {
-    cloudAgentIdsCache = Object.freeze(
-      new Set(
-        Object.values(backendRegistry)
-          .filter((descriptor) => !descriptor.selfHostable)
-          .map((descriptor) => descriptor.id)
-      )
-    );
-  }
-  return cloudAgentIdsCache;
+export function findBackendForModel(
+  settings: CopilotSettings,
+  baseModelId: string
+): BackendDescriptor | undefined {
+  return listBackendDescriptors().find((descriptor) =>
+    descriptor
+      .getEnabledModelEntries?.(settings)
+      ?.some((entry) => entry.baseModelId === baseModelId)
+  );
 }
