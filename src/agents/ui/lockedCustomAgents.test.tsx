@@ -46,7 +46,7 @@ const { __setRequestUrlImpl: setRequestUrlImpl } = obsidianModule as unknown as 
 };
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/582";
-const LAPSED_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/950";
+const LOCKED_AGENTS_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/950";
 const MENTION_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/947";
 const NO_AGENTS: readonly CustomAgent[] = [];
 const AGENTS = [COCO, MAYA] as unknown as readonly CustomAgent[];
@@ -238,7 +238,7 @@ describe("lockedCustomAgents", () => {
       { from: "+", medium: "custom_agent_dialog" },
       { from: "the @ row", medium: "custom_agent_mention" },
     ] as const)(
-      `shows the vault's own agents instead of the Supporter preview when $from is chosen in a vault with agents (${LAPSED_ISSUE})`,
+      `shows the vault's own agents instead of the Supporter preview when $from is chosen in a vault with agents (${LOCKED_AGENTS_ISSUE})`,
       async ({ medium }) => {
         answerLicenseChecks(REFUSED_403);
 
@@ -324,9 +324,9 @@ describe("lockedCustomAgents", () => {
   describe("openLockedAgentProfile()", () => {
     it.each([
       { who: "a device that never had a license", key: "" },
-      { who: "a lapsed device", key: "lapsed-key" },
+      { who: "a device with a license key that is no longer valid", key: "license-key" },
     ])(
-      `checks the license with trigger custom_agents on $who, then opens the locked profile once when clicked twice meanwhile (${LAPSED_ISSUE})`,
+      `checks the license with trigger custom_agents on $who, then opens the locked profile once when clicked twice meanwhile (${LOCKED_AGENTS_ISSUE})`,
       async ({ key }) => {
         await enterLicenseKey(key);
         const { requestUrl, reply } = holdLicenseCheck();
@@ -349,7 +349,7 @@ describe("lockedCustomAgents", () => {
       }
     );
 
-    it(`opens the profile unlocked when the check grants custom_agents (${LAPSED_ISSUE})`, async () => {
+    it(`opens the profile unlocked when the check grants custom_agents (${LOCKED_AGENTS_ISSUE})`, async () => {
       await enterLicenseKey("supporter-key");
       mockSignedClaims(["multi_agent", "custom_agents"]);
       answerLicenseChecks(GRANTED);
@@ -401,7 +401,7 @@ describe("lockedCustomAgents", () => {
       expect(onCreate).not.toHaveBeenCalled();
     });
 
-    it(`opens the dialog for the vault's agents from the locked + in a vault with agents (${LAPSED_ISSUE})`, async () => {
+    it(`opens the dialog for the vault's agents from the locked + in a vault with agents (${LOCKED_AGENTS_ISSUE})`, async () => {
       answerLicenseChecks(REFUSED_403);
       renderWithApp(
         renderNewAgentButton("locked", { emphasized: false, onCreate: jest.fn() }),
@@ -477,7 +477,7 @@ describe("lockedCustomAgents", () => {
       expect(mockOpenUpsell).toHaveBeenCalledTimes(1);
     });
 
-    it(`keeps the locked Agents row in a vault with agents, and opens the dialog for them when it is chosen (${LAPSED_ISSUE})`, async () => {
+    it(`keeps the locked Agents row in a vault with agents, and opens the dialog for them when it is chosen (${LOCKED_AGENTS_ISSUE})`, async () => {
       answerLicenseChecks(REFUSED_403);
       const { result } = renderMentionHook(true, AGENTS);
       expect(result.current?.option).toMatchObject({

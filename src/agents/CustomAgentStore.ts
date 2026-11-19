@@ -252,7 +252,7 @@ export class CustomAgentStore {
   }
 }
 
-// A lapsed or synced vault shows its agents without a license, and only Delete may change their files.
+// A vault whose license isn't valid for custom agents shows its agents, and only Delete may change their files.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/950
 function assertNotLocked(): void {
   if (getCustomAgentsGate() === "locked") throw new Error("Custom agents are locked.");

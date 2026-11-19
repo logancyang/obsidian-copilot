@@ -4,7 +4,7 @@ import { FileText, Users } from "lucide-react";
 import React from "react";
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/582";
-const LAPSED_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/950";
+const LOCKED_AGENTS_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/950";
 const STILL_POINTER_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/947";
 
 const NOTES: TypeaheadOption = {
@@ -82,7 +82,7 @@ describe("TypeaheadMenuContent", () => {
       fireEvent.mouseDown(title);
       expect(onSelect).toHaveBeenCalledWith(LOCKED_AGENTS);
     });
-    it(`shows a locked agent among the first results with a lock at its end and no divider (${LAPSED_ISSUE})`, () => {
+    it(`shows a locked agent among the first results with a lock at its end and no divider (${LOCKED_AGENTS_ISSUE})`, () => {
       const maya = {
         key: "custom-agent-maya",
         title: "Maya",

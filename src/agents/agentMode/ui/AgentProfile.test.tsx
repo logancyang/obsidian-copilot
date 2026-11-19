@@ -297,35 +297,28 @@ describe("AgentProfile", () => {
     });
 
     it.each([
-      {
-        device: "a lapsed device",
-        access: "free",
-        banner: "Your Supporter plan ended. Coco can't chat until you renew.",
-        action: "Renew",
-      },
-      {
-        device: "a device that never had a license",
-        access: "keyless",
-        banner: "Coco can't chat until you enter a Supporter license key on this device.",
-        action: "Enter license key",
-      },
+      { device: "a device whose stored license key is no longer valid", access: "free" },
+      { device: "a device that never had a license", access: "keyless" },
       {
         device: "a device on a paid plan without custom agents",
         access: "plus-without-custom-agents",
-        banner: "Coco can't chat until you enter a Supporter license key on this device.",
-        action: "Enter license key",
       },
     ] as const)(
-      `shows the locked profile on $device, with its banner, a model that can't change and Delete but no New chat, and still deletes the agent and archives its chats (${LOCKED_ISSUE})`,
-      async ({ access, banner, action }) => {
+      `shows the same locked profile on $device: the valid Supporter license banner with Enter license key, a model that can't change and Delete but no New chat, and still deletes the agent and archives its chats (${LOCKED_ISSUE})`,
+      async ({ access }) => {
         jest.mocked(AgentDeleteModal).mockClear();
         archivedChats.mockClear();
         const { vault } = await setup();
 
         await act(() => setCustomAgentsAccess(access));
 
-        expect(screen.getByText(banner)).not.toBeNull();
-        expect(screen.getByRole("button", { name: action })).not.toBeNull();
+        expect(
+          screen.getByText("Coco can't chat without a valid Supporter license.")
+        ).not.toBeNull();
+        expect(
+          screen.getByText("Locked until you enter a valid Supporter license key")
+        ).not.toBeNull();
+        expect(screen.getByRole("button", { name: "Enter license key" })).not.toBeNull();
         expect(screen.queryByRole("button", { name: "New chat with Coco" })).toBeNull();
         expect(screen.queryByRole("button", { name: "Rename Coco" })).toBeNull();
         expect(screen.getByTitle("Model · effort").hasAttribute("disabled")).toBe(true);

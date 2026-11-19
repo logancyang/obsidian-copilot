@@ -190,15 +190,9 @@ export const InstructionPastFourThousand: StoryObj<StoryProps> = {
   },
 };
 
-export const LockedAfterLicenseLapsed: StoryObj<StoryProps> = {
+export const LockedWithoutValidLicense: StoryObj<StoryProps> = {
   args: {
-    locked: { lapsed: true, onUnlock: () => {} },
-  },
-};
-
-export const LockedOnDeviceWithoutLicense: StoryObj<StoryProps> = {
-  args: {
-    locked: { lapsed: false, onUnlock: () => {} },
+    locked: { onUnlock: () => {} },
   },
 };
 

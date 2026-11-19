@@ -328,7 +328,7 @@ describe("CustomAgentStore", () => {
         expect(vault.listPaths()).toEqual([]);
       });
 
-      it(`refuses while custom agents are locked and writes nothing, so a lapsed or synced vault's agents stay as they are (${LOCKED_ISSUE})`, async () => {
+      it(`refuses while custom agents are locked and writes nothing, so a locked vault's agents stay as they are (${LOCKED_ISSUE})`, async () => {
         seedAgent(vault, "coco", "Coco");
         await setCustomAgentsAccess("keyless");
         await store.start();
@@ -528,7 +528,7 @@ describe("CustomAgentStore", () => {
         expect(store.getAgents().map((agent) => agent.slug)).toEqual(["maya"]);
       });
 
-      it(`still deletes while custom agents are locked, the one change a lapsed or synced vault allows (${LOCKED_ISSUE})`, async () => {
+      it(`still deletes while custom agents are locked, the one change a locked vault allows (${LOCKED_ISSUE})`, async () => {
         seedAgent(vault, "coco", "Coco");
         seedAgent(vault, "maya", "Maya");
         await setCustomAgentsAccess("free");
@@ -620,7 +620,7 @@ describe("CustomAgentStore", () => {
     });
 
     it.each(["free", "keyless"] as const)(
-      `lists the agents while the gate is locked for a %s device, so lapsed and synced agents stay visible (${LOCKED_ISSUE})`,
+      `lists the agents while the gate is locked for a %s device, so locked agents stay visible (${LOCKED_ISSUE})`,
       async (access) => {
         seedAgent(vault, "coco", "Coco");
         await setCustomAgentsAccess(access);

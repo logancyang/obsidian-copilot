@@ -24,7 +24,7 @@ jest.mock("@/entitlement");
 jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError: jest.fn() }));
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/944";
-const LAPSED_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/950";
+const LOCKED_AGENTS_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/950";
 const CONTROL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/945";
 const RUNNING = "https://github.com/Brevilabs/obsidian-copilot-private/issues/948";
 const PERMISSION = "https://github.com/Brevilabs/obsidian-copilot-private/issues/946";
@@ -1013,7 +1013,7 @@ describe("hiddenAgentChats", () => {
         });
       });
 
-      it(`turns down asking while custom agents are locked (${ISSUE}, ${LAPSED_ISSUE})`, async () => {
+      it(`turns down asking while custom agents are locked (${ISSUE}, ${LOCKED_AGENTS_ISSUE})`, async () => {
         const coco = await openChat({ agentSlug: "coco" });
         await setCustomAgentsAccess("free");
         expect(customAgentsGate.getCustomAgentsGate()).toBe("locked");
@@ -1031,7 +1031,7 @@ describe("hiddenAgentChats", () => {
         expect(fake.closeSession).toHaveBeenCalledWith({ sessionId: sessionIdOf(maya) });
       });
 
-      it(`lets an asked agent finish and relays its reply when the license lapses while it works, since the license is checked only when an @ is sent (${LAPSED_ISSUE})`, async () => {
+      it(`lets an asked agent finish and relays its reply when the license lapses while it works, since the license is checked only when an @ is sent (${LOCKED_AGENTS_ISSUE})`, async () => {
         const { coco, maya } = await askFromMessage();
 
         await setCustomAgentsAccess("free");

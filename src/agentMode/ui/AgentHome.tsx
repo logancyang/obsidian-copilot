@@ -64,7 +64,7 @@ import { AgentProfile } from "@/agents/agentMode/ui/AgentProfile";
 import { findRun } from "@/agents/agentMode/agentRelays";
 import { ChatAskedAgentView } from "@/agents/agentMode/ui/AskedAgentView";
 import { chatRunningAgents } from "@/agents/agentMode/ui/RunningAgents";
-import { isLicenseLapsed, useCustomAgentsGate } from "@/agents/customAgentsGate";
+import { useCustomAgentsGate } from "@/agents/customAgentsGate";
 import type { CustomAgent } from "@/agents/CustomAgentStore";
 import { AgentIdentityBar } from "@/agents/ui/AgentIdentityBar";
 import {
@@ -453,7 +453,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   );
   const recentChats = useAgentRecentChats(chatHistoryItems, agentHome.agents, agentHome.selected);
   const customAgentsGate = useCustomAgentsGate();
-  const lapsed = isLicenseLapsed(settings);
   const { focusInput, insertTextWithPills } = useChatInput();
   const selectAgent = agentHome.select;
   const getAgentModelChoices = useCallback(
@@ -841,10 +840,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
           ? {
               onOpen: openLockedProfile,
               note: (
-                <LockedHomeNote
-                  lapsed={lapsed}
-                  onUnlock={(ownerWindow) => unlockCustomAgents(app, lapsed, ownerWindow)}
-                />
+                <LockedHomeNote onUnlock={(ownerWindow) => unlockCustomAgents(app, ownerWindow)} />
               ),
             }
           : undefined
@@ -1140,9 +1136,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                       {lockedChatAgent ? (
                         <LockedAgentChat
                           name={lockedChatAgent.name}
-                          lapsed={lapsed}
                           onNewChat={handleNewChat}
-                          onUnlock={(ownerWindow) => unlockCustomAgents(app, lapsed, ownerWindow)}
+                          onUnlock={(ownerWindow) => unlockCustomAgents(app, ownerWindow)}
                           setup={
                             customAgentsGate !== "locked" && chatSetupProblem
                               ? {

@@ -148,27 +148,14 @@ export const NoAgentsWithLockedNewAgentButton: StoryObj<AgentRosterProps> = {
   },
 };
 
-export const LockedAgentsAfterLicenseLapsed: StoryObj<AgentRosterProps> = {
+export const LockedAgentsWithoutValidLicense: StoryObj<AgentRosterProps> = {
   render,
   args: {
     agents: FIVE_AGENTS,
     selectedSlug: null,
     locked: {
       onOpen: () => {},
-      note: <LockedHomeNote lapsed onUnlock={() => {}} />,
-    },
-    newAgentButton: <NewAgentButton locked onClick={() => {}} />,
-  },
-};
-
-export const LockedAgentsOnDeviceWithoutLicense: StoryObj<AgentRosterProps> = {
-  render,
-  args: {
-    agents: FIVE_AGENTS,
-    selectedSlug: null,
-    locked: {
-      onOpen: () => {},
-      note: <LockedHomeNote lapsed={false} onUnlock={() => {}} />,
+      note: <LockedHomeNote onUnlock={() => {}} />,
     },
     newAgentButton: <NewAgentButton locked onClick={() => {}} />,
   },

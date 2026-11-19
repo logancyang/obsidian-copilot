@@ -45,7 +45,7 @@ export function useMentionableAgents(): readonly CustomAgent[] {
   const { agents, self } = useContext(ChatAgentsContext);
   const gate = useCustomAgentsGate();
   return useMemo(() => {
-    // A lapsed license still shows the agents' faces, but only a license that includes custom agents can ask one.
+    // Locked custom agents still show their faces, but only a license that includes custom agents can ask one.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/950
     if (gate !== "full") return NO_AGENTS;
     return self === null ? agents : agents.filter((agent) => agent.slug !== self);

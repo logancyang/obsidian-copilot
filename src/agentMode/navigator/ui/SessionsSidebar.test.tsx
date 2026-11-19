@@ -257,7 +257,7 @@ describe("SessionsSidebar", () => {
       expect(rowFaces()[0]).toBe("face:coco?v=2");
     });
 
-    it("keeps the agent's face on an agent chat's row while the license does not carry custom agents, so a lapsed vault's chats stay recognizable, for https://github.com/Brevilabs/obsidian-copilot-private/issues/950", async () => {
+    it("keeps the agent's face on an agent chat's row while the license does not carry custom agents, so a locked vault's chats stay recognizable, for https://github.com/Brevilabs/obsidian-copilot-private/issues/950", async () => {
       await setCustomAgentsAccess("plus-without-custom-agents");
       const manager = new FakeManager();
       manager.items = agentChats();
