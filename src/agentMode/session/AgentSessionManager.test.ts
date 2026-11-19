@@ -232,6 +232,7 @@ function makeMockSession(overrides: {
     backend: overrides.backend,
     backendSessionId: sessionId,
     releaseBackendSession: AgentSession.prototype.releaseBackendSession,
+    dropHeldPrompts: jest.fn(),
     dispose: mockSessionDispose,
     setModel: jest.fn(),
     setMode: jest.fn(),

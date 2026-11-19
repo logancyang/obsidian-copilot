@@ -181,6 +181,11 @@ export interface AgentSessionListener {
   onDisconnected?(): void;
 }
 
+interface HeldPrompt {
+  settle: (outcome: StopReason | Promise<StopReason>) => void;
+  send: () => Promise<StopReason>;
+}
+
 export interface ProjectContextUpdates {
   epoch: number;
   block: string;
@@ -251,6 +256,7 @@ export class AgentSession implements ChatStateHost, ChatView {
   private resendSavedHistory = false;
   private continuedFrom: readonly string[] = NO_EARLIER_CHATS;
   private readonly turns: TurnTracker;
+  private readonly heldPrompts: HeldPrompt[] = [];
   private readonly taskFiles = new Map<string, FileCaptures>();
   private readonly tasks = new Map<string, AgentTask>();
   private taskList: readonly AgentTask[] = EMPTY_TASKS;
@@ -718,15 +724,46 @@ export class AgentSession implements ChatStateHost, ChatView {
       status === "awaiting_permission" ||
       this.turns.getQueuedPrompts().length > 0;
     if (busy) {
-      if (!this.acceptsMidTurnPrompts() || sendsCompact) {
-        throw new Error("Session already has a turn in flight");
+      // A plugin message must reach a busy agent that cannot read it mid-turn, so it waits for the turn to end. https://github.com/Brevilabs/obsidian-copilot-private/issues/943
+      if (!this.acceptsMidTurnPrompts()) {
+        return this.holdPrompt(displayText, context, promptContent, sendsCompact);
       }
+      if (sendsCompact) throw new Error("Session already has a turn in flight");
       const queued = this.queuePrompt(displayText, context, promptContent);
       this.notifyPromptSent();
       return queued;
     }
+    return this.startPrompt(uuidv4(), displayText, context, promptContent, sendsCompact);
+  }
 
+  private holdPrompt(
+    displayText: string,
+    context: MessageContext | undefined,
+    promptContent: PromptContent[] | undefined,
+    sendsCompact: boolean
+  ): { userMessageId: string; turn: Promise<StopReason> } {
     const promptId = uuidv4();
+    let settle!: (outcome: StopReason | Promise<StopReason>) => void;
+    const turn = new Promise<StopReason>((resolve) => (settle = resolve));
+    this.heldPrompts.push({
+      settle,
+      send: () =>
+        this.startPrompt(promptId, displayText, context, promptContent, sendsCompact).turn,
+    });
+    return { userMessageId: promptId, turn };
+  }
+
+  private dropHeldPrompts(): void {
+    for (const held of this.heldPrompts.splice(0)) held.settle("cancelled");
+  }
+
+  private startPrompt(
+    promptId: string,
+    displayText: string,
+    context: MessageContext | undefined,
+    promptContent: PromptContent[] | undefined,
+    sendsCompact: boolean
+  ): { userMessageId: string; turn: Promise<StopReason> } {
     const userMessageId = this.store.addMessage(
       buildUserMessage(promptId, displayText, context, promptContent)
     );
@@ -970,6 +1007,8 @@ export class AgentSession implements ChatStateHost, ChatView {
     if (status !== "running" && status !== "awaiting_permission") return;
     if (!this.backendSessionId) return;
     const keepUnread = options.keepUnread === true;
+    // Stop never sends a waiting message, and a closing chat stops its turn the same way. https://github.com/Brevilabs/obsidian-copilot-private/issues/943
+    this.dropHeldPrompts();
     this.turns.stop(!keepUnread && this.canWithdrawPrompts());
     this.requests.rejectToolRequestsFrom("main");
     this.requests.withdrawQuestions();
@@ -989,6 +1028,7 @@ export class AgentSession implements ChatStateHost, ChatView {
     if (!backendSessionId || !this.backend.closeSession) {
       throw new Error("This agent can't shut down a single chat.");
     }
+    this.dropHeldPrompts();
     try {
       await this.backend.closeSession({ sessionId: backendSessionId });
     } catch (error) {
@@ -1005,6 +1045,7 @@ export class AgentSession implements ChatStateHost, ChatView {
     this.unregisterSessionHandler = null;
     this.requests.dispose();
     this.turns.dispose();
+    this.dropHeldPrompts();
     this.recomputeStatusIfChanged();
     this.cancelScheduledNotify();
     this.listeners.clear();
@@ -1681,6 +1722,11 @@ export class AgentSession implements ChatStateHost, ChatView {
     if (next === this.cachedStatus && replyRunning === this.cachedReplyRunning) return;
     this.cachedStatus = next;
     this.cachedReplyRunning = replyRunning;
+    // A held message starts the next turn before the chat reports idle, so the composer's held messages and a deferred backend restart keep waiting. https://github.com/Brevilabs/obsidian-copilot-private/issues/943
+    if (next === "idle" || next === "error") {
+      const held = this.heldPrompts.shift();
+      if (held) return held.settle(held.send());
+    }
     for (const l of this.listeners) {
       try {
         l.onStatusChanged(next);
