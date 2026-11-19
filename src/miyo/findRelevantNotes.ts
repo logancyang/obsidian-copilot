@@ -13,6 +13,7 @@ import {
   shouldUseMiyo,
 } from "@/miyo/miyoUtils";
 import { getBacklinkedNotes, getLinkedNotes } from "@/noteUtils";
+import { isSystemExcludedPath } from "@/search/searchUtils";
 import { getSettings, type CopilotSettings } from "@/settings/model";
 import { withTimeout } from "@/utils";
 import { App, TFile } from "obsidian";
@@ -356,7 +357,9 @@ export async function findRelevantNotes({
   const notes = Array.from(scoreByPath.entries())
     .map(([path, score]) => {
       const file = app.vault.getAbstractFileByPath(path);
-      if (!(file instanceof TFile) || file.extension !== "md") {
+      // Miyo excludes only the Copilot folders it was registered with, so a moved Copilot folder or a vault added in Miyo itself would surface agent instructions and memory.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/936
+      if (!(file instanceof TFile) || file.extension !== "md" || isSystemExcludedPath(path)) {
         return null;
       }
       return {

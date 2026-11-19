@@ -1,6 +1,7 @@
 import { MiyoClient, MiyoRequestError } from "@/miyo/MiyoClient";
 import { getMiyoCustomUrl, getVaultRelativeMiyoPath } from "@/miyo/miyoUtils";
 import type { ChatRelevantNotesContext } from "@/search/chatRelevantNotesContext";
+import { isSystemExcludedPath } from "@/search/searchUtils";
 import type { RelevantNotesResult } from "@/miyo/findRelevantNotes";
 import { getSettings } from "@/settings/model";
 import { withTimeout } from "@/utils";
@@ -39,9 +40,12 @@ export async function findChatRelevantNotes(
     const notes = response.results.flatMap(({ path, score }) => {
       const relativePath = getVaultRelativeMiyoPath(app, path);
       const file = app.vault.getAbstractFileByPath(relativePath);
+      // Miyo excludes only the Copilot folders it was registered with, so a moved Copilot folder or a vault added in Miyo itself would surface agent instructions and memory.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/936
       if (
         !(file instanceof TFile) ||
         file.extension !== "md" ||
+        isSystemExcludedPath(relativePath) ||
         !Number.isFinite(score) ||
         request.file_paths?.includes(path)
       )
