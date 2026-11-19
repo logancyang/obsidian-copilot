@@ -5,6 +5,7 @@ import { FilesChangedCard } from "@/agentMode/ui/FilesChangedCard";
 import { TaskDetailFrame, useStickToBottom } from "@/agentMode/ui/TaskDetailView";
 import { openTurnDiff } from "@/agentMode/ui/TurnDiffView";
 import type { AgentMention } from "@/agents/agentMentions";
+import { relayRuns } from "@/agents/agentMode/agentRelays";
 import {
   readAskedMessage,
   type AskedAgentChat,
@@ -21,6 +22,7 @@ import type { App } from "obsidian";
 import React, { useEffect, useState } from "react";
 
 const NO_MESSAGES: readonly AgentChatMessage[] = Object.freeze([]);
+const NO_REPLIES: ReadonlyMap<string, string> = new Map();
 
 export interface AskedAgentViewProps {
   run: AgentMention;
@@ -28,6 +30,7 @@ export interface AskedAgentViewProps {
   fromFaceSrc?: string;
   faceSrc?: string;
   chat: AskedAgentChat | null;
+  replies?: ReadonlyMap<string, string>;
   app: App;
   onBack: () => void;
 }
@@ -40,6 +43,7 @@ export const AskedAgentView: React.FC<AskedAgentViewProps> = ({
   fromFaceSrc,
   faceSrc,
   chat,
+  replies = NO_REPLIES,
   app,
   onBack,
 }) => {
@@ -75,7 +79,14 @@ export const AskedAgentView: React.FC<AskedAgentViewProps> = ({
       backLabel={`Back to ${from}`}
       banner={waitsOn ? { text: waitsOn, action: "Answer there" } : null}
     >
-      <AskedAgentSteps run={run} from={from} chat={chat} messages={messages} app={app} />
+      <AskedAgentSteps
+        run={run}
+        from={from}
+        chat={chat}
+        messages={messages}
+        replies={replies}
+        app={app}
+      />
       <div className="copilot-divider-t tw-px-3 tw-py-2 tw-text-xs tw-text-muted">
         You can only watch here. To tell {run.name} something, tell {from}.
       </div>
@@ -87,6 +98,7 @@ interface ChatAskedAgentViewProps {
   run: AgentMention;
   chat: AgentSession | null;
   hiddenChats: HiddenAgentChats | undefined;
+  messages: readonly AgentChatMessage[];
   agents: readonly CustomAgent[];
   app: App;
   onBack: () => void;
@@ -96,11 +108,17 @@ export const ChatAskedAgentView: React.FC<ChatAskedAgentViewProps> = ({
   run,
   chat,
   hiddenChats,
+  messages,
   agents,
   app,
   onBack,
 }) => {
   const asking = agents.find((agent) => agent.slug === chat?.agentSlug);
+  const replies = new Map(
+    [...relayRuns(messages)]
+      .filter(([, { relay }]) => relay.marker.mention === run.id && relay.reply)
+      .map(([id, { relay }]) => [id, relay.reply])
+  );
   return (
     <AskedAgentView
       run={run}
@@ -108,6 +126,7 @@ export const ChatAskedAgentView: React.FC<ChatAskedAgentViewProps> = ({
       fromFaceSrc={asking?.faceSrc}
       faceSrc={agents.find((agent) => agent.slug === run.agent)?.faceSrc}
       chat={chat && hiddenChats ? hiddenChats.askedChat(chat, run) : null}
+      replies={replies}
       app={app}
       onBack={onBack}
     />
@@ -119,10 +138,18 @@ interface AskedAgentStepsProps {
   from: string;
   chat: AskedAgentChat | null;
   messages: readonly AgentChatMessage[];
+  replies: ReadonlyMap<string, string>;
   app: App;
 }
 
-const AskedAgentSteps: React.FC<AskedAgentStepsProps> = ({ run, from, chat, messages, app }) => {
+const AskedAgentSteps: React.FC<AskedAgentStepsProps> = ({
+  run,
+  from,
+  chat,
+  messages,
+  replies,
+  app,
+}) => {
   const { scrollRef, contentRef, endRef } = useStickToBottom();
   const responding = chat?.session.getStatus() === "running";
   const nextRun = chat && [...chat.continuedAt].find(([, at]) => at > run.startedAt)?.[0];
@@ -130,9 +157,17 @@ const AskedAgentSteps: React.FC<AskedAgentStepsProps> = ({ run, from, chat, mess
     <div ref={scrollRef} className="tw-min-h-0 tw-flex-1 tw-overflow-y-auto">
       <div ref={contentRef} className="tw-flex tw-flex-col tw-gap-2 tw-py-2">
         {!chat && run.status !== "working" ? (
-          <div className="tw-px-3 tw-text-sm tw-text-muted">
-            {run.name}&apos;s steps from this run are no longer available.
-          </div>
+          <>
+            <div className="tw-px-3 tw-text-sm tw-text-muted">
+              {run.name}&apos;s steps from this run are no longer available.
+            </div>
+            {/* The asked agent's chat lives only while Obsidian keeps it open, but the asking chat saved its words in the relay, so they stay readable after a restart. https://github.com/Brevilabs/obsidian-copilot-private/issues/967 */}
+            {[...replies].map(([id, reply]) => (
+              <div key={id} className="tw-px-3">
+                <AgentTrail parts={[{ kind: "text", text: reply }]} isStreaming={false} app={app} />
+              </div>
+            ))}
+          </>
         ) : !chat || messages.length === 0 ? (
           <div className="tw-px-3 tw-text-sm tw-text-muted">Starting…</div>
         ) : (

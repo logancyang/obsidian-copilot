@@ -200,13 +200,16 @@ export function useStickToBottom() {
     const el = scrollRef.current;
     const content = contentRef.current;
     if (!el || !content) return;
-    // An asked agent's conversation opened from an earlier run rests at that run's end, where its reply is, instead of the latest run's. https://github.com/Brevilabs/obsidian-copilot-private/issues/967
+    // An asked agent's conversation opened from an earlier run rests at that run's end, where its reply is, instead of the latest run's, until the user scrolls to the real bottom to follow the newest run. https://github.com/Brevilabs/obsidian-copilot-private/issues/967
+    const toRealBottom = () => el.scrollHeight - el.scrollTop - el.clientHeight;
+    let marked = true;
     const belowView = () =>
-      endRef.current
+      marked && endRef.current
         ? endRef.current.getBoundingClientRect().top - el.getBoundingClientRect().bottom
-        : el.scrollHeight - el.scrollTop - el.clientHeight;
+        : toRealBottom();
     let atBottom = true;
     const onScroll = () => {
+      if (toRealBottom() < STICK_TO_BOTTOM_PX) marked = false;
       atBottom = Math.abs(belowView()) < STICK_TO_BOTTOM_PX;
     };
     // Markdown renders after React commits, so the view follows the content's size, not its data. https://github.com/Brevilabs/obsidian-copilot-private/issues/749

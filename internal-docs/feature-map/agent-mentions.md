@@ -46,7 +46,7 @@ All of these need a license that includes custom agents and at least two agents 
 - Question: give Leo an instruction such as "Before changing any note, ask the user which month.", then send `@Leo reconcile the books`. The chat's agent asks which month. Answer `October.` The chat's agent says it passed the answer on, and Leo's reply follows it.
 - Progress: while Maya works, send `How's Maya doing?`. The chat's agent says how far she got without stopping her.
 - Didn't finish: while Maya works, end her agent's process. The chat's agent says she didn't finish and why. Send `Send Maya back to it.`; her reply builds on what she had done.
-- Resume: after a relay, reload the plugin, open the chat from Recent chats, and send `@Maya what did you tell me before?`. She recalls the earlier exchange.
+- Resume: after a relay, reload the plugin and open the chat from Recent chats. Choose `Message from Maya`: her reply shows below the note that her steps are no longer available; choose Back. Send `@Maya what did you tell me before?`. She recalls the earlier exchange.
 - Stop: send `@Maya check every claim in <note>, one by one`, then `Tell Maya to stop.` while she works. The chat's agent stops her, then says how far she got; the note keeps any change she made.
 - Delete while working: send `@Maya …` with a long job, open Maya's profile, and choose Delete. The dialog shows `Maya is working in <agent>'s chat. Deleting stops it.` in orange. After Delete, the chat's agent says Maya was deleted and how far she got.
 - Can't remember: send `@Maya from now on, flag video length first.` The relay says Maya can't save rules from a chat she was asked into; her `MEMORY.md` does not change.
@@ -56,7 +56,7 @@ All of these need a license that includes custom agents and at least two agents 
 
 - Without a license that includes custom agents, `@<name>` is plain text for the chat's own agent.
 - A mentioned agent never saves rules to its memory and never changes its instruction, whatever the mode. Rules for it belong in its own chat.
-- A mentioned agent's work can be viewed only while Obsidian keeps its chat open: after a restart, or once the chat that asked it was shut down, the conversation says its steps from that run are no longer available, until mentioning the agent again continues its conversation.
+- A mentioned agent's work can be viewed only while Obsidian keeps its chat open: after a restart, or once the chat that asked it was shut down, the conversation says its steps from that run are no longer available, with what the agent sent back from that run, such as its question and its reply, below the note, until mentioning the agent again continues its conversation. A run that sent nothing back shows the note alone.
 - The mentioned agent works in a chat no list shows: not in the [chat tabs](chat-tabs.md), Recent chats or the [Copilot Navigator](copilot-navigator.md).
 - On Codex models, a chat can mention agents only if it was opened while custom agents were available: it keeps the tools it started with. On Claude and OpenCode models, an open chat gets the tools as soon as custom agents become available, and loses them when they stop being available.
 - Closing Obsidian, shutting the chat down, or losing the license stops the mentioned agent; its reply never comes back.
