@@ -7,6 +7,7 @@ import {
 } from "@/agents/customAgentFiles";
 import { AgentFace } from "@/agents/ui/AgentFace";
 import { AgentFacePicker, type PickedFace } from "@/agents/ui/AgentFacePicker";
+import type { PresetFacesState } from "@/agents/ui/usePresetFaces";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ModelEffortPicker } from "@/components/ui/ModelEffortPicker";
@@ -50,6 +51,7 @@ export interface CreateAgentFormProps {
   folderNames: readonly string[];
   agentsFolder: string;
   models: AgentModelChoices;
+  presetFaces: PresetFacesState;
   initialValues?: CreateAgentInitialValues;
   closeGuard: CreateAgentCloseGuard;
   onCreate: (agent: NewCustomAgent) => Promise<void>;
@@ -61,6 +63,7 @@ export function CreateAgentForm({
   folderNames,
   agentsFolder,
   models,
+  presetFaces,
   initialValues,
   closeGuard,
   onCreate,
@@ -71,13 +74,14 @@ export function CreateAgentForm({
   const [title, setTitle] = useState(initialValues?.title ?? "");
   const [instruction, setInstruction] = useState(initialValues?.instruction ?? "");
   const [model, setModel] = useState(models.initial);
-  const [face, setFace] = useState<PickedFace | null>(null);
+  const [pickedFace, setFace] = useState<PickedFace | null>(null);
   const [facePickerOpen, setFacePickerOpen] = useState(false);
   const [instructionLeftEmpty, setInstructionLeftEmpty] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const ids = { name: useId(), title: useId(), instruction: useId() };
 
+  const face = pickedFace ?? unusedPresetFace(presetFaces);
   const trimmedName = name.trim();
   const who = trimmedName || "it";
   const hasInput = [name, title, instruction].some((text) => text.trim() !== "");
@@ -145,6 +149,8 @@ export function CreateAgentForm({
           </PopoverTrigger>
           <PopoverContent container={rootEl} align="start" className="tw-w-auto tw-p-2.5">
             <AgentFacePicker
+              presets={presetFaces}
+              selectedPresetId={face?.presetId}
               onPick={(picked) => {
                 setFace(picked);
                 setFacePickerOpen(false);
@@ -265,6 +271,16 @@ export function CreateAgentForm({
       </div>
     </form>
   );
+}
+
+// The dialog opens with a face no other agent wears, so it is never faceless and never a twin.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/939
+function unusedPresetFace(presets: PresetFacesState): PickedFace | null {
+  if (presets.status !== "ready") return null;
+  const preset = presets.faces.find((face) => !presets.usedIds.has(face.id)) ?? presets.faces[0];
+  return preset
+    ? { image: { kind: "preset", bytes: preset.bytes }, src: preset.src, presetId: preset.id }
+    : null;
 }
 
 interface FieldProps {

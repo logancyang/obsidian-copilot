@@ -4,7 +4,8 @@ import {
   type AgentModelChoices,
   type CreateAgentFormProps,
 } from "@/agents/ui/CreateAgentForm";
-import { COCO, LEO, MAYA, NORA } from "@/agents/ui/testing/rosterFixtures";
+import { COCO, LEO, MAYA, NORA, TWELVE_AGENTS } from "@/agents/ui/testing/rosterFixtures";
+import type { PresetFacesState } from "@/agents/ui/usePresetFaces";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { Meta, StoryObj } from "@/lib/story";
 import React, { useEffect, useRef } from "react";
@@ -27,6 +28,19 @@ const MODELS: AgentModelChoices = {
     "codex:gpt-5.5|agent": effort,
   },
   initial: { baseModelId: "opus", effort: "high" },
+};
+
+const TEAM = [COCO, MAYA, LEO, NORA];
+
+const PRESET_FACES: PresetFacesState = {
+  status: "ready",
+  faces: [...TWELVE_AGENTS.slice(4), ...TEAM].map((agent) => ({
+    id: agent.slug,
+    alt: `${agent.name}'s face`,
+    bytes: new ArrayBuffer(0),
+    src: agent.faceSrc,
+  })),
+  usedIds: new Set(TEAM.map((agent) => agent.slug)),
 };
 
 const KAI_INSTRUCTION =
@@ -52,10 +66,11 @@ function FormStory({ setup, ...props }: StoryProps) {
     <TooltipProvider>
       <div ref={ref}>
         <CreateAgentForm
-          agents={[COCO, MAYA, LEO, NORA]}
-          folderNames={(props.agents ?? [COCO, MAYA, LEO, NORA]).map((agent) => agent.slug)}
+          agents={TEAM}
+          folderNames={(props.agents ?? TEAM).map((agent) => agent.slug)}
           agentsFolder="copilot/agents"
           models={MODELS}
+          presetFaces={PRESET_FACES}
           closeGuard={new CreateAgentCloseGuard()}
           onCreate={async () => {}}
           onClose={() => {}}
@@ -70,6 +85,10 @@ function leaveInstructionEmpty(form: HTMLElement) {
   const instruction = form.querySelector("textarea");
   instruction?.focus();
   instruction?.blur();
+}
+
+function openFacePicker(form: HTMLElement) {
+  form.querySelector<HTMLButtonElement>('button[aria-label="Change face"]')?.click();
 }
 
 function uploadFace(form: HTMLElement) {
@@ -89,7 +108,7 @@ function uploadFace(form: HTMLElement) {
     choose(input);
   });
   observer.observe(form, { childList: true, subtree: true });
-  form.querySelector<HTMLButtonElement>('button[aria-label="Change face"]')?.click();
+  openFacePicker(form);
 }
 
 const meta = {
@@ -108,6 +127,20 @@ export const Filled: StoryObj<CreateAgentFormProps> = {
     <FormStory
       initialValues={KAI}
       models={{ ...MODELS, initial: { baseModelId: "sonnet", effort: "medium" } }}
+    />
+  ),
+};
+
+export const FaceGridLoaded: StoryObj<CreateAgentFormProps> = {
+  render: () => <FormStory initialValues={{ name: "Kai" }} setup={openFacePicker} />,
+};
+
+export const FaceGridFailedToLoad: StoryObj<CreateAgentFormProps> = {
+  render: () => (
+    <FormStory
+      initialValues={{ name: "Kai" }}
+      presetFaces={{ status: "failed" }}
+      setup={openFacePicker}
     />
   ),
 };

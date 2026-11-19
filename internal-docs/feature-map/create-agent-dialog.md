@@ -5,7 +5,8 @@ The `New agent` dialog that makes a custom agent: its face, name, optional title
 ## Sub-features
 
 - create-fields: `Name`, `Title` (optional), the instruction field, and `Model`. The instruction field's label follows the name as it is typed: "What it handles", then "What Kai handles"; its grey example text disappears once the user types.
-- create-face: the face at the top left opens `Pick a face`; `Upload image` takes a png, jpg, or webp file and shows it as the face. A file that is not a readable image keeps the face as it was and shows "Couldn't read that image. Choose a PNG, JPEG or WebP file."
+- create-face: the dialog opens wearing a preset face no other agent wears. The face at the top left opens `Pick a face`: a grid of preset faces, with the ones already on the team faded ("Faded faces are already on your team.") but still choosable, and `Upload image` for a png, jpg, or webp file. A file that is not a readable image keeps the face as it was and shows "Couldn't read that image. Choose a PNG, JPEG or WebP file."
+- create-face-offline: when the preset faces cannot load, the dialog opens with a blank face and `Pick a face` says "Couldn't load the preset faces. You can upload an image."; `Upload image` still works.
 - create-model: `Model` lists the models a chat can run on, grouped by agent, with the effort slider; it starts on the default model and the effort a chat would use with it.
 - create-saved-in: the bottom left reads `Saved in <Copilot folder>/agents/<name>/`, following the name as it is typed.
 - create-instruction-count: once the instruction has text, a count such as `372 / 4,000` shows under it; past 4,000 characters it turns orange, and Create still works.
@@ -26,7 +27,8 @@ It needs a license that includes custom agents (a team license until launch).
 ## Driving it
 
 - Fields: open the dialog and type a name. The instruction label, its hint, and `Saved in` follow the name.
-- Face: choose the face, then `Upload image`, and pick a photo. It shows as the face; after Create, the agent's face file is a 256 by 256 image.
+- Face: open the dialog. A face shows that no agent wears. Choose it: `Pick a face` shows the grid with team faces faded. Choose another face, or `Upload image` and pick a photo. It shows as the face; after Create, the agent's face file is the preset, or the photo cut to a 256 by 256 square.
+- Faces offline: open the dialog without internet. The face is blank, `Pick a face` says the preset faces couldn't load, and `Upload image` works.
 - Model: open `Model`, pick another model and effort, and create. The new agent's chat starts on that model.
 - Count: paste more than 4,000 characters into the instruction. The count turns orange and Create still works.
 - Missing instruction: type a name, click into the instruction, and click out. The red note shows; hover Create for "Write what <name> handles first".
@@ -39,5 +41,6 @@ It needs a license that includes custom agents (a team license until launch).
 
 ## Gotchas
 
+- The preset faces download from the Brevilabs CDN each time the dialog opens, never before. A chosen preset is saved into the agent's folder, so showing the agent never needs the internet.
 - An agent's folder is named after its name and keeps that name through a rename. Agents in numbered folders such as `kai-2`, or two agents with the same name in hand-made folders, still show as separate agents.
 - Esc first closes an open face or model picker; the next Esc acts on the dialog.

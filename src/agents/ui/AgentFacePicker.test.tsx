@@ -1,9 +1,21 @@
 import { AgentFacePicker, readAsDataUrl } from "@/agents/ui/AgentFacePicker";
+import type { PresetFacesState } from "@/agents/ui/usePresetFaces";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Notice } from "obsidian";
 import React from "react";
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/939";
+
+const COCO_BYTES = new Uint8Array([1]).buffer;
+const KAI_BYTES = new Uint8Array([2]).buffer;
+const PRESETS: PresetFacesState = {
+  status: "ready",
+  faces: [
+    { id: "coco", alt: "Face with a ponytail", bytes: COCO_BYTES, src: "data:coco" },
+    { id: "kai", alt: "Face with round glasses", bytes: KAI_BYTES, src: "data:kai" },
+  ],
+  usedIds: new Set(["coco"]),
+};
 
 function decodeImages(decodes: boolean) {
   Object.assign(window, {
@@ -25,7 +37,7 @@ describe("AgentFacePicker", () => {
     it("offers Upload image for png, jpg and webp files and hands back the chosen file with a preview", async () => {
       const onPick = jest.fn();
       const photo = new File(["webp bytes"], "kai.webp", { type: "image/webp" });
-      render(<AgentFacePicker onPick={onPick} />);
+      render(<AgentFacePicker presets={{ status: "loading" }} onPick={onPick} />);
 
       const input = screen.getByLabelText<HTMLInputElement>("Upload image");
       expect(input.accept).toBe("image/png,image/jpeg,image/webp");
@@ -39,10 +51,54 @@ describe("AgentFacePicker", () => {
       );
     });
 
+    it(`shows the preset faces, fading the ones already on the team and marking the selected one (${ISSUE})`, () => {
+      render(<AgentFacePicker presets={PRESETS} selectedPresetId="kai" onPick={jest.fn()} />);
+
+      const coco = screen.getByRole("button", { name: "Face with a ponytail" });
+      const kai = screen.getByRole("button", { name: "Face with round glasses" });
+      expect(coco.className).toContain("tw-opacity-30");
+      expect(coco.getAttribute("aria-pressed")).toBe("false");
+      expect(kai.className).not.toContain("tw-opacity-30");
+      expect(kai.getAttribute("aria-pressed")).toBe("true");
+      expect(screen.getByText("Faded faces are already on your team.")).not.toBeNull();
+    });
+
+    it(`shows a selected face that an agent wears as chosen, not faded, without the faded note (${ISSUE})`, () => {
+      render(<AgentFacePicker presets={PRESETS} selectedPresetId="coco" onPick={jest.fn()} />);
+
+      const coco = screen.getByRole("button", { name: "Face with a ponytail" });
+      expect(coco.getAttribute("aria-pressed")).toBe("true");
+      expect(coco.className).not.toContain("tw-opacity-30");
+      expect(screen.queryByText("Faded faces are already on your team.")).toBeNull();
+    });
+
+    it("hands back a picked preset's bytes, preview and id, even when another agent wears it", () => {
+      const onPick = jest.fn();
+      render(<AgentFacePicker presets={PRESETS} onPick={onPick} />);
+
+      fireEvent.click(screen.getByRole("button", { name: "Face with a ponytail" }));
+
+      expect(onPick).toHaveBeenCalledWith({
+        image: { kind: "preset", bytes: COCO_BYTES },
+        src: "data:coco",
+        presetId: "coco",
+      });
+    });
+
+    it(`says the preset faces could not load and still offers Upload image (${ISSUE})`, () => {
+      render(<AgentFacePicker presets={{ status: "failed" }} onPick={jest.fn()} />);
+
+      expect(
+        screen.getByText("Couldn't load the preset faces. You can upload an image.")
+      ).not.toBeNull();
+      expect(screen.getByRole("button", { name: "Upload image" })).not.toBeNull();
+      expect(screen.queryByRole("group", { name: "Preset faces" })).toBeNull();
+    });
+
     it(`keeps the current face and says why when the chosen file is not a readable image (${ISSUE})`, async () => {
       decodeImages(false);
       const onPick = jest.fn();
-      render(<AgentFacePicker onPick={onPick} />);
+      render(<AgentFacePicker presets={{ status: "loading" }} onPick={onPick} />);
 
       fireEvent.change(screen.getByLabelText("Upload image"), {
         target: { files: [new File(["%PDF-1.7"], "notes.png", { type: "image/png" })] },
@@ -57,7 +113,7 @@ describe("AgentFacePicker", () => {
     });
 
     it("opens the file chooser from the Upload image button", () => {
-      render(<AgentFacePicker onPick={jest.fn()} />);
+      render(<AgentFacePicker presets={{ status: "loading" }} onPick={jest.fn()} />);
       const click = jest.spyOn(screen.getByLabelText("Upload image"), "click");
 
       fireEvent.click(screen.getByRole("button", { name: "Upload image" }));

@@ -1,5 +1,8 @@
 import type { FaceImage } from "@/agents/customAgentFiles";
+import { AgentFace } from "@/agents/ui/AgentFace";
+import type { PresetFacesState } from "@/agents/ui/usePresetFaces";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { ImageIcon } from "lucide-react";
 import { Notice } from "obsidian";
 import React, { useRef } from "react";
@@ -7,9 +10,12 @@ import React, { useRef } from "react";
 export interface PickedFace {
   image: FaceImage;
   src: string;
+  presetId?: string;
 }
 
 export interface AgentFacePickerProps {
+  presets: PresetFacesState;
+  selectedPresetId?: string | null;
   onPick: (face: PickedFace) => void;
 }
 
@@ -33,8 +39,20 @@ async function decodes(image: Blob): Promise<boolean> {
   }
 }
 
-export function AgentFacePicker({ onPick }: AgentFacePickerProps): React.ReactElement {
+export function AgentFacePicker({
+  presets,
+  selectedPresetId,
+  onPick,
+}: AgentFacePickerProps): React.ReactElement {
   const fileInput = useRef<HTMLInputElement>(null);
+  // The face being worn shows as chosen rather than taken, also when another agent wears it.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/939
+  const fadedIds =
+    presets.status === "ready"
+      ? presets.faces
+          .map((face) => face.id)
+          .filter((id) => presets.usedIds.has(id) && id !== selectedPresetId)
+      : [];
 
   const pickUpload = async (file: File | undefined) => {
     if (!file) return;
@@ -48,11 +66,55 @@ export function AgentFacePicker({ onPick }: AgentFacePickerProps): React.ReactEl
   };
 
   return (
-    <div className="tw-flex tw-flex-col tw-gap-2">
+    <div className="tw-flex tw-w-72 tw-flex-col tw-gap-2">
       <div className="tw-text-ui-smaller tw-uppercase tw-tracking-wide tw-text-faint">
         Pick a face
       </div>
-      <div>
+      {presets.status === "ready" && (
+        <>
+          <div className="tw-grid tw-grid-cols-6 tw-gap-2" role="group" aria-label="Preset faces">
+            {presets.faces.map((face) => (
+              <button
+                key={face.id}
+                type="button"
+                aria-label={face.alt || face.id}
+                aria-pressed={face.id === selectedPresetId}
+                className={cn(
+                  "clickable-icon tw-size-10 tw-rounded-full tw-bg-transparent tw-p-0.5 tw-shadow-none",
+                  fadedIds.includes(face.id) && "tw-opacity-30"
+                )}
+                onClick={() =>
+                  onPick({
+                    image: { kind: "preset", bytes: face.bytes },
+                    src: face.src,
+                    presetId: face.id,
+                  })
+                }
+              >
+                <AgentFace
+                  src={face.src}
+                  size="l"
+                  className={cn(
+                    face.id === selectedPresetId &&
+                      "tw-outline tw-outline-2 tw-outline-offset-2 tw-outline-[color:var(--interactive-accent)]"
+                  )}
+                />
+              </button>
+            ))}
+          </div>
+          {fadedIds.length > 0 && (
+            <div className="tw-text-ui-smaller tw-text-faint">
+              Faded faces are already on your team.
+            </div>
+          )}
+        </>
+      )}
+      {presets.status === "failed" && (
+        <div className="tw-text-ui-smaller tw-text-muted">
+          Couldn&apos;t load the preset faces. You can upload an image.
+        </div>
+      )}
+      <div className="tw-border-0 tw-border-t tw-border-solid tw-border-border tw-pt-2">
         <Button
           type="button"
           variant="secondary"
