@@ -71,7 +71,7 @@ describe("activityLiveStep", () => {
       expect(activityLiveStep(members, false)).toBeNull();
     });
 
-    it("shortens the label's vault path through the supplied context", () => {
+    it("names a vault file by its file name, recognising the vault through the supplied context", () => {
       const members = [
         action("a", {
           vendorToolName: "Read",
@@ -80,9 +80,7 @@ describe("activityLiveStep", () => {
         }),
       ];
 
-      expect(activityLiveStep(members, true, { vaultBase: "/vault" })).toBe(
-        "Reading Notes/Inbox.md"
-      );
+      expect(activityLiveStep(members, true, { vaultBase: "/vault" })).toBe("Reading Inbox.md");
     });
   });
 });

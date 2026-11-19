@@ -52,13 +52,18 @@ describe("toolSummaries", () => {
       expect(s.outcome(t)).toMatch(/tokens$/);
     });
 
-    it("renders Read paths relative to the vault root", () => {
+    it("names a read file by its file name and keeps the vault path as the link target", () => {
       const t = tool({
         vendorToolName: "Read",
         title: "read",
         locations: [{ path: "/Users/me/vault/notes/music-theory.md" }],
       });
-      expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("Read notes/music-theory.md");
+      const summary = lookupToolSummary(t);
+      expect(summary.collapsedLine(t, CTX)).toBe("Read music-theory.md");
+      expect(summary.target?.(t, CTX)).toEqual({
+        path: "notes/music-theory.md",
+        label: "music-theory.md",
+      });
     });
 
     it("hides parent directories outside the vault without changing the navigation target", () => {
@@ -116,12 +121,12 @@ describe("toolSummaries", () => {
       expect(s).toBe(taskEquiv);
     });
 
-    it("maps the LS tool onto the list summary", () => {
+    it("maps the LS tool onto the list summary and names the folder without its parents", () => {
       const list = tool({
         vendorToolName: "LS",
         toolKind: "read",
-        title: "LS Daily",
-        input: { path: "Daily" },
+        title: "LS Journal/Daily",
+        input: { path: "Journal/Daily" },
       });
       expect(lookupToolSummary(list).collapsedLine(list, CTX)).toBe("Listed Daily");
     });
@@ -200,7 +205,7 @@ describe("toolSummaries", () => {
         mcpServer: "srv",
         locations: [{ path: "/Users/me/vault/notes/x.md" }],
       });
-      expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("srv · Read notes/x.md");
+      expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("srv · Read x.md");
     });
 
     it("shows an ACP backend's friendly multi-word title verbatim", () => {
@@ -397,7 +402,7 @@ describe("toolSummaries", () => {
         toolKind: "delete",
         title: "old.md",
         status: "in_progress",
-        input: { filePath: "/Users/me/vault/old.md" },
+        input: { filePath: "/Users/me/vault/archive/old.md" },
       });
       const summary = lookupToolSummary(inflight);
       expect(summary.collapsedLine(inflight, CTX)).toBe("Deleting old.md");
@@ -406,6 +411,20 @@ describe("toolSummaries", () => {
       );
       expect(summary.collapsedLine({ ...inflight, status: "failed" }, CTX)).toBe(
         "Didn't delete old.md"
+      );
+    });
+
+    it("uses Moving and Moved with the moved file's name", () => {
+      const inflight = tool({
+        toolKind: "move",
+        title: "draft.md",
+        status: "in_progress",
+        input: { filePath: "/Users/me/vault/inbox/draft.md" },
+      });
+      const summary = lookupToolSummary(inflight);
+      expect(summary.collapsedLine(inflight, CTX)).toBe("Moving draft.md");
+      expect(summary.collapsedLine({ ...inflight, status: "completed" }, CTX)).toBe(
+        "Moved draft.md"
       );
     });
 

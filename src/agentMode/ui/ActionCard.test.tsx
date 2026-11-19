@@ -24,11 +24,11 @@ function readTool(overrides: Partial<ToolCallPart> = {}): ToolCallPart {
 
 describe("ActionCard", () => {
   describe("ActionCard()", () => {
-    it("links only the file path of a completed read, keeping the verb as plain text", () => {
+    it("links a completed read by file name and opens its vault path, keeping the verb as plain text", () => {
       render(<ActionCard part={readTool()} open={false} onToggle={jest.fn()} />);
 
       const link = screen.getByRole("link");
-      expect(link.textContent).toBe("notes/today.md");
+      expect(link.textContent).toBe("today.md");
       expect(screen.getByText("Read").closest("a")).toBeNull();
 
       fireEvent.click(link);
@@ -113,7 +113,7 @@ describe("ActionCard", () => {
         <ActionCard part={readTool({ status: "in_progress" })} open={false} onToggle={jest.fn()} />
       );
 
-      expect(screen.getByText("Reading notes/today.md")).toBeTruthy();
+      expect(screen.getByText("Reading today.md")).toBeTruthy();
       expect(screen.queryByRole("link")).toBeNull();
     });
   });
