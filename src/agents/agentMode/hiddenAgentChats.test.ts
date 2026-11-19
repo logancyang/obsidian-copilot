@@ -22,6 +22,14 @@ jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError:
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/944";
 const AUTO_MODE: BackendState = { model: null, mode: { current: "auto", options: [], apply: {} } };
+const PLAN_CHANGE = Object.freeze({
+  path: "Plans/Launch plan.md",
+  status: "modified" as const,
+  before: "# Launch plan\n",
+  after: "# Launch plan\nRisk: the intro is too long.\n",
+  additions: 1,
+  deletions: 0,
+});
 const CLAUDE_LIKE = { midTurnDelivery: true, withdraw: true } as unknown as BackendDescriptor;
 
 let vault: FakeAgentVault;
@@ -253,6 +261,61 @@ describe("hiddenAgentChats", () => {
         expect(relayed).toContain(
           '<agent-reply from="Maya">\nI disagree. Six features is too many.\n</agent-reply>'
         );
+      });
+
+      it(`carries the files the agent changed onto the relayed reply, for the Files changed card, and names them to the current agent (${ISSUE})`, async () => {
+        const coco = await openChat({ agentSlug: "coco" });
+        const maya = await askedAndPrompted(coco, "Add one line to the plan.");
+        const reply = maya.store.getDisplayMessages().at(-1)!;
+        maya.store.setFileChanges(reply.id, [PLAN_CHANGE]);
+
+        answer(maya, "Added the risk line.");
+
+        const relayed = await fake.untilPrompt(sessionIdOf(coco));
+        expect(relayed).toContain("Maya changed Plans/Launch plan.md.");
+        const relayMessage = coco.store.getDisplayMessages().find((m) => m.message === relayed);
+        expect(relayMessage?.fileChanges).toEqual([PLAN_CHANGE]);
+      });
+
+      it(`carries the files onto a relayed reply that waited for a busy chat's turn to end (${ISSUE})`, async () => {
+        const coco = await openChat({ agentSlug: "coco" });
+        const maya = await askedAndPrompted(coco, "Add one line to the plan.");
+        coco.sendPrompt("Meanwhile, something else.");
+        await fake.untilPrompt(sessionIdOf(coco));
+        maya.store.setFileChanges(maya.store.getDisplayMessages().at(-1)!.id, [PLAN_CHANGE]);
+        const handed = coco.untilHanded();
+        answer(maya, "Added the risk line.");
+        await handed;
+
+        fake.endTurn(sessionIdOf(coco));
+
+        const relayed = await fake.untilPrompt(sessionIdOf(coco), 2);
+        const relayMessage = coco.store.getDisplayMessages().find((m) => m.message === relayed);
+        expect(relayMessage?.fileChanges).toEqual([PLAN_CHANGE]);
+      });
+
+      it(`carries only the files changed since the latest ask when a continued chat's reply is relayed (${ISSUE})`, async () => {
+        const coco = await openChat({ agentSlug: "coco" });
+        const maya = await askedAndPrompted(coco, "Add the risk line to the plan.");
+        maya.store.setFileChanges(maya.store.getDisplayMessages().at(-1)!.id, [PLAN_CHANGE]);
+        answer(maya, "Added the risk line.");
+        await fake.untilPrompt(sessionIdOf(coco));
+        fake.endTurn(sessionIdOf(coco));
+        await untilStatus(maya, (status) => status === "idle");
+        const outro = {
+          ...PLAN_CHANGE,
+          before: PLAN_CHANGE.after,
+          after: `${PLAN_CHANGE.after}Outro: 10 seconds.\n`,
+        };
+
+        chats.ask(coco, "Maya", "Add the outro line too.");
+        await fake.untilPrompt(sessionIdOf(maya), 2);
+        maya.store.setFileChanges(maya.store.getDisplayMessages().at(-1)!.id, [outro]);
+        answer(maya, "Added the outro line.");
+
+        const relayed = await fake.untilPrompt(sessionIdOf(coco), 2);
+        const relayMessage = coco.store.getDisplayMessages().find((m) => m.message === relayed);
+        expect(relayMessage?.fileChanges).toEqual([outro]);
       });
 
       it(`continues the same chat when the same chat asks the agent again after it finished (${ISSUE})`, async () => {

@@ -14,10 +14,13 @@ import AgentChatMessages from "@/agentMode/ui/AgentChatMessages";
 import { FEEDBACK_OFFER, type FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
 import { EMPTY_CHAT_STATES, withChatState } from "@/agentMode/session/chatExtension";
 import { CONNECTOR_CARDS } from "@/connectors/agentMode/connectorCards";
-import { AI_SENDER } from "@/constants";
+import { AI_SENDER, USER_SENDER } from "@/constants";
+import { AppContext } from "@/context";
+import type { App } from "obsidian";
 import { openTurnDiff } from "@/agentMode/ui/TurnDiffView";
 import { logError } from "@/logger";
 import { setCustomAgentsAccess } from "@/agents/testing/customAgentsAccess";
+import { formatAgentReply } from "@/agents/agentReply";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
 
@@ -114,6 +117,10 @@ jest.mock("@/agentMode/ui/AgentTrailView", () => ({
 }));
 
 jest.mock("@/entitlement");
+
+jest.mock("@/agentMode/ui/AgentMarkdownText", () => ({
+  AgentMarkdownText: ({ text }: { text: string }) => <div>{text}</div>,
+}));
 
 jest.mock("@/agentMode/ui/TurnDiffView", () => ({
   openTurnDiff: jest.fn(() => Promise.resolve()),
@@ -229,12 +236,12 @@ function plan(id: string): CurrentPlan {
   };
 }
 
-function renderMessages(
+function messagesProps(
   messages: AgentChatMessage[],
   isLoading: boolean,
   overrides: Partial<AgentChatMessagesProps> = {}
-) {
-  const props: AgentChatMessagesProps = {
+): AgentChatMessagesProps {
+  return {
     messages,
     plugin: { app: {}, manifest: { version: "4.1.0" } } as never,
     currentPlan: null,
@@ -245,6 +252,14 @@ function renderMessages(
     chatStates: EMPTY_CHAT_STATES,
     ...overrides,
   };
+}
+
+function renderMessages(
+  messages: AgentChatMessage[],
+  isLoading: boolean,
+  overrides: Partial<AgentChatMessagesProps> = {}
+) {
+  const props = messagesProps(messages, isLoading, overrides);
   return { ...render(<AgentChatMessages {...props} />), props };
 }
 
@@ -745,6 +760,65 @@ describe("AgentChatMessages", () => {
 
       expect(screen.getByTestId("chat-messages").textContent).toContain("Plan plan-1");
       expect(screen.queryByTestId("agent-action-rail")).toBeNull();
+    });
+
+    describe("a reply relayed from an @-mentioned agent", () => {
+      const relayed = formatAgentReply({
+        agent: "maya",
+        name: "Maya",
+        mention: "mention-1",
+        reply: "BIGGEST RISK: the intro is too slow.",
+        denied: [],
+        changed: ["Plans/Launch plan.md"],
+      });
+      const relayMessage = {
+        id: "relay",
+        sender: USER_SENDER,
+        message: relayed,
+        timestamp: { epoch: 1, display: "", fileName: "" },
+        isVisible: true,
+        fileChanges: [
+          {
+            path: "Plans/Launch plan.md",
+            status: "modified" as const,
+            before: "a\n",
+            after: "a\nb\n",
+            additions: 1,
+            deletions: 0,
+          },
+        ],
+      };
+
+      afterEach(async () => {
+        await setCustomAgentsAccess("free");
+      });
+
+      it("shows the agent's words under one line and the files it changed, never the message the current agent received (https://github.com/Brevilabs/obsidian-copilot-private/issues/944)", async () => {
+        await setCustomAgentsAccess("team");
+
+        const { container } = render(
+          <AppContext.Provider value={{} as App}>
+            <AgentChatMessages {...messagesProps([relayMessage], false)} />
+          </AppContext.Provider>
+        );
+
+        expect(screen.getByText("Maya's reply")).toBeTruthy();
+        expect(screen.getByText("BIGGEST RISK: the intro is too slow.")).toBeTruthy();
+        expect(screen.getByRole("button", { name: "Plans/Launch plan.md" })).toBeTruthy();
+        expect(container.textContent).not.toContain("copilot-agent-reply");
+        expect(container.textContent).not.toContain("Pass the reply on");
+      });
+
+      it("shows a relayed reply as the message it is while custom agents are hidden", async () => {
+        await setCustomAgentsAccess("free");
+
+        renderMessages([relayMessage], false);
+
+        expect(screen.queryByText("Maya's reply")).toBeNull();
+        expect(mockSingleMessageRender).toHaveBeenCalledWith(
+          expect.objectContaining({ message: relayed })
+        );
+      });
     });
 
     describe("a custom agent's saved rules", () => {
