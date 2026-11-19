@@ -19,7 +19,7 @@ export const ReadOnlyWhileModelCantRunHere: StoryObj<LockedAgentChatProps> = {
   args: {
     lapsed: false,
     setup: {
-      reason: "Coco runs on OpenCode, which isn't set up on this device.",
+      reason: "Coco's model, Sonnet 5.5, isn't available on this device.",
       onOpenProfile: () => {},
     },
   },
