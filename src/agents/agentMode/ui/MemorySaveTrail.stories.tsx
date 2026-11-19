@@ -37,7 +37,7 @@ const TrailWithSave: React.FC<{ parts: AgentMessagePart[]; memorySaves: MemorySa
         parts={parts}
         isStreaming={false}
         turnDurationMs={22_000}
-        timestamp="2026/11/16 14:09:31"
+        timestampMs={new Date(2026, 10, 16, 14, 9, 31).getTime()}
         app={app}
         turnStopReason="end_turn"
         memorySaves={memorySaves}

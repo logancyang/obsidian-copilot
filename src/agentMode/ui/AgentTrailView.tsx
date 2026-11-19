@@ -37,7 +37,9 @@ interface AgentTrailProps {
   isStreaming: boolean;
   turnStartedAtMs?: number;
   turnDurationMs?: number;
-  timestamp?: string;
+  timestampMs?: number;
+  responseText?: string;
+  hideFooter?: boolean;
   app: App;
   turnStopReason?: StopReason;
   agentCancelCause?: AgentCancelCause;
@@ -81,7 +83,9 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({
   isStreaming,
   turnStartedAtMs,
   turnDurationMs,
-  timestamp,
+  timestampMs,
+  responseText,
+  hideFooter = false,
   app,
   turnStopReason,
   agentCancelCause,
@@ -104,13 +108,14 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({
   const trailNodes = buildAgentTrail(parts);
   const compactionOnly =
     trailNodes.length > 0 && trailNodes.every((node) => node.type === "compaction");
+  const copyText = responseText ?? answer;
   const footer =
-    !isStreaming && turnStopReason !== "cancelled" && answer.length > 0 ? (
+    !isStreaming && turnStopReason !== "cancelled" && copyText.length > 0 ? (
       <AgentMessageActions
-        text={answer}
+        text={copyText}
         app={app}
         durationMs={turnDurationMs}
-        timestamp={timestamp}
+        timestampMs={timestampMs}
         onContinue={onContinue}
       />
     ) : turnDurationMs !== undefined ? (
@@ -119,12 +124,10 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({
           <AgentTurnDurationIndicator status="complete" durationMs={turnDurationMs} inline />
         }
       />
-    ) : !hasRunningDuration && timestamp ? (
-      <AssistantResponseFooter timestamp={timestamp} />
     ) : null;
 
   return (
-    <div className="tw-group tw-flex tw-flex-col tw-gap-1">
+    <div className="tw-group/response tw-flex tw-flex-col tw-gap-1">
       <LinearTrail
         parts={parts}
         isStreaming={isStreaming}
@@ -142,7 +145,7 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({
       {hasRunningDuration && !compactionOnly ? (
         <AgentTurnDurationIndicator status="running" startedAtMs={turnStartedAtMs} />
       ) : null}
-      {compactionOnly ? null : footer}
+      {compactionOnly || hideFooter ? null : footer}
     </div>
   );
 };

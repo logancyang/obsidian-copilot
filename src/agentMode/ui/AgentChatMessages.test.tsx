@@ -47,17 +47,26 @@ jest.mock("@/components/chat-components/ChatSingleMessage", () => ({
   default: ({
     message,
     footerStart,
+    responseText,
+    hideFooter,
     sourcePath,
     onContinue,
   }: {
     message: { message: string };
     footerStart?: React.ReactNode;
+    responseText?: string;
+    hideFooter?: boolean;
     sourcePath?: string;
     onContinue?: () => void;
   }) => {
     mockSingleMessageRender(message);
     return (
-      <div data-source-path={sourcePath}>
+      <div
+        data-testid="single-message"
+        data-source-path={sourcePath}
+        data-response-text={responseText}
+        data-row={hideFooter ? "none" : "shown"}
+      >
         {message.message}
         <div data-testid="single-message-footer">{footerStart}</div>
         {onContinue ? (
@@ -72,7 +81,10 @@ jest.mock("@/components/chat-components/ChatSingleMessage", () => ({
 
 jest.mock("@/agentMode/ui/AgentTrailView", () => ({
   AgentTrail: ({
-    timestamp,
+    timestampMs,
+    turnDurationMs,
+    responseText,
+    hideFooter,
     parts,
     errorText,
     agentCancelCause,
@@ -81,7 +93,10 @@ jest.mock("@/agentMode/ui/AgentTrailView", () => ({
     onOpenFileChange,
     onContinue,
   }: {
-    timestamp?: string;
+    timestampMs?: number;
+    turnDurationMs?: number;
+    responseText?: string;
+    hideFooter?: boolean;
     parts: unknown[];
     errorText?: string;
     agentCancelCause?: string;
@@ -92,8 +107,13 @@ jest.mock("@/agentMode/ui/AgentTrailView", () => ({
   }) => {
     mockTrailRender(parts);
     return (
-      <div data-testid="agent-trail-timestamp">
-        {timestamp}
+      <div
+        data-testid="agent-trail-timestamp"
+        data-response-text={responseText}
+        data-row={hideFooter ? "none" : "shown"}
+        data-duration={turnDurationMs}
+      >
+        {timestampMs}
         {memorySaves ? (
           <span data-testid="agent-trail-memory-anchor">{memorySaves.anchorId}</span>
         ) : null}
@@ -263,6 +283,16 @@ function renderMessages(
   return { ...render(<AgentChatMessages {...props} />), props };
 }
 
+function rowsOf(
+  replies: HTMLElement[]
+): Array<[string | undefined, string | undefined, string | undefined]> {
+  return replies.map((reply) => [
+    reply.dataset.row,
+    reply.dataset.responseText,
+    reply.dataset.duration,
+  ]);
+}
+
 describe("AgentChatMessages", () => {
   describe("AgentChatMessages()", () => {
     beforeEach(() => {
@@ -425,19 +455,138 @@ describe("AgentChatMessages", () => {
       expect(screen.queryByText("Agent is working")).toBeNull();
     });
 
-    it("passes the message timestamp to a structured trail without a duration", () => {
-      const timestamp = "2026/08/07 20:31:10";
+    it("passes the message's sent time to a structured trail without a duration", () => {
       renderMessages(
         [
           assistantMessage("answer-1", 62_000, {
-            timestamp: { epoch: 62_000, display: timestamp, fileName: "20260807_203110" },
+            timestamp: { epoch: 62_000, display: "1970/01/01 00:01:02", fileName: "" },
             parts: [{ kind: "thought", text: "Inspect the response." }],
           }),
         ],
         false
       );
 
-      expect(screen.getByTestId("agent-trail-timestamp").textContent).toBe(timestamp);
+      expect(screen.getByTestId("agent-trail-timestamp").textContent).toBe("62000");
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/971 gives a response of one reply one row, on that reply, with its text and its Worked for", () => {
+      renderMessages(
+        [
+          assistantMessage("user-1", 1, { sender: USER_SENDER, message: "Draft the recap" }),
+          assistantMessage("reply-a", 2, {
+            parts: [{ kind: "text", text: "The draft is in Q4 recap." }],
+            turnDurationMs: 46_000,
+          }),
+        ],
+        false
+      );
+
+      expect(rowsOf(screen.getAllByTestId("agent-trail-timestamp"))).toEqual([
+        ["shown", "The draft is in Q4 recap.", "46000"],
+      ]);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/971 leaves a row on each response when a user message sits between them, and only the newest response's row shows Worked for", () => {
+      renderMessages(
+        [
+          assistantMessage("user-1", 1, { sender: USER_SENDER, message: "Draft the recap" }),
+          assistantMessage("reply-a", 2, {
+            parts: [{ kind: "text", text: "Drafted." }],
+            turnDurationMs: 46_000,
+          }),
+          assistantMessage("user-2", 3, { sender: USER_SENDER, message: "Shorten it" }),
+          assistantMessage("reply-b", 4, {
+            parts: [{ kind: "text", text: "Shortened." }],
+            turnDurationMs: 18_000,
+          }),
+        ],
+        false
+      );
+
+      expect(rowsOf(screen.getAllByTestId("agent-trail-timestamp"))).toEqual([
+        ["shown", "Drafted.", undefined],
+        ["shown", "Shortened.", "18000"],
+      ]);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/971 shows no row on a response while its last reply is being written, nor on its earlier replies", () => {
+      renderMessages(
+        [
+          assistantMessage("user-1", 1, { sender: USER_SENDER, message: "Draft the recap" }),
+          assistantMessage("reply-a", 2, {
+            parts: [{ kind: "text", text: "Drafted." }],
+            turnDurationMs: 46_000,
+            turnStopReason: "end_turn",
+          }),
+          assistantMessage("reply-b", 3, { parts: [{ kind: "text", text: "Checking" }] }),
+        ],
+        true
+      );
+
+      const [earlier, live] = rowsOf(screen.getAllByTestId("agent-trail-timestamp"));
+      expect(earlier[0]).toBe("none");
+      expect(live[2]).toBeUndefined();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/971 continues a chat from the last reply of a response, the only reply that offers it", async () => {
+      const onContinueFrom = jest.fn().mockResolvedValue(undefined);
+      renderMessages(
+        [
+          assistantMessage("user-1", 1_000, { sender: "user", message: "Question" }),
+          assistantMessage("reply-a", 2_000, { parts: [{ kind: "text", text: "First" }] }),
+          assistantMessage("reply-b", 3_000, { parts: [{ kind: "text", text: "Second" }] }),
+        ],
+        false,
+        { onContinueFrom }
+      );
+
+      await act(async () => fireEvent.click(screen.getByText("Continue trail")));
+
+      expect(onContinueFrom.mock.calls).toEqual([["reply-b"]]);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/971 labels the first message of each day in a chat that spans days", () => {
+      jest.setSystemTime(new Date(2026, 10, 18, 15, 0));
+      renderMessages(
+        [
+          assistantMessage("user-1", new Date(2026, 10, 17, 14, 2).getTime(), {
+            sender: USER_SENDER,
+            message: "Draft the recap",
+          }),
+          assistantMessage("reply-1", new Date(2026, 10, 17, 14, 3).getTime()),
+          assistantMessage("user-2", new Date(2026, 10, 18, 9, 15).getTime(), {
+            sender: USER_SENDER,
+            message: "Shorten it",
+          }),
+          assistantMessage("reply-2", new Date(2026, 10, 18, 9, 16).getTime()),
+        ],
+        false
+      );
+
+      const transcript = screen.getByTestId("chat-messages").textContent ?? "";
+      expect(transcript.indexOf("Yesterday")).toBeLessThan(transcript.indexOf("Draft the recap"));
+      expect(transcript.indexOf("Today")).toBeGreaterThan(transcript.indexOf("Draft the recap"));
+      expect(transcript.indexOf("Today")).toBeLessThan(transcript.indexOf("Shorten it"));
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/971 labels a chat that began today with Yesterday once midnight passes with it open", () => {
+      jest.setSystemTime(new Date(2026, 10, 18, 23, 59, 30));
+      renderMessages(
+        [
+          assistantMessage("user-1", new Date(2026, 10, 18, 23, 50).getTime(), {
+            sender: USER_SENDER,
+            message: "Late question",
+          }),
+        ],
+        false
+      );
+      expect(screen.queryByText("Yesterday")).toBeNull();
+
+      act(() => {
+        jest.advanceTimersByTime(60_000);
+      });
+
+      expect(screen.getByText("Yesterday")).toBeTruthy();
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/633 hands a failed structured turn's error to its trail, which shows no error text for a message without parts", () => {
@@ -527,11 +676,12 @@ describe("AgentChatMessages", () => {
       const messages = [
         assistantMessage("user-1", 1_000, { sender: "user", message: "Question" }),
         assistantMessage("text-reply", 2_000, { message: "Saved answer" }),
+        assistantMessage("user-2", 2_500, { sender: "user", message: "Follow-up" }),
         assistantMessage("trail-reply", 3_000, { parts: [{ kind: "text", text: "Live" }] }),
       ];
       const { rerender, props } = renderMessages(messages, false, { onContinueFrom });
 
-      expect(screen.queryByText("Continue Question")).toBeNull();
+      expect(screen.queryByText(/Continue (Question|Follow-up)/)).toBeNull();
       for (const label of ["Continue Saved answer", "Continue trail"]) {
         await act(async () => fireEvent.click(screen.getByText(label)));
       }
@@ -563,7 +713,7 @@ describe("AgentChatMessages", () => {
       expect(onContinueFrom).toHaveBeenCalledTimes(2);
     });
 
-    it("lets the browser skip painting every turn that is scrolled out of view https://github.com/logancyang/obsidian-copilot/issues/3343", () => {
+    it("lets the browser skip painting every reply that is scrolled out of view https://github.com/logancyang/obsidian-copilot/issues/3343", () => {
       renderMessages(
         [
           assistantMessage("user-1", 1_000, { sender: "user", message: "Summarize this note" }),
@@ -574,12 +724,19 @@ describe("AgentChatMessages", () => {
         false
       );
 
-      const rows = Array.from(screen.getByTestId("chat-messages").firstElementChild!.children);
-      expect(rows).toHaveLength(2);
-      for (const row of rows) {
-        expect(row.className).toContain("[content-visibility:auto]");
-        expect(row.className).toContain("[contain-intrinsic-size:auto_500px]");
-      }
+      const reply = screen.getByTestId("agent-trail-timestamp").closest(".tw-w-full");
+      expect(reply?.className).toContain("[content-visibility:auto]");
+      expect(reply?.className).toContain("[contain-intrinsic-size:auto_500px]");
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/971 paints a user message's row in full, so its floating bar is not cut off at the row's edge", () => {
+      renderMessages(
+        [assistantMessage("user-1", 1_000, { sender: "user", message: "Summarize this note" })],
+        false
+      );
+
+      const row = screen.getByTestId("single-message").parentElement;
+      expect(row?.className).not.toContain("content-visibility");
     });
 
     it("opens the clicked file's diff against the turn that changed it", () => {
@@ -803,6 +960,38 @@ describe("AgentChatMessages", () => {
 
       afterEach(async () => {
         await setCustomAgentsAccess("free");
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/971 keeps a reply, another agent's message and a second reply in one response, with one row at its end that copies both replies' text in order without the other agent's message and adds up both turns in Worked for", async () => {
+        await setCustomAgentsAccess("team");
+        const messages = [
+          assistantMessage("user-1", 1, { sender: USER_SENDER, message: "Ask Maya to check it" }),
+          assistantMessage("reply-a", 2, {
+            parts: [{ kind: "text", text: "I asked Maya." }],
+            turnDurationMs: 46_000,
+          }),
+          relayMessage,
+          assistantMessage("reply-b", 4, {
+            parts: [{ kind: "text", text: "Maya found one wrong year." }],
+            turnDurationMs: 12_000,
+          }),
+        ];
+
+        render(
+          <AppContext.Provider value={{} as App}>
+            <AgentChatMessages {...messagesProps(messages, false)} />
+          </AppContext.Provider>
+        );
+
+        const replies = screen.getAllByTestId("agent-trail-timestamp");
+        expect(rowsOf(replies)).toEqual([
+          ["none", undefined, undefined],
+          ["shown", "I asked Maya.\n\nMaya found one wrong year.", "58000"],
+        ]);
+        const response = replies[0].closest(".tw-group\\/response");
+        expect(response?.contains(replies[1])).toBe(true);
+        expect(response?.textContent).toContain("Message fromMaya");
+        expect(response?.contains(screen.getByTestId("single-message"))).toBe(false);
       });
 
       it("draws a relay as a card from the asked agent with the files it changed, never showing the message the current agent received (https://github.com/Brevilabs/obsidian-copilot-private/issues/967)", async () => {

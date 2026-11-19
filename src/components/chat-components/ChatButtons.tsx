@@ -1,7 +1,6 @@
 import { CopyButton } from "@/components/chat-components/CopyButton";
 import { MessageActionButton } from "@/components/chat-components/MessageActionButton";
 import { USER_SENDER } from "@/constants";
-import { cn } from "@/lib/utils";
 import { ChatMessage } from "@/types/message";
 import { cleanMessageForCopy } from "@/utils";
 import {
@@ -12,11 +11,11 @@ import {
   TextCursorInput,
   Trash2,
 } from "lucide-react";
-import { Platform } from "obsidian";
 import React from "react";
 
 interface ChatButtonsProps {
   message: ChatMessage;
+  text: string;
   onInsertIntoEditor?: () => void;
   onRegenerate?: () => void;
   onEdit?: () => void;
@@ -28,6 +27,7 @@ interface ChatButtonsProps {
 
 export const ChatButtons: React.FC<ChatButtonsProps> = ({
   message,
+  text,
   onInsertIntoEditor,
   onRegenerate,
   onEdit,
@@ -37,14 +37,10 @@ export const ChatButtons: React.FC<ChatButtonsProps> = ({
   hasSources,
 }) => {
   return (
-    <div
-      className={cn("tw-flex tw-gap-1", {
-        "group-hover:opacity-100 opacity-0": !Platform.isMobile,
-      })}
-    >
+    <div className="tw-flex tw-gap-1">
       {message.sender === USER_SENDER ? (
         <>
-          <CopyButton text={cleanMessageForCopy(message.message)} />
+          <CopyButton text={cleanMessageForCopy(text)} />
           {onEdit && <MessageActionButton label="Edit" icon={PenSquare} onClick={onEdit} />}
           {onDelete && <MessageActionButton label="Delete" icon={Trash2} onClick={onDelete} />}
         </>
@@ -58,7 +54,7 @@ export const ChatButtons: React.FC<ChatButtonsProps> = ({
             icon={TextCursorInput}
             onClick={onInsertIntoEditor}
           />
-          <CopyButton text={cleanMessageForCopy(message.message)} />
+          <CopyButton text={cleanMessageForCopy(text)} />
           {onContinue && (
             <MessageActionButton
               label="Continue from here in a new chat"

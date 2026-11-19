@@ -9,6 +9,11 @@ jest.mock("@/utils", () => ({
   cleanMessageForCopy: (s: string) => s,
 }));
 
+const mockCopy = jest.fn();
+jest.mock("@/hooks/useCopyToClipboard", () => ({
+  useCopyToClipboard: jest.fn(() => ({ isCopied: false, copy: mockCopy })),
+}));
+
 jest.mock("obsidian", () => ({
   Platform: { isMobile: false },
 }));
@@ -20,7 +25,7 @@ function message(sender: string): ChatMessage {
 function renderButtons(props: Partial<React.ComponentProps<typeof ChatButtons>>) {
   return render(
     <TooltipProvider>
-      <ChatButtons message={message(USER_SENDER)} hasSources={false} {...props} />
+      <ChatButtons message={message(USER_SENDER)} text="body" hasSources={false} {...props} />
     </TooltipProvider>
   );
 }
@@ -67,6 +72,14 @@ describe("ChatButtons", () => {
       expect(screen.queryByTitle("Regenerate")).toBeNull();
       expect(screen.queryByTitle("Delete")).toBeNull();
       expect(screen.queryByTitle("Continue from here in a new chat")).toBeNull();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/971 copies the text it is given, which is the whole response when the reply ends one", () => {
+      renderButtons({ message: message("AI"), text: "I asked Maya.\n\nThe year is fixed." });
+
+      fireEvent.click(screen.getByTitle("Copy"));
+
+      expect(mockCopy).toHaveBeenCalledWith("I asked Maya.\n\nThe year is fixed.");
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/908 shows Continue from here in a new chat after Copy when its handler is provided", () => {
