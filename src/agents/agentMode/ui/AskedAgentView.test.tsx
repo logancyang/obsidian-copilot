@@ -10,6 +10,7 @@ import { AskedAgentView, ChatAskedAgentView } from "@/agents/agentMode/ui/AskedA
 import { formatAgentReply } from "@/agents/agentReply";
 import { COCO, LEO } from "@/agents/ui/testing/rosterFixtures";
 import { AppContext } from "@/context";
+import { formatMessageClock, formatMessageDateTime } from "@/lib/messageTime";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import type { App } from "obsidian";
 import React from "react";
@@ -220,25 +221,28 @@ describe("AskedAgentView", () => {
       );
 
       expect(screen.getAllByText(/^Continued at/).map((divider) => divider.textContent)).toEqual([
-        "Continued at 10:21",
+        `Continued at ${formatMessageClock(sentBack)}`,
       ]);
     });
 
-    it(`writes the divider's hour with two digits, so a time after midnight doesn't read as how long a run took (${CARDS})`, async () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/971 writes the divider's time as the view's message times show theirs, a short clock time in the user's locale with the full date and time on hover", async () => {
       const first = await turn(job("Reconcile October."), "Matched 182 of 214.");
       const second = await turn(job("Send Leo back to it."), "Picking up at 183.");
+      const sentBack = new Date(2026, 10, 16, 21, 54).getTime();
       renderView(
         {},
         {
           session: leo,
           continuedAt: new Map([
             [first, STARTED],
-            [second, new Date(2026, 10, 17, 0, 34).getTime()],
+            [second, sentBack],
           ]),
         }
       );
 
-      expect(screen.getByText(/^Continued at/).textContent).toBe("Continued at 00:34");
+      const divider = screen.getByText(/^Continued at/);
+      expect(divider.textContent).toBe(`Continued at ${formatMessageClock(sentBack)}`);
+      expect(divider.getAttribute("title")).toBe(formatMessageDateTime(sentBack));
     });
 
     it(`opened for an earlier run, rests where that run ends, above the next run's divider, so its reply is in view (${CARDS})`, async () => {

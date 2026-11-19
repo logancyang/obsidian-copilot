@@ -16,6 +16,7 @@ import { AgentFace } from "@/agents/ui/AgentFace";
 import ChatSingleMessage from "@/components/chat-components/ChatSingleMessage";
 import { CopilotBrandIcon } from "@/components/ui/CopilotBrandIcon";
 import { USER_SENDER } from "@/constants";
+import { formatMessageClock, formatMessageDateTime } from "@/lib/messageTime";
 import { logError } from "@/logger";
 import { ArrowRightLeft, Bot } from "lucide-react";
 import type { App } from "obsidian";
@@ -240,17 +241,16 @@ const ContinuedAt: React.FC<{ at: number; endRef?: React.Ref<HTMLDivElement> }> 
   at,
   endRef,
 }) => (
-  <div ref={endRef} className="tw-flex tw-items-center tw-gap-2 tw-px-3 tw-text-xs tw-text-faint">
+  <div
+    ref={endRef}
+    title={formatMessageDateTime(at)}
+    className="tw-flex tw-items-center tw-gap-2 tw-px-3 tw-text-xs tw-text-faint"
+  >
     <span className="copilot-divider-b tw-flex-1" />
-    Continued at {clockTime(at)}
+    Continued at {formatMessageClock(at)}
     <span className="copilot-divider-b tw-flex-1" />
   </div>
 );
-
-function clockTime(epoch: number): string {
-  const date = new Date(epoch);
-  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-}
 
 function useChatMessages(session: AgentSession | null): readonly AgentChatMessage[] {
   const [, setRevision] = useState(0);
