@@ -123,6 +123,7 @@ const copilotLintPlugin = {
   rules: {
     "no-direct-node-imports": noDirectNodeImportsRule,
     "issue-linked-comments": issueLinkedCommentsRule,
+    ...architecture.lintRules,
   },
 };
 
@@ -517,6 +518,11 @@ export default [
       "boundaries/no-unknown-files": "error",
     },
   },
+
+  ...architecture.clientAccessConfigs.map((config) => ({
+    ...config,
+    plugins: { copilot: copilotLintPlugin },
+  })),
 
   {
     files: ["**/*.test.{js,jsx,ts,tsx}", "jest.setup.js", "__mocks__/**"],
