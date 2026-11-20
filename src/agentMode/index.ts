@@ -109,7 +109,7 @@ export type {
 } from "./session/types";
 export { partitionOpencodeOnlyWireIds } from "./backends/opencode/opencodeProbePartition";
 export { mapProviderToOpencodeId } from "./backends/opencode/opencodeModelResolve";
-export type { CopilotMode, ModelSelection } from "./session/types";
+export type { CopilotMode, ModelSelection, ToolDescriptionUpFront } from "./session/types";
 export { AgentDefaultModelSetting } from "./ui/AgentDefaultModelSetting";
 export { ModelEnableList } from "@/components/ui/ModelEnableList";
 export type { ModelEnableGroup } from "@/components/ui/ModelEnableList";
@@ -410,9 +410,11 @@ export function createAgentSessionManager(
         : []),
     ],
     copilotMcpServer,
-    resolveAgent: async (slug) => {
+    resolveAgent: async (slug, toolDescriptionUpFront) => {
       const vaultBase = getVaultBase(app);
-      return vaultBase ? loadAgentSessionPrompt(customAgents, slug, vaultBase) : null;
+      return vaultBase
+        ? loadAgentSessionPrompt(customAgents, slug, vaultBase, { toolDescriptionUpFront })
+        : null;
     },
     onChatReopened: restoreRelayedRuns,
   });

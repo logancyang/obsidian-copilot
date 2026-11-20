@@ -92,6 +92,7 @@ import type {
   PermissionDecision,
   PermissionPrompt,
   SessionId,
+  ToolDescriptionUpFront,
 } from "./types";
 
 const AUTOSAVE_DEBOUNCE_MS = 500;
@@ -175,7 +176,10 @@ export interface AgentSessionManagerOptions {
   sessionIndex?: AgentSessionIndex;
   copilotMcpServer?: CopilotMcpServer;
   chatExtensions?: readonly ChatExtension<unknown>[];
-  resolveAgent?: (slug: string) => Promise<SessionAgent | null>;
+  resolveAgent?: (
+    slug: string,
+    toolDescriptionUpFront: ToolDescriptionUpFront
+  ) => Promise<SessionAgent | null>;
   onChatReopened?: (chat: AgentSession) => void;
 }
 
@@ -790,7 +794,7 @@ export class AgentSessionManager {
       : undefined;
 
     const cwd = this.resolveSessionCwd(projectId);
-    const agent = await this.loadAgent(agentSlug);
+    const agent = await this.loadAgent(agentSlug, descriptor);
 
     this.pendingCreates++;
     this.startingBackendId = resolvedId;
@@ -1009,9 +1013,12 @@ export class AgentSessionManager {
 
   // A chat whose agent cannot load (custom agents not available, or its folder removed outside Copilot) runs as a Copilot chat and keeps naming its agent.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/937
-  private async loadAgent(slug: string | null | undefined): Promise<SessionAgent | null> {
+  private async loadAgent(
+    slug: string | null | undefined,
+    descriptor: BackendDescriptor
+  ): Promise<SessionAgent | null> {
     if (!slug || !this.opts.resolveAgent) return null;
-    return this.opts.resolveAgent(slug);
+    return this.opts.resolveAgent(slug, descriptor.toolDescriptionUpFront);
   }
 
   private resolveSessionCwd(projectId: ProjectScopeId): string {
@@ -2354,7 +2361,7 @@ export class AgentSessionManager {
     );
     const cwd = this.resolveSessionCwd(projectId);
     const descriptor = this.resolveDescriptor(backendId);
-    const agent = await this.loadAgent(agentSlug);
+    const agent = await this.loadAgent(agentSlug, descriptor);
 
     this.pendingCreates++;
     this.startingBackendId = backendId;

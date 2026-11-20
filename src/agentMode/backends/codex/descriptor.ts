@@ -101,6 +101,9 @@ export const CodexBackendDescriptor: BackendDescriptor = {
   restartOnManagedSkillsChange: false,
   restartOnProviderConfigChange: false,
   restartOnSystemPromptChange: true,
+  // Codex 0.166 shows the model nothing of a Copilot tool, not even the server's name, until it searches its tools; recheck on upgrade.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/986
+  toolDescriptionUpFront: "none",
   summarizesSessionTitle: false,
   // Codex ends its turn on revise_plan without acting on the deny message.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/41

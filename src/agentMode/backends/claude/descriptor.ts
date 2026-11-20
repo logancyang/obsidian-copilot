@@ -354,6 +354,9 @@ export const ClaudeBackendDescriptor: ClaudeDescriptor = {
   restartOnManagedSkillsChange: false,
   restartOnProviderConfigChange: false,
   restartOnSystemPromptChange: false,
+  // Claude Code 2.1.329 sends every Copilot tool to the model as a function with its whole description; recheck on upgrade.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/986
+  toolDescriptionUpFront: "full",
   summarizesSessionTitle: false,
   midTurnDelivery: true,
   withdraw: true,

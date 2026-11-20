@@ -5,6 +5,7 @@ import type {
   ToolListing,
 } from "@/agentMode/session/copilotMcpServer";
 import { readAgentDraft, showAgentDraft } from "@/agents/agentMode/agentDraftCard";
+import { DRAFT_AGENT_PROMPT_HINT } from "@/agents/agentSessionPrompt";
 import { getCustomAgentsGate } from "@/agents/customAgentsGate";
 
 export const DRAFT_AGENT_TOOL_NAME = "draft_agent";
@@ -54,8 +55,7 @@ export function createDraftAgentTool(host: DraftAgentToolHost): HostedTool {
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/941
     listedAs: ({ sessionKey }: ToolListing) =>
       getCustomAgentsGate() !== "full" || host.isUnlistedChat(sessionKey) ? null : DRAFT_AGENT_TOOL,
-    promptHint:
-      "When the user asks you to make a new agent, draft it with the draft_agent tool from obsidian-copilot, which shows them a card to review and create it. If you or another agent already handles that job, say so and ask before drafting. You can't create an agent yourself.",
+    promptHint: DRAFT_AGENT_PROMPT_HINT,
     call: async (args, chat) => {
       const draft = readAgentDraft(args);
       if (!draft) {

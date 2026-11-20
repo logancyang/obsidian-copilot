@@ -37,6 +37,8 @@ export type SessionId = string;
 
 export type CopilotMode = "default" | "plan" | "auto";
 
+export type ToolDescriptionUpFront = "full" | "start" | "none";
+
 export interface ModeMapping {
   kind: "setMode" | "configOption";
   configId?: string;
