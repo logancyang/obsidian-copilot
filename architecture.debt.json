@@ -1,14 +1,13 @@
 {
   "counts": {
-    "imports": 485,
-    "nodeAccess": 21
+    "imports": 743,
+    "clientAccess": 151
   },
   "imports": {
     "src/agentMode/acp/AcpBackendProcess.ts": [
       "@/agents/agentMemoryFile",
       "@/commands/compactCommand"
     ],
-    "src/agentMode/agentModelDiscovery.ts": ["@/main"],
     "src/agentMode/backends/claude/ClaudeSettingsPanel.tsx": ["@/main"],
     "src/agentMode/backends/claude/descriptor.ts": ["@/main"],
     "src/agentMode/backends/codex/CodexSettingsPanel.tsx": ["@/main"],
@@ -36,10 +35,18 @@
     "src/agentMode/backends/shared/managedInstall.ts": ["@/agentMode/skills/renameWithRetry"],
     "src/agentMode/backends/shared/simpleBinaryBackend.ts": ["@/main"],
     "src/agentMode/backends/shared/ui/AgentBackendHeader.tsx": ["@/components/TruncatedText"],
-    "src/agentMode/index.ts": ["@/main", "@/system-prompts/state"],
+    "src/agentMode/navigator/hooks/useSessionsSidebarOpen.ts": [
+      "@/agentMode/navigator/navigatorEntitlement",
+      "@/plusUtils"
+    ],
     "src/agentMode/navigator/openSessionsSidebar.ts": ["@/main"],
     "src/agentMode/navigator/revealSessionsSidebar.ts": ["@/main"],
     "src/agentMode/navigator/ui/AgentProjectRowMenu.tsx": ["@/projects/ui/AgentProjectRowActions"],
+    "src/agentMode/navigator/ui/NavigatorUpsell.tsx": [
+      "@/components/modals/ReactModal",
+      "@/components/modals/SupporterPreviewUpsell",
+      "@/plusUtils"
+    ],
     "src/agentMode/navigator/ui/SessionsSidebar.tsx": [
       "@/agentMode/session/AgentSessionManager",
       "@/agents/CustomAgentStore",
@@ -50,12 +57,23 @@
       "@/projects/ui/AgentProjectCreateForm",
       "@/projects/ui/AgentProjectRowActions"
     ],
+    "src/agentMode/navigator/ui/SessionsSidebarFolderRow.tsx": ["@/aiParams"],
     "src/agentMode/navigator/ui/SessionsSidebarPanel.stories.tsx": [
       "@/agents/ui/testing/rosterFixtures",
       "@/agents/ui/useAgentRecentChats"
     ],
-    "src/agentMode/navigator/ui/SessionsSidebarPanel.tsx": ["@/projects/ui/CreateProjectPanel"],
-    "src/agentMode/navigator/ui/SessionsSidebarView.tsx": ["@/agents/CustomAgentStore", "@/main"],
+    "src/agentMode/navigator/ui/SessionsSidebarPanel.tsx": [
+      "@/aiParams",
+      "@/projects/ui/CreateProjectPanel"
+    ],
+    "src/agentMode/navigator/ui/SessionsSidebarView.tsx": [
+      "@/agentMode/navigator/navigatorEntitlement",
+      "@/agentMode/navigator/openSessionsSidebar",
+      "@/agents/CustomAgentStore",
+      "@/main"
+    ],
+    "src/agentMode/navigator/ui/sessionsSidebarGroups.ts": ["@/aiParams"],
+    "src/agentMode/navigator/ui/testing/sessionsSidebarFixtures.ts": ["@/aiParams"],
     "src/agentMode/sdk/ClaudeSdkBackendProcess.ts": ["@/commands/compactCommand"],
     "src/agentMode/sdk/permissionBridge.ts": ["@/agents/agentMemoryFile"],
     "src/agentMode/session/AgentChatPersistenceManager.ts": [
@@ -119,14 +137,36 @@
       "@/agents/memorySaves"
     ],
     "src/agentMode/session/useBackendInstallStates.ts": ["@/main"],
-    "src/agentMode/skills/ui/SkillRow.tsx": ["@/agentMode/skills/SkillManager"],
+    "src/agentMode/skills/ui/BuiltinSkillsTable.tsx": ["@/settings/builtinSkillPreferences"],
+    "src/agentMode/skills/ui/DeleteConfirmDialog.tsx": ["@/agentMode/skills/types"],
+    "src/agentMode/skills/ui/MigrateSkillConfirmModal.ts": ["@/agentMode/skills/types"],
+    "src/agentMode/skills/ui/PropertiesDialog.tsx": [
+      "@/agentMode/skills/skillFormat",
+      "@/agentMode/skills/types"
+    ],
+    "src/agentMode/skills/ui/SkillLoadIssues.tsx": ["@/components/modals/ReactModal"],
+    "src/agentMode/skills/ui/SkillRow.tsx": [
+      "@/agentMode/skills/SkillManager",
+      "@/agentMode/skills/mergeDiscovery",
+      "@/agentMode/skills/toggleDecision",
+      "@/agentMode/skills/types",
+      "@/settings/copilotFolder"
+    ],
     "src/agentMode/skills/ui/SkillsSettings.tsx": [
       "@/agentMode/backends/registry",
       "@/agentMode/session/useBackendInstallStates",
       "@/agentMode/skills/SkillManager",
-      "@/contexts/PluginContext"
+      "@/agentMode/skills/builtin/reconcileBuiltinSkills",
+      "@/agentMode/skills/mergeDiscovery",
+      "@/agentMode/skills/skillFormat",
+      "@/agentMode/skills/skillRepairPrompt",
+      "@/agentMode/skills/types",
+      "@/builtinSkills/builtinSkills",
+      "@/contexts/PluginContext",
+      "@/settings/copilotFolder",
+      "@/settings/model"
     ],
-    "src/agentMode/ui/AgentChatControls.tsx": ["@/agentMode/backends/registry"],
+    "src/agentMode/ui/AgentChatControls.tsx": ["@/agentMode/backends/registry", "@/settings/model"],
     "src/agentMode/ui/AgentChatInput.tsx": [
       "@/agentMode/session/AgentChatBackend",
       "@/agentMode/session/AgentInputDraftStore",
@@ -136,7 +176,10 @@
       "@/agents/ui/chatAgents",
       "@/commands/compactCommand",
       "@/commands/customCommandManager",
-      "@/commands/state"
+      "@/commands/state",
+      "@/selection/selectionStore",
+      "@/services/webViewerService/activeWebTabSnapshot",
+      "@/settings/model"
     ],
     "src/agentMode/ui/AgentChatMessages.stories.tsx": [
       "@/agentMode/session/AgentChatBackend",
@@ -160,7 +203,10 @@
       "@/agentMode/session/AgentChatBackend",
       "@/agentMode/session/planUsage"
     ],
-    "src/agentMode/ui/AgentDefaultModelSetting.tsx": ["@/agentMode/session/AgentSessionManager"],
+    "src/agentMode/ui/AgentDefaultModelSetting.tsx": [
+      "@/agentMode/session/AgentSessionManager",
+      "@/settings/model"
+    ],
     "src/agentMode/ui/AgentHome.tsx": [
       "@/agentMode/backends/registry",
       "@/agentMode/navigator/hooks/useSessionsSidebarOpen",
@@ -189,6 +235,8 @@
       "@/agents/ui/useAgentHomeSelection",
       "@/agents/ui/useAgentRecentChats",
       "@/agents/ui/useCustomAgents",
+      "@/aiParams",
+      "@/components/release-update/AgentHomeReleaseUpdate",
       "@/main",
       "@/projects/ProjectFileManager",
       "@/projects/hooks/useRefreshEmptyLandingOnContextSourceChange",
@@ -202,7 +250,8 @@
       "@/projects/ui/CreateProjectPanel",
       "@/projects/ui/ProjectFilesView",
       "@/projects/ui/ProjectInfoPopover",
-      "@/projects/ui/ProjectPickerList"
+      "@/projects/ui/ProjectPickerList",
+      "@/settings/model"
     ],
     "src/agentMode/ui/AgentLandingStack.stories.tsx": [
       "@/agents/CustomAgentStore",
@@ -249,13 +298,16 @@
     ],
     "src/agentMode/ui/ArchivedChatsModal.tsx": [
       "@/agentMode/session/AgentSessionManager",
+      "@/aiParams",
+      "@/components/modals/ReactModal",
       "@/projects/ProjectFileManager",
       "@/projects/ui/ProjectFolderIcon"
     ],
     "src/agentMode/ui/ConnectorsAttentionBanner.tsx": [
       "@/connectors/connectionManager",
       "@/connectors/connectorsEntitlement",
-      "@/connectors/ui/useConnectorsSnapshot"
+      "@/connectors/ui/useConnectorsSnapshot",
+      "@/settings/openSettings"
     ],
     "src/agentMode/ui/CopilotAgentView.tsx": [
       "@/agents/CustomAgentStore",
@@ -263,18 +315,24 @@
       "@/main"
     ],
     "src/agentMode/ui/FeedbackCard.stories.tsx": ["@/agentMode/session/feedback/feedbackOffer"],
-    "src/agentMode/ui/FeedbackCard.tsx": ["@/agentMode/session/feedback/feedbackOffer"],
+    "src/agentMode/ui/FeedbackCard.tsx": [
+      "@/agentMode/session/feedback/feedbackOffer",
+      "@/settings/model"
+    ],
     "src/agentMode/ui/PlanPreviewView.tsx": ["@/agentMode/session/AgentChatBackend"],
     "src/agentMode/ui/PlanProposalCard.stories.tsx": ["@/agentMode/session/AgentChatBackend"],
     "src/agentMode/ui/PlanProposalCard.tsx": ["@/agentMode/session/AgentChatBackend"],
     "src/agentMode/ui/QueuedMessageList.tsx": ["@/agentMode/session/AgentInputDraftStore"],
-    "src/agentMode/ui/RecentChatMenu.tsx": ["@/agentMode/backends/registry"],
-    "src/agentMode/ui/ReportIssueFlow.tsx": ["@/utils/issueReport"],
+    "src/agentMode/ui/RecentChatMenu.tsx": [
+      "@/agentMode/backends/registry",
+      "@/components/modals/ConfirmModal"
+    ],
+    "src/agentMode/ui/RenameChatModal.tsx": ["@/components/modals/ReactModal"],
     "src/agentMode/ui/ReportIssueModal.tsx": [
       "@/LLMProviders/chainRunner/utils/promptPayloadRecorder",
       "@/agentMode/session/debugSink",
-      "@/utils/issueReport",
-      "@/utils/opencodeLog"
+      "@/logFileManager",
+      "@/settings/model"
     ],
     "src/agentMode/ui/RunningTasksIndicator.tsx": [
       "@/agentMode/session/AgentSession",
@@ -286,7 +344,10 @@
       "@/agents/agentMode/ui/AskedAgentRequester",
       "@/agents/ui/testing/rosterFixtures"
     ],
-    "src/agentMode/ui/TurnDiffView.tsx": ["@/agentMode/session/turnFileChanges"],
+    "src/agentMode/ui/TurnDiffView.tsx": [
+      "@/agentMode/session/turnFileChanges",
+      "@/selection/selectionStore"
+    ],
     "src/agentMode/ui/activityGroups.ts": ["@/agents/agentMode/memorySaveCards"],
     "src/agentMode/ui/agentModePickerHelpers.ts": [
       "@/agentMode/session/AgentChatUIState",
@@ -297,7 +358,8 @@
       "@/agentMode/session/AgentChatUIState",
       "@/agentMode/session/AgentSession",
       "@/agentMode/session/AgentSessionManager",
-      "@/agents/ui/CreateAgentForm"
+      "@/agents/ui/CreateAgentForm",
+      "@/settings/model"
     ],
     "src/agentMode/ui/chatBackendIcon.ts": ["@/agentMode/backends/registry"],
     "src/agentMode/ui/chatCardSlots.ts": [
@@ -317,14 +379,20 @@
       "@/agentMode/session/scope",
       "@/main"
     ],
-    "src/agentMode/ui/hooks/useAgentInputDrafts.ts": ["@/agentMode/session/AgentInputDraftStore"],
+    "src/agentMode/ui/hooks/useAgentInputDrafts.ts": [
+      "@/agentMode/session/AgentInputDraftStore",
+      "@/settings/model"
+    ],
     "src/agentMode/ui/hooks/useAttentionChatIds.ts": ["@/agentMode/session/AgentSessionManager"],
     "src/agentMode/ui/hooks/useChatRelevantNotesContext.ts": [
+      "@/aiParams",
       "@/miyo/MiyoClient",
       "@/miyo/miyoUtils",
       "@/miyo/useMiyoFolderName",
       "@/projects/projectLinks",
-      "@/search/chatRelevantNotesContext"
+      "@/search/chatRelevantNotesContext",
+      "@/search/searchUtils",
+      "@/selection/selectionStore"
     ],
     "src/agentMode/ui/hooks/useManagerSetSnapshot.ts": ["@/agentMode/session/AgentSessionManager"],
     "src/agentMode/ui/hooks/usePlanUsage.ts": [
@@ -340,6 +408,11 @@
       "@/agentMode/session/messageParts"
     ],
     "src/agentMode/ui/taskDisplay.ts": ["@/agentMode/session/AgentSession"],
+    "src/agentMode/ui/testing/navigatorAccess.ts": [
+      "@/entitlement",
+      "@/plusUtils",
+      "@/settings/model"
+    ],
     "src/agentMode/ui/testing/taskFixtures.ts": [
       "@/agentMode/session/AgentSession",
       "@/agentMode/session/taskOutputTail"
@@ -356,7 +429,8 @@
     ],
     "src/agentMode/ui/trackTabStripShown.ts": [
       "@/agentMode/navigator/hooks/useSessionsSidebarOpen",
-      "@/agentMode/session/AgentSessionManager"
+      "@/agentMode/session/AgentSessionManager",
+      "@/plusUtils"
     ],
     "src/agentMode/ui/useAgentModePicker.ts": [
       "@/agentMode/session/AgentSessionManager",
@@ -366,7 +440,8 @@
       "@/agentMode/backends/registry",
       "@/agentMode/session/AgentSessionManager",
       "@/agentMode/session/translateBackendState",
-      "@/main"
+      "@/main",
+      "@/settings/model"
     ],
     "src/agentMode/ui/useAgentSelect.ts": [
       "@/agentMode/backends/registry",
@@ -378,64 +453,190 @@
       "@/agentMode/backends/registry",
       "@/agentMode/session/AgentSessionManager",
       "@/agentMode/session/useBackendInstallStates",
-      "@/main"
+      "@/main",
+      "@/settings/model"
     ],
     "src/agentMode/ui/useManagerSubscribe.ts": ["@/agentMode/session/AgentSessionManager"],
-    "src/agents/agentMode/agentChats.ts": ["@/agentMode/backends/registry", "@/projects/state"],
-    "src/agents/agentMode/agentRelays.ts": ["@/agentMode/session/AgentSession"],
-    "src/agents/agentMode/askAgentTool.ts": [
-      "@/agentMode/session/chatExtension",
-      "@/agentMode/session/copilotMcpServer"
+    "src/agents/agentMode/agentChats.ts": [
+      "@/agentMode/backends/registry",
+      "@/components/chat-components/ChatHistoryPopover",
+      "@/projects/state"
     ],
+    "src/agents/agentMode/agentToolCalls.ts": [
+      "@/agentMode/ui/agentTrail",
+      "@/agentMode/ui/copilotToolCall"
+    ],
+    "src/agents/agentMode/agentToolLineKind.tsx": ["@/agents/agentMode/agentToolCalls"],
     "src/agents/agentMode/hiddenAgentChats.ts": ["@/context/compactionUtils"],
-    "src/agents/agentMode/listChatsTool.ts": [
-      "@/agentMode/session/AgentSessionIndex",
-      "@/agentMode/session/chatExtension",
-      "@/agentMode/session/copilotMcpServer"
+    "src/agents/agentMode/listChatsTool.ts": ["@/components/chat-components/ChatHistoryPopover"],
+    "src/agents/agentMode/memorySaveCards.tsx": [
+      "@/agentMode/session/editTargets",
+      "@/agents/customAgentFiles",
+      "@/agents/memorySaves"
     ],
-    "src/agents/agentMode/memorySaveCards.tsx": ["@/agentMode/session/editTargets"],
-    "src/agents/agentMode/tabDot.ts": ["@/agentMode/session/AgentSession"],
+    "src/agents/agentMode/ui/AgentDraftCard.stories.tsx": ["@/agents/agentMode/agentDraftCard"],
     "src/agents/agentMode/ui/AgentDraftCard.tsx": [
       "@/agentMode/backends/registry",
       "@/agentMode/session/chatExtension",
+      "@/agents/CustomAgentStore",
       "@/agents/agentMode/agentChats",
       "@/agents/agentMode/agentDraftCard",
-      "@/main"
+      "@/agents/customAgentFiles",
+      "@/agents/customAgentsGate",
+      "@/main",
+      "@/settings/model"
     ],
     "src/agents/agentMode/ui/AgentProfile.tsx": [
       "@/agentMode/backends/registry",
       "@/agentMode/session/AgentSessionManager",
-      "@/agents/agentMode/agentChats"
+      "@/agents/CustomAgentStore",
+      "@/agents/agentMode/agentChats",
+      "@/agents/agentMode/hiddenAgentChats",
+      "@/agents/customAgentsGate",
+      "@/agents/presetFaces"
     ],
+    "src/agents/agentMode/ui/AgentReplyMessage.stories.tsx": [
+      "@/agents/agentMentions",
+      "@/agents/memorySaves"
+    ],
+    "src/agents/agentMode/ui/AgentReplyMessage.tsx": [
+      "@/agents/agentMentions",
+      "@/agents/agentReply"
+    ],
+    "src/agents/agentMode/ui/AgentToolLine.stories.tsx": ["@/agents/agentMode/agentToolCalls"],
+    "src/agents/agentMode/ui/AgentToolLine.tsx": [
+      "@/agents/agentMentionPrompt",
+      "@/agents/agentMode/agentToolCalls",
+      "@/agents/customAgentFiles"
+    ],
+    "src/agents/agentMode/ui/AskedAgentView.stories.tsx": ["@/agents/agentMentions"],
     "src/agents/agentMode/ui/AskedAgentView.tsx": [
+      "@/agentMode/session/AgentSession",
+      "@/agents/CustomAgentStore",
+      "@/agents/agentMentions",
+      "@/agents/agentMode/agentRelays",
+      "@/agents/agentMode/hiddenAgentChats"
+    ],
+    "src/agents/agentMode/ui/RunningAgents.stories.tsx": [
+      "@/agents/CustomAgentStore",
+      "@/agents/agentMentions"
+    ],
+    "src/agents/agentMode/ui/RunningAgents.tsx": [
+      "@/agentMode/session/AgentSession",
+      "@/agents/CustomAgentStore",
+      "@/agents/agentMentionStatus",
+      "@/agents/agentMentions",
+      "@/agents/agentMode/hiddenAgentChats",
+      "@/agents/customAgentsGate"
+    ],
+    "src/agents/agentMode/ui/testing/askedAgentChatFixture.ts": [
       "@/agentMode/session/AgentSession",
       "@/agents/agentMode/hiddenAgentChats"
     ],
-    "src/agents/agentMode/ui/RunningAgents.tsx": ["@/agentMode/session/AgentSession"],
-    "src/agents/agentMode/ui/testing/askedAgentChatFixture.ts": [
-      "@/agentMode/session/AgentSession"
-    ],
+    "src/agents/agentMode/ui/testing/relayedReply.ts": ["@/agents/agentReply"],
     "src/agents/agentMode/ui/useAgentProfileFacts.ts": [
       "@/agentMode/session/AgentSessionManager",
-      "@/agents/agentMode/agentChats"
+      "@/agents/CustomAgentStore",
+      "@/agents/agentMode/agentChats",
+      "@/agents/memorySaves"
     ],
-    "src/agents/agentMode/useAgentSetupProblems.ts": ["@/agents/agentMode/agentChats", "@/main"],
+    "src/agents/agentMode/useAgentSetupProblems.ts": [
+      "@/agentMode/ui/useBackendDescriptor",
+      "@/main"
+    ],
     "src/agents/customAgentFiles.ts": ["@/agentMode"],
-    "src/agents/ui/AgentProfileView.tsx": ["@/agentMode", "@/connectors/ui/ConnectorRow"],
-    "src/agents/ui/AgentRoster.tsx": ["@/connectors/ui/ConnectorRow"],
-    "src/agents/ui/CreateAgentForm.tsx": ["@/agentMode"],
+    "src/agents/ui/AgentDeleteModal.tsx": [
+      "@/agents/CustomAgentStore",
+      "@/agents/customAgentFiles",
+      "@/components/modals/ReactModal"
+    ],
+    "src/agents/ui/AgentFacePicker.tsx": ["@/agents/customAgentFiles"],
+    "src/agents/ui/AgentIdentityBar.tsx": ["@/agents/CustomAgentStore", "@/agents/agentTitle"],
+    "src/agents/ui/AgentPickerModal.ts": ["@/agents/CustomAgentStore"],
+    "src/agents/ui/AgentProfileCover.tsx": ["@/agents/CustomAgentStore"],
+    "src/agents/ui/AgentProfileView.tsx": [
+      "@/agentMode",
+      "@/agents/CustomAgentStore",
+      "@/agents/agentTitle",
+      "@/agents/customAgentFiles",
+      "@/connectors/ui/ConnectorRow"
+    ],
+    "src/agents/ui/AgentRoster.tsx": [
+      "@/agents/CustomAgentStore",
+      "@/agents/agentTitle",
+      "@/connectors/ui/ConnectorRow"
+    ],
+    "src/agents/ui/CreateAgentForm.tsx": [
+      "@/agentMode",
+      "@/agents/CustomAgentStore",
+      "@/agents/customAgentFiles"
+    ],
+    "src/agents/ui/CreateAgentModal.tsx": [
+      "@/agents/CustomAgentStore",
+      "@/components/modals/ConfirmModal"
+    ],
+    "src/agents/ui/CustomAgentsUpsell.tsx": [
+      "@/components/modals/ReactModal",
+      "@/components/modals/SupporterPreviewUpsell"
+    ],
+    "src/agents/ui/FirstAgentBanner.tsx": [
+      "@/agents/customAgentFiles",
+      "@/agents/presetFaces",
+      "@/settings/model"
+    ],
+    "src/agents/ui/LockedAgentNotices.tsx": [
+      "@/agents/CustomAgentStore",
+      "@/agents/customAgentsGate",
+      "@/settings/openSettings"
+    ],
+    "src/agents/ui/LockedAgentsUpsell.tsx": [
+      "@/agents/CustomAgentStore",
+      "@/agents/agentReply",
+      "@/components/modals/ReactModal",
+      "@/components/modals/SupporterPreviewUpsell",
+      "@/plusUtils"
+    ],
+    "src/agents/ui/agentMentionOptions.tsx": ["@/agents/CustomAgentStore", "@/agents/agentTitle"],
+    "src/agents/ui/agentMentionPills.ts": ["@/agents/CustomAgentStore"],
+    "src/agents/ui/chatAgents.tsx": ["@/agents/CustomAgentStore", "@/agents/customAgentsGate"],
+    "src/agents/ui/lockedCustomAgents.tsx": [
+      "@/agents/CustomAgentStore",
+      "@/agents/customAgentsGate",
+      "@/plusUtils"
+    ],
+    "src/agents/ui/testing/fakeAgentStore.ts": ["@/agents/CustomAgentStore"],
+    "src/agents/ui/testing/rosterFixtures.ts": ["@/agents/CustomAgentStore"],
+    "src/agents/ui/useAgentHomeSelection.ts": [
+      "@/agents/CustomAgentStore",
+      "@/agents/customAgentsGate",
+      "@/settings/model"
+    ],
+    "src/agents/ui/useAgentRecentChats.tsx": ["@/agents/CustomAgentStore"],
+    "src/agents/ui/useCustomAgents.ts": ["@/agents/CustomAgentStore", "@/agents/customAgentsGate"],
+    "src/agents/ui/usePresetFaces.ts": ["@/agents/CustomAgentStore", "@/agents/presetFaces"],
     "src/aiParams.ts": ["@/chainType"],
     "src/commands/CustomCommandChatModal.tsx": [
+      "@/commands/customCommandUtils",
+      "@/commands/type",
       "@/editor/replaceGuard",
       "@/editor/selectionHighlight",
-      "@/hooks/use-streaming-chat-session"
+      "@/hooks/use-streaming-chat-session",
+      "@/settings/model",
+      "@/settings/openSettings"
+    ],
+    "src/commands/CustomCommandSettingsModal.tsx": [
+      "@/commands/customCommandUtils",
+      "@/commands/type"
     ],
     "src/commands/customCommandChatEngine.ts": ["@/LLMProviders/chatModelManager"],
     "src/commands/customCommandManager.ts": ["@/error"],
     "src/commands/customCommandUtils.ts": ["@/types"],
     "src/components/Chat.tsx": ["@/main"],
     "src/components/CopilotView.tsx": ["@/main"],
-    "src/components/RelevantNotesView.tsx": ["@/main"],
+    "src/components/RelevantNotesView.tsx": [
+      "@/components/chat-components/RelevantNotes",
+      "@/main"
+    ],
     "src/components/chat-components/AgentMentionMenu.stories.tsx": [
       "@/agents/ui/agentMentionOptions",
       "@/agents/ui/testing/rosterFixtures"
@@ -448,8 +649,15 @@
     "src/components/chat-components/AgentReasoningBlock.tsx": [
       "@/LLMProviders/chainRunner/utils/AgentReasoningState"
     ],
-    "src/components/chat-components/ChatControls.tsx": ["@/chainType"],
-    "src/components/chat-components/ChatInput.tsx": ["@/agentMode"],
+    "src/components/chat-components/ChatControls.tsx": [
+      "@/aiParams",
+      "@/chainType",
+      "@/plusUtils",
+      "@/settings/model"
+    ],
+    "src/components/chat-components/ChatHistoryPopover.tsx": ["@/settings/model"],
+    "src/components/chat-components/ChatInput.tsx": ["@/agentMode", "@/aiParams"],
+    "src/components/chat-components/ChatModeInput.tsx": ["@/aiParams", "@/settings/model"],
     "src/components/chat-components/ChatModeSelector.stories.tsx": ["@/chainType"],
     "src/components/chat-components/ChatModeSelector.tsx": ["@/chainType"],
     "src/components/chat-components/ChatSettingsPopover.tsx": ["@/system-prompts"],
@@ -457,12 +665,16 @@
       "@/LLMProviders/chainRunner/utils/AgentReasoningState",
       "@/LLMProviders/chainRunner/utils/citationUtils",
       "@/LLMProviders/chainRunner/utils/toolCallParser",
-      "@/agents/ui/agentMentionPills"
+      "@/agents/ui/agentMentionPills",
+      "@/components/modals/SourcesModal",
+      "@/settings/model"
     ],
-    "src/components/chat-components/ChatToolControls.tsx": ["@/chainType"],
+    "src/components/chat-components/ChatToolControls.tsx": ["@/chainType", "@/settings/model"],
+    "src/components/chat-components/InlineMessageEditor.tsx": ["@/aiParams"],
     "src/components/chat-components/LexicalEditor.tsx": [
       "@/agents/ui/AgentMentionPillNode",
-      "@/chainType"
+      "@/chainType",
+      "@/settings/model"
     ],
     "src/components/chat-components/RelevantNotes.tsx": [
       "@/hooks/useChatRelevantNotes",
@@ -472,7 +684,9 @@
       "@/miyo/miyoRuntimePolicy",
       "@/miyo/miyoUtils",
       "@/miyo/useMiyoFolderName",
-      "@/miyo/useMiyoStatus"
+      "@/miyo/useMiyoStatus",
+      "@/settings/model",
+      "@/settings/openSettings"
     ],
     "src/components/chat-components/ToolCallBanner.tsx": ["@/tools/ToolResultFormatter"],
     "src/components/chat-components/TypeaheadMenuContent.stories.tsx": [
@@ -480,11 +694,31 @@
       "@/agents/ui/testing/rosterFixtures"
     ],
     "src/components/chat-components/attachToChat.ts": ["@/projects/projectLinks"],
-    "src/components/chat-components/hooks/noteSuggestionPaths.ts": ["@/projects/constants"],
-    "src/components/chat-components/hooks/useAllFolders.ts": ["@/state/vaultDataAtoms"],
-    "src/components/chat-components/hooks/useAllNotes.ts": ["@/state/vaultDataAtoms"],
-    "src/components/chat-components/hooks/useAllTags.ts": ["@/state/vaultDataAtoms"],
+    "src/components/chat-components/hooks/noteSuggestionPaths.ts": [
+      "@/projects/constants",
+      "@/settings/copilotFolder",
+      "@/settings/model"
+    ],
+    "src/components/chat-components/hooks/useActiveWebTabState.ts": [
+      "@/services/webViewerService/webViewerServiceSingleton",
+      "@/services/webViewerService/webViewerServiceTypes"
+    ],
+    "src/components/chat-components/hooks/useAllFolders.ts": [
+      "@/settings/model",
+      "@/state/vaultDataAtoms"
+    ],
+    "src/components/chat-components/hooks/useAllNotes.ts": [
+      "@/settings/model",
+      "@/state/vaultDataAtoms"
+    ],
+    "src/components/chat-components/hooks/useAllTags.ts": [
+      "@/settings/model",
+      "@/state/vaultDataAtoms"
+    ],
     "src/components/chat-components/hooks/useAtMentionSearch.ts": ["@/tools/toolManager"],
+    "src/components/chat-components/hooks/useOpenWebTabs.ts": [
+      "@/services/webViewerService/webViewerServiceSingleton"
+    ],
     "src/components/chat-components/plugins/AtMentionCommandPlugin.tsx": [
       "@/agents/ui/agentMentionOptions",
       "@/agents/ui/chatAgents",
@@ -494,7 +728,8 @@
       "@/agentMode",
       "@/commands/customCommandManager",
       "@/commands/customCommandUtils",
-      "@/commands/state"
+      "@/commands/state",
+      "@/settings/model"
     ],
     "src/components/chat-components/plugins/slashMenuItems.ts": [
       "@/agentMode",
@@ -509,6 +744,10 @@
     "src/components/chat-components/ui/RelevantNotesPane.tsx": ["@/miyo/findRelevantNotes"],
     "src/components/chat-components/ui/useRelevantNoteRowTransitions.ts": [
       "@/miyo/findRelevantNotes"
+    ],
+    "src/components/chat-components/useChatModelPicker.ts": [
+      "@/modelManagement",
+      "@/settings/model"
     ],
     "src/components/chat-components/utils/lexicalTextUtils.ts": [
       "@/agents/ui/AgentMentionPillNode"
@@ -537,6 +776,62 @@
     "src/components/ui/ModelSelector.tsx": ["@/aiParams"],
     "src/components/ui/model-display.tsx": ["@/aiParams"],
     "src/connectors/agentMode/connectorCardSlot.tsx": ["@/connectors/agentMode/connectorCards"],
+    "src/connectors/ui/BrowseConnectors.stories.tsx": [
+      "@/connectors/catalog",
+      "@/connectors/connectionManager"
+    ],
+    "src/connectors/ui/BrowseConnectors.tsx": [
+      "@/connectors/catalog",
+      "@/connectors/connectionManager",
+      "@/connectors/connectorLinks",
+      "@/connectors/connectorSearch",
+      "@/settings/v2/components/ui/SettingsSubPageLayout"
+    ],
+    "src/connectors/ui/ConnectedConnectors.stories.tsx": [
+      "@/connectors/connectionManager",
+      "@/connectors/custom/customConnectors"
+    ],
+    "src/connectors/ui/ConnectedConnectors.tsx": [
+      "@/connectors/catalog",
+      "@/connectors/connectionManager",
+      "@/connectors/connectorTools",
+      "@/connectors/custom/customConnectors"
+    ],
+    "src/connectors/ui/ConnectorChatCard.stories.tsx": ["@/connectors/connectionManager"],
+    "src/connectors/ui/ConnectorChatCard.tsx": [
+      "@/connectors/catalog",
+      "@/connectors/connectionManager",
+      "@/connectors/connectorsEntitlement",
+      "@/connectors/oauth/connectorAuth",
+      "@/plusUtils"
+    ],
+    "src/connectors/ui/ConnectorLogo.stories.tsx": ["@/connectors/catalog"],
+    "src/connectors/ui/ConnectorLogo.tsx": ["@/connectors/catalog"],
+    "src/connectors/ui/ConnectorRow.tsx": [
+      "@/connectors/catalog",
+      "@/connectors/connectionManager",
+      "@/connectors/connectorLinks",
+      "@/connectors/oauth/connectorAuth"
+    ],
+    "src/connectors/ui/ConnectorToolsPage.tsx": [
+      "@/connectors/catalog",
+      "@/connectors/connectorTools",
+      "@/settings/v2/components/ui/SettingsSubPageLayout"
+    ],
+    "src/connectors/ui/ConnectorsUpsell.tsx": ["@/connectors/catalog"],
+    "src/connectors/ui/CustomConnectorModal.stories.tsx": [
+      "@/connectors/custom/customConnectorConfig"
+    ],
+    "src/connectors/ui/CustomConnectorModal.tsx": [
+      "@/components/modals/ReactModal",
+      "@/connectors/custom/customConnectorConfig"
+    ],
+    "src/connectors/ui/CustomConnectorRow.tsx": [
+      "@/connectors/custom/customConnectors",
+      "@/connectors/oauth/connectorAuth"
+    ],
+    "src/connectors/ui/testing/serviceTools.ts": ["@/connectors/connectorTools"],
+    "src/connectors/ui/useConnectorsSnapshot.ts": ["@/connectors/connectionManager"],
     "src/constants.ts": [
       "./chainType",
       "./types",
@@ -553,22 +848,62 @@
     "src/editor/chatSelectionHighlightController.ts": ["@/main"],
     "src/editor/quickAskController.ts": ["@/main"],
     "src/editor/registerNoteHeaderAction.ts": ["@/main"],
-    "src/excalidraw/agentMode/testing/excalidrawToolCall.ts": [
-      "@/agentMode/session/copilotMcpServer",
-      "@/agentMode/session/copilotToolCalls"
+    "src/excalidraw/agentMode/excalidrawCardKind.tsx": ["@/excalidraw/agentMode/excalidrawToolRun"],
+    "src/excalidraw/agentMode/excalidrawToolRun.ts": [
+      "@/agentMode/ui/agentTrail",
+      "@/agentMode/ui/copilotToolCall"
+    ],
+    "src/excalidraw/agentMode/testing/excalidrawToolCall.ts": ["@/agentMode/ui/agentTrail"],
+    "src/excalidraw/agentMode/ui/ExcalidrawToolCard.tsx": [
+      "@/excalidraw/agentMode/excalidrawToolRun"
     ],
     "src/hooks/use-streaming-chat-session.ts": ["@/commands/customCommandChatEngine"],
+    "src/hooks/useChatBackendModelOptions.ts": ["@/modelManagement", "@/settings/model"],
+    "src/hooks/useChatRelevantNotes.ts": [
+      "@/miyo/findChatRelevantNotes",
+      "@/miyo/findRelevantNotes",
+      "@/search/chatRelevantNotesContext"
+    ],
+    "src/hooks/useResolvedChatBackendModel.ts": [
+      "@/aiParams",
+      "@/modelManagement",
+      "@/services/keychainService",
+      "@/settings/model"
+    ],
     "src/lib/lockedCopilotEntries.ts": ["@/modelManagement", "@/plusUtils", "@/settings/model"],
     "src/lib/model-display-utils.ts": ["@/aiParams"],
     "src/lib/model-key.ts": ["@/aiParams"],
     "src/logger.ts": ["@/logFileManager", "@/settings/model"],
-    "src/miyo/agentMode/testing/miyoSearchCall.ts": [
-      "@/agentMode/session/copilotMcpServer",
-      "@/agentMode/session/copilotToolCalls"
+    "src/miyo/agentMode/miyoCardKind.tsx": ["@/miyo/agentMode/miyoSearchRun"],
+    "src/miyo/agentMode/miyoSearchRun.ts": [
+      "@/agentMode/ui/agentTrail",
+      "@/agentMode/ui/copilotToolCall"
     ],
+    "src/miyo/agentMode/testing/miyoSearchCall.ts": ["@/agentMode/ui/agentTrail"],
+    "src/miyo/agentMode/ui/MiyoSearchCard.stories.tsx": ["@/miyo/agentMode/miyoSearchRun"],
+    "src/miyo/agentMode/ui/MiyoSearchCard.tsx": ["@/miyo/agentMode/miyoSearchRun"],
     "src/miyo/findRelevantNotes.ts": ["@/noteUtils"],
     "src/miyo/miyoDocParsers.ts": ["@/tools/FileParserManager"],
-    "src/miyo/settings/MiyoSettings.tsx": ["@/contexts/PluginContext"],
+    "src/miyo/settings/MiyoConnectModal.tsx": ["@/miyo/miyoUtils"],
+    "src/miyo/settings/MiyoDocumentProcessingRow.tsx": ["@/settings/v2/components/CapabilityRow"],
+    "src/miyo/settings/MiyoSettings.tsx": [
+      "@/contexts/PluginContext",
+      "@/miyo/MiyoClient",
+      "@/miyo/MiyoServiceDiscovery",
+      "@/miyo/miyoIndex",
+      "@/miyo/miyoRuntimePolicy",
+      "@/miyo/miyoSearchTool",
+      "@/miyo/miyoStatusStore",
+      "@/miyo/miyoUtils",
+      "@/miyo/useMiyoStatus",
+      "@/search/searchUtils",
+      "@/settings/model",
+      "@/settings/v2/components/CapabilityRow"
+    ],
+    "src/miyo/settings/MiyoStatusRow.tsx": ["@/miyo/miyoStatusStore"],
+    "src/miyo/ui/MiyoConnectionPanel.tsx": ["@/miyo/miyoStatusStore"],
+    "src/miyo/ui/MiyoSearchFoldersPicker.tsx": ["@/miyo/miyoUtils"],
+    "src/miyo/useMiyoLinkBadges.tsx": ["@/miyo/miyoLinkBadges"],
     "src/modelManagement/providers/providerDestination.ts": ["@/types/destination"],
     "src/modelManagement/setup/copilotPlusCatalog.ts": ["@/LLMProviders/brevilabsClient"],
     "src/modelManagement/setup/copilotPlusSync.ts": ["@/LLMProviders/brevilabsClient"],
@@ -576,10 +911,44 @@
     "src/projects/hooks/useRefreshEmptyLandingOnContextSourceChange.ts": [
       "@/agentMode/session/scope"
     ],
-    "src/projects/ui/AgentProjectCreateForm.tsx": ["@/agentMode/session/AgentSessionManager"],
-    "src/projects/ui/AgentProjectRowActions.tsx": ["@/agentMode/session/AgentSessionManager"],
-    "src/projects/ui/ProjectInfoPopover.tsx": ["@/agentMode/session/turnFileChanges"],
-    "src/projects/ui/ProjectPickerList.tsx": ["@/hooks/useRecentUsageManagerRevision"],
+    "src/projects/ui/AgentProjectCreateForm.tsx": [
+      "@/agentMode/session/AgentSessionManager",
+      "@/aiParams",
+      "@/projects/ProjectFileManager"
+    ],
+    "src/projects/ui/AgentProjectRowActions.tsx": [
+      "@/agentMode/session/AgentSessionManager",
+      "@/aiParams",
+      "@/components/modals/ConfirmModal",
+      "@/projects/ProjectFileManager",
+      "@/projects/projectPaths",
+      "@/projects/state"
+    ],
+    "src/projects/ui/EditProjectModal.tsx": [
+      "@/aiParams",
+      "@/components/modals/ReactModal",
+      "@/instructions/ProjectInstructionsField",
+      "@/instructions/agentsFile",
+      "@/projects/projectPaths",
+      "@/projects/state"
+    ],
+    "src/projects/ui/ProjectFileSelectModal.tsx": ["@/components/modals/BaseNoteModal"],
+    "src/projects/ui/ProjectFilesView.tsx": [
+      "@/components/modals/FolderSearchModal",
+      "@/components/modals/PropertySearchModal",
+      "@/components/modals/TagSearchModal",
+      "@/projects/constants",
+      "@/projects/projectLinks",
+      "@/projects/projectPaths",
+      "@/projects/state",
+      "@/search/searchUtils"
+    ],
+    "src/projects/ui/ProjectInfoPopover.tsx": ["@/agentMode/session/turnFileChanges", "@/aiParams"],
+    "src/projects/ui/ProjectPickerList.tsx": [
+      "@/aiParams",
+      "@/hooks/useRecentUsageManagerRevision",
+      "@/projects/filterProjects"
+    ],
     "src/search/RetrieverFactory.ts": ["@/miyo/MiyoSemanticRetriever", "@/miyo/miyoUtils"],
     "src/search/searchUtils.ts": ["@/instructions/agentsFile", "@/projects/constants"],
     "src/selection/selectionStore.ts": ["@/types/message"],
@@ -614,7 +983,10 @@
       "@/settings/v2/components/LegacyChatPromptsNotice",
       "@/settings/v2/components/QuickChatPanel"
     ],
-    "src/settings/v2/components/CommandSettings.tsx": ["@/types"],
+    "src/settings/v2/components/CommandSettings.tsx": [
+      "@/hooks/useChatBackendModelOptions",
+      "@/types"
+    ],
     "src/settings/v2/components/ConfiguredModelEnableList.tsx": ["@/agentMode"],
     "src/settings/v2/components/ConnectorsSettings.tsx": [
       "@/contexts/PluginContext",
@@ -641,27 +1013,157 @@
     "src/utils/obsidianBookmarks.ts": ["@/settings/openSettings"],
     "src/utils/urlNormalization.ts": ["@/types/message"]
   },
-  "nodeAccess": [
-    "src/LLMProviders/selfHostServices.ts",
+  "clientAccess": [
+    "src/__tests__/mockObsidian.ts",
+    "src/agentMode/navigator/hooks/useSessionsSidebarOpen.ts",
+    "src/agentMode/navigator/ui/NavigatorUpsell.tsx",
+    "src/agentMode/navigator/ui/SessionsSidebar.tsx",
+    "src/agentMode/navigator/ui/SessionsSidebarView.tsx",
+    "src/agentMode/skills/ui/DeleteConfirmDialog.tsx",
+    "src/agentMode/skills/ui/MigrateSkillConfirmModal.ts",
+    "src/agentMode/skills/ui/PropertiesDialog.tsx",
+    "src/agentMode/skills/ui/SkillLoadIssues.tsx",
+    "src/agentMode/skills/ui/SkillRow.tsx",
+    "src/agentMode/skills/ui/SkillsSettings.tsx",
+    "src/agentMode/ui/AgentChatInput.tsx",
+    "src/agentMode/ui/AgentChatMessages.tsx",
+    "src/agentMode/ui/AgentHome.tsx",
+    "src/agentMode/ui/AgentMarkdownText.tsx",
+    "src/agentMode/ui/AgentMessageActions.tsx",
+    "src/agentMode/ui/AgentModeStatus.tsx",
+    "src/agentMode/ui/AgentTrailView.tsx",
+    "src/agentMode/ui/ArchivedChatsModal.tsx",
+    "src/agentMode/ui/CopilotAgentView.tsx",
+    "src/agentMode/ui/PlanPreviewView.tsx",
+    "src/agentMode/ui/PlanProposalCard.stories.tsx",
+    "src/agentMode/ui/PlanProposalCard.tsx",
+    "src/agentMode/ui/RenameChatModal.tsx",
     "src/agentMode/ui/ReportIssueModal.tsx",
-    "src/cache/legacyCaches.ts",
-    "src/connectors/connectorTools.ts",
-    "src/connectors/custom/customConnectors.ts",
-    "src/connectors/custom/stdioServer.ts",
-    "src/connectors/custom/testing/fakeStdioServer.ts",
-    "src/connectors/nodeFetch.ts",
-    "src/connectors/oauth/testing/fakeOAuthService.ts",
-    "src/miyo/MiyoServiceDiscovery.ts",
-    "src/services/obsidianCli/ObsidianCliClient.ts",
+    "src/agentMode/ui/SubAgentCard.tsx",
+    "src/agentMode/ui/TaskDetailView.tsx",
+    "src/agentMode/ui/TurnDiffView.tsx",
+    "src/agentMode/ui/activityGroups.ts",
+    "src/agentMode/ui/agentModelPickerHelpers.ts",
+    "src/agentMode/ui/homeShelfPrefs.ts",
+    "src/agentMode/ui/hooks/useAgentHistoryControls.ts",
+    "src/agentMode/ui/hooks/useAgentInputDrafts.ts",
+    "src/agentMode/ui/hooks/useChatRelevantNotesContext.ts",
+    "src/agentMode/ui/openChangedNote.ts",
+    "src/agentMode/ui/renderedDiff/mergeMarkdown.ts",
+    "src/agentMode/ui/renderedDiff/splitBlocks.ts",
+    "src/agentMode/ui/renderedDiff/testing/fixtureParserApp.ts",
+    "src/agentMode/ui/renderedDiff/testing/recordedParserApp.ts",
+    "src/agentMode/ui/testing/fakeWorkspaceApp.ts",
+    "src/agentMode/ui/trackTabStripShown.ts",
+    "src/agentMode/ui/useRelevantNotesPaneOpen.ts",
+    "src/agents/agentMode/memorySaveCards.tsx",
+    "src/agents/agentMode/ui/AgentDraftCard.tsx",
+    "src/agents/agentMode/ui/AgentProfile.tsx",
+    "src/agents/agentMode/ui/AskedAgentView.tsx",
+    "src/agents/agentMode/ui/useAgentProfileFacts.ts",
+    "src/agents/ui/AgentDeleteModal.tsx",
+    "src/agents/ui/AgentFacePicker.tsx",
+    "src/agents/ui/AgentPickerModal.ts",
+    "src/agents/ui/CreateAgentModal.tsx",
+    "src/agents/ui/CustomAgentsUpsell.tsx",
+    "src/agents/ui/LockedAgentNotices.tsx",
+    "src/agents/ui/LockedAgentsUpsell.tsx",
+    "src/agents/ui/lockedCustomAgents.tsx",
+    "src/agents/ui/testing/fakeObsidianModal.ts",
+    "src/agents/ui/useAgentHomeSelection.ts",
+    "src/agents/ui/usePresetFaces.ts",
+    "src/commands/CustomCommandChatModal.tsx",
+    "src/commands/CustomCommandSettingsModal.tsx",
+    "src/components/Markdown.tsx",
+    "src/components/chat-components/AddContextButton.tsx",
+    "src/components/chat-components/AtMentionTypeahead.tsx",
+    "src/components/chat-components/ChatButtons.tsx",
+    "src/components/chat-components/ChatContextMenu.tsx",
+    "src/components/chat-components/ChatHistoryPopover.tsx",
+    "src/components/chat-components/ChatInput.stories.tsx",
+    "src/components/chat-components/ChatInput.tsx",
+    "src/components/chat-components/ChatMessages.tsx",
+    "src/components/chat-components/ChatModeInput.tsx",
+    "src/components/chat-components/ChatSingleMessage.tsx",
+    "src/components/chat-components/ContextBadges.stories.tsx",
+    "src/components/chat-components/ContextBadges.tsx",
+    "src/components/chat-components/ContextControl.tsx",
+    "src/components/chat-components/InlineMessageEditor.tsx",
+    "src/components/chat-components/LexicalEditor.tsx",
+    "src/components/chat-components/RelevantNotes.tsx",
+    "src/components/chat-components/attachChatViewLayoutObservers.ts",
+    "src/components/chat-components/attachToChat.ts",
+    "src/components/chat-components/context/ActiveFileContext.tsx",
+    "src/components/chat-components/hooks/useAllFolders.ts",
+    "src/components/chat-components/hooks/useAllNotes.ts",
+    "src/components/chat-components/hooks/useAtMentionCategories.tsx",
+    "src/components/chat-components/hooks/useAtMentionSearch.ts",
+    "src/components/chat-components/hooks/useNoteSearch.ts",
+    "src/components/chat-components/hooks/useOpenWebTabs.ts",
+    "src/components/chat-components/mentionsInText.ts",
+    "src/components/chat-components/plugins/AtMentionCommandPlugin.tsx",
+    "src/components/chat-components/plugins/NoteCommandPlugin.tsx",
+    "src/components/chat-components/toolCallRootManager.tsx",
+    "src/components/chat-components/ui/RelevantNoteRow.stories.tsx",
+    "src/components/chat-components/ui/RelevantNoteRow.tsx",
+    "src/components/chat-components/utils/lexicalTextUtils.ts",
+    "src/components/chat-components/utils/notePreviewUtils.ts",
+    "src/components/command-ui/action-buttons.tsx",
+    "src/components/command-ui/menu-command-modal.tsx",
+    "src/components/ui/AssistantResponseFooter.tsx",
+    "src/components/ui/dropdown-menu.tsx",
+    "src/components/ui/help-tooltip.tsx",
+    "src/components/ui/popover.tsx",
+    "src/connectors/ui/ConnectorChatCard.tsx",
+    "src/connectors/ui/CustomConnectorModal.tsx",
+    "src/context.ts",
+    "src/hooks/useActiveFile.ts",
+    "src/hooks/useChatFileDrop.ts",
+    "src/hooks/useChatRelevantNotes.ts",
+    "src/hooks/useLiveRelevantNotesRefresh.ts",
+    "src/hooks/useNoteDrag.ts",
+    "src/hooks/useResolvedChatBackendModel.ts",
+    "src/hooks/useStoredIdSet.ts",
+    "src/miyo/settings/MiyoConnectModal.tsx",
+    "src/miyo/settings/MiyoSettings.tsx",
+    "src/miyo/useMiyoLinkBadges.tsx",
+    "src/projects/ui/AgentProjectCreateForm.tsx",
+    "src/projects/ui/AgentProjectRowActions.tsx",
+    "src/projects/ui/EditProjectModal.tsx",
+    "src/projects/ui/LinkUrlModal.ts",
+    "src/projects/ui/ProjectFileSelectModal.tsx",
+    "src/projects/ui/ProjectFilesView.tsx",
+    "src/projects/ui/ProjectInfoPopover.tsx",
+    "src/projects/ui/ProjectPickerList.tsx",
+    "src/types/message.ts",
+    "src/utils.ts",
     "src/utils/appPaths.ts",
     "src/utils/binaryPath.ts",
+    "src/utils/chatDeepLink.ts",
+    "src/utils/chatHistoryUtils.ts",
+    "src/utils/chatImagePersistence.ts",
+    "src/utils/convertedDocOutput.ts",
+    "src/utils/desktopRuntime.ts",
+    "src/utils/detectBinary.ts",
+    "src/utils/deviceId.ts",
     "src/utils/electronShell.ts",
+    "src/utils/issueReport.ts",
     "src/utils/loginShellPath.ts",
     "src/utils/loopbackServer.ts",
     "src/utils/nodeToolBinDirs.ts",
+    "src/utils/obsidianBookmarks.ts",
     "src/utils/openVaultPath.ts",
     "src/utils/openWithSystemDefault.ts",
+    "src/utils/opencodeLog.ts",
+    "src/utils/react/createPluginRoot.tsx",
+    "src/utils/react/mountPluginViewRoot.ts",
+    "src/utils/registerActiveLeafChangeBridge.ts",
+    "src/utils/renderMarkdown.ts",
     "src/utils/rendererEventsShim.ts",
-    "src/utils/splitByVault.ts"
+    "src/utils/reportUpload.brevilabs.ts",
+    "src/utils/revealFolderInExplorer.ts",
+    "src/utils/splitByVault.ts",
+    "src/utils/vaultAdapterUtils.ts",
+    "src/utils/vaultPath.ts"
   ]
 }

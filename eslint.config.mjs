@@ -519,7 +519,7 @@ export default [
     },
   },
 
-  ...architecture.nodeAccessConfigs.map((config) => ({
+  ...architecture.clientAccessConfigs.map((config) => ({
     ...config,
     plugins: { copilot: copilotLintPlugin },
   })),
