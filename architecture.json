@@ -1,0 +1,200 @@
+{
+  "boxes": [
+    {
+      "box": "app",
+      "files": [
+        "src/main.ts",
+        "src/agentMode/index.ts",
+        "src/agentMode/agentModelDiscovery.ts",
+        "src/commands/index.ts",
+        "src/settings/SettingsPage.tsx",
+        "src/settings/settingsTabs.ts",
+        "src/settings/v2/SettingsMainV2.tsx",
+        "src/components/StartupLoadingView.ts",
+        "src/contexts/**"
+      ]
+    },
+    {
+      "box": "chat/protocol",
+      "client": true,
+      "files": ["src/agentMode/session/types.ts", "src/agentMode/session/errors.ts", "src/types/**"]
+    },
+    {
+      "box": "chat/host",
+      "files": ["src/agentMode/session/**"]
+    },
+    {
+      "box": "backends",
+      "files": ["src/agentMode/acp/**", "src/agentMode/sdk/**", "src/agentMode/backends/**"]
+    },
+    {
+      "box": "chat/ui",
+      "client": true,
+      "files": ["src/agentMode/ui/**"]
+    },
+    {
+      "box": "chat/kit",
+      "client": true,
+      "files": [
+        "src/components/chat-components/**",
+        "src/components/Markdown.tsx",
+        "src/components/TruncatedText.tsx",
+        "src/components/recordViewTop.ts",
+        "src/context/ChatInputContext.tsx",
+        "src/hooks/{useChatFileDrop,useChatScrolling,useDayLabels,useNoteDrag,useSmoothedText,useTailPaging,useIncrementalPaging,useActiveFile,useChatBackendModelOptions,useResolvedChatBackendModel}.ts"
+      ]
+    },
+    {
+      "box": "features/navigator",
+      "client": true,
+      "files": ["src/agentMode/navigator/**/*.tsx", "src/agentMode/navigator/**/{ui,hooks}/**"]
+    },
+    {
+      "box": "features/navigator/host",
+      "files": ["src/agentMode/navigator/**"]
+    },
+    {
+      "box": "features/skills",
+      "client": true,
+      "files": ["src/agentMode/skills/**/*.tsx", "src/agentMode/skills/**/{ui,hooks}/**"]
+    },
+    {
+      "box": "features/skills/host",
+      "files": [
+        "src/agentMode/skills/**",
+        "src/builtinSkills/**",
+        "src/settings/{builtinSkillPreferences,skillLoadErrorState}.ts"
+      ]
+    },
+    {
+      "box": "features/teammates",
+      "client": true,
+      "files": ["src/agents/**/*.tsx", "src/agents/**/{ui,hooks}/**"]
+    },
+    {
+      "box": "features/teammates/host",
+      "files": ["src/agents/**"]
+    },
+    {
+      "box": "features/projects",
+      "client": true,
+      "files": ["src/projects/**/*.tsx", "src/projects/**/{ui,hooks}/**"]
+    },
+    {
+      "box": "features/projects/host",
+      "files": ["src/projects/**", "src/instructions/**"]
+    },
+    {
+      "box": "features/miyo",
+      "client": true,
+      "files": [
+        "src/miyo/**/*.tsx",
+        "src/miyo/**/{ui,hooks}/**",
+        "src/hooks/{useChatRelevantNotes,useLiveRelevantNotesRefresh}.ts"
+      ]
+    },
+    {
+      "box": "features/miyo/host",
+      "files": [
+        "src/miyo/**",
+        "src/components/RelevantNotesView.tsx",
+        "src/search/chatRelevantNotesContext.ts"
+      ]
+    },
+    {
+      "box": "features/connectors",
+      "client": true,
+      "files": ["src/connectors/**/*.tsx", "src/connectors/**/{ui,hooks}/**"]
+    },
+    {
+      "box": "features/connectors/host",
+      "files": ["src/connectors/**", "src/settings/v2/components/ConnectorsSettings.tsx"]
+    },
+    {
+      "box": "features/excalidraw",
+      "client": true,
+      "files": ["src/excalidraw/**/*.tsx", "src/excalidraw/**/{ui,hooks}/**"]
+    },
+    {
+      "box": "features/excalidraw/host",
+      "files": ["src/excalidraw/**"]
+    },
+    {
+      "box": "features/openArtifacts/host",
+      "files": ["src/openArtifacts/**", "src/components/modals/OpenArtifactsModal*"]
+    },
+    {
+      "box": "features/customCommands",
+      "client": true,
+      "files": [
+        "src/commands/**/*.tsx",
+        "src/commands/**/{ui,hooks}/**",
+        "src/components/command-ui/**",
+        "src/components/CustomPromptSyntaxInstruction.tsx"
+      ]
+    },
+    {
+      "box": "features/customCommands/host",
+      "files": ["src/commands/**", "src/settings/v2/components/CommandSettings.tsx"]
+    },
+    {
+      "box": "quickChat",
+      "files": [
+        "src/components/{Chat,CopilotView}.tsx",
+        "src/components/{quick-ask,composer}/**",
+        "src/settings/v2/components/{QuickChatPanel,ChatModelEnableList,LegacyChatPromptsNotice}*",
+        "src/{core,memory,tools,LLMProviders,state,mentions,imageProcessing,context,system-prompts,editor,pdf,cache}/**",
+        "src/search/v3/**",
+        "src/search/RetrieverFactory*",
+        "src/hooks/{use-streaming-chat-session,useChatManager,useRecentUsageManagerRevision,useLatestVersion}.ts",
+        "src/{chainType,chainUtils,chatUtils,langchainStream,contextProcessor,composerUtils,types,error,noteUtils}.ts",
+        "src/{chatUtils,composerUtils,contextProcessor,langchainStream}.*.ts"
+      ]
+    },
+    {
+      "box": "platform",
+      "files": [
+        "src/settings/**",
+        "src/{modelManagement,entitlement,services,selection,search}/**",
+        "src/{aiParams,plusUtils,logFileManager}.ts",
+        "src/{plusUtils,logFileManager}.*.ts",
+        "src/components/{modals,release-update}/**"
+      ]
+    },
+    {
+      "box": "kernel",
+      "client": true,
+      "files": [
+        "src/{utils,lib,hooks,styles,__tests__}/**",
+        "src/components/ui/**",
+        "src/components/gallery-hosts.*",
+        "src/{constants,context,errorFormat,logger,utils}.ts",
+        "src/**/*.test.{ts,tsx}"
+      ]
+    }
+  ],
+  "edges": {
+    "kernel": [],
+    "chat/protocol": ["kernel"],
+    "chat/kit": ["kernel", "chat/protocol"],
+    "chat/ui": ["kernel", "chat/protocol", "chat/kit"],
+    "features/*": ["kernel", "chat/protocol", "chat/kit", "chat/ui"],
+    "platform": ["kernel"],
+    "chat/host": ["kernel", "platform", "chat/protocol"],
+    "backends": ["kernel", "platform", "chat/protocol", "chat/host"],
+    "features/*/host": ["kernel", "platform", "chat/protocol", "chat/host"],
+    "quickChat": ["kernel", "platform", "chat/protocol", "chat/kit"],
+    "app": [
+      "kernel",
+      "platform",
+      "chat/protocol",
+      "chat/kit",
+      "chat/ui",
+      "chat/host",
+      "backends",
+      "features/*",
+      "features/*/host",
+      "quickChat"
+    ]
+  }
+}
