@@ -10,18 +10,24 @@ import {
   useManagedInstallActionState,
   useSessionBackendDescriptor,
 } from "@/agentMode/ui/useBackendDescriptor";
+import type { HiddenAgentChats } from "@/agents/agentMode/hiddenAgentChats";
+import type { CustomAgentStore } from "@/agents/CustomAgentStore";
 import type CopilotPlugin from "@/main";
 import { logError } from "@/logger";
 import React from "react";
 
 interface Props {
   plugin: CopilotPlugin;
+  customAgents: CustomAgentStore | undefined;
+  hiddenAgentChats: HiddenAgentChats | undefined;
   onSaveChat: (saveAsNote: () => Promise<void>) => void;
   updateUserMessageHistory: (newMessage: string) => void;
 }
 
 export const AgentModeChat: React.FC<Props> = ({
   plugin,
+  customAgents,
+  hiddenAgentChats,
   onSaveChat,
   updateUserMessageHistory,
 }) => {
@@ -79,6 +85,8 @@ export const AgentModeChat: React.FC<Props> = ({
         chatInputId={activeSession.chatInputId}
         manager={manager}
         plugin={plugin}
+        customAgents={customAgents}
+        hiddenAgentChats={hiddenAgentChats}
         onSaveChat={onSaveChat}
         updateUserMessageHistory={updateUserMessageHistory}
       />

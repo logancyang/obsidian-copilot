@@ -3,6 +3,8 @@ import { GLOBAL_SCOPE } from "@/agentMode/session/scope";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import type { InstallState } from "@/agentMode/session/types";
+import type { HiddenAgentChats } from "@/agents/agentMode/hiddenAgentChats";
+import type { CustomAgentStore } from "@/agents/CustomAgentStore";
 import type CopilotPlugin from "@/main";
 import { render, screen, waitFor } from "@testing-library/react";
 import React from "react";
@@ -32,8 +34,9 @@ jest.mock("@/agentMode/ui/useBackendDescriptor", () => ({
 }));
 /* eslint-enable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
 
+const mockAgentHome = jest.fn((_props: object) => <div data-testid="agent-home" />);
 jest.mock("@/agentMode/ui/AgentHome", () => ({
-  AgentHome: () => <div data-testid="agent-home" />,
+  AgentHome: (props: object) => mockAgentHome(props),
 }));
 jest.mock("@/agentMode/ui/AgentModeStatus", () => ({
   AgentModeStatus: () => <div data-testid="status-card" />,
@@ -81,7 +84,13 @@ function makeManager({
 function renderChat(manager: AgentSessionManager) {
   const plugin = { app: {}, agentSessionManager: manager } as unknown as CopilotPlugin;
   return render(
-    <AgentModeChat plugin={plugin} onSaveChat={() => {}} updateUserMessageHistory={() => {}} />
+    <AgentModeChat
+      plugin={plugin}
+      customAgents={undefined}
+      hiddenAgentChats={undefined}
+      onSaveChat={() => {}}
+      updateUserMessageHistory={() => {}}
+    />
   );
 }
 
@@ -127,6 +136,8 @@ describe("AgentModeChat", () => {
       rerender(
         <AgentModeChat
           plugin={{ app: {}, agentSessionManager: manager } as unknown as CopilotPlugin}
+          customAgents={undefined}
+          hiddenAgentChats={undefined}
           onSaveChat={() => {}}
           updateUserMessageHistory={() => {}}
         />
@@ -186,6 +197,33 @@ describe("AgentModeChat", () => {
 
       await waitFor(() => expect(manager.getSessionsForScope).toHaveBeenCalled());
       expect(getOrCreateActiveSession).not.toHaveBeenCalled();
+    });
+
+    it("hands the open chat's Agent Home the custom agent store and the asked agents' chats it was given, which the plugin no longer holds (https://github.com/Brevilabs/obsidian-copilot-private/issues/984)", () => {
+      const { manager } = makeManager({
+        activeProjectId: GLOBAL_SCOPE,
+        scopeSessions: [session("global-1")],
+        poolSessions: [session("global-1")],
+      });
+      (manager.getActiveSession as jest.Mock).mockReturnValue(session("global-1"));
+      (manager.getActiveChatUIState as jest.Mock).mockReturnValue({});
+      const customAgents = {} as CustomAgentStore;
+      const hiddenAgentChats = {} as HiddenAgentChats;
+
+      render(
+        <AgentModeChat
+          plugin={{ app: {}, agentSessionManager: manager } as unknown as CopilotPlugin}
+          customAgents={customAgents}
+          hiddenAgentChats={hiddenAgentChats}
+          onSaveChat={() => {}}
+          updateUserMessageHistory={() => {}}
+        />
+      );
+
+      expect(screen.getByTestId("agent-home")).toBeTruthy();
+      expect(mockAgentHome).toHaveBeenLastCalledWith(
+        expect.objectContaining({ customAgents, hiddenAgentChats })
+      );
     });
 
     it("routes an outdated auto-detected backend without managed installation to setup (https://github.com/Brevilabs/obsidian-copilot-private/issues/532)", () => {
@@ -283,6 +321,8 @@ describe("AgentModeChat", () => {
         rerender(
           <AgentModeChat
             plugin={{ agentSessionManager: manager } as unknown as CopilotPlugin}
+            customAgents={undefined}
+            hiddenAgentChats={undefined}
             onSaveChat={() => {}}
             updateUserMessageHistory={() => {}}
           />
@@ -304,6 +344,8 @@ describe("AgentModeChat", () => {
         rerender(
           <AgentModeChat
             plugin={{ agentSessionManager: manager } as unknown as CopilotPlugin}
+            customAgents={undefined}
+            hiddenAgentChats={undefined}
             onSaveChat={() => {}}
             updateUserMessageHistory={() => {}}
           />
