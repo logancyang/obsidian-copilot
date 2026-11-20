@@ -332,7 +332,12 @@ describe("askAgentTool", () => {
       listingCases({
         "a Copilot chat": [],
         "Coco's own chat": [],
-        "the chat Coco runs when asked": ["only Coco", "Coco and Maya", "Coco, Maya and Leo"],
+        "the chat Coco runs when asked": [
+          "no agent",
+          "only Coco",
+          "Coco and Maya",
+          "Coco, Maya and Leo",
+        ],
         "OpenCode's shared folder listing": ["only Coco", "Coco and Maya", "Coco, Maya and Leo"],
       })
     )(

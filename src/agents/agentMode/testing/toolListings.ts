@@ -32,7 +32,7 @@ export type ChatKind = keyof typeof CHAT_LISTINGS;
 export type AgentSet = keyof typeof AGENT_SETS;
 
 export function toolHost(agents: AgentSet | readonly CustomAgent[] = []) {
-  const listed = typeof agents === "string" ? agentsIn(agents) : agents;
+  const listed = typeof agents === "string" ? AGENT_SETS[agents] : agents;
   return {
     isUnlistedChat: (sessionKey: string) => sessionKey === ASKED_COCO_CHAT,
     agents: () => listed,
@@ -46,27 +46,16 @@ export interface ListingCase {
   label: string;
 }
 
-function chatCanExist(chat: ChatKind, agents: AgentSet): boolean {
-  const runsCoco = "agentSlug" in CHAT_LISTINGS[chat];
-  return !runsCoco || agentsIn(agents).some((agent) => agent.slug === "coco");
-}
-
-export function agentsIn(set: AgentSet): readonly CustomAgent[] {
-  return AGENT_SETS[set];
-}
-
 export function listingCases(listedFor: Readonly<Record<ChatKind, readonly AgentSet[]>>) {
   return (Object.keys(CHAT_LISTINGS) as ChatKind[]).flatMap((chat) =>
-    (Object.keys(AGENT_SETS) as AgentSet[])
-      .filter((agents) => chatCanExist(chat, agents))
-      .map((agents): ListingCase => {
-        const listed = listedFor[chat].includes(agents);
-        return {
-          chat,
-          agents,
-          listed,
-          label: `${listed ? "lists" : "leaves out"} the tool for ${chat} when the agents are ${agents}`,
-        };
-      })
+    (Object.keys(AGENT_SETS) as AgentSet[]).map((agents): ListingCase => {
+      const listed = listedFor[chat].includes(agents);
+      return {
+        chat,
+        agents,
+        listed,
+        label: `${listed ? "lists" : "leaves out"} the tool for ${chat} when the agents are ${agents}`,
+      };
+    })
   );
 }

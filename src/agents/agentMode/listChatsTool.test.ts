@@ -134,12 +134,12 @@ describe("listChatsTool", () => {
       it.each(
         listingCases({
           "a Copilot chat": [],
-          "Coco's own chat": ["only Coco", "Coco and Maya", "Coco, Maya and Leo"],
+          "Coco's own chat": ["no agent", "only Coco", "Coco and Maya", "Coco, Maya and Leo"],
           "the chat Coco runs when asked": [],
           "OpenCode's shared folder listing": ["only Coco", "Coco and Maya", "Coco, Maya and Leo"],
         })
       )(
-        `$label: it is offered only in an agent's own chat, or in a folder's shared listing that can reach one while any agent exists (${SCOPE_ISSUE})`,
+        `$label: it is offered only in an agent's own chat, even before its agent loads or after it is deleted while the chat is open, or in a folder's shared listing that can reach one while any agent exists (${SCOPE_ISSUE})`,
         ({ chat, agents, listed }) => {
           expect(buildTool({ agents }).listedAs?.(CHAT_LISTINGS[chat])?.name ?? null).toBe(
             listed ? LIST_CHATS_TOOL_NAME : null

@@ -90,7 +90,7 @@ describe("draftAgentTool", () => {
       it.each(
         listingCases({
           "a Copilot chat": ["no agent", "only Coco", "Coco and Maya", "Coco, Maya and Leo"],
-          "Coco's own chat": ["only Coco", "Coco and Maya", "Coco, Maya and Leo"],
+          "Coco's own chat": ["no agent", "only Coco", "Coco and Maya", "Coco, Maya and Leo"],
           "the chat Coco runs when asked": [],
           "OpenCode's shared folder listing": [
             "no agent",
