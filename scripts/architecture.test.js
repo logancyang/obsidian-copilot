@@ -16,7 +16,7 @@ const {
   staticValueImports,
 } = require("./architecture");
 
-const ISSUE = "ARCH_ISSUE_URL";
+const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/993";
 const SLOW_TEST_MS = 120000;
 const NODE_ACCESS_HINT = /requireNodeModule|require\(|electron|process|Buffer|__dirname|__filename/;
 
