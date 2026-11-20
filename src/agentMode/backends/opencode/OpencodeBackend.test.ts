@@ -30,12 +30,6 @@ import {
 } from "./OpencodeBackend";
 import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
 import { useHermeticHome } from "./testing/hermeticHome";
-import { removeAgentEntries } from "./opencodeCustomAgents";
-import { loadAgentSessionPrompt } from "@/agents/agentSessionPrompt";
-import { CustomAgentStore } from "@/agents/CustomAgentStore";
-import { serializeInstructionsFile } from "@/agents/customAgentFiles";
-import { setCustomAgentsAccess } from "@/agents/testing/customAgentsAccess";
-import { createFakeAgentVault } from "@/agents/testing/fakeAgentVault";
 import {
   SELF_HOST_WEB_SEARCH_ENV,
   SELF_HOST_WEB_SEARCH_TOKEN_ENV,
@@ -48,8 +42,6 @@ function resetPromptState(): void {
   updateSetting("defaultSystemPromptTitle", "");
   updateCachedSystemPrompts([]);
 }
-
-jest.mock("@/entitlement");
 
 jest.mock("./OpencodeBinaryManager", () => ({
   ...jest.requireActual("./OpencodeBinaryManager"),
@@ -1447,7 +1439,7 @@ describe("OpencodeBackend", () => {
 
     describe("selectAgentMode()", () => {
       const COCO = { slug: "coco", prompt: "In this chat you are Coco." };
-      const ASKED_COCO = { slug: "coco", prompt: "Asked Coco.", asked: true };
+      const COCO_ALT = { slug: "coco", prompt: "Coco, alt.", variant: "alt" };
       const sandbox = useHermeticHome();
       let file: string;
 
@@ -1506,106 +1498,54 @@ describe("OpencodeBackend", () => {
         expect(fs.readdirSync(path.dirname(file))).toEqual(["opencode-agents.json"]);
       });
 
-      it(`https://github.com/Brevilabs/obsidian-copilot-private/issues/991 gives the chat an agent runs when asked its own pair of entries, so asking the agent leaves its own chat's entries as they were`, async () => {
+      it(`https://github.com/Brevilabs/obsidian-copilot-private/issues/991 gives a prompt variant of an agent its own pair of entries, so running the variant leaves the agent's own entries as they were`, async () => {
         const backend = await spawnedBackend();
         const shared = (await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS)).agents;
         await backend.selectAgentMode(COCO, modeOption("copilot-build"));
         const ownBefore = readAgents()["copilot-agent-coco/default"];
 
-        const asked = await backend.selectAgentMode(ASKED_COCO, modeOption("copilot-build"));
+        const alt = await backend.selectAgentMode(COCO_ALT, modeOption("copilot-build"));
         const ownAgain = await backend.selectAgentMode(
           COCO,
           modeOption("copilot-agent-coco/default")
         );
 
-        expect(asked).toEqual({ configId: "mode", value: "copilot-agent-coco/asked/default" });
+        expect(alt).toEqual({ configId: "mode", value: "copilot-agent-coco/alt/default" });
         expect(ownAgain).toEqual({ configId: "mode", value: "copilot-agent-coco/default" });
         const agents = readAgents();
         expect(Object.keys(agents)).toEqual([
           "copilot-agent-coco/default",
           "copilot-agent-coco/auto",
-          "copilot-agent-coco/asked/default",
-          "copilot-agent-coco/asked/auto",
+          "copilot-agent-coco/alt/default",
+          "copilot-agent-coco/alt/auto",
         ]);
         expect(agents["copilot-agent-coco/default"]).toEqual(ownBefore);
         expect(agents["copilot-agent-coco/default"].system).toBe(
           `${shared["copilot-build"].system}\n\nIn this chat you are Coco.`
         );
-        expect(agents["copilot-agent-coco/asked/default"].system).toBe(
-          `${shared["copilot-build"].system}\n\nAsked Coco.`
+        expect(agents["copilot-agent-coco/alt/default"].system).toBe(
+          `${shared["copilot-build"].system}\n\nCoco, alt.`
         );
-        expect(agents["copilot-agent-coco/asked/auto"].system).toBe(
-          `${shared.build.system}\n\nAsked Coco.`
+        expect(agents["copilot-agent-coco/alt/auto"].system).toBe(
+          `${shared.build.system}\n\nCoco, alt.`
         );
       });
 
       it.each([
-        ["copilot-agent-coco/default", "copilot-agent-coco/asked/default"],
-        ["copilot-agent-coco/auto", "copilot-agent-coco/asked/auto"],
+        ["copilot-agent-coco/default", "copilot-agent-coco/alt/default"],
+        ["copilot-agent-coco/auto", "copilot-agent-coco/alt/auto"],
       ])(
-        "https://github.com/Brevilabs/obsidian-copilot-private/issues/991 moves an asked agent's chat saved on %s, the entry both kinds of chat shared, to its own %s",
+        "https://github.com/Brevilabs/obsidian-copilot-private/issues/991 moves a prompt variant's chat saved on %s, the entry it shared with the agent's own chat, to its own %s",
         async (current, moved) => {
           const backend = await spawnedBackend();
 
-          await expect(backend.selectAgentMode(ASKED_COCO, modeOption(current))).resolves.toEqual({
+          await expect(backend.selectAgentMode(COCO_ALT, modeOption(current))).resolves.toEqual({
             configId: "mode",
             value: moved,
           });
-          expect(readAgents()[moved].system).toMatch(/Asked Coco\.$/);
+          expect(readAgents()[moved].system).toMatch(/Coco, alt\.$/);
         }
       );
-
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/991 runs an agent's own chat, an ask from another chat and the own chat again each from its own prompt, then keeps none of the agent's text once it is deleted", async () => {
-        const vault = createFakeAgentVault();
-        for (const [slug, name, instruction] of [
-          ["coco", "Coco", "COCO-INSTRUCTION"],
-          ["maya", "Maya", "MAYA-INSTRUCTION"],
-        ]) {
-          vault.writeByHand(
-            `copilot/agents/${slug}/instructions.md`,
-            serializeInstructionsFile({ name, title: "", model: null }, instruction)
-          );
-        }
-        vault.writeByHand("copilot/agents/coco/MEMORY.md", "COCO-MEMORY");
-        await setCustomAgentsAccess("team");
-        const store = new CustomAgentStore(vault.app);
-        await store.start();
-        const load = async (slug: string, asked = false) => {
-          const prompt = await loadAgentSessionPrompt(store, slug, "/vault", { asked });
-          if (!prompt) throw new Error(`${slug} did not load`);
-          return asked ? { ...prompt, asked } : prompt;
-        };
-        const backend = await spawnedBackend();
-        const shared = (await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS)).agents;
-        const cocoOwn = await load("coco");
-        const cocoAsked = await load("coco", true);
-        const mayaOwn = await load("maya");
-
-        const ownMode = await backend.selectAgentMode(cocoOwn, modeOption("copilot-build"));
-        await backend.selectAgentMode(mayaOwn, modeOption("copilot-build"));
-        const askedMode = await backend.selectAgentMode(cocoAsked, modeOption("copilot-build"));
-        await backend.selectAgentMode(cocoOwn, modeOption(ownMode!.value));
-
-        expect(cocoOwn.prompt).not.toBe(cocoAsked.prompt);
-        const agents = readAgents();
-        expect(agents[ownMode!.value].system).toBe(
-          `${shared["copilot-build"].system}\n\n${cocoOwn.prompt}`
-        );
-        expect(agents[askedMode!.value].system).toBe(
-          `${shared["copilot-build"].system}\n\n${cocoAsked.prompt}`
-        );
-
-        await removeAgentEntries(file, "coco");
-
-        const left = fs.readFileSync(file, "utf8");
-        expect(left).not.toContain("COCO-INSTRUCTION");
-        expect(left).not.toContain("COCO-MEMORY");
-        expect(Object.keys(readAgents())).toEqual([
-          "copilot-agent-maya/default",
-          "copilot-agent-maya/auto",
-        ]);
-        store.stop();
-      });
 
       it("keeps a reopened agent chat in Auto when it last ran there", async () => {
         const backend = await spawnedBackend();

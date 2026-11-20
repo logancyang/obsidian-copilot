@@ -414,7 +414,7 @@ export class HiddenAgentChats {
     if (!prompt) throw new Error(`${agent.name} couldn't be loaded.`);
     return this.host.startChat({
       agent,
-      prompt: { ...prompt, asked: true },
+      prompt: { ...prompt, variant: "asked" },
       projectId: parent.projectId,
       mode: parent.getState()?.mode?.current ?? null,
       observeSessionEvent,

@@ -420,7 +420,9 @@ export interface SessionAgent {
   prompt: string;
   name?: string;
   memoryPath?: string;
-  asked?: boolean;
+  // One agent can run on different prompts in different chats; a backend that keeps an agent's prompt under a name keeps each variant under its own.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/991
+  variant?: string;
 }
 
 export interface OpenSessionInput {

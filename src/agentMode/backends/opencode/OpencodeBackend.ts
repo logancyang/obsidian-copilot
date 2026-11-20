@@ -232,11 +232,10 @@ export class OpencodeBackend implements AcpBackend {
       throw new Error("Copilot Teammates can't run on OpenCode while OPENCODE_CONFIG is set.");
     }
     const spawnAgents = (JSON.parse(target.configContent) as OpencodeConfig).agents ?? {};
-    const asked = agent.asked === true;
     const define = (baseId: string, auto: boolean): [string, unknown] => {
       const base = spawnAgents[baseId] ?? {};
       return [
-        customAgentModeId({ slug: agent.slug, asked, auto }),
+        customAgentModeId({ slug: agent.slug, variant: agent.variant, auto }),
         {
           ...base,
           mode: "primary",
@@ -254,7 +253,7 @@ export class OpencodeBackend implements AcpBackend {
     const auto = running?.auto ?? current === OPENCODE_BUILTIN_BUILD_AGENT_ID;
     return {
       configId: OPENCODE_MODE_CONFIG_OPTION_ID,
-      value: customAgentModeId({ slug: agent.slug, asked, auto }),
+      value: customAgentModeId({ slug: agent.slug, variant: agent.variant, auto }),
     };
   }
 }

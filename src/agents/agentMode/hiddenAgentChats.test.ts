@@ -334,13 +334,15 @@ describe("hiddenAgentChats", () => {
         expect(prompt.memoryPath).toBe("/vault/copilot/agents/maya/MEMORY.md");
       });
 
-      it(`starts the asked agent's chat as an asked chat, so OpenCode runs it apart from the agent's own chat (${ENTRIES})`, async () => {
+      it(`starts the asked agent's chat on its own prompt variant, so a coding agent that stores prompts by agent keeps it apart from the agent's own chat (${ENTRIES})`, async () => {
         const coco = await openChat({ agentSlug: "coco" });
 
         chats.ask(coco, "maya", "Review the plan.");
         await untilAgentChatStarted();
 
-        expect(starts[0].prompt).toEqual(expect.objectContaining({ slug: "maya", asked: true }));
+        expect(starts[0].prompt).toEqual(
+          expect.objectContaining({ slug: "maya", variant: "asked" })
+        );
       });
 
       it(`starts the asked agent's chat in the project and mode of the chat that asked (${ISSUE})`, async () => {

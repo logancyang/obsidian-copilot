@@ -22,18 +22,18 @@ describe("opencodeCustomAgents", () => {
     JSON.parse(fs.readFileSync(agentsFile(), "utf8")).agents as Record<string, { system: string }>;
 
   describe("customAgentModeId()", () => {
-    it(`names an agent's ask-first and Auto OpenCode agents for its own chat and, apart, for the chat it runs when asked, so no two ids collide (${ISSUE})`, () => {
+    it(`names an agent's ask-first and Auto OpenCode agents and, apart, those of each prompt variant, so no two ids collide (${ISSUE})`, () => {
       expect([
-        customAgentModeId({ slug: "coco", asked: false, auto: false }),
-        customAgentModeId({ slug: "coco", asked: false, auto: true }),
-        customAgentModeId({ slug: "coco", asked: true, auto: false }),
-        customAgentModeId({ slug: "coco", asked: true, auto: true }),
-        customAgentModeId({ slug: "coco-auto", asked: false, auto: false }),
+        customAgentModeId({ slug: "coco", auto: false }),
+        customAgentModeId({ slug: "coco", auto: true }),
+        customAgentModeId({ slug: "coco", variant: "alt", auto: false }),
+        customAgentModeId({ slug: "coco", variant: "alt", auto: true }),
+        customAgentModeId({ slug: "coco-auto", auto: false }),
       ]).toEqual([
         "copilot-agent-coco/default",
         "copilot-agent-coco/auto",
-        "copilot-agent-coco/asked/default",
-        "copilot-agent-coco/asked/auto",
+        "copilot-agent-coco/alt/default",
+        "copilot-agent-coco/alt/auto",
         "copilot-agent-coco-auto/default",
       ]);
     });
@@ -41,16 +41,15 @@ describe("opencodeCustomAgents", () => {
 
   describe("readCustomAgentModeId()", () => {
     it.each([
-      ["copilot-agent-coco/default", { slug: "coco", asked: false, auto: false }],
-      ["copilot-agent-coco/auto", { slug: "coco", asked: false, auto: true }],
-      ["copilot-agent-coco/asked/default", { slug: "coco", asked: true, auto: false }],
-      ["copilot-agent-coco/asked/auto", { slug: "coco", asked: true, auto: true }],
-      ["copilot-agent-auto/default", { slug: "auto", asked: false, auto: false }],
-      ["copilot-agent-asked/default", { slug: "asked", asked: false, auto: false }],
+      ["copilot-agent-coco/default", { slug: "coco", auto: false }],
+      ["copilot-agent-coco/auto", { slug: "coco", auto: true }],
+      ["copilot-agent-coco/alt/default", { slug: "coco", variant: "alt", auto: false }],
+      ["copilot-agent-coco/alt/auto", { slug: "coco", variant: "alt", auto: true }],
+      ["copilot-agent-auto/default", { slug: "auto", auto: false }],
       ["copilot-agent-coco", null],
       ["copilot-agent-coco/build", null],
-      ["copilot-agent-coco/asked", null],
-      ["copilot-agent-coco/other/default", null],
+      ["copilot-agent-coco/alt", null],
+      ["copilot-agent-coco/alt/more/default", null],
       ["copilot-build", null],
       ["build", null],
     ])(
@@ -116,11 +115,11 @@ describe("opencodeCustomAgents", () => {
   });
 
   describe("removeAgentEntries()", () => {
-    it(`removes every entry of the agent, for its own chat and when asked, and keeps the other agents' entries (${ISSUE})`, async () => {
+    it(`removes every entry of the agent, of each prompt variant, and keeps the other agents' entries (${ISSUE})`, async () => {
       startAgentEntries(agentsFile());
       await putAgentEntries(agentsFile(), {
         "copilot-agent-coco/default": { system: "COCO-OWN" },
-        "copilot-agent-coco/asked/auto": { system: "COCO-ASKED" },
+        "copilot-agent-coco/alt/auto": { system: "COCO-ALT" },
         "copilot-agent-coco-two/default": { system: "COCO-TWO" },
       });
 

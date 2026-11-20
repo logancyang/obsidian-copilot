@@ -6,25 +6,24 @@ const AGENT_MODE_PREFIX = "copilot-agent-";
 
 export interface CustomAgentMode {
   slug: string;
-  asked: boolean;
+  variant?: string;
   auto: boolean;
 }
 
 // A slug is one folder name and never holds "/", so the "/" before the mode closes the slug off and one agent's ids never equal another's.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/937
-// The chat an agent runs when asked has its own prompt, so it gets its own ids; the agent's own chat keeps the ids chats saved before then still run on.
+// Each prompt variant of an agent gets its own ids so one variant never overwrites another; an agent with no variant keeps the ids chats saved before then still run on.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/991
-export function customAgentModeId({ slug, asked, auto }: CustomAgentMode): string {
-  return `${AGENT_MODE_PREFIX}${slug}/${asked ? "asked/" : ""}${auto ? "auto" : "default"}`;
+export function customAgentModeId({ slug, variant, auto }: CustomAgentMode): string {
+  return `${AGENT_MODE_PREFIX}${slug}/${variant ? `${variant}/` : ""}${auto ? "auto" : "default"}`;
 }
 
 export function readCustomAgentModeId(modeId: string): CustomAgentMode | null {
   if (!modeId.startsWith(AGENT_MODE_PREFIX)) return null;
   const [slug, ...rest] = modeId.slice(AGENT_MODE_PREFIX.length).split("/");
   const mode = rest.pop();
-  const asked = rest.length === 1 && rest[0] === "asked";
-  if (!slug || (rest.length > 0 && !asked) || (mode !== "default" && mode !== "auto")) return null;
-  return { slug, asked, auto: mode === "auto" };
+  if (!slug || rest.length > 1 || (mode !== "default" && mode !== "auto")) return null;
+  return { slug, variant: rest[0], auto: mode === "auto" };
 }
 
 export function opencodeAgentsFilePath(app: App): string {
