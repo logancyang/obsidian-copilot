@@ -61,7 +61,9 @@ function createBoxOf(graph) {
 }
 
 function clientBoxes(graph) {
-  return new Set(graph.boxes.map(({ box }) => box).filter((box) => box.startsWith("client/")));
+  const runsAnywhere = (box) =>
+    graph.runsAnywhere.some((name) => (name.endsWith("/") ? box.startsWith(name) : box === name));
+  return new Set(graph.boxes.map(({ box }) => box).filter(runsAnywhere));
 }
 
 function featureOf(box) {
