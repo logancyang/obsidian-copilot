@@ -20,15 +20,18 @@ allowlists, e.g. the gallery/story fence and the `src/components/ui`
 purity fence).
 
 `architecture.json` splits `src/` by where code runs. **Client** boxes (the
-session protocol, the chat UI and each feature's components and hooks) must
-run in any shell, the phone app included: they import no `obsidian`, no
-Electron, no Node, and no host box, and they reach the host only through the
-session protocol or the shell interface. **Host** boxes (sessions, backends,
-settings, each feature's other files, Quick Chat, the app) run in the desktop
-plugin and may use all of those. Inside the client, the chat UI never imports
-a feature and features never import each other: a feature plugs into slots
-the chat UI defines, so it can be removed by deleting its folder and its
-registration.
+session protocol, the chat UI, each feature's components and hooks, and
+`core`, the basics everything shares) must run in any shell, the phone app
+included: they import no `obsidian`, no Electron, no Node, and no host box,
+and they reach the host only through the session protocol or the shell
+interface. **Host** boxes (the chat engine, backends, settings and services,
+each feature's other files, and the app) run inside the Obsidian plugin and
+may use all of those. **Quick Chat** is a legacy box of its own: it runs in
+Obsidian on desktop and phones, stays outside the session protocol, and only
+the app imports it, so it can be deleted as one box. Inside the client, the
+chat UI never imports a feature and features never import each other: a
+feature plugs into slots the chat UI defines, so it can be removed by
+deleting its folder and its registration.
 
 **When a fence rejects an import, fix the structure — never the fence.**
 A rejected import means the file is in the wrong place or the dependency
