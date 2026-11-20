@@ -162,7 +162,7 @@
       ]
     },
     {
-      "box": "kernel",
+      "box": "core",
       "client": true,
       "files": [
         "src/{utils,lib,hooks,styles,__tests__}/**",
@@ -174,18 +174,18 @@
     }
   ],
   "edges": {
-    "kernel": [],
-    "chat/protocol": ["kernel"],
-    "chat/kit": ["kernel", "chat/protocol"],
-    "chat/ui": ["kernel", "chat/protocol", "chat/kit"],
-    "features/*": ["kernel", "chat/protocol", "chat/kit", "chat/ui"],
-    "platform": ["kernel"],
-    "chat/host": ["kernel", "platform", "chat/protocol"],
-    "backends": ["kernel", "platform", "chat/protocol", "chat/host"],
-    "features/*/host": ["kernel", "platform", "chat/protocol", "chat/host"],
-    "quickChat": ["kernel", "platform", "chat/protocol", "chat/kit"],
+    "core": [],
+    "chat/protocol": ["core"],
+    "chat/kit": ["core", "chat/protocol"],
+    "chat/ui": ["core", "chat/protocol", "chat/kit"],
+    "features/*": ["core", "chat/protocol", "chat/kit", "chat/ui"],
+    "platform": ["core"],
+    "chat/host": ["core", "platform", "chat/protocol"],
+    "backends": ["core", "platform", "chat/protocol", "chat/host"],
+    "features/*/host": ["core", "platform", "chat/protocol", "chat/host"],
+    "quickChat": ["core", "platform", "chat/protocol", "chat/kit"],
     "app": [
-      "kernel",
+      "core",
       "platform",
       "chat/protocol",
       "chat/kit",
