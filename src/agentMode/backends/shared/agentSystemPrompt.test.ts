@@ -359,7 +359,7 @@ describe("agentSystemPrompt", () => {
       }
     });
 
-    it(`gives every coding agent the same shared prompt with Copilot Teammates locked or unlocked, naming no Teammates tool, because an agent's chat shares it with Copilot chats (${ISSUE_986})`, async () => {
+    it(`gives every coding agent the same shared prompt with Copilot Teammates locked or unlocked, naming no Teammates tool and stating no identity, because an agent's chat shares it with Copilot chats (${ISSUE_986})`, async () => {
       for (const backendId of ["claude", "codex", "opencode"] as const) {
         await setCustomAgentsAccess("free");
         const locked = buildAgentSystemPrompt(backendId, APP);
@@ -370,6 +370,7 @@ describe("agentSystemPrompt", () => {
         expect(unlocked).not.toMatch(
           /list_chats|draft_agent|ask_agent|check_agent|answer_agent|stop_agent|In a chat where you are Copilot/
         );
+        expect(unlocked).not.toMatch(/\byou are\b/i);
       }
     });
 

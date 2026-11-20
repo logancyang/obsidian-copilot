@@ -83,6 +83,7 @@ import { CLAUDE_DISCONNECTED_MESSAGE } from "./claudeLiveQuery";
 import { FakeClaudeQuery, SessionEventRecorder } from "./testing/fakeClaudeQuery";
 import { getCachedSdkCatalog } from "./effortOption";
 import { AuthRequiredError } from "@/agentMode/session/errors";
+import { setDisableBuiltinSystemPrompt } from "@/system-prompts/state";
 
 beforeEach(() => {
   (getCachedSdkCatalog as jest.Mock).mockReturnValue(FAKE_CATALOG);
@@ -927,7 +928,7 @@ describe("ClaudeSdkBackendProcess", () => {
           type: "preset",
           preset: "claude_code",
           excludeDynamicSections: true,
-          append: undefined,
+          append: "You are Obsidian Copilot.",
         });
       });
 
@@ -1080,11 +1081,40 @@ describe("ClaudeSdkBackendProcess", () => {
           type: "preset",
           preset: "claude_code",
           excludeDynamicSections: true,
-          append: "DO THIS THING WITH SKILLS",
+          append: "DO THIS THING WITH SKILLS\n\nYou are Obsidian Copilot.",
         });
       });
 
-      it("appends a custom agent's part after the shared prompt for a chat started as that agent", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/986 tells a Copilot chat it is Obsidian Copilot after the shared prompt, and nothing of the kind while the user turns the built-in prompt off", async () => {
+        queryMock.mockImplementation(answering([resultMessage(), resultMessage()]));
+        const proc = makeProc({ getSystemPromptAppend: () => "SHARED PROMPT" });
+
+        const copilot = await proc.newSession({ cwd: "/vault" });
+        setDisableBuiltinSystemPrompt(true);
+        try {
+          const unbuilt = await proc.newSession({ cwd: "/vault" });
+          await promptTurn(proc, {
+            sessionId: copilot.sessionId,
+            prompt: [{ type: "text", text: "hi" }],
+          });
+          await promptTurn(proc, {
+            sessionId: unbuilt.sessionId,
+            prompt: [{ type: "text", text: "hi" }],
+          });
+        } finally {
+          setDisableBuiltinSystemPrompt(false);
+        }
+
+        expect(
+          getPromptQueryCalls().map(
+            ([call]) =>
+              (call as { options: { systemPrompt: { append?: string } } }).options.systemPrompt
+                .append
+          )
+        ).toEqual(["SHARED PROMPT\n\nYou are Obsidian Copilot.", "SHARED PROMPT"]);
+      });
+
+      it("appends a custom agent's part after the shared prompt for a chat started as that agent, and no Copilot part", async () => {
         queryMock.mockImplementation(answering([resultMessage()]));
         const proc = makeProc({ getSystemPromptAppend: () => "SHARED PROMPT" });
 
@@ -1216,7 +1246,7 @@ describe("ClaudeSdkBackendProcess", () => {
           type: "preset",
           preset: "claude_code",
           excludeDynamicSections: true,
-          append: "FIRST DIRECTIVE",
+          append: "FIRST DIRECTIVE\n\nYou are Obsidian Copilot.",
         });
       });
 
