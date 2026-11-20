@@ -222,7 +222,10 @@ describe("agentMode", () => {
       mockAskedConversations = [];
       mockCustomAgentsGate = "full";
       mockSettings = settingsWith({ reasoning: true });
-      customAgents = { getAgents: () => [] } as unknown as CustomAgentStore;
+      customAgents = {
+        getAgents: () => [],
+        subscribe: () => () => {},
+      } as unknown as CustomAgentStore;
       plugin = {
         manifest: { id: "copilot" },
         register: jest.fn(),
@@ -259,7 +262,7 @@ describe("agentMode", () => {
         memoryPath: "/vault/copilot/agents/coco/MEMORY.md",
       };
       jest.mocked(loadAgentSessionPrompt).mockResolvedValueOnce(agent);
-      const store = {} as CustomAgentStore;
+      const store = { ...customAgents } as CustomAgentStore;
       createAgentSessionManager({} as App, plugin, store);
 
       const resolved = await jest
@@ -775,6 +778,38 @@ describe("agentMode", () => {
       expect(notifyToolsChanged).toHaveBeenCalledTimes(2);
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/987 has the agents list Copilot's tools again when the first agent is created, and offers the asking tools to a Copilot chat from then on", () => {
+      const notifyToolsChanged = jest.fn();
+      const { createCopilotMcpServer: create } = jest.requireActual<
+        typeof import("./session/copilotMcpServer")
+      >("./session/copilotMcpServer");
+      jest
+        .mocked(createCopilotMcpServer)
+        .mockImplementationOnce((...args) => ({ ...create(...args), notifyToolsChanged }));
+      let agents: unknown[] = [];
+      const storeListeners: Array<() => void> = [];
+      const store = {
+        getAgents: () => agents,
+        subscribe: (listener: () => void) => {
+          storeListeners.push(listener);
+          return () => {};
+        },
+      } as unknown as CustomAgentStore;
+      Object.assign(mockManager, { isUnlistedSession: () => false });
+      createAgentSessionManager({} as App, plugin, store);
+      const askAgent = jest
+        .mocked(createCopilotMcpServer)
+        .mock.calls[0][1].find(({ definition }) => definition.name === "ask_agent")!;
+      const copilotChat = { sessionKey: "copilot-chat", backendId: "claude" as const };
+
+      expect(askAgent.listedAs?.(copilotChat)).toBeNull();
+      agents = [{ slug: "maya", name: "Maya" }];
+      storeListeners.forEach((listener) => listener());
+
+      expect(notifyToolsChanged).toHaveBeenCalledTimes(1);
+      expect(askAgent.listedAs?.(copilotChat)).toBe(askAgent.definition);
+    });
+
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/945 offers check_agent, answer_agent, stop_agent and ask_user and hands the profile's delete the asked agents' chats to stop", () => {
       const { hiddenAgentChats } = createAgentSessionManager({} as App, plugin, customAgents);
 
@@ -818,7 +853,7 @@ describe("agentMode", () => {
       );
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/959 lists a chat's own earlier chats without the calling chat, and tells an asked agent's hidden chat it has none", async () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/959 lists an agent's own earlier chats without the calling chat, and turns down a chat no list shows (https://github.com/Brevilabs/obsidian-copilot-private/issues/987)", async () => {
       const at = new Date(2026, 10, 11);
       const item = (id: string, title: string, agent?: string) => ({
         id,
@@ -849,8 +884,8 @@ describe("agentMode", () => {
         .mocked(createCopilotMcpServer)
         .mock.calls[0][1].find(({ definition }) => definition.name === "list_chats")!;
 
-      expect((await listChats.call({}, fakeChat())).text).toContain(
-        "Another agent asked you into this chat, so it has no earlier chats with the user."
+      expect((await listChats.call({}, fakeChat())).text).toBe(
+        "This chat can't list earlier chats. Don't call list_chats again."
       );
       const { text } = await listChats.call({}, juno);
       expect(text).toContain("- 2026-11-11 · Release video plan · /vault/chats/plan.md");
@@ -898,6 +933,7 @@ describe("agentMode", () => {
       ];
       const store = {
         getAgents: () => [{ slug: "rex", name: "Rex" }],
+        subscribe: () => () => {},
       } as unknown as CustomAgentStore;
       createAgentSessionManager({} as App, plugin, store);
       const listChats = jest

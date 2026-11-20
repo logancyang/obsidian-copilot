@@ -21,6 +21,7 @@ import {
 } from "@/agents/agentMode/agentToolCalls";
 import { RELAY_PRINCIPLE } from "@/agents/agentReply";
 import { describeAgent } from "@/agents/agentSessionPrompt";
+import type { CustomAgent, CustomAgentStore } from "@/agents/CustomAgentStore";
 import { getCustomAgentsGate, subscribeToCustomAgentsGate } from "@/agents/customAgentsGate";
 
 export const ASK_USER_TOOL_NAME = "ask_user";
@@ -28,6 +29,7 @@ const UNAVAILABLE_TEXT = "Copilot Teammates isn't available right now. Tell the 
 
 export interface AskAgentToolHost {
   isUnlistedChat: (sessionKey: string) => boolean;
+  agents: () => readonly Pick<CustomAgent, "slug">[];
 }
 
 // OpenCode's Code Mode catalog shows only the first ~120 characters of a description, so the opening carries when to call it.
@@ -35,8 +37,6 @@ export interface AskAgentToolHost {
 const ASK_AGENT_TOOL: McpToolDefinition = Object.freeze({
   name: ASK_AGENT_TOOL_NAME,
   description: `Ask another agent only when the user's message @-mentions it by name or clearly points to it. Never call it otherwise, and never for yourself.
-
-The agents aren't listed here. When the user names an agent without an @, or only describes its job, call this with the name or job they gave: a name no agent has answers with the agents you can ask.
 
 The agent works in the background, in its own chat with its own instruction and memory, and can't see this chat. The call returns at once. Then tell the user in one short line who you asked and that you'll bring back the reply, and end your turn. Don't wait for the reply or check on it. When the reply comes back, pass it on. ${RELAY_PRINCIPLE}
 
@@ -128,23 +128,42 @@ function stopResultText(result: StopAgentResult): string {
 
 // Only a chat the user sees can ask, and only while custom agents are available. The listing names no agent, since OpenCode keeps one listing for its whole process; the call finds the agent by name.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
+// A chat with no other agent to ask isn't offered the tools; OpenCode's shared listing can't tell whose chat lists, so any agent counts there.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/987
 function listedForAskingChats(
   host: AskAgentToolHost,
   definition: McpToolDefinition
 ): HostedTool["listedAs"] {
-  return ({ sessionKey }: ToolListing): McpToolDefinition | null =>
-    getCustomAgentsGate() === "full" && !host.isUnlistedChat(sessionKey) ? definition : null;
+  return ({ sessionKey, agentSlug }: ToolListing): McpToolDefinition | null =>
+    getCustomAgentsGate() === "full" &&
+    !host.isUnlistedChat(sessionKey) &&
+    host.agents().some((agent) => agent.slug !== agentSlug)
+      ? definition
+      : null;
 }
 
 // OpenCode lists a folder's tools once for every chat in it, so custom agents unlocking or locking while it runs has it list them again.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
-export function relistOnCustomAgentsGateChange(relist: () => void): () => void {
-  let full = getCustomAgentsGate() === "full";
-  return subscribeToCustomAgentsGate(() => {
-    if ((getCustomAgentsGate() === "full") === full) return;
-    full = !full;
+// Which tools a chat is offered also follows which agents exist, so an agent created or deleted has open chats list them again.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/987
+export function relistOnAgentsChange(
+  store: Pick<CustomAgentStore, "getAgents" | "subscribe">,
+  relist: () => void
+): () => void {
+  const listingKey = () =>
+    `${getCustomAgentsGate() === "full"} ${store
+      .getAgents()
+      .map((agent) => agent.slug)
+      .join("/")}`;
+  let key = listingKey();
+  const onChange = (): void => {
+    const next = listingKey();
+    if (next === key) return;
+    key = next;
     relist();
-  });
+  };
+  const unsubscribes = [subscribeToCustomAgentsGate(onChange), store.subscribe(onChange)];
+  return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
 }
 
 const ASK_AGENT_PROMPT_HINT =
@@ -153,6 +172,14 @@ const ASK_AGENT_PROMPT_HINT =
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/986
 const ASKED_AGENT_PROMPT_HINT =
   "When the user asks how an agent you asked is doing, check with check_agent; when the user answers its question, pass the answer with answer_agent; when the user gives it a new instruction while it works, send that with ask_agent; when the user tells you to stop it, use stop_agent. All are in obsidian-copilot.";
+
+// The chat draws a call's line from its error flag, so a call that did nothing for the agent it names fails.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/945
+// A valid call answered with how things stand, as for a name no agent has or an agent not working now, isn't an error, so the chat draws no failed step and no Copilot tool reads as erroring; an answer whose line would claim what didn't happen, as "Stopped" for nothing to stop, keeps the flag.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/987
+function failed(kind: string, ...answered: string[]): boolean {
+  return ![...answered, "unknown_agent"].includes(kind);
+}
 
 export function createAskAgentTool(chats: HiddenAgentChats, host: AskAgentToolHost): HostedTool {
   return {
@@ -166,12 +193,7 @@ export function createAskAgentTool(chats: HiddenAgentChats, host: AskAgentToolHo
         return { text: "agent and message must be non-empty strings.", isError: true };
       }
       const result = chats.ask(chat, agent, message);
-      // The chat draws a call's line from its error flag, so a call that asked no one fails.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/945
-      return {
-        text: resultText(result),
-        isError: result.kind !== "asked" && result.kind !== "sent",
-      };
+      return { text: resultText(result), isError: failed(result.kind, "asked", "sent") };
     },
   };
 }
@@ -237,7 +259,10 @@ export function createCheckAgentTool(chats: HiddenAgentChats, host: AskAgentTool
     host,
     (chat, agent) => {
       const result = chats.check(chat, agent);
-      return { text: checkResultText(result), isError: result.kind !== "progress" };
+      return {
+        text: checkResultText(result),
+        isError: failed(result.kind, "progress", "not_asked"),
+      };
     }
   );
 }
@@ -252,7 +277,7 @@ export function createStopAgentTool(chats: HiddenAgentChats, host: AskAgentToolH
     host,
     (chat, agent) => {
       const result = chats.stop(chat, agent);
-      return { text: stopResultText(result), isError: result.kind !== "stopped" };
+      return { text: stopResultText(result), isError: failed(result.kind, "stopped") };
     }
   );
 }
@@ -267,7 +292,7 @@ export function createAnswerAgentTool(chats: HiddenAgentChats, host: AskAgentToo
     host,
     (chat, agent, answer) => {
       const result = chats.answer(chat, agent, answer);
-      return { text: answerResultText(result), isError: result.kind !== "answered" };
+      return { text: answerResultText(result), isError: failed(result.kind, "answered") };
     },
     { name: "answer", description: "The user's answer, in their own words." }
   );
@@ -295,12 +320,15 @@ const ASK_USER_RESULT_TEXT = Object.freeze({
 
 // An asked agent's chat has no user in it, so only that chat gets a way to reach the user; OpenCode lists a folder's tools once for every chat in it, so the call decides there.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/945
+// No agent can be asked while none exists, so a shared listing then leaves it out.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/987
 export function createAskUserTool(chats: HiddenAgentChats, host: AskAgentToolHost): HostedTool {
   return {
     definition: ASK_USER_TOOL,
     turnedOffText: UNAVAILABLE_TEXT,
     listedAs: ({ sessionKey, shared }: ToolListing) =>
-      getCustomAgentsGate() === "full" && (shared || host.isUnlistedChat(sessionKey))
+      getCustomAgentsGate() === "full" &&
+      (shared ? host.agents().length > 0 : host.isUnlistedChat(sessionKey))
         ? ASK_USER_TOOL
         : null,
     call: async (args, chat) => {
