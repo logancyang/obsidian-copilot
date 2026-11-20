@@ -10,6 +10,10 @@ import {
   OPENCODE_COPILOT_PLUGIN_SOURCE,
   opencodeCopilotPluginDir,
 } from "./opencodeCopilotPlugin";
+import {
+  createProtectedFilesVault,
+  type ProtectedFilesVault,
+} from "@/agentMode/session/testing/protectedFilesVault";
 
 jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
@@ -359,28 +363,22 @@ describe("opencodeCopilotPlugin", () => {
     describe("protected files", () => {
       const ISSUE_989 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/989";
       const REASON = "Only the user edits an agent's instruction.";
+      let fixture: ProtectedFilesVault;
       let vault: string;
 
-      beforeEach(async () => {
-        vault = await fs.promises.realpath(
-          await fs.promises.mkdtemp(path.join(os.tmpdir(), "opencode-protected-"))
-        );
-        await fs.promises.mkdir(path.join(vault, "copilot/agents/coco"), { recursive: true });
-        await fs.promises.writeFile(path.join(vault, "copilot/agents/coco/instructions.md"), "x");
-        process.env[COPILOT_PROTECTED_FILES_ENV] = JSON.stringify({
-          folder: path.join(vault, "copilot/agents"),
-          fileName: "instructions.md",
-          reason: REASON,
-        });
+      beforeEach(() => {
+        fixture = createProtectedFilesVault(REASON);
+        vault = fixture.vault;
+        process.env[COPILOT_PROTECTED_FILES_ENV] = JSON.stringify(fixture.rule);
       });
 
-      afterEach(async () => {
+      afterEach(() => {
         delete process.env[COPILOT_PROTECTED_FILES_ENV];
-        await fs.promises.rm(vault, { recursive: true, force: true });
+        fixture.remove();
       });
 
-      async function before(tool: string, input: unknown) {
-        const { toolHooks } = await setUpPlugin(plugin, vault);
+      async function before(tool: string, input: unknown, directory = vault) {
+        const { toolHooks } = await setUpPlugin(plugin, directory);
         return toolHooks.get("execute.before")!({ tool, id: "call-1", input });
       }
 
@@ -415,23 +413,29 @@ describe("opencodeCopilotPlugin", () => {
         }
       });
 
-      it(`rejects the file named through '..', another letter case or a nested folder (${ISSUE_989})`, async () => {
-        for (const file of [
-          "notes/../copilot/agents/coco/instructions.md",
-          "copilot/agents/coco/INSTRUCTIONS.md",
-          "copilot/agents/coco/old/instructions.md",
-        ]) {
-          await expect(before("edit", { path: file })).rejects.toThrow(REASON);
+      it(`judges every spelling of a write's path as Copilot's own check does, from the chat's folder (${ISSUE_989})`, async () => {
+        const verdicts = [];
+        for (const { spelling, target } of fixture.cases) {
+          const refused = await before("write", { path: target }).then(
+            () => false,
+            () => true
+          );
+          verdicts.push([spelling, refused]);
         }
+
+        expect(verdicts).toEqual(
+          fixture.cases.map(({ spelling, protected: expected }) => [spelling, expected])
+        );
+        await expect(
+          before(
+            "write",
+            { path: "../../copilot/agents/coco/instructions.md" },
+            path.join(vault, "Projects", "Launch")
+          )
+        ).rejects.toThrow(REASON);
       });
 
-      it("lets the agent's MEMORY.md and other files, reads and commands through", async () => {
-        await expect(
-          before("write", { path: "copilot/agents/coco/MEMORY.md" })
-        ).resolves.toBeUndefined();
-        await expect(
-          before("edit", { path: "copilot/agents/coco/notes.md" })
-        ).resolves.toBeUndefined();
+      it("lets reads and commands through", async () => {
         await expect(
           before("read", { path: "copilot/agents/coco/instructions.md" })
         ).resolves.toBeUndefined();
@@ -440,12 +444,15 @@ describe("opencodeCopilotPlugin", () => {
         ).resolves.toBeUndefined();
       });
 
-      it("lets every write through when the process was started without a rule", async () => {
-        process.env[COPILOT_PROTECTED_FILES_ENV] = "null";
+      it(`lets every write through when the process was started without a rule, as by a Copilot version that has none (${ISSUE_989})`, async () => {
+        for (const value of ["null", undefined]) {
+          if (value === undefined) delete process.env[COPILOT_PROTECTED_FILES_ENV];
+          else process.env[COPILOT_PROTECTED_FILES_ENV] = value;
 
-        await expect(
-          before("edit", { path: "copilot/agents/coco/instructions.md" })
-        ).resolves.toBeUndefined();
+          await expect(
+            before("edit", { path: "copilot/agents/coco/instructions.md" })
+          ).resolves.toBeUndefined();
+        }
       });
     });
 
