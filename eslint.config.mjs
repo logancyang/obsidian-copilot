@@ -5,6 +5,7 @@ import tailwind from "eslint-plugin-tailwindcss";
 import boundaries from "eslint-plugin-boundaries";
 import globals from "globals";
 import { isBuiltin } from "node:module";
+import { architecture } from "./eslint.architecture.mjs";
 
 const NODE_IMPORT_GUIDANCE =
   "Use requireNodeModule() from '@/utils/desktopRuntime' for runtime access; use an import(\"node:...\") type query when only a type is needed.";
@@ -122,6 +123,7 @@ const copilotLintPlugin = {
   rules: {
     "no-direct-node-imports": noDirectNodeImportsRule,
     "issue-linked-comments": issueLinkedCommentsRule,
+    ...architecture.lintRules,
   },
 };
 
@@ -491,6 +493,8 @@ export default [
       "scripts/patchRendererUnsafeUnref.js",
       "scripts/bundleSizeGuard.js",
       "scripts/bundleSizeGuard.test.js",
+      "scripts/architecture.js",
+      "scripts/architecture.test.js",
     ],
     rules: {
       "@typescript-eslint/no-require-imports": "off",
@@ -506,121 +510,18 @@ export default [
         node: true,
       },
       "boundaries/include": ["src/**/*"],
-      "boundaries/elements": [
-        { type: "registry", pattern: "src/agentMode/backends/registry.ts", mode: "file" },
-        { type: "barrel", pattern: "src/agentMode/index.ts", mode: "file" },
-        { type: "session", pattern: "src/agentMode/session" },
-        { type: "acp", pattern: "src/agentMode/acp" },
-        { type: "sdk", pattern: "src/agentMode/sdk" },
-        { type: "backend", pattern: "src/agentMode/backends/*", capture: ["name"] },
-        { type: "ui", pattern: "src/agentMode/ui" },
-        { type: "skills", pattern: "src/agentMode/skills" },
-        { type: "navigator", pattern: "src/agentMode/navigator" },
-        { type: "modelmgmt", pattern: "src/modelManagement" },
-        { type: "miyoAgent", pattern: "src/miyo/agentMode" },
-        { type: "excalidrawAgent", pattern: "src/excalidraw/agentMode" },
-        { type: "connectorsAgent", pattern: "src/connectors/agentMode" },
-        { type: "customAgentsAgent", pattern: "src/agents/agentMode" },
-        { type: "projectsUi", pattern: ["src/projects/ui", "src/projects/hooks"] },
-        { type: "host", pattern: "src/**" },
-      ],
+      "boundaries/elements": architecture.elements,
+      "boundaries/dependency-nodes": ["import", "dynamic-import", "export"],
     },
     rules: {
-      "boundaries/dependencies": [
-        "error",
-        {
-          default: "disallow",
-          rules: [
-            { from: { type: "session" }, allow: { to: { type: ["session", "host"] } } },
-            { from: { type: "acp" }, allow: { to: { type: ["acp", "session", "host"] } } },
-            { from: { type: "sdk" }, allow: { to: { type: ["sdk", "session", "host"] } } },
-            {
-              from: { type: "backend" },
-              allow: [
-                { to: { type: ["acp", "sdk", "session", "skills", "modelmgmt", "host"] } },
-                { to: { type: "backend", captured: { name: "{{from.captured.name}}" } } },
-                { to: { type: "backend", captured: { name: "shared" } } },
-              ],
-            },
-            { from: { type: "registry" }, allow: { to: { type: ["backend", "session", "host"] } } },
-            {
-              from: { type: "ui" },
-              allow: {
-                to: {
-                  type: [
-                    "ui",
-                    "session",
-                    "registry",
-                    "skills",
-                    "navigator",
-                    "miyoAgent",
-                    "excalidrawAgent",
-                    "connectorsAgent",
-                    "customAgentsAgent",
-                    "projectsUi",
-                    "host",
-                  ],
-                },
-              },
-            },
-            {
-              from: { type: "navigator" },
-              allow: { to: { type: ["navigator", "ui", "session", "projectsUi", "host"] } },
-            },
-            {
-              from: { type: "miyoAgent" },
-              allow: { to: { type: ["miyoAgent", "ui", "session", "host"] } },
-            },
-            {
-              from: { type: "excalidrawAgent" },
-              allow: { to: { type: ["excalidrawAgent", "ui", "session", "host"] } },
-            },
-            {
-              from: { type: "connectorsAgent" },
-              allow: { to: { type: ["connectorsAgent", "ui", "session", "host"] } },
-            },
-            {
-              from: { type: "customAgentsAgent" },
-              allow: { to: { type: ["customAgentsAgent", "ui", "session", "registry", "host"] } },
-            },
-            {
-              from: { type: "projectsUi" },
-              allow: { to: { type: ["projectsUi", "ui", "session", "host"] } },
-            },
-            {
-              from: { type: "skills" },
-              allow: { to: { type: ["skills", "session", "host", "registry"] } },
-            },
-            {
-              from: { type: "barrel" },
-              allow: {
-                to: {
-                  type: [
-                    "acp",
-                    "session",
-                    "sdk",
-                    "backend",
-                    "registry",
-                    "ui",
-                    "skills",
-                    "navigator",
-                    "connectorsAgent",
-                    "customAgentsAgent",
-                    "host",
-                  ],
-                },
-              },
-            },
-            { from: { type: "modelmgmt" }, allow: { to: { type: ["modelmgmt", "host"] } } },
-            {
-              from: { type: "host" },
-              allow: { to: { type: ["host", "barrel", "modelmgmt"] } },
-            },
-          ],
-        },
-      ],
+      "boundaries/dependencies": ["error", { default: "disallow", rules: architecture.rules }],
     },
   },
+
+  ...architecture.nodeAccessConfigs.map((config) => ({
+    ...config,
+    plugins: { copilot: copilotLintPlugin },
+  })),
 
   {
     files: ["**/*.test.{js,jsx,ts,tsx}", "jest.setup.js", "__mocks__/**"],
