@@ -1,50 +1,19 @@
 /** @jest-environment node */
 const fs = require("fs");
-const os = require("os");
 const path = require("path");
-const { Linter } = require("eslint");
-const tsParser = require("@typescript-eslint/parser");
 const {
+  clientBoxes,
   createBoxOf,
-  desktopBoxes,
   globToRegExp,
   importRows,
   loadArchitecture,
-  mobileLoadClosure,
-  noNodeInPortableCode,
-  resolveImport,
-  staticValueImports,
 } = require("./architecture");
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/993";
-const SLOW_TEST_MS = 120000;
-const NODE_ACCESS_HINT = /requireNodeModule|require\(|electron|process|Buffer|__dirname|__filename/;
 
 const root = process.cwd();
 const { graph, debt } = loadArchitecture(root);
 const boxOf = createBoxOf(graph);
-
-const linter = new Linter({ configType: "flat" });
-const NODE_ACCESS_RULE = "copilot/no-node-in-portable-code";
-const nodeAccessConfig = [
-  {
-    files: ["**/*.{ts,tsx}"],
-    languageOptions: { parser: tsParser, parserOptions: { ecmaFeatures: { jsx: true } } },
-    plugins: { copilot: { rules: { "no-node-in-portable-code": noNodeInPortableCode } } },
-    rules: { [NODE_ACCESS_RULE]: "error" },
-  },
-];
-
-function nodeAccessIn(file, text) {
-  return linter
-    .verify(text, nodeAccessConfig, { filename: path.join(root, file) })
-    .filter((message) => message.fatal || message.ruleId === NODE_ACCESS_RULE)
-    .map((message) => (message.fatal ? `could not parse: ${message.message}` : message.message));
-}
-
-function nodeAccessInCode(code) {
-  return nodeAccessIn("src/example.ts", code).map((message) => message.split(" reaches ")[0]);
-}
 
 function readSource(file) {
   return fs.readFileSync(path.join(root, file), "utf8");
@@ -56,19 +25,6 @@ function trackedSourceFiles(folder) {
     if (entry.isDirectory()) return trackedSourceFiles(relative);
     return /\.(ts|tsx)$/.test(entry.name) ? [relative] : [];
   });
-}
-
-const projects = [];
-afterAll(() => projects.forEach((project) => fs.rmSync(project, { recursive: true })));
-
-function writeProject(files) {
-  const project = fs.mkdtempSync(path.join(os.tmpdir(), "architecture-"));
-  projects.push(project);
-  for (const [file, text] of Object.entries(files)) {
-    fs.mkdirSync(path.dirname(path.join(project, file)), { recursive: true });
-    fs.writeFileSync(path.join(project, file), text);
-  }
-  return project;
 }
 
 describe("architecture", () => {
@@ -92,34 +48,44 @@ describe("architecture", () => {
       const boxed = createBoxOf({
         boxes: [
           { box: "chat/protocol", files: ["src/chat/types.ts"] },
-          { box: "chat/desktop", files: ["src/chat/**"] },
+          { box: "chat/host", files: ["src/chat/**"] },
         ],
       });
 
       expect(boxed("src/chat/types.ts")).toBe("chat/protocol");
-      expect(boxed("src/chat/AgentSession.ts")).toBe("chat/desktop");
+      expect(boxed("src/chat/AgentSession.ts")).toBe("chat/host");
     });
 
     it("puts a file no box claims in no box", () => {
       expect(createBoxOf({ boxes: [{ box: "kernel", files: ["src/**"] }] })("dev/x.ts")).toBe(null);
     });
 
-    it(`puts a file listed for a desktop folder in that desktop box before it has moved (${ISSUE})`, () => {
-      expect(boxOf("src/agents/agentMode/hiddenAgentChats.ts")).toBe("features/teammates/desktop");
-      expect(boxOf("src/agents/agentTitle.ts")).toBe("features/teammates");
+    it(`puts a feature's components and hooks in its client box and its other files in its host box (${ISSUE})`, () => {
+      expect(boxOf("src/agents/ui/AgentRoster.tsx")).toBe("features/teammates");
+      expect(boxOf("src/agents/agentMode/ui/AgentProfile.tsx")).toBe("features/teammates");
+      expect(boxOf("src/projects/hooks/useRefreshEmptyLandingOnContextSourceChange.ts")).toBe(
+        "features/projects"
+      );
+      expect(boxOf("src/agents/customAgentsGate.ts")).toBe("features/teammates/host");
+      expect(boxOf("src/agents/agentMode/hiddenAgentChats.ts")).toBe("features/teammates/host");
     });
   });
 
-  describe("desktopBoxes()", () => {
-    it("names the boxes whose code may run only where Node exists", () => {
-      expect([...desktopBoxes(graph)].sort()).toEqual([
-        "app/desktop",
-        "backends",
-        "chat/desktop",
-        "features/connectors/desktop",
-        "features/skills/desktop",
-        "features/teammates/desktop",
-        "platform/desktop",
+  describe("clientBoxes()", () => {
+    it("names the boxes whose code must run in any shell, outside Obsidian too", () => {
+      expect([...clientBoxes(graph)].sort()).toEqual([
+        "chat/kit",
+        "chat/protocol",
+        "chat/ui",
+        "features/connectors",
+        "features/customCommands",
+        "features/excalidraw",
+        "features/miyo",
+        "features/navigator",
+        "features/projects",
+        "features/skills",
+        "features/teammates",
+        "kernel",
       ]);
     });
   });
@@ -127,204 +93,53 @@ describe("architecture", () => {
   describe("importRows()", () => {
     const rowOf = (box) => importRows(graph).find((row) => row.box === box);
 
+    it("lets the chat UI import only the client boxes below it", () => {
+      expect(rowOf("chat/ui").allowed).toEqual(["kernel", "chat/protocol", "chat/kit"]);
+    });
+
     it("lets a feature import the chat client and the boxes below it, never another feature", () => {
-      expect(rowOf("features/miyo").value).toEqual([
+      expect(rowOf("features/miyo").allowed).toEqual([
         "kernel",
-        "platform",
         "chat/protocol",
         "chat/kit",
         "chat/ui",
       ]);
     });
 
-    it("lets a feature's desktop folder import the chat host and its own portable code", () => {
-      expect(rowOf("features/teammates/desktop").value).toEqual([
+    it("lets a feature's host part import the chat host and its own client part, never another feature", () => {
+      expect(rowOf("features/teammates/host").allowed).toEqual([
         "kernel",
         "platform",
-        "platform/desktop",
         "chat/protocol",
-        "chat/kit",
-        "chat/ui",
-        "chat/desktop",
+        "chat/host",
         "features/teammates",
       ]);
     });
 
-    it(`lets portable code name its own desktop folder, and one below it, only as a type (${ISSUE})`, () => {
-      expect(rowOf("features/teammates").typeOnly).toEqual([
-        "features/teammates/desktop",
-        "platform/desktop",
-      ]);
-      expect(rowOf("chat/ui").typeOnly).toEqual(["platform/desktop"]);
+    it(`lets no client box import a host box, so the client compiles without the plugin (${ISSUE})`, () => {
+      const client = clientBoxes(graph);
+      const reachingHost = importRows(graph)
+        .filter(({ box }) => client.has(box))
+        .flatMap(({ box, allowed }) =>
+          allowed.filter((to) => !client.has(to)).map((to) => `${box} -> ${to}`)
+        );
+
+      expect(reachingHost).toEqual([]);
     });
 
-    it("gives a desktop box no type-only allowance, since it may import what its row lists outright", () => {
-      expect(rowOf("chat/desktop").typeOnly).toEqual([]);
-    });
-  });
+    it("gives every row and every allowed import a box that exists", () => {
+      const boxes = new Set(graph.boxes.map(({ box }) => box));
+      const unknown = importRows(graph)
+        .flatMap(({ box, allowed }) => [box, ...allowed])
+        .filter((box) => !boxes.has(box));
 
-  describe("staticValueImports()", () => {
-    it("lists value imports, side-effect imports and re-exports", () => {
-      const code = [
-        'import a, { b } from "@/a";',
-        'import "@/side-effect";',
-        'export { c } from "./c";',
-        'export * from "./d";',
-      ].join("\n");
-
-      expect(staticValueImports("x.ts", code)).toEqual(["@/a", "@/side-effect", "./c", "./d"]);
-    });
-
-    it(`leaves out imports that load no code on a phone: type-only imports and import() (${ISSUE})`, () => {
-      const code = [
-        'import type { A } from "@/a";',
-        'import { type B, type C } from "@/b";',
-        'export type { D } from "@/d";',
-        'const lazy = () => import("@/desktop");',
-        'import { type E, f } from "@/mixed";',
-      ].join("\n");
-
-      expect(staticValueImports("x.ts", code)).toEqual(["@/mixed"]);
-    });
-  });
-
-  describe("resolveImport()", () => {
-    it("resolves an alias, a relative path and a folder index to repo-relative files", () => {
-      const project = writeProject({
-        "src/a.ts": "",
-        "src/ui/B.tsx": "",
-        "src/pkg/index.ts": "",
-      });
-
-      expect(resolveImport(project, "src/main.ts", "@/a")).toBe("src/a.ts");
-      expect(resolveImport(project, "src/main.ts", "./ui/B")).toBe("src/ui/B.tsx");
-      expect(resolveImport(project, "src/main.ts", "@/pkg")).toBe("src/pkg/index.ts");
-    });
-
-    it("resolves nothing for a package import or a missing file", () => {
-      const project = writeProject({ "src/a.ts": "" });
-
-      expect(resolveImport(project, "src/main.ts", "obsidian")).toBe(null);
-      expect(resolveImport(project, "src/main.ts", "@/missing")).toBe(null);
-    });
-  });
-
-  describe("mobileLoadClosure()", () => {
-    it("follows static value imports from the entry and stops at import() and type-only imports", () => {
-      const project = writeProject({
-        "src/main.ts":
-          'import "@/portable";\nimport type { T } from "@/typed";\nvoid import("@/desktop");',
-        "src/portable.ts": 'export * from "./deeper";',
-        "src/deeper.ts": "export const x = 1;",
-        "src/typed.ts": "export type T = 1;",
-        "src/desktop.ts": 'import "@/onlyDesktop";',
-        "src/onlyDesktop.ts": "",
-      });
-
-      expect(mobileLoadClosure(project)).toEqual([
-        "src/deeper.ts",
-        "src/main.ts",
-        "src/portable.ts",
-      ]);
-    });
-
-    describe("for the plugin a phone loads", () => {
-      const closure = mobileLoadClosure(root);
-
-      it(
-        `holds no file from a desktop-only box, so a phone never evaluates desktop code at load (${ISSUE})`,
-        () => {
-          const desktop = desktopBoxes(graph);
-
-          expect(closure.length).toBeGreaterThan(100);
-          expect(closure.filter((file) => desktop.has(boxOf(file)))).toEqual([]);
-        },
-        SLOW_TEST_MS
-      );
-
-      it(
-        `holds no file that reaches Node or Electron beyond the ones architecture.debt.json names (${ISSUE})`,
-        () => {
-          const known = new Set(debt.nodeAccess);
-          const reaching = closure.filter((file) => {
-            if (known.has(file)) return false;
-            const text = readSource(file);
-            return NODE_ACCESS_HINT.test(text) && nodeAccessIn(file, text).length > 0;
-          });
-
-          expect(reaching).toEqual([]);
-        },
-        SLOW_TEST_MS
-      );
-    });
-  });
-
-  describe("noNodeInPortableCode", () => {
-    it("reports each way portable code can reach Node or Electron", () => {
-      const code = [
-        'import { requireNodeModule } from "@/utils/desktopRuntime";',
-        'const cp = window.require("child_process");',
-        'const shell = require("electron").shell;',
-        'import { ipcRenderer } from "electron";',
-        "const os = process.platform;",
-        'const bytes = Buffer.from("a");',
-        "const here = __dirname + __filename;",
-      ].join("\n");
-
-      expect(nodeAccessInCode(code).sort()).toEqual([
-        ".require",
-        "Buffer",
-        "__dirname",
-        "__filename",
-        'import "electron"',
-        "process",
-        'require("electron")',
-        "requireNodeModule",
-      ]);
-    });
-
-    it(`reports Node reached through a cast, an alias, a namespace or a global object (${ISSUE})`, () => {
-      const code = [
-        'import { requireNodeModule as load } from "@/utils/desktopRuntime";',
-        'import * as runtime from "@/utils/desktopRuntime";',
-        'export { shell } from "electron";',
-        "const container = window as unknown as { require?: (id: string) => unknown };",
-        'const cp = container.require?.("child_process");',
-        'const fs = runtime.requireNodeModule("fs");',
-        "const os = globalThis.process?.platform;",
-      ].join("\n");
-
-      expect(nodeAccessInCode(code).sort()).toEqual([
-        ".require",
-        ".requireNodeModule",
-        "globalThis.process",
-        'import "electron"',
-        "requireNodeModule",
-      ]);
-    });
-
-    it(`allows what loads no Node code: process.env.NODE_ENV, type queries and type-only imports (${ISSUE})`, () => {
-      const code = [
-        'const production = process.env.NODE_ENV === "production";',
-        'type Fs = typeof import("node:fs");',
-        'import type { IpcRenderer } from "electron";',
-        "let bytes: Buffer | undefined;",
-      ].join("\n");
-
-      expect(nodeAccessInCode(code)).toEqual([]);
-    });
-
-    it("allows a local variable that only shares a Node global's name", () => {
-      expect(
-        nodeAccessInCode("function run(process: { id: number }) { return process.id; }")
-      ).toEqual([]);
+      expect(unknown).toEqual([]);
     });
   });
 
   describe("architecture.json", () => {
-    const sources = trackedSourceFiles("src");
-
     it("names only patterns that still match a source file, so a moved or deleted file leaves no dead entry", () => {
+      const sources = trackedSourceFiles("src");
       const dead = graph.boxes.flatMap(({ box, files }) =>
         files
           .filter((glob) => !sources.some((file) => globToRegExp(glob).test(file)))
@@ -333,22 +148,12 @@ describe("architecture", () => {
 
       expect(dead).toEqual([]);
     });
-
-    it("gives every import row a box that exists", () => {
-      const boxes = new Set(graph.boxes.map(({ box }) => box));
-      const unknown = importRows(graph)
-        .flatMap(({ box, value, typeOnly }) => [box, ...value, ...typeOnly])
-        .filter((box) => !boxes.has(box));
-
-      expect(unknown).toEqual([]);
-    });
   });
 
   describe("architecture.debt.json", () => {
     it("states the totals of its own lists, so a review sees the numbers move", () => {
       expect(debt.counts).toEqual({
         imports: Object.values(debt.imports).reduce((sum, list) => sum + list.length, 0),
-        nodeAccess: debt.nodeAccess.length,
       });
     });
 
@@ -361,25 +166,6 @@ describe("architecture", () => {
       });
 
       expect(stale).toEqual([]);
-    });
-
-    it(
-      `names only portable files that still reach Node or Electron (${ISSUE})`,
-      () => {
-        const stale = debt.nodeAccess.filter((file) => {
-          const text = fs.existsSync(path.join(root, file)) ? readSource(file) : "";
-          return nodeAccessIn(file, text).length === 0;
-        });
-
-        expect(stale).toEqual([]);
-      },
-      SLOW_TEST_MS
-    );
-
-    it("names no file from a desktop-only box, where Node access is allowed", () => {
-      const desktop = desktopBoxes(graph);
-
-      expect(debt.nodeAccess.filter((file) => desktop.has(boxOf(file)))).toEqual([]);
     });
   });
 });
