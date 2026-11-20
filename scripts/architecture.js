@@ -15,6 +15,12 @@ const RESOLVE_SUFFIXES = [
   "/index.tsx",
 ];
 const NODE_GLOBALS = new Set(["process", "Buffer", "__dirname", "__filename"]);
+const GLOBAL_OBJECTS = new Set(["window", "globalThis", "global", "self", "activeWindow"]);
+const TS_WRAPPERS = new Set(["TSAsExpression", "TSNonNullExpression", "TSTypeAssertion"]);
+
+function unwrapExpression(node) {
+  return TS_WRAPPERS.has(node.type) ? unwrapExpression(node.expression) : node;
+}
 
 function readJson(root, name) {
   return JSON.parse(fs.readFileSync(path.join(root, name), "utf8"));
@@ -184,10 +190,31 @@ const noNodeInPortableCode = {
   create(context) {
     const report = (node, access) =>
       context.report({ node, messageId: "nodeAccess", data: { access } });
+    const reportElectronSource = (node) => {
+      const typeOnly = node.importKind === "type" || node.exportKind === "type";
+      if (node.source?.value === "electron" && !typeOnly) report(node, 'import "electron"');
+    };
     return {
-      ImportDeclaration(node) {
-        if (node.source.value === "electron" && node.importKind !== "type") {
-          report(node, 'import "electron"');
+      ImportDeclaration: reportElectronSource,
+      ExportNamedDeclaration: reportElectronSource,
+      ExportAllDeclaration: reportElectronSource,
+      ImportSpecifier(node) {
+        const typeOnly = node.importKind === "type" || node.parent.importKind === "type";
+        if (node.imported.name === "requireNodeModule" && !typeOnly) {
+          report(node, "requireNodeModule");
+        }
+      },
+      MemberExpression(node) {
+        const name = node.computed ? node.property.value : node.property.name;
+        const object = unwrapExpression(node.object);
+        if (name === "require" || name === "requireNodeModule") {
+          report(node, `.${name}`);
+        } else if (
+          NODE_GLOBALS.has(name) &&
+          object.type === "Identifier" &&
+          GLOBAL_OBJECTS.has(object.name)
+        ) {
+          report(node, `${object.name}.${name}`);
         }
       },
       ImportExpression(node) {
@@ -197,17 +224,7 @@ const noNodeInPortableCode = {
       },
       CallExpression(node) {
         const { callee } = node;
-        if (callee.type === "Identifier" && callee.name === "requireNodeModule") {
-          report(node, "requireNodeModule()");
-        } else if (
-          callee.type === "MemberExpression" &&
-          callee.object.type === "Identifier" &&
-          callee.object.name === "window" &&
-          callee.property.type === "Identifier" &&
-          callee.property.name === "require"
-        ) {
-          report(node, "window.require()");
-        } else if (
+        if (
           callee.type === "Identifier" &&
           callee.name === "require" &&
           node.arguments[0]?.type === "Literal" &&

@@ -258,7 +258,7 @@ describe("architecture", () => {
   describe("noNodeInPortableCode", () => {
     it("reports each way portable code can reach Node or Electron", () => {
       const code = [
-        'const fs = requireNodeModule("fs");',
+        'import { requireNodeModule } from "@/utils/desktopRuntime";',
         'const cp = window.require("child_process");',
         'const shell = require("electron").shell;',
         'import { ipcRenderer } from "electron";',
@@ -268,14 +268,34 @@ describe("architecture", () => {
       ].join("\n");
 
       expect(nodeAccessInCode(code).sort()).toEqual([
+        ".require",
         "Buffer",
         "__dirname",
         "__filename",
         'import "electron"',
         "process",
         'require("electron")',
-        "requireNodeModule()",
-        "window.require()",
+        "requireNodeModule",
+      ]);
+    });
+
+    it(`reports Node reached through a cast, an alias, a namespace or a global object (${ISSUE})`, () => {
+      const code = [
+        'import { requireNodeModule as load } from "@/utils/desktopRuntime";',
+        'import * as runtime from "@/utils/desktopRuntime";',
+        'export { shell } from "electron";',
+        "const container = window as unknown as { require?: (id: string) => unknown };",
+        'const cp = container.require?.("child_process");',
+        'const fs = runtime.requireNodeModule("fs");',
+        "const os = globalThis.process?.platform;",
+      ].join("\n");
+
+      expect(nodeAccessInCode(code).sort()).toEqual([
+        ".require",
+        ".requireNodeModule",
+        "globalThis.process",
+        'import "electron"',
+        "requireNodeModule",
       ]);
     });
 
