@@ -67,7 +67,8 @@ import { findRun } from "@/agents/agentMode/agentRelays";
 import { ChatAskedAgentView } from "@/agents/agentMode/ui/AskedAgentView";
 import { chatRunningAgents } from "@/agents/agentMode/ui/RunningAgents";
 import { useCustomAgentsGate } from "@/agents/customAgentsGate";
-import type { CustomAgent } from "@/agents/CustomAgentStore";
+import type { CustomAgent, CustomAgentStore } from "@/agents/CustomAgentStore";
+import type { HiddenAgentChats } from "@/agents/agentMode/hiddenAgentChats";
 import { AgentIdentityBar } from "@/agents/ui/AgentIdentityBar";
 import {
   ChatAgentsContext,
@@ -127,6 +128,8 @@ interface AgentHomeProps {
   chatInputId: string;
   manager: AgentSessionManager;
   plugin: CopilotPlugin;
+  customAgents: CustomAgentStore | undefined;
+  hiddenAgentChats: HiddenAgentChats | undefined;
   onSaveChat: (saveAsNote: () => Promise<void>) => void;
   updateUserMessageHistory: (newMessage: string) => void;
 }
@@ -139,6 +142,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   chatInputId,
   manager,
   plugin,
+  customAgents,
+  hiddenAgentChats,
   onSaveChat,
   updateUserMessageHistory,
 }) => {
@@ -442,9 +447,9 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     },
     [manager]
   );
-  const needsSetup = useAgentSetupProblems(plugin, useCustomAgents(plugin.customAgents));
+  const needsSetup = useAgentSetupProblems(plugin, useCustomAgents(customAgents));
   const agentHome = useAgentHomeSelection(
-    plugin.customAgents,
+    customAgents,
     {
       sessionId,
       chatInputId,
@@ -468,10 +473,9 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     [manager]
   );
   const openCreateAgentDialog = useCallback(() => {
-    const store = plugin.customAgents;
-    if (!store) return;
+    if (!customAgents) return;
     new CreateAgentModal(app, {
-      store,
+      store: customAgents,
       models: getAgentModelChoices(),
       onCreated: (slug) => void selectAgent(slug).then(focusInput),
       onAskCopilot: (message) =>
@@ -480,7 +484,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
           insertTextWithPills(message);
         }),
     }).open();
-  }, [app, plugin, getAgentModelChoices, selectAgent, focusInput, insertTextWithPills]);
+  }, [app, customAgents, getAgentModelChoices, selectAgent, focusInput, insertTextWithPills]);
   const newAgentButton = renderNewAgentButton(customAgentsGate, {
     emphasized: agentHome.agents.length === 0,
     onCreate: openCreateAgentDialog,
@@ -491,7 +495,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const profile = useAgentProfileRoute(agentHome.agents, chatInputId);
   const markProfileClosedByUser = useComposerFocusAfterTaskView(profile.agent !== null);
   const { close: closeProfile, open: openProfile } = profile;
-  const chatAgents = useChatAgentsValue(plugin.customAgents, agentHome.selected?.slug ?? null, {
+  const chatAgents = useChatAgentsValue(customAgents, agentHome.selected?.slug ?? null, {
     openRun: handleOpenRun,
     needsSetup,
     openProfile,
@@ -866,7 +870,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const runningAgents = chatRunningAgents({
     messages,
     chat: activeSession,
-    hiddenChats: plugin.hiddenAgentChats,
+    hiddenChats: hiddenAgentChats,
     agents: chatAgents.agents,
     taskCount: runningTasks(tasks).length,
     onOpen: (run) => handleOpenRun({ runId: run.id }),
@@ -969,13 +973,13 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
         }
         profile={
           profile.agent &&
-          plugin.customAgents && (
+          customAgents && (
             <AgentProfile
               agent={profile.agent}
               app={app}
               manager={manager}
-              store={plugin.customAgents}
-              hiddenChats={plugin.hiddenAgentChats}
+              store={customAgents}
+              hiddenChats={hiddenAgentChats}
               hostSessionId={sessionId}
               getModels={getAgentModelChoices}
               onBack={leaveProfile}
@@ -1082,7 +1086,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                       <ChatAskedAgentView
                         run={detailRun}
                         chat={activeSession}
-                        hiddenChats={plugin.hiddenAgentChats}
+                        hiddenChats={hiddenAgentChats}
                         messages={messages}
                         agents={chatAgents.agents}
                         app={app}
@@ -1187,7 +1191,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
 export const AgentHome: React.FC<AgentHomeProps> = (props) => {
   return (
     <ChatInputProvider>
-      <CustomAgentStoreContext.Provider value={props.plugin.customAgents}>
+      <CustomAgentStoreContext.Provider value={props.customAgents}>
         <AgentHomeInternal {...props} />
       </CustomAgentStoreContext.Provider>
     </ChatInputProvider>

@@ -5,6 +5,7 @@ import type { InstallState } from "./session/types";
 import type { BuiltinSkillRuntime } from "./skills/SkillManager";
 import { createAgentSessionManager, isCopilotToolOn, startCustomAgentChat } from "./index";
 import { loadAgentSessionPrompt } from "@/agents/agentSessionPrompt";
+import type { CustomAgentStore } from "@/agents/CustomAgentStore";
 import { trackTabStripShown } from "./ui/trackTabStripShown";
 import { AgentSessionManager } from "./session/AgentSessionManager";
 import { reconcileBuiltinSkills } from "./skills/builtin/reconcileBuiltinSkills";
@@ -165,6 +166,7 @@ const mockManager = {
   onInstallStateChanged: jest.fn(async (_id: string) => {}),
 };
 let plugin: CopilotPlugin;
+let customAgents: CustomAgentStore;
 const reconcile = jest.mocked(reconcileBuiltinSkills);
 function withCards(offerFeedbackCards: boolean): CopilotSettings {
   return { ...mockSettings, agentMode: { ...mockSettings.agentMode, offerFeedbackCards } };
@@ -220,6 +222,7 @@ describe("agentMode", () => {
       mockAskedConversations = [];
       mockCustomAgentsGate = "full";
       mockSettings = settingsWith({ reasoning: true });
+      customAgents = { getAgents: () => [] } as unknown as CustomAgentStore;
       plugin = {
         manifest: { id: "copilot" },
         register: jest.fn(),
@@ -234,7 +237,7 @@ describe("agentMode", () => {
     });
 
     it("refreshes built-in availability when a license key is removed without a paid-status change https://github.com/logancyang/obsidian-copilot/issues/4239", async () => {
-      createAgentSessionManager({} as App, plugin);
+      createAgentSessionManager({} as App, plugin, customAgents);
       await mockManager.registerPreload.mock.calls[0][1];
       mockRefresh.mockClear();
       emitSettingsChange(
@@ -256,21 +259,21 @@ describe("agentMode", () => {
         memoryPath: "/vault/copilot/agents/coco/MEMORY.md",
       };
       jest.mocked(loadAgentSessionPrompt).mockResolvedValueOnce(agent);
-      const customAgents = {};
-      createAgentSessionManager({} as App, { ...plugin, customAgents } as unknown as CopilotPlugin);
+      const store = {} as CustomAgentStore;
+      createAgentSessionManager({} as App, plugin, store);
 
       const resolved = await jest
         .mocked(AgentSessionManager)
         .mock.calls[0][2].resolveAgent?.("coco", "codex");
 
       expect(resolved).toBe(agent);
-      expect(loadAgentSessionPrompt).toHaveBeenCalledWith(customAgents, "coco", "/vault", {
+      expect(loadAgentSessionPrompt).toHaveBeenCalledWith(store, "coco", "/vault", {
         backendId: "codex",
       });
     });
 
     it("tells the manager whether a tab strip holds its chats as the workspace layout changes for https://github.com/Brevilabs/obsidian-copilot-private/issues/849", () => {
-      const manager = createAgentSessionManager({} as App, plugin);
+      const { manager } = createAgentSessionManager({} as App, plugin, customAgents);
 
       expect(trackTabStripShown).toHaveBeenCalledWith(plugin, manager);
     });
@@ -279,7 +282,7 @@ describe("agentMode", () => {
       const upgrade = deferred();
       mockStates.opencode = { kind: "ready", source: "managed" };
       mockDescriptors[1].onPluginLoad.mockReturnValueOnce(upgrade.promise);
-      createAgentSessionManager({} as App, plugin);
+      createAgentSessionManager({} as App, plugin, customAgents);
       await mockManager.registerPreload.mock.calls.find(([id]) => id === "claude")![1];
       expect(mockManager.preloadModels).toHaveBeenCalledWith("claude");
       expect(mockManager.preloadModels).not.toHaveBeenCalledWith("opencode");
@@ -298,7 +301,7 @@ describe("agentMode", () => {
         message: "Upgrade required",
       };
       mockDescriptors[1].onPluginLoad.mockReturnValueOnce(upgrade.promise);
-      createAgentSessionManager({} as App, plugin);
+      createAgentSessionManager({} as App, plugin, customAgents);
       expect(reconcile).toHaveBeenLastCalledWith(
         expect.objectContaining({ availableAgents: ["claude"] })
       );
@@ -318,7 +321,7 @@ describe("agentMode", () => {
         reconcile.mockReturnValueOnce(linked.promise);
         mockInstallListeners.opencode();
       });
-      createAgentSessionManager({} as App, plugin);
+      createAgentSessionManager({} as App, plugin, customAgents);
       await mockManager.registerPreload.mock.calls.find(([id]) => id === "claude")![1];
       expect(mockManager.preloadModels).toHaveBeenCalledWith("claude");
       expect(mockManager.preloadModels).not.toHaveBeenCalledWith("opencode");
@@ -337,14 +340,14 @@ describe("agentMode", () => {
       mockDescriptors[1].onPluginLoad.mockImplementationOnce(async () => {
         mockStates.opencode = { kind: "ready", source: "managed" };
       });
-      createAgentSessionManager({} as App, plugin);
+      createAgentSessionManager({} as App, plugin, customAgents);
       await mockManager.registerPreload.mock.calls.find(([id]) => id === "opencode")![1];
       expect(mockManager.preloadModels).toHaveBeenCalledWith("opencode");
     });
     it(`waits for initial skill reconciliation before preloading ready agents ${ISSUE}`, async () => {
       const gate = deferred();
       reconcile.mockReturnValue(gate.promise);
-      expect(createAgentSessionManager({} as App, plugin)).toBe(mockManager);
+      expect(createAgentSessionManager({} as App, plugin, customAgents).manager).toBe(mockManager);
       expect(reconcile).toHaveBeenCalledWith(
         expect.objectContaining({ availableAgents: ["claude"] })
       );
@@ -360,14 +363,14 @@ describe("agentMode", () => {
       async (failure) => {
         if (failure === "reported") mockRefresh.mockResolvedValueOnce({ ok: false });
         else mockRefresh.mockRejectedValueOnce(new Error("Disk unavailable"));
-        createAgentSessionManager({} as App, plugin);
+        createAgentSessionManager({} as App, plugin, customAgents);
         await mockManager.registerPreload.mock.calls[0][1];
         expect(mockManager.preloadModels).toHaveBeenCalledWith("claude");
       }
     );
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/833 offers a reload when Obsidian's command line interface is turned on between agent starts, so new chats gain the obsidian_cli steering, without re-reconciling skills", async () => {
-      createAgentSessionManager({} as App, plugin);
+      createAgentSessionManager({} as App, plugin, customAgents);
       await mockManager.registerPreload.mock.calls[0][1];
       const { beforeBackendStart } = jest.mocked(AgentSessionManager).mock.calls[0][2];
       const passes = reconcile.mock.calls.length;
@@ -387,7 +390,7 @@ describe("agentMode", () => {
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/787 offers a reload when the Excalidraw plugin is turned on between agent starts, so new chats gain the Excalidraw steering, without re-reconciling skills", async () => {
       let excalidraw: unknown = null;
       const app = { plugins: { getPlugin: () => excalidraw } } as unknown as App;
-      createAgentSessionManager(app, plugin);
+      createAgentSessionManager(app, plugin, customAgents);
       await mockManager.registerPreload.mock.calls[0][1];
       const { beforeBackendStart } = jest.mocked(AgentSessionManager).mock.calls[0][2];
       const passes = reconcile.mock.calls.length;
@@ -405,7 +408,7 @@ describe("agentMode", () => {
     });
 
     it(`settles new-agent skills before refreshing that agent's installation ${ISSUE}`, async () => {
-      createAgentSessionManager({} as App, plugin);
+      createAgentSessionManager({} as App, plugin, customAgents);
       await mockManager.registerPreload.mock.calls[0][1];
       const gate = deferred();
       const handled = deferred();
@@ -423,7 +426,7 @@ describe("agentMode", () => {
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/599 offers an OpenCode reload after a builtin skill opt-out is reconciled and changes its system prompt", async () => {
-      createAgentSessionManager({} as App, plugin);
+      createAgentSessionManager({} as App, plugin, customAgents);
       await mockManager.registerPreload.mock.calls[0][1];
       const reconciled = deferred();
       const noted = deferred();
@@ -451,7 +454,7 @@ describe("agentMode", () => {
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/736 offers an OpenCode reload once the search switch changes, so new chats gain or drop the Miyo steering", async () => {
-      createAgentSessionManager({} as App, plugin);
+      createAgentSessionManager({} as App, plugin, customAgents);
       await mockManager.registerPreload.mock.calls[0][1];
       const noted = deferred();
       mockManager.noteSpawnConfigChanged.mockImplementationOnce(async () => noted.resolve());
@@ -469,7 +472,7 @@ describe("agentMode", () => {
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/740 offers only OpenCode a reload once Miyo document processing changes, so new chats gain or drop the miyo_parse steering", async () => {
-      createAgentSessionManager({} as App, plugin);
+      createAgentSessionManager({} as App, plugin, customAgents);
       await mockManager.registerPreload.mock.calls[0][1];
       const noted = deferred();
       mockManager.noteSpawnConfigChanged.mockImplementationOnce(async () => noted.resolve());
@@ -489,7 +492,7 @@ describe("agentMode", () => {
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 offers an OpenCode reload when feedback cards are turned off, so new chats drop the feedback prompt line", () => {
       mockSettings = withCards(true);
-      createAgentSessionManager({} as App, plugin);
+      createAgentSessionManager({} as App, plugin, customAgents);
 
       emitSettingsChange(withCards(true), withCards(false));
 
@@ -501,7 +504,7 @@ describe("agentMode", () => {
     });
 
     it(`refreshes a spawn-config backend when a model's published effort levels change ${LINEUP_ISSUE}`, () => {
-      createAgentSessionManager({} as App, plugin);
+      createAgentSessionManager({} as App, plugin, customAgents);
 
       emitSettingsChange(
         settingsWith({ reasoning: true, reasoningEfforts: ["none", "low", "high"] }),
@@ -516,7 +519,7 @@ describe("agentMode", () => {
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/557 offers an OpenCode reload when enabled model tool support changes", () => {
-      createAgentSessionManager({} as App, plugin);
+      createAgentSessionManager({} as App, plugin, customAgents);
 
       emitSettingsChange(settingsWith({ toolCall: true }), settingsWith({ toolCall: false }));
 
@@ -527,7 +530,7 @@ describe("agentMode", () => {
     });
 
     it("https://github.com/logancyang/obsidian-copilot/issues/3840 offers an OpenCode reload when an enabled model's context window changes", () => {
-      createAgentSessionManager({} as App, plugin);
+      createAgentSessionManager({} as App, plugin, customAgents);
 
       emitSettingsChange(settingsWith({}), settingsWith({ limits: { context: 262144 } }));
 
@@ -538,7 +541,7 @@ describe("agentMode", () => {
     });
 
     it(`leaves a running agent alone when only a model's display metadata changes ${LINEUP_ISSUE}`, () => {
-      createAgentSessionManager({} as App, plugin);
+      createAgentSessionManager({} as App, plugin, customAgents);
 
       emitSettingsChange(
         settingsWith({ reasoning: true, description: "A frontier open model." }),
@@ -550,7 +553,7 @@ describe("agentMode", () => {
     });
 
     it(`offers an OpenCode reload when its enabled models change ${RELOAD_ISSUE}`, async () => {
-      createAgentSessionManager({} as App, plugin);
+      createAgentSessionManager({} as App, plugin, customAgents);
 
       await plugin.modelManagement.backendConfigRegistry.disableModel("opencode", "configured-1");
 
@@ -562,7 +565,7 @@ describe("agentMode", () => {
     });
 
     it(`does not offer an OpenCode reload when a Claude model is disabled or re-enabled ${RELOAD_ISSUE}`, async () => {
-      createAgentSessionManager({} as App, plugin);
+      createAgentSessionManager({} as App, plugin, customAgents);
 
       await plugin.modelManagement.backendConfigRegistry.disableModel("claude", "claude-haiku");
       expect(plugin.modelManagement.backendConfigRegistry.get("claude").enabledModels).toEqual([]);
@@ -573,7 +576,7 @@ describe("agentMode", () => {
     });
 
     it(`ignores model metadata changes outside OpenCode's enabled list ${RELOAD_ISSUE}`, () => {
-      createAgentSessionManager({} as App, plugin);
+      createAgentSessionManager({} as App, plugin, customAgents);
       const prev = settingsWith({ reasoning: true });
       const next = {
         ...prev,
@@ -598,7 +601,7 @@ describe("agentMode", () => {
         configuredModelId: "native-model",
         providerId: "native",
       });
-      createAgentSessionManager({} as App, plugin);
+      createAgentSessionManager({} as App, plugin, customAgents);
 
       await plugin.modelManagement.backendConfigRegistry.enableModel("opencode", "native-model");
       await plugin.modelManagement.backendConfigRegistry.disableModel("opencode", "native-model");
@@ -627,7 +630,7 @@ describe("agentMode", () => {
           }
         );
         mockSettings.backends.opencode!.enabledModels.push("native-model");
-        createAgentSessionManager({} as App, plugin);
+        createAgentSessionManager({} as App, plugin, customAgents);
         const notifyProvider = jest.mocked(plugin.modelManagement.providerRegistry.subscribe).mock
           .calls[0][0];
 
@@ -645,7 +648,7 @@ describe("agentMode", () => {
     );
 
     it(`offers a reload when an injected provider is removed ${RELOAD_ISSUE}`, () => {
-      createAgentSessionManager({} as App, plugin);
+      createAgentSessionManager({} as App, plugin, customAgents);
 
       emitSettingsChange(mockSettings, { ...mockSettings, providers: {} });
 
@@ -656,7 +659,7 @@ describe("agentMode", () => {
     });
 
     it(`routes a Claude environment change only to Claude ${RELOAD_ISSUE}`, () => {
-      createAgentSessionManager({} as App, plugin);
+      createAgentSessionManager({} as App, plugin, customAgents);
       const next = {
         ...mockSettings,
         agentMode: {
@@ -686,7 +689,8 @@ describe("agentMode", () => {
               return () => {};
             },
           },
-        } as unknown as CopilotPlugin
+        } as unknown as CopilotPlugin,
+        customAgents
       );
 
       toolSetListeners.forEach((listener) => listener((backendId) => backendId === "opencode"));
@@ -710,7 +714,8 @@ describe("agentMode", () => {
               ],
             }),
           },
-        } as unknown as CopilotPlugin
+        } as unknown as CopilotPlugin,
+        customAgents
       );
 
       const hosted = jest.mocked(createCopilotMcpServer).mock.calls[0][1];
@@ -730,14 +735,15 @@ describe("agentMode", () => {
               connections: [{ id: "c1", serviceId: "notion", status: "connected" }],
             }),
           },
-        } as unknown as CopilotPlugin
+        } as unknown as CopilotPlugin,
+        customAgents
       );
 
       expect(connectorCardNote("notion")).toContain("without connecting Notion");
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/860 offers no suggest_connector or connector cards where connectors aren't available, such as mobile", () => {
-      createAgentSessionManager({} as App, plugin);
+      createAgentSessionManager({} as App, plugin, customAgents);
 
       const hosted = jest.mocked(createCopilotMcpServer).mock.calls[0][1];
       expect(hosted.map(({ definition }) => definition.name)).not.toContain("suggest_connector");
@@ -745,7 +751,7 @@ describe("agentMode", () => {
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/944 offers ask_agent among Copilot's tools and stops the agents it asked when the plugin unloads", () => {
-      createAgentSessionManager({} as App, plugin);
+      createAgentSessionManager({} as App, plugin, customAgents);
 
       const hosted = jest.mocked(createCopilotMcpServer).mock.calls[0][1];
       expect(hosted.map(({ definition }) => definition.name)).toContain("ask_agent");
@@ -760,7 +766,7 @@ describe("agentMode", () => {
       jest
         .mocked(createCopilotMcpServer)
         .mockImplementationOnce((...args) => ({ ...create(...args), notifyToolsChanged }));
-      createAgentSessionManager({} as App, plugin);
+      createAgentSessionManager({} as App, plugin, customAgents);
 
       mockCustomAgentsGate = "locked";
       mockGateListeners.forEach((listener) => listener());
@@ -772,13 +778,13 @@ describe("agentMode", () => {
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/945 offers check_agent, answer_agent, stop_agent and ask_user and hands the profile's delete the asked agents' chats to stop", () => {
-      createAgentSessionManager({} as App, plugin);
+      const { hiddenAgentChats } = createAgentSessionManager({} as App, plugin, customAgents);
 
       const hosted = jest.mocked(createCopilotMcpServer).mock.calls[0][1];
       expect(hosted.map(({ definition }) => definition.name)).toEqual(
         expect.arrayContaining(["check_agent", "answer_agent", "stop_agent", "ask_user"])
       );
-      expect(plugin.hiddenAgentChats).toEqual(
+      expect(hiddenAgentChats).toEqual(
         expect.objectContaining({ stopAgent: expect.any(Function) })
       );
     });
@@ -791,7 +797,7 @@ describe("agentMode", () => {
         getSessions: () => [coco, copilot],
         isUnlistedSession: (key: string) => key === "hidden-chat",
       });
-      createAgentSessionManager({} as App, plugin);
+      createAgentSessionManager({} as App, plugin, customAgents);
       const draftAgent = jest
         .mocked(createCopilotMcpServer)
         .mock.calls[0][1].find(({ definition }) => definition.name === "draft_agent")!;
@@ -840,7 +846,7 @@ describe("agentMode", () => {
           item("chats/rex.md", "Podcast sponsorship", "rex"),
         ],
       });
-      createAgentSessionManager({} as App, plugin);
+      createAgentSessionManager({} as App, plugin, customAgents);
       const listChats = jest
         .mocked(createCopilotMcpServer)
         .mock.calls[0][1].find(({ definition }) => definition.name === "list_chats")!;
@@ -892,8 +898,10 @@ describe("agentMode", () => {
           ending: "finished",
         },
       ];
-      const customAgents = { getAgents: () => [{ slug: "rex", name: "Rex" }] };
-      createAgentSessionManager({} as App, { ...plugin, customAgents } as unknown as CopilotPlugin);
+      const store = {
+        getAgents: () => [{ slug: "rex", name: "Rex" }],
+      } as unknown as CustomAgentStore;
+      createAgentSessionManager({} as App, plugin, store);
       const listChats = jest
         .mocked(createCopilotMcpServer)
         .mock.calls[0][1].find(({ definition }) => definition.name === "list_chats")!;
@@ -908,7 +916,7 @@ describe("agentMode", () => {
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/944 hands a permission request no asked agent made to the chat's own prompter", async () => {
       const chatPrompter = jest.fn(async () => ({ outcome: { outcome: "cancelled" as const } }));
       jest.mocked(createDefaultPermissionPrompter).mockReturnValueOnce(chatPrompter);
-      createAgentSessionManager({} as App, plugin);
+      createAgentSessionManager({} as App, plugin, customAgents);
       const request = {
         sessionId: "chat-session",
         toolCall: { toolCallId: "t", title: "Edit" },
@@ -921,7 +929,7 @@ describe("agentMode", () => {
     });
 
     it(`retains only previously ready agents during compatibility checks ${ISSUE}`, async () => {
-      createAgentSessionManager({} as App, plugin);
+      createAgentSessionManager({} as App, plugin, customAgents);
       await mockManager.registerPreload.mock.calls[0][1];
       mockStates.claude = { kind: "checking", source: "custom" };
       mockStates.opencode = { kind: "checking", source: "custom" };

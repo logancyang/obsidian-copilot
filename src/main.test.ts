@@ -65,6 +65,7 @@ jest.mock("@/utils/chatDeepLink", () => ({
 }));
 const mockSkillManagerDispose = jest.fn();
 const mockSkillManagerHasInstance = jest.fn(() => true);
+const mockHiddenAgentChats = {};
 jest.mock("@/agentMode", () => ({
   SkillManager: {
     hasInstance: () => mockSkillManagerHasInstance(),
@@ -74,7 +75,14 @@ jest.mock("@/agentMode", () => ({
   closeRestoredTurnDiffs: jest.fn(),
   registerTurnDiffCommands: jest.fn(),
   acpFrameSink: { narrowLegacyLogs: jest.fn(async () => undefined) },
-  createAgentSessionManager: jest.fn(() => ({})),
+  createAgentSessionManager: jest.fn(() => ({
+    manager: {},
+    hiddenAgentChats: mockHiddenAgentChats,
+  })),
+  CopilotAgentView: jest.fn(),
+  SessionsSidebarView: jest.fn(),
+  PlanPreviewView: jest.fn(),
+  TurnDiffView: jest.fn(),
   startCustomAgentChat: jest.fn(),
   MAX_PROVIDED_TOOL_NAME_LENGTH: 41,
 }));
@@ -83,6 +91,7 @@ jest.mock("@/connectors/connectionManager");
 jest.mock("@/connectors/custom/customConnectors");
 
 import CopilotPlugin from "@/main";
+import { CopilotAgentView, createAgentSessionManager, SessionsSidebarView } from "@/agentMode";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import * as obsidianModule from "obsidian";
 import CopilotView from "@/components/CopilotView";
@@ -734,7 +743,7 @@ describe("main", () => {
         expect(custom.dispose).toHaveBeenCalledTimes(1);
       });
 
-      it("gives the plugin a running custom agent store on desktop, so a vault's agents show locked, and adds no agent command, while custom agents are locked (https://github.com/Brevilabs/obsidian-copilot-private/issues/950)", async () => {
+      it("gives Agent Chat a running custom agent store on desktop, so a vault's agents show locked, and adds no agent command, while custom agents are locked (https://github.com/Brevilabs/obsidian-copilot-private/issues/950)", async () => {
         (isDesktopRuntime as jest.Mock).mockReturnValue(true);
         (startActiveWebTabTracking as jest.Mock).mockReturnValue({
           activeLeafRef: {},
@@ -745,11 +754,33 @@ describe("main", () => {
         plugin.onload();
         await finishStartup();
 
-        expect(plugin.customAgents).toBeInstanceOf(CustomAgentStore);
-        await expect(plugin.customAgents?.loadForSession("coco")).resolves.toBeNull();
+        const store = jest.mocked(createAgentSessionManager).mock.lastCall?.[2];
+        expect(store).toBeInstanceOf(CustomAgentStore);
+        await expect(store?.loadForSession("coco")).resolves.toBeNull();
         expect(
           registrations.addCommand.mock.calls.map(([command]) => (command as { id: string }).id)
         ).not.toContain(START_AGENT_CHAT_COMMAND_ID);
+      });
+
+      it("hands the Agent Chat view the custom agent store and the asked agents' chats, and the sessions sidebar view the same store, since the plugin holds neither (https://github.com/Brevilabs/obsidian-copilot-private/issues/984)", async () => {
+        (isDesktopRuntime as jest.Mock).mockReturnValue(true);
+        (startActiveWebTabTracking as jest.Mock).mockReturnValue({
+          activeLeafRef: {},
+          layoutRef: {},
+        });
+        const { plugin, finishStartup, openRegisteredView } = createLoadingPlugin();
+
+        plugin.onload();
+        await finishStartup();
+        openRegisteredView(CHAT_AGENT_VIEWTYPE);
+        openRegisteredView(SESSIONS_SIDEBAR_VIEWTYPE);
+
+        const store = jest.mocked(createAgentSessionManager).mock.lastCall?.[2];
+        const agentViewArgs = jest.mocked(CopilotAgentView).mock.lastCall;
+        expect(store).toBeInstanceOf(CustomAgentStore);
+        expect(agentViewArgs?.[2]).toBe(store);
+        expect(agentViewArgs?.[3]).toBe(mockHiddenAgentChats);
+        expect(jest.mocked(SessionsSidebarView).mock.lastCall?.[2]).toBe(store);
       });
 
       it("starts no connection manager on mobile, where connector logins cannot run", async () => {

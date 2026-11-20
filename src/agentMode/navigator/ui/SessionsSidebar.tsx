@@ -1,6 +1,7 @@
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import type { RecentChatActions } from "@/agentMode/ui/RecentChatMenu";
 import { useAgentChatIcon } from "@/agents/ui/useAgentRecentChats";
+import type { CustomAgentStore } from "@/agents/CustomAgentStore";
 import { useCustomAgents } from "@/agents/ui/useCustomAgents";
 import { createProjectAndEnter } from "@/projects/ui/AgentProjectCreateForm";
 import { leaveDeletedProject } from "@/projects/ui/AgentProjectRowActions";
@@ -23,9 +24,14 @@ import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 interface SessionsSidebarProps {
   manager: AgentSessionManager;
   plugin: CopilotPlugin;
+  customAgents: CustomAgentStore | undefined;
 }
 
-export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({ manager, plugin }) => {
+export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({
+  manager,
+  plugin,
+  customAgents,
+}) => {
   const {
     chatHistoryItems,
     archivedChatItems,
@@ -43,7 +49,7 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({ manager, plugi
     setChatBookmarked,
   } = useAgentHistoryControls(manager, plugin);
   const { app } = plugin;
-  const getChatIcon = useAgentChatIcon(useCustomAgents(plugin.customAgents));
+  const getChatIcon = useAgentChatIcon(useCustomAgents(customAgents));
   const openChatIds = useManagerSetSnapshot(manager, (m) => m.getOpenChatIds());
   const runningChatIds = useRunningChatIds(manager);
   const waitingChatIds = useManagerSetSnapshot(manager, (m) => m.getWaitingChatIds());

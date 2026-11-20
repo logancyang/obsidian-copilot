@@ -1,4 +1,6 @@
 import { AgentModeChat } from "@/agentMode/ui/AgentModeChat";
+import type { HiddenAgentChats } from "@/agents/agentMode/hiddenAgentChats";
+import type { CustomAgentStore } from "@/agents/CustomAgentStore";
 import { attachChatViewLayoutObservers } from "@/components/chat-components/attachChatViewLayoutObservers";
 import { CHAT_AGENT_VIEWTYPE, COPILOT_AGENT_ICON_ID } from "@/constants";
 import { ChatViewEventTarget, EventTargetContext } from "@/context";
@@ -17,7 +19,9 @@ export default class CopilotAgentView extends ItemView {
 
   constructor(
     leaf: WorkspaceLeaf,
-    private plugin: CopilotPlugin
+    private plugin: CopilotPlugin,
+    private readonly customAgents: CustomAgentStore | undefined,
+    private readonly hiddenAgentChats: HiddenAgentChats | undefined
   ) {
     super(leaf);
     this.app = plugin.app;
@@ -62,6 +66,8 @@ export default class CopilotAgentView extends ItemView {
         <Tooltip.Provider delayDuration={0}>
           <AgentModeChat
             plugin={this.plugin}
+            customAgents={this.customAgents}
+            hiddenAgentChats={this.hiddenAgentChats}
             onSaveChat={(fn) => {
               this.handleSaveAsNote = fn;
             }}
