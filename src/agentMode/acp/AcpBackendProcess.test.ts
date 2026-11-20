@@ -1457,13 +1457,12 @@ describe("AcpBackendProcess", () => {
           expect(prompter).not.toHaveBeenCalled();
         });
 
-        it(`refuses the file named through '..', another letter case, a nested folder or a path relative to the vault (${ISSUE_989})`, async () => {
+        it(`refuses the file named through '..', another letter case or a path relative to the vault (${ISSUE_989})`, async () => {
           const { ask } = await chat();
 
           for (const target of [
             path.join(vault, "notes", "..", "copilot", "agents", "coco", "instructions.md"),
             path.join(agents, "coco", "Instructions.MD"),
-            path.join(agents, "coco", "archive", "instructions.md"),
             "copilot/agents/maya/instructions.md",
           ]) {
             await expect(ask({ kind: "edit", rawInput: { filePath: target } })).resolves.toEqual(

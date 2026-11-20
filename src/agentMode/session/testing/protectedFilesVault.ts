@@ -99,6 +99,16 @@ export function createProtectedFilesVault(reason: string): ProtectedFilesVault {
       protected: false,
     },
     {
+      spelling: "the name directly in the folder",
+      target: path.join(agents, "instructions.md"),
+      protected: false,
+    },
+    {
+      spelling: "the name deeper in an agent's own folder",
+      target: path.join(agents, "coco", "recipes", "instructions.md"),
+      protected: false,
+    },
+    {
       spelling: "a look-alike folder",
       target: path.join(vault, "copilot", "agents-old", "coco", "instructions.md"),
       protected: false,

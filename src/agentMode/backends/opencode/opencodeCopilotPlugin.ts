@@ -121,7 +121,7 @@ function refuseProtectedWrite(ctx, rule, event) {
   const folder = landingPath(path.resolve(rule.folder)).toLowerCase();
   for (const file of writeTargets(event.tool, event.input)) {
     const target = landingPath(path.resolve(ctx.location.directory, file)).toLowerCase();
-    if (path.basename(target) === rule.fileName.toLowerCase() && target.startsWith(folder + path.sep)) {
+    if (path.basename(target) === rule.fileName.toLowerCase() && path.dirname(path.dirname(target)) === folder) {
       throw new Error(rule.reason);
     }
   }

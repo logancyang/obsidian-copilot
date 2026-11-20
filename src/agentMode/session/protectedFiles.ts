@@ -1,6 +1,6 @@
 import { requireNodeModule } from "@/utils/desktopRuntime";
 
-// Whoever runs the chats can name files no model may write, move or delete, with the reason the model is told.
+// Whoever runs the chats can name a file, kept in each folder directly inside a folder, that no model may write, move or delete, with the reason the model is told.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/989
 export interface ProtectedFiles {
   folder: string;
@@ -15,7 +15,8 @@ export function isProtectedFile(rule: ProtectedFiles, target: string, cwd: strin
   const file = landingPath(path.resolve(cwd, target)).toLowerCase();
   const folder = landingPath(path.resolve(rule.folder)).toLowerCase();
   return (
-    path.basename(file) === rule.fileName.toLowerCase() && file.startsWith(`${folder}${path.sep}`)
+    path.basename(file) === rule.fileName.toLowerCase() &&
+    path.dirname(path.dirname(file)) === folder
   );
 }
 

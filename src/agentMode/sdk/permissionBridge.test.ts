@@ -552,11 +552,10 @@ describe("permissionBridge", () => {
       );
     });
 
-    it(`refuses the file named through '..', another letter case, a nested folder or a path relative to the chat's folder (${ISSUE_989})`, async () => {
+    it(`refuses the file named through '..', another letter case or a path relative to the chat's folder (${ISSUE_989})`, async () => {
       for (const file_path of [
         path.join(vault, "notes", "..", "copilot", "agents", "coco", "instructions.md"),
         path.join(vault, "copilot", "agents", "coco", "INSTRUCTIONS.md"),
-        path.join(vault, "copilot", "agents", "coco", "old", "instructions.md"),
         "copilot/agents/maya/instructions.md",
       ]) {
         await expect(preToolUse("Write", { file_path, content: "y" })).resolves.toEqual(REFUSED);
