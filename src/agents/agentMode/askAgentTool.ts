@@ -147,11 +147,19 @@ export function relistOnCustomAgentsGateChange(relist: () => void): () => void {
   });
 }
 
+const ASK_AGENT_PROMPT_HINT =
+  "When the user's message @-mentions one of the user's agents by name or clearly points to one, ask that agent with the ask_agent tool from obsidian-copilot; never otherwise.";
+// check_agent, answer_agent and stop_agent are always offered together, so each carries the one sentence that names all three.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/986
+const ASKED_AGENT_PROMPT_HINT =
+  "When the user asks how an agent you asked is doing, check with check_agent; when the user answers its question, pass the answer with answer_agent; when the user gives it a new instruction while it works, send that with ask_agent; when the user tells you to stop it, use stop_agent. All are in obsidian-copilot.";
+
 export function createAskAgentTool(chats: HiddenAgentChats, host: AskAgentToolHost): HostedTool {
   return {
     definition: ASK_AGENT_TOOL,
     turnedOffText: UNAVAILABLE_TEXT,
     listedAs: listedForAskingChats(host, ASK_AGENT_TOOL),
+    promptHint: ASK_AGENT_PROMPT_HINT,
     call: async (args, chat) => {
       const { agent, message } = (args ?? {}) as Record<string, unknown>;
       if (typeof agent !== "string" || typeof message !== "string" || !message.trim()) {
@@ -203,6 +211,7 @@ function askedAgentTool(
     definition,
     turnedOffText: UNAVAILABLE_TEXT,
     listedAs: listedForAskingChats(host, definition),
+    promptHint: ASKED_AGENT_PROMPT_HINT,
     call: async (args, chat) => {
       const fields = (args ?? {}) as Record<string, unknown>;
       const text = textArgument ? fields[textArgument.name] : "";

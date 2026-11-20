@@ -29,8 +29,9 @@ export function mentionedAgentNames(text: string, agents: readonly CustomAgent[]
   return agents.filter((agent) => mentioned.has(agent)).map((agent) => agent.name);
 }
 
-// Codex keeps MCP tools behind its tool search and a Copilot chat has no prompt of its own there, so the message names the tool for each agent the user mentioned.
+// A Copilot chat is given no list of the user's agents, so on every coding agent the message says which @-names are agents and names the tool that asks them.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/947
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/986
 export function agentMentionsBlock(names: readonly string[] | undefined): string | null {
   if (!names?.length) return null;
   return [

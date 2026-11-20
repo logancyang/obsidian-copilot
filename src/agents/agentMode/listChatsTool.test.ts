@@ -96,6 +96,14 @@ describe("listChatsTool", () => {
   });
 
   describe("createListChatsTool()", () => {
+    describe("promptHint", () => {
+      it("gives a model that can't see tool descriptions the sentence naming list_chats and when to call it, the same sentence that opens an agent's earlier-chats paragraph (https://github.com/Brevilabs/obsidian-copilot-private/issues/986)", () => {
+        expect(buildTool().promptHint).toBe(
+          "When the user asks what you and they worked on, discussed or decided before, list your earlier chats with list_chats from obsidian-copilot and read a listed note when you need what was said."
+        );
+      });
+    });
+
     describe("listedAs()", () => {
       it(`lists the tool, saying in its opening when to call it (${ISSUE})`, () => {
         const listed = buildTool().listedAs?.({ sessionKey: "juno-chat", backendId: "claude" });

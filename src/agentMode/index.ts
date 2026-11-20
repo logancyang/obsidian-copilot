@@ -75,8 +75,8 @@ import {
 } from "@/agents/agentMode/askAgentTool";
 import { createDraftAgentTool } from "@/agents/agentMode/draftAgentTool";
 import { createListChatsTool } from "@/agents/agentMode/listChatsTool";
-import { subscribeToCustomAgentsGate } from "@/agents/customAgentsGate";
 import { HiddenAgentChats } from "@/agents/agentMode/hiddenAgentChats";
+import type { CustomAgentStore } from "@/agents/CustomAgentStore";
 import { SkillManager } from "./skills";
 import {
   availableBuiltinAgents,
@@ -200,7 +200,11 @@ export function isCopilotToolOn(toolName: string, settings: CopilotSettings, app
   return true;
 }
 
-export function createAgentSessionManager(app: App, plugin: CopilotPlugin): AgentSessionManager {
+export function createAgentSessionManager(
+  app: App,
+  plugin: CopilotPlugin,
+  customAgents: CustomAgentStore
+): { manager: AgentSessionManager; hiddenAgentChats: HiddenAgentChats } {
   const os = requireNodeModule<typeof import("node:os")>("os");
   const path = requireNodeModule<typeof import("node:path")>("path");
   let lastAvailableSkillAgents: readonly string[] = [];
@@ -252,7 +256,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   );
   const sessionIndex = new AgentSessionIndex(createNodeFileStorage(), indexPath);
   const hiddenAgentChats = new HiddenAgentChats({
-    store: () => plugin.customAgents,
+    store: () => customAgents,
     vaultBase: () => getVaultBase(app),
     listedChat: (chat) => managerRef?.getSessions().find((session) => session === chat) ?? null,
     unavailableReason: (agent) => {
@@ -276,7 +280,6 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     askedConversations: sessionIndex,
   });
   plugin.register(() => hiddenAgentChats.dispose());
-  plugin.hiddenAgentChats = hiddenAgentChats;
   const askingChatsHost = {
     isUnlistedChat: (sessionKey: string) => managerRef?.isUnlistedSession(sessionKey) ?? false,
   };
@@ -349,7 +352,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
             agent: session.agentSlug,
             chats: (await listAllChats(manager)).filter((item) => !own.has(item.id)),
             askedConversations: await sessionIndex.getAskedConversations(),
-            agents: plugin.customAgents?.getAgents() ?? [],
+            agents: customAgents.getAgents(),
           };
         },
         vaultBase: () => getVaultBase(app) ?? "",
@@ -409,9 +412,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     copilotMcpServer,
     resolveAgent: async (slug) => {
       const vaultBase = getVaultBase(app);
-      return plugin.customAgents && vaultBase
-        ? loadAgentSessionPrompt(plugin.customAgents, slug, vaultBase)
-        : null;
+      return vaultBase ? loadAgentSessionPrompt(customAgents, slug, vaultBase) : null;
     },
     onChatReopened: restoreRelayedRuns,
   });
@@ -491,9 +492,6 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     }
   };
   subscribeToSystemPromptChange(refreshSystemPromptAffected);
-  // The shared prompt's earlier-chats line follows the custom agents gate, which a stored license reaches only after Agent Chat is created; re-checking on the change keeps the warm Codex and OpenCode probes from being spawned twice at every start.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/959
-  subscribeToCustomAgentsGate(refreshSystemPromptAffected);
   // Codex and OpenCode bake the feedback pointer into their prompt at spawn, so toggling cards must reach a running backend.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
   subscribeToSettingsChange((prev, next) => {
@@ -596,7 +594,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     }
   }
 
-  return manager;
+  return { manager, hiddenAgentChats };
 }
 
 export { AgentBackendHeader } from "./backends/shared/ui/AgentBackendHeader";

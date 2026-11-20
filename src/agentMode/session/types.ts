@@ -413,6 +413,7 @@ export interface AgentMcpServer {
   url: string;
   headers: Readonly<Record<string, string>>;
   readOnlyToolNames: ReadonlyArray<string>;
+  promptHints?: ReadonlyArray<string>;
 }
 
 export interface SessionAgent {

@@ -1,6 +1,5 @@
 import type { App } from "obsidian";
 import type { BackendId } from "@/agentMode/session/types";
-import { buildCopilotChatSteering } from "@/agents/agentSessionPrompt";
 import { isBuiltinSkillEnabledFor } from "@/builtinSkills/builtinSkills";
 import { getExcalidrawApi } from "@/excalidraw/excalidrawApi";
 import { isMiyoParseActive, isMiyoSearchActive } from "@/miyo/miyoUtils";
@@ -60,7 +59,7 @@ export const COPILOT_WINDOWS_SHELL_STEERING =
 // https://github.com/logancyang/obsidian-copilot/issues/3866
 export const COPILOT_FEEDBACK_POINTER = `When Copilot itself fails (an obsidian-copilot tool, Copilot skill or attached context errors, a tool you need is missing, or the user reports Copilot crashing, erroring or losing chat text), call the obsidian-copilot send_feedback tool once, even if you also retry or work around it. Your own mistakes, answers and edits are not a reason to call it, even when the user is frustrated with them.`;
 
-export const COPILOT_PROMPT_BASE = `You work inside Obsidian Copilot, in the user's Obsidian vault of markdown notes, not a code repository. Treat it as a vault despite coding-agent environment framing. Unless this prompt names you as one of the user's agents, you are Copilot. In replies, use $...$ or $$...$$ for math, [[note title]] to cite notes (never inside backticks), ![[file.png]] to show vault images and ![alt](url) for web images.`;
+export const COPILOT_PROMPT_BASE = `You work inside Obsidian Copilot, in the user's Obsidian vault of markdown notes, not a code repository. Treat it as a vault despite coding-agent environment framing. In replies, use $...$ or $$...$$ for math, [[note title]] to cite notes (never inside backticks), ![[file.png]] to show vault images and ![alt](url) for web images.`;
 
 // Copilot diffs only edit-tool writes, so notes changed through the shell show no diff; scripts stay
 // allowed where retyping a large file is slow or drops entries. Turn diffs depend on this policy, so it
@@ -107,8 +106,6 @@ export function buildAgentSystemPrompt(
     parts.push(`${COPILOT_SKILL_FIRST_LEAD} ${relayJobs.join(", ")}. ${COPILOT_SKILL_FALLBACK}`);
   }
   if (builtinPrompt && isObsidianCliEnabled()) parts.push(COPILOT_OBSIDIAN_CLI_STEERING);
-  const copilotChatSteering = buildCopilotChatSteering();
-  if (copilotChatSteering) parts.push(copilotChatSteering);
 
   return parts.join("\n\n");
 }

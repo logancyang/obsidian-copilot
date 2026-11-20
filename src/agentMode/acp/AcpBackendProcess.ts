@@ -360,7 +360,7 @@ export class AcpBackendProcess implements BackendProcess {
     const req: NewSessionRequest & SystemPromptField = {
       cwd: params.cwd,
       mcpServers: this.mcpServersField(params.mcpServers),
-      ...this.systemPromptField(params.agent),
+      ...this.systemPromptField(params.agent, params.mcpServers),
     };
     const wireResp = await this.requireConnection()
       .agent.request("session/new", req)
@@ -645,7 +645,7 @@ export class AcpBackendProcess implements BackendProcess {
   }
 
   async resumeSession(params: ResumeSessionInput): Promise<ResumeSessionOutput> {
-    const systemPrompt = this.systemPromptField(params.agent);
+    const systemPrompt = this.systemPromptField(params.agent, params.mcpServers);
     const wireResp = await this.dispatchCapability(
       "session/resume",
       (c) =>
@@ -670,7 +670,7 @@ export class AcpBackendProcess implements BackendProcess {
   }
 
   async loadSession(params: LoadSessionInput): Promise<LoadSessionOutput> {
-    const systemPrompt = this.systemPromptField(params.agent);
+    const systemPrompt = this.systemPromptField(params.agent, params.mcpServers);
     const sessionId = params.sessionId;
     this.loadingSessions.add(sessionId);
     const wireResp = await this.dispatchCapability(
@@ -695,12 +695,25 @@ export class AcpBackendProcess implements BackendProcess {
 
   // The agent's part rides on every session/new, load and resume, so it outlasts compaction after a resume; a backend that cannot take it would run the chat as Copilot under the agent's name.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/937
-  private systemPromptField(agent: SessionAgent | undefined): SystemPromptField {
-    if (!agent || this.backend.selectAgentMode) return {};
+  // The backend may add to each chat's part from the tool servers the chat is given; a chat without an agent whose adapter is too old to take a part goes without.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/986
+  private systemPromptField(
+    agent: SessionAgent | undefined,
+    servers: ReadonlyArray<AgentMcpServer> | undefined
+  ): SystemPromptField {
+    if (this.backend.selectAgentMode) return {};
+    const agentPrompt = agent?.prompt ?? null;
+    const added = this.backend.extendChatPrompt?.({
+      agentPrompt,
+      mcpServers: this.hasCapability("mcp/http") ? (servers ?? []) : [],
+    });
+    const text = [agentPrompt, added].filter(Boolean).join("\n\n");
+    if (!text) return {};
     if (!this.hasCapability("systemPrompt")) {
+      if (!agent) return {};
       throw new Error(`${this.descriptor.displayName} needs an update to run Copilot Teammates.`);
     }
-    return { systemPrompt: { mode: "append", content: [{ type: "text", text: agent.prompt }] } };
+    return { systemPrompt: { mode: "append", content: [{ type: "text", text }] } };
   }
 
   private async applyAgentMode(sessionId: SessionId, agent: SessionAgent | undefined) {

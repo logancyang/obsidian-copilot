@@ -9,6 +9,7 @@ import { AgentDraftCard, agentDraftCardSlot } from "@/agents/agentMode/ui/AgentD
 import type { CustomAgent, CustomAgentStore } from "@/agents/CustomAgentStore";
 import { setCustomAgentsAccess } from "@/agents/testing/customAgentsAccess";
 import type { FakeObsidianModal } from "@/agents/ui/testing/fakeObsidianModal";
+import { CustomAgentStoreContext } from "@/agents/ui/useCustomAgents";
 import { AI_SENDER, USER_SENDER } from "@/constants";
 import { ChatInputProvider, useChatInput } from "@/context/ChatInputContext";
 import type CopilotPlugin from "@/main";
@@ -58,7 +59,7 @@ function draftCard(overrides: Partial<AgentDraftCardState> = {}): AgentDraftCard
   return { draft: NORA, draftedBy: "coco", afterUserTurn: 1, ...overrides };
 }
 
-function fakePlugin() {
+function fakeAgentChat() {
   const agents: CustomAgent[] = [COCO];
   const store = {
     subscribe: () => () => {},
@@ -72,7 +73,6 @@ function fakePlugin() {
   const manager = {};
   const plugin = {
     app: { vault: {} },
-    customAgents: store,
     agentSessionManager: manager,
   } as unknown as CopilotPlugin;
   return { plugin, store, manager };
@@ -84,15 +84,17 @@ function ComposerFocus({ onFocus }: { onFocus: () => void }) {
   return null;
 }
 
-function renderSlot(card: AgentDraftCardState, plugin = fakePlugin().plugin) {
+function renderSlot(card: AgentDraftCardState, { plugin, store } = fakeAgentChat()) {
   const chat = fakeChat();
   const focusComposer = jest.fn();
   chat.updateChatState(AGENT_DRAFT_CARD, () => card);
   render(
-    <ChatInputProvider>
-      <ComposerFocus onFocus={focusComposer} />
-      {agentDraftCardSlot.render(card, "draft", { plugin, chat })}
-    </ChatInputProvider>
+    <CustomAgentStoreContext.Provider value={store}>
+      <ChatInputProvider>
+        <ComposerFocus onFocus={focusComposer} />
+        {agentDraftCardSlot.render(card, "draft", { plugin, chat })}
+      </ChatInputProvider>
+    </CustomAgentStoreContext.Provider>
   );
   return { chat, focusComposer };
 }
@@ -199,8 +201,8 @@ describe("AgentDraftCard", () => {
       });
 
       it(`opens the create dialog filled with the draft under "Drafted by" the agent that drafted it, and creates nothing until the user presses Create (${ISSUE})`, () => {
-        const { plugin, store } = fakePlugin();
-        renderSlot(draftCard(), plugin);
+        const agentChat = fakeAgentChat();
+        renderSlot(draftCard(), agentChat);
 
         fireEvent.click(screen.getByRole("button", { name: "Review and create…" }));
 
@@ -210,30 +212,30 @@ describe("AgentDraftCard", () => {
         expect(screen.getByLabelText<HTMLTextAreaElement>("What Nora handles").value).toBe(
           NORA.instruction
         );
-        expect(store.createAgent).not.toHaveBeenCalled();
+        expect(agentChat.store.createAgent).not.toHaveBeenCalled();
       });
 
       it(`after Create, opens the new agent's home with it selected and the cursor in its chat input, and removes the card from the drafting chat (${ISSUE})`, async () => {
-        const { plugin, manager } = fakePlugin();
-        const { chat, focusComposer } = renderSlot(draftCard(), plugin);
+        const agentChat = fakeAgentChat();
+        const { chat, focusComposer } = renderSlot(draftCard(), agentChat);
         fireEvent.click(screen.getByRole("button", { name: "Review and create…" }));
 
         fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
         await waitFor(() => expect(focusComposer).toHaveBeenCalled());
-        expect(startCustomAgentChat).toHaveBeenCalledWith(manager, NORA_AGENT);
+        expect(startCustomAgentChat).toHaveBeenCalledWith(agentChat.manager, NORA_AGENT);
         expect(chat.readChatState(AGENT_DRAFT_CARD)).toBeNull();
       });
 
       it(`keeps the card and its Review and create… button when the dialog closes without creating, so the draft can be opened again (${ISSUE})`, () => {
-        const { plugin, store } = fakePlugin();
-        const { chat } = renderSlot(draftCard(), plugin);
+        const agentChat = fakeAgentChat();
+        const { chat } = renderSlot(draftCard(), agentChat);
         fireEvent.click(screen.getByRole("button", { name: "Review and create…" }));
 
         act(() => void openedModals[0].pressEscape());
 
         expect(openedModals[0].isOpen).toBe(false);
-        expect(store.createAgent).not.toHaveBeenCalled();
+        expect(agentChat.store.createAgent).not.toHaveBeenCalled();
         expect(chat.readChatState(AGENT_DRAFT_CARD)).toEqual(draftCard());
         expect(screen.getByRole("button", { name: "Review and create…" })).not.toBeNull();
       });
