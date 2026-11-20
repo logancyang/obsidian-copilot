@@ -10,7 +10,7 @@ export interface UpsellVideo {
 }
 
 export const COPILOT_TEAMMATES_VIDEO: UpsellVideo = {
-  url: "https://www.youtube.com/watch?v=L5AEzX1z6Ko",
+  url: "https://www.youtube.com/watch?v=Ri4YB0qR-Go",
   thumbnailUrl:
     "https://images.brevilabs.com/newsletters/copilot-plugin/copilot-teammates/teammates-video-play-7008237f.webp",
 };
