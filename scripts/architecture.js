@@ -253,7 +253,6 @@ const noNodeInPortableCode = {
 };
 
 module.exports = {
-  DESKTOP_PART,
   createBoxOf,
   desktopBoxes,
   globToRegExp,
