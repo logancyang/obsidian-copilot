@@ -1,4 +1,5 @@
 import type {
+  AgentMcpServer,
   BackendConfigOption,
   BackendId,
   SessionAgent,
@@ -16,7 +17,7 @@ export interface AcpSpawnDescriptor {
 
 export interface ChatPromptInput {
   agentPrompt: string | null;
-  toolPromptHints: ReadonlyArray<string>;
+  mcpServers: ReadonlyArray<AgentMcpServer>;
 }
 
 export interface AcpBackend {

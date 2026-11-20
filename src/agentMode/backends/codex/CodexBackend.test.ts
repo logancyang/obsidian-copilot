@@ -228,11 +228,19 @@ describe("CodexBackend", () => {
     });
 
     describe("extendChatPrompt()", () => {
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/986 tells a chat the prompt hints of the Copilot tools it is offered, since Codex finds MCP tools only through its tool search: each hint once, in order", () => {
+      const hinted = (...promptHints: string[]) => ({
+        name: "obsidian-copilot",
+        url: "http://127.0.0.1/mcp",
+        headers: {},
+        readOnlyToolNames: [],
+        promptHints,
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/986 tells a chat the prompt hints of the Copilot tools its servers offer it, since Codex finds MCP tools only through its tool search: each hint once, in order", () => {
         expect(
           new CodexBackend(APP).extendChatPrompt({
             agentPrompt: null,
-            toolPromptHints: ["Ask with ask.", "Check with check.", "Check with check."],
+            mcpServers: [hinted("Ask with ask.", "Check with check.", "Check with check.")],
           })
         ).toBe("Ask with ask. Check with check.");
       });
@@ -243,16 +251,16 @@ describe("CodexBackend", () => {
         expect(
           codex.extendChatPrompt({
             agentPrompt: "You are Coco. Recall with recall. Remember rules.",
-            toolPromptHints: ["Ask with ask.", "Recall with recall."],
+            mcpServers: [hinted("Ask with ask.", "Recall with recall.")],
           })
         ).toBe("Ask with ask.");
         expect(
           codex.extendChatPrompt({
             agentPrompt: "You are Coco. Recall with recall.",
-            toolPromptHints: ["Recall with recall."],
+            mcpServers: [hinted("Recall with recall.")],
           })
         ).toBeNull();
-        expect(codex.extendChatPrompt({ agentPrompt: null, toolPromptHints: [] })).toBeNull();
+        expect(codex.extendChatPrompt({ agentPrompt: null, mcpServers: [] })).toBeNull();
       });
     });
 

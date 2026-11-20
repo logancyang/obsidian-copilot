@@ -1441,7 +1441,7 @@ describe("AcpBackendProcess", () => {
         expect(mockNewSession.mock.calls[0][0]).not.toHaveProperty("systemPrompt");
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/986 lets the backend add to a chat's prompt from the agent's part and the prompt hints of the Copilot tools the chat is offered, after the agent's part", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/986 lets the backend add to a chat's prompt from the agent's part and the tool servers the chat is given, after the agent's part", async () => {
         mockInitializeResult = {
           protocolVersion: 1,
           agentCapabilities: {
@@ -1450,8 +1450,8 @@ describe("AcpBackendProcess", () => {
           },
         };
         const extendChatPrompt = jest.fn(
-          ({ toolPromptHints }: { toolPromptHints: readonly string[] }) =>
-            toolPromptHints.join(" ") || null
+          ({ mcpServers }: { mcpServers: ReadonlyArray<{ promptHints?: readonly string[] }> }) =>
+            mcpServers.flatMap((server) => server.promptHints ?? []).join(" ") || null
         );
         const backend = new AcpBackendProcess(
           buildApp(),
@@ -1472,8 +1472,8 @@ describe("AcpBackendProcess", () => {
         });
 
         expect(extendChatPrompt.mock.calls.map(([chat]) => chat)).toEqual([
-          { agentPrompt: null, toolPromptHints: ["Ask with ask.", "Draw with draw."] },
-          { agentPrompt: "You are Coco.", toolPromptHints: ["Ask with ask.", "Draw with draw."] },
+          { agentPrompt: null, mcpServers },
+          { agentPrompt: "You are Coco.", mcpServers },
         ]);
         expect(
           mockNewSession.mock.calls.map(
@@ -1519,7 +1519,7 @@ describe("AcpBackendProcess", () => {
         }
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/986 hands the backend no prompt hints when the agent cannot take Copilot's tools, so a chat is never told of a tool it isn't offered", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/986 hands the backend no tool servers when the agent cannot take Copilot's tools, so a chat is never told of a tool it isn't offered", async () => {
         mockInitializeResult = {
           protocolVersion: 1,
           agentCapabilities: { sessionCapabilities: { systemPrompt: {} } },
@@ -1538,7 +1538,7 @@ describe("AcpBackendProcess", () => {
           mcpServers: [{ ...HINTED_SERVER, promptHints: ["Ask with ask."] }],
         });
 
-        expect(extendChatPrompt).toHaveBeenCalledWith({ agentPrompt: null, toolPromptHints: [] });
+        expect(extendChatPrompt).toHaveBeenCalledWith({ agentPrompt: null, mcpServers: [] });
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/986 opens a chat without an agent, without what the backend adds, when the adapter cannot take a system prompt, instead of refusing it", async () => {

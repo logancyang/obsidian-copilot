@@ -41,8 +41,9 @@ export class CodexBackend implements AcpBackend {
 
   // Codex finds MCP tools only through its tool search, so each chat is told the Copilot tools it is offered, per chat because the developer instructions are shared by every chat in the process.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/986
-  extendChatPrompt({ agentPrompt, toolPromptHints }: ChatPromptInput): string | null {
-    const unsaid = [...new Set(toolPromptHints)].filter((hint) => !agentPrompt?.includes(hint));
+  extendChatPrompt({ agentPrompt, mcpServers }: ChatPromptInput): string | null {
+    const hints = new Set(mcpServers.flatMap((server) => server.promptHints ?? []));
+    const unsaid = [...hints].filter((hint) => !agentPrompt?.includes(hint));
     return unsaid.length > 0 ? unsaid.join(" ") : null;
   }
 

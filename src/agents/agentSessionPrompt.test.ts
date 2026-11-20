@@ -83,8 +83,11 @@ function chatPrompt(
   sessionKey: string,
   agentPrompt: string | null
 ): string {
-  const toolPromptHints = promptHintsFor(teammatesTools(), () => true, { sessionKey, backendId });
-  const added = CHAT_PROMPT_EXTENSIONS[backendId]?.({ agentPrompt, toolPromptHints }) ?? null;
+  const promptHints = promptHintsFor(teammatesTools(), () => true, { sessionKey, backendId });
+  const mcpServers = [
+    { name: "obsidian-copilot", url: "", headers: {}, readOnlyToolNames: [], promptHints },
+  ];
+  const added = CHAT_PROMPT_EXTENSIONS[backendId]?.({ agentPrompt, mcpServers }) ?? null;
   return [agentPrompt, added].filter(Boolean).join("\n\n");
 }
 
