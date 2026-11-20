@@ -106,6 +106,9 @@ export interface HostedTool {
   // A tool offered only to some chats, or worded for the chat that lists it, answers each listing; null leaves it out.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
   listedAs?: (listing: ToolListing) => McpToolDefinition | null;
+  // The sentence a model that can't see this tool's description until it searches for it needs to find the tool; a chat gets it only while it is offered the tool.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/986
+  promptHint?: string;
   call: (args: unknown, chat: ChatStateHost | null) => Promise<HostedToolResult>;
 }
 
@@ -234,6 +237,7 @@ export function createCopilotMcpServer(
         url,
         headers: Object.freeze({ Authorization: `Bearer ${token}` }),
         readOnlyToolNames: listReadOnlyToolNames(),
+        promptHints: promptHintsFor(hostedTools, isToolOn, { sessionKey, backendId, shared }),
       });
     },
     async readOnlyToolNames(): Promise<ReadonlyArray<string>> {
@@ -261,6 +265,22 @@ export function createCopilotMcpServer(
       void toolProvider?.dispose();
     },
   });
+}
+
+export function promptHintsFor(
+  tools: readonly HostedTool[],
+  isToolOn: ToolSwitch,
+  listing: ToolListing
+): ReadonlyArray<string> {
+  return Object.freeze(
+    tools.flatMap((tool) =>
+      tool.promptHint &&
+      isToolOn(tool.definition.name) &&
+      (tool.listedAs ? tool.listedAs(listing) : tool.definition)
+        ? [tool.promptHint]
+        : []
+    )
+  );
 }
 
 async function handleHttpRequest(

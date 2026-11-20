@@ -186,6 +186,30 @@ describe("copilotMcpServer", () => {
       expect(channel.readOnlyToolNames).toEqual(["send_feedback", "peek"]);
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/986 gives each session the prompt hints of the tools listed for it, in tool order: none for a tool without a hint, one listed only elsewhere, or one switched off", async () => {
+      server.dispose();
+      server = createCopilotMcpServer(
+        (toolName) => toolName !== "draw",
+        [
+          { ...lookupTool(), promptHint: "Look things up with lookup." },
+          { ...lookupTool(), definition: { name: "peek" } },
+          {
+            ...lookupTool(),
+            definition: { name: "ask" },
+            promptHint: "Ask with ask.",
+            listedAs: ({ sessionKey }) => (sessionKey === "session-a" ? { name: "ask" } : null),
+          },
+          { ...lookupTool(), definition: { name: "draw" }, promptHint: "Draw with draw." },
+        ]
+      );
+
+      const listed = await server.connect("session-a", "codex", NO_CHAT);
+      const notListed = await server.connect("session-b", "codex", NO_CHAT);
+
+      expect(listed.promptHints).toEqual(["Look things up with lookup.", "Ask with ask."]);
+      expect(notListed.promptHints).toEqual(["Look things up with lookup."]);
+    });
+
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/862 names the read-only tools, connected services' included after a refresh, for an agent whose permission rules are fixed when it starts", async () => {
       server.dispose();
       const provider = connectorProvider();

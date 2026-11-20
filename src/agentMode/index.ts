@@ -410,11 +410,9 @@ export function createAgentSessionManager(
         : []),
     ],
     copilotMcpServer,
-    resolveAgent: async (slug, backendId) => {
+    resolveAgent: async (slug) => {
       const vaultBase = getVaultBase(app);
-      return vaultBase
-        ? loadAgentSessionPrompt(customAgents, slug, vaultBase, { backendId })
-        : null;
+      return vaultBase ? loadAgentSessionPrompt(customAgents, slug, vaultBase) : null;
     },
     onChatReopened: restoreRelayedRuns,
   });

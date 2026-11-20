@@ -1,6 +1,7 @@
 import type { AskedConversation } from "@/agentMode/session/AgentSessionIndex";
 import type { ChatStateHost } from "@/agentMode/session/chatExtension";
 import type { HostedTool, McpToolDefinition } from "@/agentMode/session/copilotMcpServer";
+import { LIST_CHATS_PROMPT_HINT } from "@/agents/agentSessionPrompt";
 import type { CustomAgent } from "@/agents/CustomAgentStore";
 import { getCustomAgentsGate } from "@/agents/customAgentsGate";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
@@ -83,9 +84,10 @@ export function createListChatsTool(host: ListChatsToolHost): HostedTool {
   return {
     definition: LIST_CHATS_TOOL,
     turnedOffText: UNAVAILABLE_TEXT,
-    // An asked agent's hidden chat reads the shared prompt that names list_chats too, and without the tool it reported a missing Copilot tool; it gets the tool and the call tells it that chat has no earlier chats.
+    // An asked agent's hidden chat that called list_chats without having it reported a missing Copilot tool, so it gets the tool and the call tells it that chat has no earlier chats.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/959
     listedAs: () => (getCustomAgentsGate() === "full" ? LIST_CHATS_TOOL : null),
+    promptHint: LIST_CHATS_PROMPT_HINT,
     call: async (_args, chat) => {
       if (getCustomAgentsGate() !== "full") return { text: UNAVAILABLE_TEXT, isError: false };
       const caller = await host.earlierChats(chat);

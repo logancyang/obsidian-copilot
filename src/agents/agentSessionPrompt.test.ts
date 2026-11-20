@@ -1,6 +1,18 @@
+import type { ChatPromptInput } from "@/agentMode/acp/types";
+import { CodexBackend } from "@/agentMode/backends/codex/CodexBackend";
+import { promptHintsFor, type HostedTool } from "@/agentMode/session/copilotMcpServer";
+import {
+  createAnswerAgentTool,
+  createAskAgentTool,
+  createAskUserTool,
+  createCheckAgentTool,
+  createStopAgentTool,
+} from "@/agents/agentMode/askAgentTool";
+import { createDraftAgentTool } from "@/agents/agentMode/draftAgentTool";
+import type { HiddenAgentChats } from "@/agents/agentMode/hiddenAgentChats";
+import { createListChatsTool } from "@/agents/agentMode/listChatsTool";
 import {
   buildAgentPrompt,
-  buildCopilotChatSteering,
   describeAgent,
   loadAgentSessionPrompt,
 } from "@/agents/agentSessionPrompt";
@@ -10,13 +22,13 @@ import { buildMemorySaveRules } from "@/agents/memorySaveRules";
 import { setCustomAgentsAccess } from "@/agents/testing/customAgentsAccess";
 import { createFakeAgentVault, type FakeAgentVault } from "@/agents/testing/fakeAgentVault";
 import { setSettings } from "@/settings/model";
+import type { App } from "obsidian";
 
 jest.mock("@/entitlement");
 
 const COCO = { name: "Coco", title: "Houseplant carer" };
 const MAYA = { name: "Maya", title: "Product critic" };
 const ISSUE_986 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/986";
-const CODING_AGENTS = ["claude", "codex", "opencode"] as const;
 const OWN_CHAT = { chatsFolder: "/vault/copilot/copilot-conversations" };
 
 const IDENTITY = "In this chat you are Coco (Houseplant carer), an agent the user made in Copilot.";
@@ -27,16 +39,58 @@ const CONTROL_ASKED_AGENTS =
   "When the user asks how an agent you asked is doing, check with check_agent; when the user answers its question, pass the answer with answer_agent; when the user gives it a new instruction while it works, send that with ask_agent; when the user tells you to stop it, use stop_agent. All are in obsidian-copilot.";
 const DRAFT_NEW_AGENTS =
   "When the user asks you to make a new agent, draft it with the draft_agent tool from obsidian-copilot, which shows them a card to review and create it. If you or another agent already handles that job, say so and ask before drafting. You can't create an agent yourself.";
-const RECALL_EARLIER_CHATS =
-  "When the user asks what you and they worked on, discussed or decided before, list your earlier chats with list_chats from obsidian-copilot and read a listed note when you need what was said. For that answer use only those chats: never search /vault/copilot/copilot-conversations for it, even within a wider search, and never read a note there that list_chats didn't list, unless the user names it. If none of them covers it, say you haven't discussed it.";
-const AGENT_CHAT_SENTENCES = {
+const LIST_CHATS =
+  "When the user asks what you and they worked on, discussed or decided before, list your earlier chats with list_chats from obsidian-copilot and read a listed note when you need what was said.";
+const RECALL_SCOPE =
+  "For that answer use only those chats: never search /vault/copilot/copilot-conversations for it, even within a wider search, and never read a note there that list_chats didn't list, unless the user names it. If none of them covers it, say you haven't discussed it.";
+const RECALL_EARLIER_CHATS = `${LIST_CHATS} ${RECALL_SCOPE}`;
+const TEAMMATES_SENTENCES = {
   "the rule that another agent's rule is not its to save": NOT_YOURS_TO_SAVE,
   "the ask_agent sentence": ASK_AGENTS,
   "the check_agent, answer_agent and stop_agent sentence": CONTROL_ASKED_AGENTS,
   "the draft_agent sentences": DRAFT_NEW_AGENTS,
-  "the earlier-chats paragraph": RECALL_EARLIER_CHATS,
+  "the list_chats sentence": LIST_CHATS,
+  "the earlier-chats scope": RECALL_SCOPE,
 };
-type AgentChatSentence = keyof typeof AGENT_CHAT_SENTENCES;
+type TeammatesSentence = keyof typeof TEAMMATES_SENTENCES;
+
+const APP = {} as App;
+const ASKED_CHAT = "asked-chat";
+const CHAT_PROMPT_EXTENSIONS: Readonly<
+  Record<"claude" | "codex" | "opencode", ((chat: ChatPromptInput) => string | null) | null>
+> = {
+  claude: null,
+  opencode: null,
+  codex: (chat) => new CodexBackend(APP).extendChatPrompt(chat),
+};
+
+function teammatesTools(): HostedTool[] {
+  const chats = {} as HiddenAgentChats;
+  const host = { isUnlistedChat: (sessionKey: string) => sessionKey === ASKED_CHAT };
+  return [
+    createAskAgentTool(chats, host),
+    createCheckAgentTool(chats, host),
+    createAnswerAgentTool(chats, host),
+    createAskUserTool(chats, host),
+    createStopAgentTool(chats, host),
+    createDraftAgentTool({ ...host, callerOf: () => null }),
+    createListChatsTool({ earlierChats: async () => null, vaultBase: () => "/vault" }),
+  ];
+}
+
+function chatPrompt(
+  backendId: keyof typeof CHAT_PROMPT_EXTENSIONS,
+  sessionKey: string,
+  agentPrompt: string | null
+): string {
+  const toolPromptHints = promptHintsFor(teammatesTools(), () => true, { sessionKey, backendId });
+  const added = CHAT_PROMPT_EXTENSIONS[backendId]?.({ agentPrompt, toolPromptHints }) ?? null;
+  return [agentPrompt, added].filter(Boolean).join("\n\n");
+}
+
+function countOf(text: string, sentence: string): number {
+  return text.split(sentence).length - 1;
+}
 
 function seedAgent(
   vault: FakeAgentVault,
@@ -68,22 +122,19 @@ describe("agentSessionPrompt", () => {
     });
 
     it(`states who the model is exactly once, as the agent, and never calls it Copilot (${ISSUE_986})`, () => {
-      for (const backendId of CODING_AGENTS) {
-        for (const ownChat of [OWN_CHAT, undefined]) {
-          const built = buildAgentPrompt({
-            agent: COCO,
-            folder: "/vault/copilot/agents/coco",
-            others: [MAYA],
-            instruction: "",
-            memory: "",
-            instructionsPath: "copilot/agents/coco/instructions.md",
-            ownChat,
-            backendId,
-          });
+      for (const ownChat of [OWN_CHAT, undefined]) {
+        const built = buildAgentPrompt({
+          agent: COCO,
+          folder: "/vault/copilot/agents/coco",
+          others: [MAYA],
+          instruction: "",
+          memory: "",
+          instructionsPath: "copilot/agents/coco/instructions.md",
+          ownChat,
+        });
 
-          expect(built.match(/\byou are\b/gi)).toEqual(["you are"]);
-          expect(built.startsWith(IDENTITY)).toBe(true);
-        }
+        expect(built.match(/\byou are\b/gi)).toEqual(["you are"]);
+        expect(built.startsWith(IDENTITY)).toBe(true);
       }
     });
 
@@ -113,26 +164,23 @@ describe("agentSessionPrompt", () => {
       );
     });
 
-    it("says there are no other agents when the agent is the only one, and nothing about asking one, on every coding agent", () => {
-      for (const backendId of CODING_AGENTS) {
-        const alone = buildAgentPrompt({
-          agent: COCO,
-          folder: "/v",
-          others: [],
-          instruction: "",
-          memory: "",
-          instructionsPath: "copilot/agents/coco/instructions.md",
-          ownChat: OWN_CHAT,
-          backendId,
-        });
+    it("says there are no other agents when the agent is the only one, and nothing about asking one", () => {
+      const alone = buildAgentPrompt({
+        agent: COCO,
+        folder: "/v",
+        others: [],
+        instruction: "",
+        memory: "",
+        instructionsPath: "copilot/agents/coco/instructions.md",
+        ownChat: OWN_CHAT,
+      });
 
-        expect(alone).toContain("Other agents: none.");
-        expect(alone).not.toContain("ask_agent");
-        expect(alone).not.toContain(NOT_YOURS_TO_SAVE);
-      }
+      expect(alone).toContain("Other agents: none.");
+      expect(alone).not.toContain("ask_agent");
+      expect(alone).not.toContain(NOT_YOURS_TO_SAVE);
     });
 
-    it(`tells an agent in its own chat on Codex, which finds tools only by name, to ask another agent with ask_agent only when the user @-mentions or points to it, and that a rule the user gives that agent is not its own to save (https://github.com/Brevilabs/obsidian-copilot-private/issues/944, https://github.com/Brevilabs/obsidian-copilot-private/issues/969, ${ISSUE_986})`, () => {
+    it(`tells an agent in its own chat that a rule the user gives another agent is not its own to save, and leaves naming ask_agent, check_agent, answer_agent, stop_agent and draft_agent to their tools (https://github.com/Brevilabs/obsidian-copilot-private/issues/969, ${ISSUE_986})`, () => {
       const ownChat = buildAgentPrompt({
         agent: COCO,
         folder: "/vault/copilot/agents/coco",
@@ -141,38 +189,23 @@ describe("agentSessionPrompt", () => {
         memory: "",
         instructionsPath: "copilot/agents/coco/instructions.md",
         ownChat: OWN_CHAT,
-        backendId: "codex",
       });
 
       expect(ownChat).toContain(
-        `Other agents: Maya (Product critic); Leo.\n\n${ASK_AGENTS} ${NOT_YOURS_TO_SAVE}\n\n${CONTROL_ASKED_AGENTS}`
+        `Other agents: Maya (Product critic); Leo.\n\n${NOT_YOURS_TO_SAVE}\n\n`
       );
+      for (const tool of [
+        "ask_agent",
+        "check_agent",
+        "answer_agent",
+        "stop_agent",
+        "draft_agent",
+      ]) {
+        expect(ownChat).not.toContain(tool);
+      }
     });
 
-    it.each(["claude", "opencode"] as const)(
-      `tells an agent in its own chat on %s that a rule the user gives another agent is not its own to save, and leaves naming ask_agent, check_agent, answer_agent and stop_agent to their tool descriptions (https://github.com/Brevilabs/obsidian-copilot-private/issues/969, ${ISSUE_986})`,
-      (backendId) => {
-        const ownChat = buildAgentPrompt({
-          agent: COCO,
-          folder: "/vault/copilot/agents/coco",
-          others: [MAYA, { name: "Leo", title: "" }],
-          instruction: "",
-          memory: "",
-          instructionsPath: "copilot/agents/coco/instructions.md",
-          ownChat: OWN_CHAT,
-          backendId,
-        });
-
-        expect(ownChat).toContain(
-          `Other agents: Maya (Product critic); Leo.\n\n${NOT_YOURS_TO_SAVE}\n\n`
-        );
-        for (const tool of ["ask_agent", "check_agent", "answer_agent", "stop_agent"]) {
-          expect(ownChat).not.toContain(tool);
-        }
-      }
-    );
-
-    it(`tells an agent in its own chat on Codex, even with no other agents, to draft a new agent with draft_agent, to say first when it or another agent already handles the job, and that it can't create one (https://github.com/Brevilabs/obsidian-copilot-private/issues/941, ${ISSUE_986})`, () => {
+    it("tells an agent in its own chat to list its earlier chats with list_chats only when the user asks, to search or read no other chat note and to say when something was never discussed (https://github.com/Brevilabs/obsidian-copilot-private/issues/959)", () => {
       const ownChat = buildAgentPrompt({
         agent: COCO,
         folder: "/vault/copilot/agents/coco",
@@ -181,93 +214,48 @@ describe("agentSessionPrompt", () => {
         memory: "",
         instructionsPath: "copilot/agents/coco/instructions.md",
         ownChat: OWN_CHAT,
-        backendId: "codex",
       });
 
-      expect(ownChat).toContain(DRAFT_NEW_AGENTS);
+      expect(ownChat).toContain(RECALL_EARLIER_CHATS);
     });
 
-    it.each(["claude", "opencode"] as const)(
-      `leaves draft_agent to its tool description in an agent's own chat on %s, which also says to ask first when a job is covered and that the agent can't create one (${ISSUE_986})`,
-      (backendId) => {
-        const ownChat = buildAgentPrompt({
-          agent: COCO,
-          folder: "/vault/copilot/agents/coco",
-          others: [MAYA],
-          instruction: "",
-          memory: "",
-          instructionsPath: "copilot/agents/coco/instructions.md",
-          ownChat: OWN_CHAT,
-          backendId,
-        });
+    it("names no Teammates tool and has no ask, draft or earlier-chats line in a chat the agent was asked into, which has none of those tools (https://github.com/Brevilabs/obsidian-copilot-private/issues/944, https://github.com/Brevilabs/obsidian-copilot-private/issues/941, https://github.com/Brevilabs/obsidian-copilot-private/issues/959)", () => {
+      const asked = buildAgentPrompt({
+        agent: COCO,
+        folder: "/vault/copilot/agents/coco",
+        others: [MAYA, { name: "Leo", title: "" }],
+        instruction: "",
+        memory: "",
+        instructionsPath: "copilot/agents/coco/instructions.md",
+      });
 
-        expect(ownChat).not.toContain("draft_agent");
-        expect(ownChat).not.toContain("create an agent");
+      expect(asked).toContain("Other agents: Maya (Product critic); Leo.");
+      for (const tool of [
+        "ask_agent",
+        "check_agent",
+        "answer_agent",
+        "stop_agent",
+        "draft_agent",
+        "list_chats",
+      ]) {
+        expect(asked).not.toContain(tool);
       }
-    );
+      expect(asked).not.toContain(NOT_YOURS_TO_SAVE);
+    });
 
-    it.each(CODING_AGENTS)(
-      "tells an agent in its own chat on %s to list its earlier chats with list_chats only when the user asks, to search or read no other chat note and to say when something was never discussed (https://github.com/Brevilabs/obsidian-copilot-private/issues/959)",
-      (backendId) => {
-        const ownChat = buildAgentPrompt({
-          agent: COCO,
-          folder: "/vault/copilot/agents/coco",
-          others: [],
-          instruction: "",
-          memory: "",
-          instructionsPath: "copilot/agents/coco/instructions.md",
-          ownChat: OWN_CHAT,
-          backendId,
-        });
-
-        expect(ownChat).toContain(RECALL_EARLIER_CHATS);
-      }
-    );
-
-    it.each(CODING_AGENTS)(
-      "names no Teammates tool and has no ask, draft or earlier-chats line in a chat the agent was asked into on %s, which has none of those tools (https://github.com/Brevilabs/obsidian-copilot-private/issues/944, https://github.com/Brevilabs/obsidian-copilot-private/issues/941, https://github.com/Brevilabs/obsidian-copilot-private/issues/959)",
-      (backendId) => {
-        const asked = buildAgentPrompt({
-          agent: COCO,
-          folder: "/vault/copilot/agents/coco",
-          others: [MAYA, { name: "Leo", title: "" }],
-          instruction: "",
-          memory: "",
-          instructionsPath: "copilot/agents/coco/instructions.md",
-          backendId,
-        });
-
-        expect(asked).toContain("Other agents: Maya (Product critic); Leo.");
-        for (const tool of [
-          "ask_agent",
-          "check_agent",
-          "answer_agent",
-          "stop_agent",
-          "draft_agent",
-          "list_chats",
-        ]) {
-          expect(asked).not.toContain(tool);
-        }
-        expect(asked).not.toContain(NOT_YOURS_TO_SAVE);
-      }
-    );
-
-    it(`keeps an agent's part, apart from its instruction and memory, under 4,200 bytes on every coding agent, in its own chat and when asked (${ISSUE_986})`, () => {
-      const sizes = CODING_AGENTS.flatMap((backendId) =>
-        [OWN_CHAT, undefined].map((ownChat) =>
-          Buffer.byteLength(
-            buildAgentPrompt({
-              agent: COCO,
-              folder: "/vault/copilot/agents/coco",
-              others: [MAYA, { name: "Leo", title: "" }],
-              instruction: "",
-              memory: "",
-              instructionsPath: "copilot/agents/coco/instructions.md",
-              ownChat,
-              backendId,
-            }),
-            "utf8"
-          )
+    it(`keeps an agent's part, apart from its instruction and memory, under 4,200 bytes, in its own chat and when asked (${ISSUE_986})`, () => {
+      const sizes = [OWN_CHAT, undefined].map((ownChat) =>
+        Buffer.byteLength(
+          buildAgentPrompt({
+            agent: COCO,
+            folder: "/vault/copilot/agents/coco",
+            others: [MAYA, { name: "Leo", title: "" }],
+            instruction: "",
+            memory: "",
+            instructionsPath: "copilot/agents/coco/instructions.md",
+            ownChat,
+          }),
+          "utf8"
         )
       );
 
@@ -404,40 +392,50 @@ describe("agentSessionPrompt", () => {
       await expect(loadAgentSessionPrompt(store, "coco", "/vault")).resolves.toBeNull();
     });
 
-    const SAVE_RULE: AgentChatSentence = "the rule that another agent's rule is not its to save";
-    const ASK: AgentChatSentence = "the ask_agent sentence";
-    const CONTROL: AgentChatSentence = "the check_agent, answer_agent and stop_agent sentence";
-    const DRAFT: AgentChatSentence = "the draft_agent sentences";
-    const RECALL: AgentChatSentence = "the earlier-chats paragraph";
+    const SAVE_RULE: TeammatesSentence = "the rule that another agent's rule is not its to save";
+    const ASK: TeammatesSentence = "the ask_agent sentence";
+    const CONTROL: TeammatesSentence = "the check_agent, answer_agent and stop_agent sentence";
+    const DRAFT: TeammatesSentence = "the draft_agent sentences";
+    const LIST: TeammatesSentence = "the list_chats sentence";
+    const SCOPE: TeammatesSentence = "the earlier-chats scope";
     const TWO_OTHERS = ["Maya", "Leo"];
     const MATRIX = [
-      { backendId: "claude", chat: "own", others: TWO_OTHERS, lines: [SAVE_RULE, RECALL] },
-      { backendId: "opencode", chat: "own", others: TWO_OTHERS, lines: [SAVE_RULE, RECALL] },
+      { backendId: "claude", chat: "copilot", others: TWO_OTHERS, lines: [] },
+      { backendId: "opencode", chat: "copilot", others: TWO_OTHERS, lines: [] },
+      {
+        backendId: "codex",
+        chat: "copilot",
+        others: TWO_OTHERS,
+        lines: [ASK, CONTROL, DRAFT, LIST],
+      },
+      { backendId: "claude", chat: "own", others: TWO_OTHERS, lines: [SAVE_RULE, LIST, SCOPE] },
+      { backendId: "opencode", chat: "own", others: TWO_OTHERS, lines: [SAVE_RULE, LIST, SCOPE] },
       {
         backendId: "codex",
         chat: "own",
         others: TWO_OTHERS,
-        lines: [SAVE_RULE, ASK, CONTROL, DRAFT, RECALL],
+        lines: [SAVE_RULE, LIST, SCOPE, ASK, CONTROL, DRAFT],
       },
-      { backendId: "claude", chat: "own", others: [], lines: [RECALL] },
-      { backendId: "opencode", chat: "own", others: [], lines: [RECALL] },
-      { backendId: "codex", chat: "own", others: [], lines: [DRAFT, RECALL] },
+      { backendId: "claude", chat: "own", others: [], lines: [LIST, SCOPE] },
+      { backendId: "opencode", chat: "own", others: [], lines: [LIST, SCOPE] },
+      { backendId: "codex", chat: "own", others: [], lines: [LIST, SCOPE, ASK, CONTROL, DRAFT] },
       { backendId: "claude", chat: "asked", others: TWO_OTHERS, lines: [] },
       { backendId: "opencode", chat: "asked", others: TWO_OTHERS, lines: [] },
-      { backendId: "codex", chat: "asked", others: TWO_OTHERS, lines: [] },
+      { backendId: "codex", chat: "asked", others: TWO_OTHERS, lines: [LIST] },
       { backendId: "claude", chat: "asked", others: [], lines: [] },
       { backendId: "opencode", chat: "asked", others: [], lines: [] },
-      { backendId: "codex", chat: "asked", others: [], lines: [] },
+      { backendId: "codex", chat: "asked", others: [], lines: [LIST] },
     ] as const;
 
     it.each(
       MATRIX.map((row) => ({
         ...row,
+        label: { copilot: "a Copilot", own: "an agent's own", asked: "an asked agent's" }[row.chat],
         otherCount: row.others.length,
         summary: row.lines.length > 0 ? row.lines.join(", ") : "no Teammates line",
       }))
     )(
-      `on $backendId, gives an agent's $chat chat with $otherCount other agents its identity once and only: $summary (${ISSUE_986})`,
+      `on $backendId, gives $label chat with $otherCount other agents the agent's identity once if it runs one, and each of these Teammates lines exactly once and no other: $summary (${ISSUE_986})`,
       async ({ backendId, chat, others, lines }) => {
         seedAgent(vault, "coco", COCO, "You handle houseplant care only.");
         for (const name of others) {
@@ -445,17 +443,26 @@ describe("agentSessionPrompt", () => {
         }
         await store.start();
 
-        const loaded = await loadAgentSessionPrompt(store, "coco", "/vault", {
-          asked: chat === "asked",
+        const loaded =
+          chat === "copilot"
+            ? null
+            : await loadAgentSessionPrompt(store, "coco", "/vault", { asked: chat === "asked" });
+        const prompt = chatPrompt(
           backendId,
-        });
+          chat === "asked" ? ASKED_CHAT : "listed-chat",
+          loaded?.prompt ?? null
+        );
 
-        expect(loaded?.prompt.startsWith(IDENTITY)).toBe(true);
-        expect(loaded?.prompt.match(/\byou are\b/gi)).toEqual(["you are"]);
-        for (const [sentence, text] of Object.entries(AGENT_CHAT_SENTENCES)) {
-          expect([sentence, loaded?.prompt.includes(text)]).toEqual([
+        if (loaded) {
+          expect(prompt.startsWith(IDENTITY)).toBe(true);
+          expect(prompt.match(/\byou are\b/gi)).toEqual(["you are"]);
+        } else {
+          expect(prompt).not.toMatch(/\byou are\b/i);
+        }
+        for (const [sentence, text] of Object.entries(TEAMMATES_SENTENCES)) {
+          expect([sentence, countOf(prompt, text)]).toEqual([
             sentence,
-            (lines as readonly AgentChatSentence[]).includes(sentence as AgentChatSentence),
+            (lines as readonly TeammatesSentence[]).includes(sentence as TeammatesSentence) ? 1 : 0,
           ]);
         }
       }
@@ -481,30 +488,5 @@ describe("agentSessionPrompt", () => {
       await expect(loadAgentSessionPrompt(store, "coco", "/vault")).resolves.toBeNull();
       expect(vault.touchedPaths).toEqual([]);
     });
-  });
-
-  describe("buildCopilotChatSteering()", () => {
-    it(`names every Teammates tool a Copilot chat is offered, with when to use each, for a Codex Copilot chat that finds tools only by name (https://github.com/Brevilabs/obsidian-copilot-private/issues/959, https://github.com/Brevilabs/obsidian-copilot-private/issues/941, ${ISSUE_986})`, async () => {
-      await setCustomAgentsAccess("team");
-
-      expect(buildCopilotChatSteering()).toBe(
-        `When the user asks what you and they worked on, discussed or decided before, list your earlier chats with list_chats from obsidian-copilot and read a listed note when you need what was said. When the user asks you to make a new agent, draft it with the draft_agent tool from obsidian-copilot, which shows them a card to review and create it; you can't create an agent yourself. ${ASK_AGENTS} ${CONTROL_ASKED_AGENTS}`
-      );
-    });
-
-    it(`states no identity, so nothing in a Copilot chat says who the model is (${ISSUE_986})`, async () => {
-      await setCustomAgentsAccess("team");
-
-      expect(buildCopilotChatSteering()).not.toMatch(/you are|Copilot,/);
-    });
-
-    it.each(["free", "plus-without-custom-agents"] as const)(
-      "adds nothing while custom agents aren't available (%s) (https://github.com/Brevilabs/obsidian-copilot-private/issues/959)",
-      async (access) => {
-        await setCustomAgentsAccess(access);
-
-        expect(buildCopilotChatSteering()).toBeNull();
-      }
-    );
   });
 });

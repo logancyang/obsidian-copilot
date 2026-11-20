@@ -1,7 +1,5 @@
 import { getSettings, resetSettings, setSettings, updateSetting } from "@/settings/model";
 import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
-import { buildCopilotChatSteering } from "@/agents/agentSessionPrompt";
-import { setCustomAgentsAccess } from "@/agents/testing/customAgentsAccess";
 import { detectBinary } from "@/utils/detectBinary";
 import { setDisableBuiltinSystemPrompt } from "@/system-prompts/state";
 import { CODEX_QUESTION_CARD_STEERING, CodexBackend } from "./CodexBackend";
@@ -9,7 +7,6 @@ import * as codexVersion from "./codexVersion";
 import type { App } from "obsidian";
 
 jest.mock("@/utils/detectBinary", () => ({ detectBinary: jest.fn() }));
-jest.mock("@/entitlement");
 
 jest.mock("@/services/obsidianCli/ObsidianCliClient", () => ({
   isObsidianCliEnabled: () => true,
@@ -230,15 +227,32 @@ describe("CodexBackend", () => {
       });
     });
 
-    describe("copilotChatPrompt()", () => {
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/986 names every Teammates tool to a Copilot chat while Copilot Teammates is unlocked, since Codex finds MCP tools only through its tool search", async () => {
-        await setCustomAgentsAccess("team");
-        const unlocked = new CodexBackend(APP).copilotChatPrompt();
+    describe("extendChatPrompt()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/986 tells a chat the prompt hints of the Copilot tools it is offered, since Codex finds MCP tools only through its tool search: each hint once, in order", () => {
+        expect(
+          new CodexBackend(APP).extendChatPrompt({
+            agentPrompt: null,
+            toolPromptHints: ["Ask with ask.", "Check with check.", "Check with check."],
+          })
+        ).toBe("Ask with ask. Check with check.");
+      });
 
-        expect(unlocked).toBe(buildCopilotChatSteering());
-        expect(unlocked).toContain("stop_agent");
-        await setCustomAgentsAccess("free");
-        expect(new CodexBackend(APP).copilotChatPrompt()).toBeNull();
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/986 leaves out a hint the agent's part already says, so no chat is told the same sentence twice", () => {
+        const codex = new CodexBackend(APP);
+
+        expect(
+          codex.extendChatPrompt({
+            agentPrompt: "You are Coco. Recall with recall. Remember rules.",
+            toolPromptHints: ["Ask with ask.", "Recall with recall."],
+          })
+        ).toBe("Ask with ask.");
+        expect(
+          codex.extendChatPrompt({
+            agentPrompt: "You are Coco. Recall with recall.",
+            toolPromptHints: ["Recall with recall."],
+          })
+        ).toBeNull();
+        expect(codex.extendChatPrompt({ agentPrompt: null, toolPromptHints: [] })).toBeNull();
       });
     });
 
