@@ -14,8 +14,8 @@ language, comment, styling, and code-structure rules.
 ## Import boundaries
 
 ESLint enforces module boundaries in two forms: layer rules
-(`eslint-plugin-boundaries`, e.g. the agent-mode layers in
-`src/agentMode/AGENTS.md`) and path fences (`no-restricted-imports`
+(`eslint-plugin-boundaries`, built from the boxes and edges in the root
+`architecture.json`) and path fences (`no-restricted-imports`
 allowlists, e.g. the gallery/story fence and the `src/components/ui`
 purity fence).
 
@@ -38,7 +38,10 @@ points the wrong way. In order of preference:
 Never widen a fence with a per-file exemption (a `SomeComponent$` regex
 carve-out, an extra `!@/...` negation for one module). Each carve-out
 silently redefines what the boundary means, invites the next one, and
-leaves the file somewhere its folder no longer describes. If none of the
+leaves the file somewhere its folder no longer describes. The same holds
+for `architecture.debt.json`: it lists the violations that existed when the
+rules landed and only shrinks; never add an entry to make a new import pass.
+If none of the
 three options above works, the boundary itself is wrong — change the
 boundary deliberately, in its own reviewed change, with the layer rules
 in `src/agentMode/AGENTS.md` updated to match.
