@@ -58,8 +58,12 @@ function trackedSourceFiles(folder) {
   });
 }
 
+const projects = [];
+afterAll(() => projects.forEach((project) => fs.rmSync(project, { recursive: true })));
+
 function writeProject(files) {
   const project = fs.mkdtempSync(path.join(os.tmpdir(), "architecture-"));
+  projects.push(project);
   for (const [file, text] of Object.entries(files)) {
     fs.mkdirSync(path.dirname(path.join(project, file)), { recursive: true });
     fs.writeFileSync(path.join(project, file), text);
