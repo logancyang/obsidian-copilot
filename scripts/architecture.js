@@ -1,8 +1,6 @@
 const fs = require("fs");
 const path = require("path");
 
-const HOST_PART = "/host";
-
 function readJson(root, name) {
   return JSON.parse(fs.readFileSync(path.join(root, name), "utf8"));
 }
@@ -50,18 +48,19 @@ function createBoxOf(graph) {
 }
 
 function clientBoxes(graph) {
-  return new Set(graph.boxes.filter(({ client }) => client).map(({ box }) => box));
+  return new Set(graph.boxes.map(({ box }) => box).filter((box) => box.startsWith("client/")));
 }
 
 function featureOf(box) {
-  return box.startsWith("features/") ? box.split("/")[1] : null;
+  return /^(?:client|host)\/features\/([^/]+)$/.exec(box)?.[1] ?? null;
 }
 
 function expandBox(graph, name) {
-  const features = graph.boxes.map(({ box }) => box).filter((box) => featureOf(box));
-  if (name === "features/*") return features.filter((box) => !box.endsWith(HOST_PART));
-  if (name === "features/*/host") return features.filter((box) => box.endsWith(HOST_PART));
-  return [name];
+  if (!name.endsWith("/*")) return [name];
+  const prefix = name.slice(0, -1);
+  return graph.boxes
+    .map(({ box }) => box)
+    .filter((box) => box.startsWith(prefix) && featureOf(box));
 }
 
 function importRows(graph) {
@@ -69,9 +68,7 @@ function importRows(graph) {
   return Object.entries(graph.edges).flatMap(([source, targets]) =>
     expandBox(graph, source).map((box) => {
       const reach = targets.flatMap((target) => expandBox(graph, target));
-      if (featureOf(box) && box.endsWith(HOST_PART)) {
-        reach.push(box.slice(0, -HOST_PART.length));
-      }
+      if (box.startsWith("host/features/")) reach.push(`client/features/${featureOf(box)}`);
       return { box, allowed: reach.filter((to) => names.has(to)) };
     })
   );
