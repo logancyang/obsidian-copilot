@@ -20,16 +20,19 @@ allowlists, e.g. the gallery/story fence and the `src/components/ui`
 purity fence).
 
 `architecture.json` splits `src/` by where code runs, and each box is named
-after the folder its code belongs in. **Client** boxes (`client/core` for the
-basics everything shares, `client/protocol`, `client/chat`, and
-`client/features/<name>`) must run in any shell, the phone app included: they
-import no `obsidian`, no Electron, no Node, and no host box, and they reach
-the host only through the session protocol or the shell interface. **Host**
-boxes (`host/chat` for the chat engine, `host/backends`, `host/platform` for
-settings and services, and `host/features/<name>`) run inside the Obsidian
-plugin and may use all of those. **Quick Chat** is a legacy box of its own:
-it runs in Obsidian on desktop and phones, stays outside the session
-protocol, and only the app imports it, so it can be deleted as one box.
+after the monorepo module its code belongs in. Three boxes, listed under
+`runsAnywhere`, must run in any shell, the phone app included: `core` (the
+basics everything shares, package `packages/core`), `protocol` (the session
+protocol, `packages/protocol`) and the **client** boxes, `client/chat` and
+`client/features/<name>` (`packages/client`). They import no `obsidian`, no
+Electron, no Node, and no host box, and client code reaches the host only
+through the session protocol or the shell interface. **Host** boxes
+(`host/chat` for the chat engine, `host/backends`, `host/platform` for
+settings and services, and `host/features/<name>`) belong to the Obsidian
+plugin, `apps/obsidian`, and may use all of those. **Quick Chat** is a legacy
+box of its own in the plugin: it runs in Obsidian on desktop and phones,
+stays outside the session protocol, and only the app imports it, so it can be
+deleted as one box.
 
 A feature is two modules with the same name: its client half (screens,
 hooks, and the types and protocol messages both halves share) and its host

@@ -47,19 +47,17 @@ describe("architecture", () => {
     it("puts a file in the first box whose pattern matches it", () => {
       const boxed = createBoxOf({
         boxes: [
-          { box: "client/protocol", files: ["src/chat/types.ts"] },
+          { box: "protocol", files: ["src/chat/types.ts"] },
           { box: "host/chat", files: ["src/chat/**"] },
         ],
       });
 
-      expect(boxed("src/chat/types.ts")).toBe("client/protocol");
+      expect(boxed("src/chat/types.ts")).toBe("protocol");
       expect(boxed("src/chat/AgentSession.ts")).toBe("host/chat");
     });
 
     it("puts a file no box claims in no box", () => {
-      expect(createBoxOf({ boxes: [{ box: "client/core", files: ["src/**"] }] })("dev/x.ts")).toBe(
-        null
-      );
+      expect(createBoxOf({ boxes: [{ box: "core", files: ["src/**"] }] })("dev/x.ts")).toBe(null);
     });
 
     it(`puts a feature's components and hooks in its client box and its other files in its host box (${ISSUE})`, () => {
@@ -78,7 +76,6 @@ describe("architecture", () => {
       expect([...clientBoxes(graph)].sort()).toEqual([
         "client/chat",
         "client/chatKit",
-        "client/core",
         "client/features/connectors",
         "client/features/customCommands",
         "client/features/excalidraw",
@@ -87,7 +84,8 @@ describe("architecture", () => {
         "client/features/projects",
         "client/features/skills",
         "client/features/teammates",
-        "client/protocol",
+        "core",
+        "protocol",
       ]);
     });
   });
@@ -96,17 +94,13 @@ describe("architecture", () => {
     const rowOf = (box) => importRows(graph).find((row) => row.box === box);
 
     it("lets the chat UI import only the client boxes below it", () => {
-      expect(rowOf("client/chat").allowed).toEqual([
-        "client/core",
-        "client/protocol",
-        "client/chatKit",
-      ]);
+      expect(rowOf("client/chat").allowed).toEqual(["core", "protocol", "client/chatKit"]);
     });
 
     it("lets a feature import the chat client and the boxes below it, never another feature", () => {
       expect(rowOf("client/features/miyo").allowed).toEqual([
-        "client/core",
-        "client/protocol",
+        "core",
+        "protocol",
         "client/chatKit",
         "client/chat",
       ]);
@@ -114,9 +108,9 @@ describe("architecture", () => {
 
     it("lets a feature's host part import the chat host and its own client part, never another feature", () => {
       expect(rowOf("host/features/teammates").allowed).toEqual([
-        "client/core",
+        "core",
         "host/platform",
-        "client/protocol",
+        "protocol",
         "host/chat",
         "client/features/teammates",
       ]);
