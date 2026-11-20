@@ -12,4 +12,8 @@ const meta = {
 } satisfies Meta<CustomAgentsUpsellContentProps>;
 export default meta;
 
-export const UpsellDialog: StoryObj<CustomAgentsUpsellContentProps> = {};
+export const WithVideo: StoryObj<CustomAgentsUpsellContentProps> = {};
+
+export const WithoutVideo: StoryObj<CustomAgentsUpsellContentProps> = {
+  args: { video: null },
+};
