@@ -420,6 +420,7 @@ export interface SessionAgent {
   prompt: string;
   name?: string;
   memoryPath?: string;
+  asked?: boolean;
 }
 
 export interface OpenSessionInput {

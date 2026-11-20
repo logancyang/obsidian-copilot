@@ -461,6 +461,18 @@ describe("descriptor", () => {
           ).toEqual({ default: "copilot-agent-coco/default", auto: "copilot-agent-coco/auto" });
         }
       );
+
+      it.each(["copilot-agent-coco/asked/default", "copilot-agent-coco/asked/auto"])(
+        "https://github.com/Brevilabs/obsidian-copilot-private/issues/991 maps Default and Auto to the asked agent's own pair while its chat runs as %s",
+        (current) => {
+          expect(
+            OpencodeBackendDescriptor.getModeMapping?.(null, modeOption(current))?.canonical
+          ).toEqual({
+            default: "copilot-agent-coco/asked/default",
+            auto: "copilot-agent-coco/asked/auto",
+          });
+        }
+      );
     });
   });
 
