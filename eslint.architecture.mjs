@@ -11,16 +11,16 @@ const BACKEND_LAYERS = [
 ];
 
 const elements = graph.boxes.flatMap(({ box, files }) =>
-  box === "backends"
+  box === "host/backends"
     ? BACKEND_LAYERS.map((layer) => ({ ...layer, category: box, mode: "full" }))
     : [{ type: box, category: box, pattern: files, mode: "full" }]
 );
 
 const rows = importRows(graph);
-const belowBackends = { category: rows.find(({ box }) => box === "backends").allowed };
+const belowBackends = { category: rows.find(({ box }) => box === "host/backends").allowed };
 
 const boxRules = rows
-  .filter(({ box }) => box !== "backends")
+  .filter(({ box }) => box !== "host/backends")
   .map(({ box, allowed }) => ({
     from: { category: box },
     allow: { to: { category: [box, ...allowed] } },
@@ -48,9 +48,9 @@ const debtRules = Object.entries(debt.imports).map(([file, sources]) => ({
 const clientAccessRule = "copilot/no-host-access-in-client";
 
 const clientAccessConfigs = [
-  ...[...graph.boxes].reverse().map(({ files, client }) => ({
+  ...[...graph.boxes].reverse().map(({ box, files }) => ({
     files,
-    rules: { [clientAccessRule]: client ? "error" : "off" },
+    rules: { [clientAccessRule]: box.startsWith("client/") ? "error" : "off" },
   })),
   {
     files: ["**/*.test.{ts,tsx}", "**/__mocks__/**", ...debt.clientAccess],

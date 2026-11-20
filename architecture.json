@@ -15,26 +15,23 @@
       ]
     },
     {
-      "box": "chat/protocol",
-      "client": true,
+      "box": "client/protocol",
       "files": ["src/agentMode/session/types.ts", "src/agentMode/session/errors.ts", "src/types/**"]
     },
     {
-      "box": "chat/host",
+      "box": "host/chat",
       "files": ["src/agentMode/session/**"]
     },
     {
-      "box": "backends",
+      "box": "host/backends",
       "files": ["src/agentMode/acp/**", "src/agentMode/sdk/**", "src/agentMode/backends/**"]
     },
     {
-      "box": "chat/ui",
-      "client": true,
+      "box": "client/chat",
       "files": ["src/agentMode/ui/**"]
     },
     {
-      "box": "chat/kit",
-      "client": true,
+      "box": "client/chatKit",
       "files": [
         "src/components/chat-components/**",
         "src/components/Markdown.tsx",
@@ -45,21 +42,19 @@
       ]
     },
     {
-      "box": "features/navigator",
-      "client": true,
+      "box": "client/features/navigator",
       "files": ["src/agentMode/navigator/**/*.tsx", "src/agentMode/navigator/**/{ui,hooks}/**"]
     },
     {
-      "box": "features/navigator/host",
+      "box": "host/features/navigator",
       "files": ["src/agentMode/navigator/**"]
     },
     {
-      "box": "features/skills",
-      "client": true,
+      "box": "client/features/skills",
       "files": ["src/agentMode/skills/**/*.tsx", "src/agentMode/skills/**/{ui,hooks}/**"]
     },
     {
-      "box": "features/skills/host",
+      "box": "host/features/skills",
       "files": [
         "src/agentMode/skills/**",
         "src/builtinSkills/**",
@@ -67,26 +62,23 @@
       ]
     },
     {
-      "box": "features/teammates",
-      "client": true,
+      "box": "client/features/teammates",
       "files": ["src/agents/**/*.tsx", "src/agents/**/{ui,hooks}/**"]
     },
     {
-      "box": "features/teammates/host",
+      "box": "host/features/teammates",
       "files": ["src/agents/**"]
     },
     {
-      "box": "features/projects",
-      "client": true,
+      "box": "client/features/projects",
       "files": ["src/projects/**/*.tsx", "src/projects/**/{ui,hooks}/**"]
     },
     {
-      "box": "features/projects/host",
+      "box": "host/features/projects",
       "files": ["src/projects/**", "src/instructions/**"]
     },
     {
-      "box": "features/miyo",
-      "client": true,
+      "box": "client/features/miyo",
       "files": [
         "src/miyo/**/*.tsx",
         "src/miyo/**/{ui,hooks}/**",
@@ -94,7 +86,7 @@
       ]
     },
     {
-      "box": "features/miyo/host",
+      "box": "host/features/miyo",
       "files": [
         "src/miyo/**",
         "src/components/RelevantNotesView.tsx",
@@ -102,30 +94,27 @@
       ]
     },
     {
-      "box": "features/connectors",
-      "client": true,
+      "box": "client/features/connectors",
       "files": ["src/connectors/**/*.tsx", "src/connectors/**/{ui,hooks}/**"]
     },
     {
-      "box": "features/connectors/host",
+      "box": "host/features/connectors",
       "files": ["src/connectors/**", "src/settings/v2/components/ConnectorsSettings.tsx"]
     },
     {
-      "box": "features/excalidraw",
-      "client": true,
+      "box": "client/features/excalidraw",
       "files": ["src/excalidraw/**/*.tsx", "src/excalidraw/**/{ui,hooks}/**"]
     },
     {
-      "box": "features/excalidraw/host",
+      "box": "host/features/excalidraw",
       "files": ["src/excalidraw/**"]
     },
     {
-      "box": "features/openArtifacts/host",
+      "box": "host/features/openArtifacts",
       "files": ["src/openArtifacts/**", "src/components/modals/OpenArtifactsModal*"]
     },
     {
-      "box": "features/customCommands",
-      "client": true,
+      "box": "client/features/customCommands",
       "files": [
         "src/commands/**/*.tsx",
         "src/commands/**/{ui,hooks}/**",
@@ -134,7 +123,7 @@
       ]
     },
     {
-      "box": "features/customCommands/host",
+      "box": "host/features/customCommands",
       "files": ["src/commands/**", "src/settings/v2/components/CommandSettings.tsx"]
     },
     {
@@ -152,7 +141,7 @@
       ]
     },
     {
-      "box": "platform",
+      "box": "host/platform",
       "files": [
         "src/settings/**",
         "src/{modelManagement,entitlement,services,selection,search}/**",
@@ -162,8 +151,7 @@
       ]
     },
     {
-      "box": "core",
-      "client": true,
+      "box": "client/core",
       "files": [
         "src/{utils,lib,hooks,styles,__tests__}/**",
         "src/components/ui/**",
@@ -174,26 +162,26 @@
     }
   ],
   "edges": {
-    "core": [],
-    "chat/protocol": ["core"],
-    "chat/kit": ["core", "chat/protocol"],
-    "chat/ui": ["core", "chat/protocol", "chat/kit"],
-    "features/*": ["core", "chat/protocol", "chat/kit", "chat/ui"],
-    "platform": ["core"],
-    "chat/host": ["core", "platform", "chat/protocol"],
-    "backends": ["core", "platform", "chat/protocol", "chat/host"],
-    "features/*/host": ["core", "platform", "chat/protocol", "chat/host"],
-    "quickChat": ["core", "platform", "chat/protocol", "chat/kit"],
+    "client/core": [],
+    "client/protocol": ["client/core"],
+    "client/chatKit": ["client/core", "client/protocol"],
+    "client/chat": ["client/core", "client/protocol", "client/chatKit"],
+    "client/features/*": ["client/core", "client/protocol", "client/chatKit", "client/chat"],
+    "host/platform": ["client/core"],
+    "host/chat": ["client/core", "host/platform", "client/protocol"],
+    "host/backends": ["client/core", "host/platform", "client/protocol", "host/chat"],
+    "host/features/*": ["client/core", "host/platform", "client/protocol", "host/chat"],
+    "quickChat": ["client/core", "host/platform", "client/protocol", "client/chatKit"],
     "app": [
-      "core",
-      "platform",
-      "chat/protocol",
-      "chat/kit",
-      "chat/ui",
-      "chat/host",
-      "backends",
-      "features/*",
-      "features/*/host",
+      "client/core",
+      "host/platform",
+      "client/protocol",
+      "client/chatKit",
+      "client/chat",
+      "host/chat",
+      "host/backends",
+      "client/features/*",
+      "host/features/*",
       "quickChat"
     ]
   }

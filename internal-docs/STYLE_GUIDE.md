@@ -19,19 +19,25 @@ ESLint enforces module boundaries in two forms: layer rules
 allowlists, e.g. the gallery/story fence and the `src/components/ui`
 purity fence).
 
-`architecture.json` splits `src/` by where code runs. **Client** boxes (the
-session protocol, the chat UI, each feature's components and hooks, and
-`core`, the basics everything shares) must run in any shell, the phone app
-included: they import no `obsidian`, no Electron, no Node, and no host box,
-and they reach the host only through the session protocol or the shell
-interface. **Host** boxes (the chat engine, backends, settings and services,
-each feature's other files, and the app) run inside the Obsidian plugin and
-may use all of those. **Quick Chat** is a legacy box of its own: it runs in
-Obsidian on desktop and phones, stays outside the session protocol, and only
-the app imports it, so it can be deleted as one box. Inside the client, the
-chat UI never imports a feature and features never import each other: a
-feature plugs into slots the chat UI defines, so it can be removed by
-deleting its folder and its registration.
+`architecture.json` splits `src/` by where code runs, and each box is named
+after the folder its code belongs in. **Client** boxes (`client/core` for the
+basics everything shares, `client/protocol`, `client/chat`, and
+`client/features/<name>`) must run in any shell, the phone app included: they
+import no `obsidian`, no Electron, no Node, and no host box, and they reach
+the host only through the session protocol or the shell interface. **Host**
+boxes (`host/chat` for the chat engine, `host/backends`, `host/platform` for
+settings and services, and `host/features/<name>`) run inside the Obsidian
+plugin and may use all of those. **Quick Chat** is a legacy box of its own:
+it runs in Obsidian on desktop and phones, stays outside the session
+protocol, and only the app imports it, so it can be deleted as one box.
+
+A feature is two modules with the same name: its client half (screens,
+hooks, and the types and protocol messages both halves share) and its host
+half (stores, tools, prompt sections), which may import its own client half
+and nothing of another feature. Inside the client, the chat UI never imports
+a feature and features never import each other: a feature plugs into slots
+the chat UI defines, so it can be removed by deleting its two folders and its
+registration.
 
 **When a fence rejects an import, fix the structure — never the fence.**
 A rejected import means the file is in the wrong place or the dependency

@@ -73,45 +73,47 @@ describe("architecture", () => {
     it("puts a file in the first box whose pattern matches it", () => {
       const boxed = createBoxOf({
         boxes: [
-          { box: "chat/protocol", files: ["src/chat/types.ts"] },
-          { box: "chat/host", files: ["src/chat/**"] },
+          { box: "client/protocol", files: ["src/chat/types.ts"] },
+          { box: "host/chat", files: ["src/chat/**"] },
         ],
       });
 
-      expect(boxed("src/chat/types.ts")).toBe("chat/protocol");
-      expect(boxed("src/chat/AgentSession.ts")).toBe("chat/host");
+      expect(boxed("src/chat/types.ts")).toBe("client/protocol");
+      expect(boxed("src/chat/AgentSession.ts")).toBe("host/chat");
     });
 
     it("puts a file no box claims in no box", () => {
-      expect(createBoxOf({ boxes: [{ box: "core", files: ["src/**"] }] })("dev/x.ts")).toBe(null);
+      expect(createBoxOf({ boxes: [{ box: "client/core", files: ["src/**"] }] })("dev/x.ts")).toBe(
+        null
+      );
     });
 
     it(`puts a feature's components and hooks in its client box and its other files in its host box (${ISSUE})`, () => {
-      expect(boxOf("src/agents/ui/AgentRoster.tsx")).toBe("features/teammates");
-      expect(boxOf("src/agents/agentMode/ui/AgentProfile.tsx")).toBe("features/teammates");
+      expect(boxOf("src/agents/ui/AgentRoster.tsx")).toBe("client/features/teammates");
+      expect(boxOf("src/agents/agentMode/ui/AgentProfile.tsx")).toBe("client/features/teammates");
       expect(boxOf("src/projects/hooks/useRefreshEmptyLandingOnContextSourceChange.ts")).toBe(
-        "features/projects"
+        "client/features/projects"
       );
-      expect(boxOf("src/agents/customAgentsGate.ts")).toBe("features/teammates/host");
-      expect(boxOf("src/agents/agentMode/hiddenAgentChats.ts")).toBe("features/teammates/host");
+      expect(boxOf("src/agents/customAgentsGate.ts")).toBe("host/features/teammates");
+      expect(boxOf("src/agents/agentMode/hiddenAgentChats.ts")).toBe("host/features/teammates");
     });
   });
 
   describe("clientBoxes()", () => {
     it("names the boxes whose code must run in any shell, outside Obsidian too", () => {
       expect([...clientBoxes(graph)].sort()).toEqual([
-        "chat/kit",
-        "chat/protocol",
-        "chat/ui",
-        "core",
-        "features/connectors",
-        "features/customCommands",
-        "features/excalidraw",
-        "features/miyo",
-        "features/navigator",
-        "features/projects",
-        "features/skills",
-        "features/teammates",
+        "client/chat",
+        "client/chatKit",
+        "client/core",
+        "client/features/connectors",
+        "client/features/customCommands",
+        "client/features/excalidraw",
+        "client/features/miyo",
+        "client/features/navigator",
+        "client/features/projects",
+        "client/features/skills",
+        "client/features/teammates",
+        "client/protocol",
       ]);
     });
   });
@@ -120,25 +122,29 @@ describe("architecture", () => {
     const rowOf = (box) => importRows(graph).find((row) => row.box === box);
 
     it("lets the chat UI import only the client boxes below it", () => {
-      expect(rowOf("chat/ui").allowed).toEqual(["core", "chat/protocol", "chat/kit"]);
+      expect(rowOf("client/chat").allowed).toEqual([
+        "client/core",
+        "client/protocol",
+        "client/chatKit",
+      ]);
     });
 
     it("lets a feature import the chat client and the boxes below it, never another feature", () => {
-      expect(rowOf("features/miyo").allowed).toEqual([
-        "core",
-        "chat/protocol",
-        "chat/kit",
-        "chat/ui",
+      expect(rowOf("client/features/miyo").allowed).toEqual([
+        "client/core",
+        "client/protocol",
+        "client/chatKit",
+        "client/chat",
       ]);
     });
 
     it("lets a feature's host part import the chat host and its own client part, never another feature", () => {
-      expect(rowOf("features/teammates/host").allowed).toEqual([
-        "core",
-        "platform",
-        "chat/protocol",
-        "chat/host",
-        "features/teammates",
+      expect(rowOf("host/features/teammates").allowed).toEqual([
+        "client/core",
+        "host/platform",
+        "client/protocol",
+        "host/chat",
+        "client/features/teammates",
       ]);
     });
 
