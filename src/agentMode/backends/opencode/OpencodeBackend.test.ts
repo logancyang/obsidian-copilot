@@ -1119,6 +1119,7 @@ describe("OpencodeBackend", () => {
 
     describe("buildSpawnDescriptor()", () => {
       beforeEach(() => {
+        delete process.env.OPENCODE_CONFIG;
         resetSettings();
         seedSkills([]);
         resetPromptState();
