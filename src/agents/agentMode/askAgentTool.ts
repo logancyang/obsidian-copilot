@@ -320,7 +320,7 @@ const ASK_USER_RESULT_TEXT = Object.freeze({
 
 // An asked agent's chat has no user in it, so only that chat gets a way to reach the user; OpenCode lists a folder's tools once for every chat in it, so the call decides there.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/945
-// No agent can be asked while none exists, so a shared listing then leaves it out.
+// No agent can be asked while none exists, so a shared listing then leaves it out; a chat the user sees that calls it there is told to ask directly, which isn't an error.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/987
 export function createAskUserTool(chats: HiddenAgentChats, host: AskAgentToolHost): HostedTool {
   return {
@@ -337,7 +337,7 @@ export function createAskUserTool(chats: HiddenAgentChats, host: AskAgentToolHos
         return { text: "question must be a non-empty string.", isError: true };
       }
       const result = chats.askUser(chat, question);
-      return { text: ASK_USER_RESULT_TEXT[result], isError: result !== "asked" };
+      return { text: ASK_USER_RESULT_TEXT[result], isError: result === "unavailable" };
     },
   };
 }

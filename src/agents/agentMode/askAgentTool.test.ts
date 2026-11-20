@@ -371,12 +371,12 @@ describe("askAgentTool", () => {
       });
     });
 
-    it(`tells a chat the user sees to ask the user directly, marking the call failed (${CONTROL})`, async () => {
+    it(`tells a chat the user sees, which OpenCode's shared listing reaches, to ask the user directly, without failing the call (${SCOPE_ISSUE})`, async () => {
       await expect(
         buildAskUser("not_from_here").tool.call({ question: "October?" }, CHAT)
       ).resolves.toEqual({
         text: "Only an agent asked into another agent's chat can use ask_user. Ask the user directly in your reply.",
-        isError: true,
+        isError: false,
       });
     });
   });
