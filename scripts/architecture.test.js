@@ -57,7 +57,7 @@ describe("architecture", () => {
     });
 
     it("puts a file no box claims in no box", () => {
-      expect(createBoxOf({ boxes: [{ box: "kernel", files: ["src/**"] }] })("dev/x.ts")).toBe(null);
+      expect(createBoxOf({ boxes: [{ box: "core", files: ["src/**"] }] })("dev/x.ts")).toBe(null);
     });
 
     it(`puts a feature's components and hooks in its client box and its other files in its host box (${ISSUE})`, () => {
@@ -77,6 +77,7 @@ describe("architecture", () => {
         "chat/kit",
         "chat/protocol",
         "chat/ui",
+        "core",
         "features/connectors",
         "features/customCommands",
         "features/excalidraw",
@@ -85,7 +86,6 @@ describe("architecture", () => {
         "features/projects",
         "features/skills",
         "features/teammates",
-        "kernel",
       ]);
     });
   });
@@ -94,12 +94,12 @@ describe("architecture", () => {
     const rowOf = (box) => importRows(graph).find((row) => row.box === box);
 
     it("lets the chat UI import only the client boxes below it", () => {
-      expect(rowOf("chat/ui").allowed).toEqual(["kernel", "chat/protocol", "chat/kit"]);
+      expect(rowOf("chat/ui").allowed).toEqual(["core", "chat/protocol", "chat/kit"]);
     });
 
     it("lets a feature import the chat client and the boxes below it, never another feature", () => {
       expect(rowOf("features/miyo").allowed).toEqual([
-        "kernel",
+        "core",
         "chat/protocol",
         "chat/kit",
         "chat/ui",
@@ -108,7 +108,7 @@ describe("architecture", () => {
 
     it("lets a feature's host part import the chat host and its own client part, never another feature", () => {
       expect(rowOf("features/teammates/host").allowed).toEqual([
-        "kernel",
+        "core",
         "platform",
         "chat/protocol",
         "chat/host",
