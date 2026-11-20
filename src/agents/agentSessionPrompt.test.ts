@@ -451,7 +451,7 @@ describe("agentSessionPrompt", () => {
         });
 
         expect(loaded?.prompt.startsWith(IDENTITY)).toBe(true);
-        expect(loaded?.prompt).not.toMatch(/you are Copilot/i);
+        expect(loaded?.prompt.match(/\byou are\b/gi)).toEqual(["you are"]);
         for (const [sentence, text] of Object.entries(AGENT_CHAT_SENTENCES)) {
           expect([sentence, loaded?.prompt.includes(text)]).toEqual([
             sentence,
