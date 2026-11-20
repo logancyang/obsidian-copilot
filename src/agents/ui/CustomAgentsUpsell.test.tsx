@@ -30,20 +30,20 @@ describe("CustomAgentsUpsell", () => {
   });
 
   describe("CustomAgentsUpsellContent()", () => {
-    it("says what a teammate is for and lists the three things teammates do", () => {
+    it("says what a teammate is for, that it is a preview for Supporters, and lists three things teammates do", () => {
       const { container } = renderContent(
         <CustomAgentsUpsellContent medium="custom_agent_dialog" onClose={jest.fn()} video={null} />
       );
 
       expect(
         screen.getByText(
-          "Make a teammate for each part of your life: one for your taxes, one for marketing, one for your family's calendar. Each has its own job, instructions and memory."
+          "Make a teammate for each kind of work you do, like an editor for your drafts, a researcher for your sources or a planner for your weekly review. Each one has its own instructions and memory. Copilot Teammates is a preview for Supporters."
         )
       ).toBeTruthy();
       expect(Array.from(container.querySelectorAll("li"), (li) => li.textContent)).toEqual([
-        "Correct a teammate once and it remembers next time",
-        "@ another teammate for a second opinion or to hand off a task",
-        "Change how a teammate works by editing its note in your vault",
+        "Correct a teammate or tell it how you like things done, and it remembers next time",
+        "@ another teammate for a second opinion or to hand off part of the work",
+        "Change how a teammate works by editing its instructions in your vault",
       ]);
     });
 
@@ -52,7 +52,7 @@ describe("CustomAgentsUpsell", () => {
         <CustomAgentsUpsellContent medium="custom_agent_dialog" onClose={jest.fn()} />
       );
 
-      const link = screen.getByRole("link", { name: "Watch the video on YouTube (1:39)" });
+      const link = screen.getByRole("link", { name: "Watch the video on YouTube" });
       expect(link.getAttribute("href")).toBe(COPILOT_TEAMMATES_VIDEO.url);
       expect(link.getAttribute("target")).toBe("_blank");
       expect(link.querySelector("img")?.getAttribute("src")).toBe(
@@ -70,12 +70,11 @@ describe("CustomAgentsUpsell", () => {
           video={{
             url: "https://www.youtube.com/watch?v=walkthrough",
             thumbnailUrl: "https://example.invalid/walkthrough.webp",
-            duration: "4:12",
           }}
         />
       );
 
-      const link = screen.getByRole("link", { name: "Watch the video on YouTube (4:12)" });
+      const link = screen.getByRole("link", { name: "Watch the video on YouTube" });
       expect(link.getAttribute("href")).toBe("https://www.youtube.com/watch?v=walkthrough");
       expect(link.querySelector("img")?.getAttribute("src")).toBe(
         "https://example.invalid/walkthrough.webp"
