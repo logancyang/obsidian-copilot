@@ -251,7 +251,7 @@ describe("agentMode", () => {
       );
     });
 
-    it("gives the manager the plugin's custom agents to start a chat as one, with how much of a tool's description the chat's backend shows (https://github.com/Brevilabs/obsidian-copilot-private/issues/986)", async () => {
+    it("gives the manager the plugin's custom agents to start a chat as one", async () => {
       const agent = {
         slug: "coco",
         name: "Coco",
@@ -264,12 +264,10 @@ describe("agentMode", () => {
 
       const resolved = await jest
         .mocked(AgentSessionManager)
-        .mock.calls[0][2].resolveAgent?.("coco", "none");
+        .mock.calls[0][2].resolveAgent?.("coco");
 
       expect(resolved).toBe(agent);
-      expect(loadAgentSessionPrompt).toHaveBeenCalledWith(store, "coco", "/vault", {
-        toolDescriptionUpFront: "none",
-      });
+      expect(loadAgentSessionPrompt).toHaveBeenCalledWith(store, "coco", "/vault");
     });
 
     it("tells the manager whether a tab strip holds its chats as the workspace layout changes for https://github.com/Brevilabs/obsidian-copilot-private/issues/849", () => {

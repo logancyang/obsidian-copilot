@@ -431,7 +431,6 @@ function buildDescriptor(overrides: Record<string, unknown> = {}): BackendDescri
     id: "opencode",
     displayName: "opencode",
     summarizesSessionTitle: true,
-    toolDescriptionUpFront: "start",
     getInstallState: jest.fn(() => ({ kind: "ready" })),
     subscribeInstallState: jest.fn(),
     openInstallUI: jest.fn(),
@@ -1116,8 +1115,7 @@ describe("AgentSessionManager", () => {
         expect(mgr.getChatUIState(session.internalId)).toBe(mgr.getActiveChatUIState());
       });
 
-      it("starts a chat as the custom agent it names, giving the backend that agent's part, built for how much of a tool's description the backend shows (https://github.com/Brevilabs/obsidian-copilot-private/issues/986)", async () => {
-        mockResolveAgent.mockClear();
+      it("starts a chat as the custom agent it names, giving the backend that agent's part", async () => {
         const mgr = buildManager();
 
         const session = await mgr.createSession(
@@ -1128,7 +1126,6 @@ describe("AgentSessionManager", () => {
           "coco"
         );
 
-        expect(mockResolveAgent).toHaveBeenCalledWith("coco", "start");
         expect(sessionCreateSpy).toHaveBeenLastCalledWith(
           expect.objectContaining({ agentSlug: "coco", agent: COCO_AGENT })
         );
@@ -7050,8 +7047,7 @@ describe("AgentSessionManager", () => {
           descriptor: buildDescriptor({ createBackendProcess: () => replay.backend }),
         }).loadSessionFromHistory(mockTFile({ path: "chat/Saved.md" }));
 
-      it("reopens a chat note recorded with a custom agent as that agent, loading the backend session with the agent's part built for how much of a tool's description the backend shows (https://github.com/Brevilabs/obsidian-copilot-private/issues/986)", async () => {
-        mockResolveAgent.mockClear();
+      it("reopens a chat note recorded with a custom agent as that agent, loading the backend session with the agent's part", async () => {
         const replay = buildReplayingBackend();
         const session = await buildManager({
           persistence: {
@@ -7066,7 +7062,6 @@ describe("AgentSessionManager", () => {
           descriptor: buildDescriptor({ createBackendProcess: () => replay.backend }),
         }).loadSessionFromHistory(mockTFile({ path: "chat/Saved.md" }));
 
-        expect(mockResolveAgent).toHaveBeenCalledWith("coco", "start");
         expect(replay.backend.loadSession).toHaveBeenCalledWith(
           expect.objectContaining({ sessionId: "native-1", agent: COCO_AGENT })
         );

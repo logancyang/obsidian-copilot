@@ -20,7 +20,7 @@ import {
   STOP_AGENT_TOOL_NAME,
 } from "@/agents/agentMode/agentToolCalls";
 import { RELAY_PRINCIPLE } from "@/agents/agentReply";
-import { ASK_AGENT_PROMPT_HINT, describeAgent } from "@/agents/agentSessionPrompt";
+import { describeAgent } from "@/agents/agentSessionPrompt";
 import { getCustomAgentsGate, subscribeToCustomAgentsGate } from "@/agents/customAgentsGate";
 
 export const ASK_USER_TOOL_NAME = "ask_user";
@@ -147,6 +147,8 @@ export function relistOnCustomAgentsGateChange(relist: () => void): () => void {
   });
 }
 
+const ASK_AGENT_PROMPT_HINT =
+  "When the user's message @-mentions one of the user's agents by name or clearly points to one, ask that agent with the ask_agent tool from obsidian-copilot; never otherwise.";
 // check_agent, answer_agent and stop_agent are always offered together, so each carries the one sentence that names all three.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/986
 const ASKED_AGENT_PROMPT_HINT =

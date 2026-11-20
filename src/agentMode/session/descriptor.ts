@@ -21,7 +21,6 @@ import type {
   PermissionOption,
   RawModeState,
   SessionId,
-  ToolDescriptionUpFront,
 } from "./types";
 
 export interface ModelSelectionSession {
@@ -109,10 +108,6 @@ export interface BackendDescriptor {
   readonly restartOnProviderConfigChange: boolean;
 
   readonly restartOnSystemPromptChange: boolean;
-
-  // How much of each Copilot tool's description the model sees before it looks the tool up; an agent's chat states the rules a description carries only where the model may not see them.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/986
-  readonly toolDescriptionUpFront: ToolDescriptionUpFront;
 
   readonly summarizesSessionTitle: boolean;
 

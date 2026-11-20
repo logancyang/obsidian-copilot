@@ -3,7 +3,6 @@ import {
   CODEX_QUESTION_CARD_STEERING,
   CodexBackend,
 } from "@/agentMode/backends/codex/CodexBackend";
-import { backendRegistry } from "@/agentMode/backends/registry";
 import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
 import { buildCopilotChatPrompt } from "@/agentMode/session/copilotChatPrompt";
 import { promptHintsFor, type HostedTool } from "@/agentMode/session/copilotMcpServer";
@@ -38,12 +37,7 @@ jest.mock("@/services/obsidianCli/ObsidianCliClient", () => ({
 const COCO = { name: "Coco", title: "Houseplant carer" };
 const MAYA = { name: "Maya", title: "Product critic" };
 const ISSUE_986 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/986";
-const OWN_CHAT = {
-  chatsFolder: "/vault/copilot/copilot-conversations",
-  toolDescriptionUpFront: "full",
-} as const;
-const OWN_CHAT_START_SHOWN = { ...OWN_CHAT, toolDescriptionUpFront: "start" } as const;
-const OWN_CHAT_NONE_SHOWN = { ...OWN_CHAT, toolDescriptionUpFront: "none" } as const;
+const OWN_CHAT = { chatsFolder: "/vault/copilot/copilot-conversations" };
 
 const IDENTITY = "In this chat you are Coco (Houseplant carer), an agent the user made in Copilot.";
 const COPILOT_IDENTITY = "You are Obsidian Copilot.";
@@ -205,7 +199,7 @@ describe("agentSessionPrompt", () => {
       expect(alone).not.toContain(NOT_YOURS_TO_SAVE);
     });
 
-    it(`tells an agent in its own chat that a rule the user gives another agent is not its own to save, and leaves naming ask_agent, check_agent, answer_agent, stop_agent and draft_agent to their tools when the model sees each tool's whole description (https://github.com/Brevilabs/obsidian-copilot-private/issues/969, ${ISSUE_986})`, () => {
+    it(`tells an agent in its own chat that a rule the user gives another agent is not its own to save, and leaves naming ask_agent, check_agent, answer_agent, stop_agent and draft_agent to their tools (https://github.com/Brevilabs/obsidian-copilot-private/issues/969, ${ISSUE_986})`, () => {
       const ownChat = buildAgentPrompt({
         agent: COCO,
         folder: "/vault/copilot/agents/coco",
@@ -228,39 +222,6 @@ describe("agentSessionPrompt", () => {
       ]) {
         expect(ownChat).not.toContain(tool);
       }
-    });
-
-    it(`puts the ask_agent rule right after the list of other agents, then the rule that another agent's rule is not its to save, then the draft_agent rule, before the earlier-chats paragraph, in an agent's own chat whose model sees only the start of a tool's description or none of it (${ISSUE_986})`, () => {
-      for (const ownChat of [OWN_CHAT_START_SHOWN, OWN_CHAT_NONE_SHOWN]) {
-        const built = buildAgentPrompt({
-          agent: COCO,
-          folder: "/vault/copilot/agents/coco",
-          others: [MAYA, { name: "Leo", title: "" }],
-          instruction: "",
-          memory: "",
-          instructionsPath: "copilot/agents/coco/instructions.md",
-          ownChat,
-        });
-
-        expect(built).toContain(
-          `Other agents: Maya (Product critic); Leo.\n\n${ASK_AGENTS}\n\n${NOT_YOURS_TO_SAVE}\n\n${DRAFT_NEW_AGENTS}\n\n${RECALL_EARLIER_CHATS}`
-        );
-      }
-    });
-
-    it(`gives an agent with no other agent the draft_agent rule but no ask_agent rule in its own chat whose model may not see a tool's whole description (${ISSUE_986})`, () => {
-      const alone = buildAgentPrompt({
-        agent: COCO,
-        folder: "/v",
-        others: [],
-        instruction: "",
-        memory: "",
-        instructionsPath: "copilot/agents/coco/instructions.md",
-        ownChat: OWN_CHAT_START_SHOWN,
-      });
-
-      expect(alone).toContain(`Other agents: none.\n\n${DRAFT_NEW_AGENTS}\n\n`);
-      expect(alone).not.toContain("ask_agent");
     });
 
     it("tells an agent in its own chat to list its earlier chats with list_chats only when the user asks, to search or read no other chat note and to say when something was never discussed (https://github.com/Brevilabs/obsidian-copilot-private/issues/959)", () => {
@@ -301,21 +262,20 @@ describe("agentSessionPrompt", () => {
       expect(asked).not.toContain(NOT_YOURS_TO_SAVE);
     });
 
-    it(`keeps an agent's part, apart from its instruction and memory, under 4,200 bytes, in its own chat on any coding agent and when asked (${ISSUE_986})`, () => {
-      const sizes = [OWN_CHAT, OWN_CHAT_START_SHOWN, OWN_CHAT_NONE_SHOWN, undefined].map(
-        (ownChat) =>
-          Buffer.byteLength(
-            buildAgentPrompt({
-              agent: COCO,
-              folder: "/vault/copilot/agents/coco",
-              others: [MAYA, { name: "Leo", title: "" }],
-              instruction: "",
-              memory: "",
-              instructionsPath: "copilot/agents/coco/instructions.md",
-              ownChat,
-            }),
-            "utf8"
-          )
+    it(`keeps an agent's part, apart from its instruction and memory, under 4,200 bytes, in its own chat and when asked (${ISSUE_986})`, () => {
+      const sizes = [OWN_CHAT, undefined].map((ownChat) =>
+        Buffer.byteLength(
+          buildAgentPrompt({
+            agent: COCO,
+            folder: "/vault/copilot/agents/coco",
+            others: [MAYA, { name: "Leo", title: "" }],
+            instruction: "",
+            memory: "",
+            instructionsPath: "copilot/agents/coco/instructions.md",
+            ownChat,
+          }),
+          "utf8"
+        )
       );
 
       expect(Math.max(...sizes)).toBeLessThan(4200);
@@ -329,7 +289,7 @@ describe("agentSessionPrompt", () => {
         instruction: "",
         memory: "",
         instructionsPath: "copilot/agents/coco/instructions.md",
-        ownChat: OWN_CHAT,
+        ownChat: { chatsFolder: "/vault/copilot/copilot-conversations" },
       });
 
       expect(ownChat).toContain(
@@ -366,14 +326,12 @@ describe("agentSessionPrompt", () => {
 
     afterEach(() => store.stop());
 
-    const FULL = { toolDescriptionUpFront: "full" } as const;
-
     it("builds the agent's part from its instruction body without frontmatter, its memory, the other agents and its folder under the vault", async () => {
       seedAgent(vault, "coco", COCO, "You handle houseplant care only.", "End with ACORN.");
       seedAgent(vault, "maya", MAYA, "You handle tax receipts only.");
       await store.start();
 
-      const loaded = await loadAgentSessionPrompt(store, "coco", "/vault", FULL);
+      const loaded = await loadAgentSessionPrompt(store, "coco", "/vault");
 
       expect(loaded).toEqual({
         slug: "coco",
@@ -385,7 +343,7 @@ describe("agentSessionPrompt", () => {
           instruction: "You handle houseplant care only.",
           memory: "End with ACORN.",
           instructionsPath: "copilot/agents/coco/instructions.md",
-          ownChat: OWN_CHAT,
+          ownChat: { chatsFolder: "/vault/copilot/copilot-conversations" },
         }),
         memoryPath: "/vault/copilot/agents/coco/MEMORY.md",
       });
@@ -422,7 +380,7 @@ describe("agentSessionPrompt", () => {
       seedAgent(vault, "maya", MAYA, "You handle tax receipts only.");
       await store.start();
 
-      const loaded = await loadAgentSessionPrompt(store, "maya", "/vault", FULL);
+      const loaded = await loadAgentSessionPrompt(store, "maya", "/vault");
 
       expect(loaded?.prompt).toContain("<memory>\n\n</memory>");
     });
@@ -432,7 +390,7 @@ describe("agentSessionPrompt", () => {
       await store.start();
       seedAgent(vault, "coco", COCO, "Edited instruction.");
 
-      const loaded = await loadAgentSessionPrompt(store, "coco", "/vault", FULL);
+      const loaded = await loadAgentSessionPrompt(store, "coco", "/vault");
 
       expect(loaded?.prompt).toContain("<instruction>\nEdited instruction.\n</instruction>");
     });
@@ -442,7 +400,7 @@ describe("agentSessionPrompt", () => {
       await store.start();
       vault.deleteByHand("copilot/agents/coco/instructions.md");
 
-      await expect(loadAgentSessionPrompt(store, "coco", "/vault", FULL)).resolves.toBeNull();
+      await expect(loadAgentSessionPrompt(store, "coco", "/vault")).resolves.toBeNull();
     });
 
     it("returns null when reading a just-moved folder fails (https://github.com/Brevilabs/obsidian-copilot-private/issues/937)", async () => {
@@ -450,7 +408,7 @@ describe("agentSessionPrompt", () => {
       await store.start();
       jest.spyOn(store, "loadForSession").mockRejectedValueOnce(new Error("ENOENT"));
 
-      await expect(loadAgentSessionPrompt(store, "coco", "/vault", FULL)).resolves.toBeNull();
+      await expect(loadAgentSessionPrompt(store, "coco", "/vault")).resolves.toBeNull();
     });
 
     const SAVE_RULE: TeammatesSentence = "the rule that another agent's rule is not its to save";
@@ -476,21 +434,16 @@ describe("agentSessionPrompt", () => {
       { backendId: "opencode", chat: "unlicensed", others: TWO_OTHERS, lines: [] },
       { backendId: "codex", chat: "unlicensed", others: TWO_OTHERS, lines: [] },
       { backendId: "claude", chat: "own", others: TWO_OTHERS, lines: [SAVE_RULE, LIST, SCOPE] },
-      {
-        backendId: "opencode",
-        chat: "own",
-        others: TWO_OTHERS,
-        lines: [ASK, SAVE_RULE, DRAFT, LIST, SCOPE],
-      },
+      { backendId: "opencode", chat: "own", others: TWO_OTHERS, lines: [SAVE_RULE, LIST, SCOPE] },
       {
         backendId: "codex",
         chat: "own",
         others: TWO_OTHERS,
-        lines: [ASK, SAVE_RULE, DRAFT, LIST, SCOPE, CONTROL],
+        lines: [SAVE_RULE, LIST, SCOPE, ASK, CONTROL, DRAFT],
       },
       { backendId: "claude", chat: "own", others: [], lines: [LIST, SCOPE] },
-      { backendId: "opencode", chat: "own", others: [], lines: [DRAFT, LIST, SCOPE] },
-      { backendId: "codex", chat: "own", others: [], lines: [DRAFT, LIST, SCOPE, ASK, CONTROL] },
+      { backendId: "opencode", chat: "own", others: [], lines: [LIST, SCOPE] },
+      { backendId: "codex", chat: "own", others: [], lines: [LIST, SCOPE, ASK, CONTROL, DRAFT] },
       { backendId: "claude", chat: "asked", others: TWO_OTHERS, lines: [] },
       { backendId: "opencode", chat: "asked", others: TWO_OTHERS, lines: [] },
       { backendId: "codex", chat: "asked", others: TWO_OTHERS, lines: [LIST] },
@@ -509,13 +462,10 @@ describe("agentSessionPrompt", () => {
           asked: "an asked agent's",
         }[row.chat],
         otherCount: row.others.length,
-        shown: { full: "all", start: "only the start", none: "none" }[
-          backendRegistry[row.backendId].toolDescriptionUpFront
-        ],
         summary: row.lines.length > 0 ? row.lines.join(", ") : "no Teammates line",
       }))
     )(
-      `on $backendId, which shows the model $shown of a tool's description up front, gives $label chat with $otherCount other agents one identity, the agent's if it runs one and Obsidian Copilot's otherwise, and each of these Teammates lines exactly once, in this order, and no other: $summary (${ISSUE_986})`,
+      `on $backendId, gives $label chat with $otherCount other agents one identity, the agent's if it runs one and Obsidian Copilot's otherwise, and each of these Teammates lines exactly once and no other: $summary (${ISSUE_986})`,
       async ({ backendId, chat, others, lines }) => {
         if (chat !== "copilot") seedAgent(vault, "coco", COCO, "You handle houseplant care only.");
         for (const name of others) {
@@ -527,14 +477,7 @@ describe("agentSessionPrompt", () => {
         const loaded =
           chat === "copilot"
             ? null
-            : await loadAgentSessionPrompt(
-                store,
-                "coco",
-                "/vault",
-                chat === "asked"
-                  ? { asked: true }
-                  : { toolDescriptionUpFront: backendRegistry[backendId].toolDescriptionUpFront }
-              );
+            : await loadAgentSessionPrompt(store, "coco", "/vault", { asked: chat === "asked" });
         const prompt = chatPrompt(
           backendId,
           chat === "asked" ? ASKED_CHAT : "listed-chat",
@@ -551,11 +494,6 @@ describe("agentSessionPrompt", () => {
             (lines as readonly TeammatesSentence[]).includes(sentence as TeammatesSentence) ? 1 : 0,
           ]);
         }
-        const positions = lines.map((line) => prompt.indexOf(TEAMMATES_SENTENCES[line]));
-        expect(positions).toEqual([...positions].sort((a, b) => a - b));
-        if (others.length > 0 && countOf(loaded?.prompt ?? "", ASK_AGENTS) > 0) {
-          expect(loaded?.prompt).toContain(`Other agents: Leo; Maya.\n\n${ASK_AGENTS}`);
-        }
       }
     );
 
@@ -563,7 +501,7 @@ describe("agentSessionPrompt", () => {
       seedAgent(vault, "coco", COCO, "You handle houseplant care only.");
       await store.start();
 
-      const own = await loadAgentSessionPrompt(store, "coco", "/vault", FULL);
+      const own = await loadAgentSessionPrompt(store, "coco", "/vault");
       const hidden = await loadAgentSessionPrompt(store, "coco", "/vault", { asked: true });
 
       expect(own?.prompt).toContain("never search /vault/copilot/copilot-conversations for it,");
@@ -576,7 +514,7 @@ describe("agentSessionPrompt", () => {
       await setCustomAgentsAccess("free");
       vault.touchedPaths.length = 0;
 
-      await expect(loadAgentSessionPrompt(store, "coco", "/vault", FULL)).resolves.toBeNull();
+      await expect(loadAgentSessionPrompt(store, "coco", "/vault")).resolves.toBeNull();
       expect(vault.touchedPaths).toEqual([]);
     });
   });

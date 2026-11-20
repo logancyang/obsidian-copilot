@@ -92,9 +92,6 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
   restartOnManagedSkillsChange: true,
   restartOnProviderConfigChange: true,
   restartOnSystemPromptChange: true,
-  // OpenCode 2.2.7 lists each Copilot tool in its code-mode catalog with the first 117 characters of its description; recheck on upgrade.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/986
-  toolDescriptionUpFront: "start",
   summarizesSessionTitle: true,
   sharesMcpServersAcrossSessions: true,
   wire: opencodeWire,

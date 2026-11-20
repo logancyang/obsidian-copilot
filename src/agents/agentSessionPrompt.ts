@@ -1,4 +1,3 @@
-import type { ToolDescriptionUpFront } from "@/agentMode";
 import type { CustomAgent, CustomAgentStore } from "@/agents/CustomAgentStore";
 import { getCustomAgentsGate } from "@/agents/customAgentsGate";
 import { MEMORY_FILE_NAME } from "@/agents/customAgentFiles";
@@ -20,16 +19,8 @@ export interface AgentPromptInput {
   instruction: string;
   memory: string;
   instructionsPath: string;
-  ownChat?: { chatsFolder: string; toolDescriptionUpFront: ToolDescriptionUpFront };
+  ownChat?: { chatsFolder: string };
 }
-
-export type AgentChatKind = { asked: true } | { toolDescriptionUpFront: ToolDescriptionUpFront };
-
-export const ASK_AGENT_PROMPT_HINT =
-  "When the user's message @-mentions one of the user's agents by name or clearly points to one, ask that agent with the ask_agent tool from obsidian-copilot; never otherwise.";
-
-export const DRAFT_AGENT_PROMPT_HINT =
-  "When the user asks you to make a new agent, draft it with the draft_agent tool from obsidian-copilot, which shows them a card to review and create it. If you or another agent already handles that job, say so and ask before drafting. You can't create an agent yourself.";
 
 export const LIST_CHATS_PROMPT_HINT =
   "When the user asks what you and they worked on, discussed or decided before, list your earlier chats with list_chats from obsidian-copilot and read a listed note when you need what was said.";
@@ -58,17 +49,12 @@ export function buildAgentPrompt({
   ownChat,
 }: AgentPromptInput): string {
   const roster = others.length > 0 ? others.map(describeAgent).join("; ") : "none";
-  // A model shown only the start of a tool's description misses the rules after it: on OpenCode an agent stopped passing a request to the agent whose job it named unless the ask rule sat beside the list of agents, and drafted a duplicate of an agent without the draft rule.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/986
-  const toolRules = ownChat !== undefined && ownChat.toolDescriptionUpFront !== "full";
   return [
     `In this chat you are ${describeAgent(agent)}, an agent the user made in Copilot.`,
     `Your folder is ${folder}. Keep your own files in it, and add nothing else to the vault unless the user asks. Do not read or change other agents' folders.`,
     `Your instruction is the body of ${folder}/instructions.md, and only the user edits that file. Your memory is ${folder}/MEMORY.md. When your memory contradicts your instruction, follow your memory.`,
     `Other agents: ${roster}.`,
-    ...(toolRules && others.length > 0 ? [ASK_AGENT_PROMPT_HINT] : []),
     ...(ownChat && others.length > 0 ? [NOT_YOURS_TO_SAVE] : []),
-    ...(toolRules ? [DRAFT_AGENT_PROMPT_HINT] : []),
     ...(ownChat ? [recallEarlierChats(ownChat.chatsFolder)] : []),
     buildMemorySaveRules(`${folder}/${MEMORY_FILE_NAME}`, instructionsPath),
     `<instruction>\n${instruction}\n</instruction>`,
@@ -80,7 +66,7 @@ export async function loadAgentSessionPrompt(
   store: CustomAgentStore,
   slug: string,
   vaultBase: string,
-  chat: AgentChatKind
+  { asked = false }: { asked?: boolean } = {}
 ): Promise<AgentSessionPrompt | null> {
   if (getCustomAgentsGate() !== "full") return null;
   const agents = store.getAgents();
@@ -107,14 +93,9 @@ export async function loadAgentSessionPrompt(
       instruction: files.instruction,
       memory: files.memory,
       instructionsPath: agent.instructionsPath,
-      ...("asked" in chat
+      ...(asked
         ? {}
-        : {
-            ownChat: {
-              chatsFolder: `${vaultBase}/${getEffectiveConversationsFolder()}`,
-              toolDescriptionUpFront: chat.toolDescriptionUpFront,
-            },
-          }),
+        : { ownChat: { chatsFolder: `${vaultBase}/${getEffectiveConversationsFolder()}` } }),
     }),
     memoryPath: `${vaultBase}/${agent.memoryPath}`,
   };
