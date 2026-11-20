@@ -813,7 +813,7 @@ export function readAskedMessage(text: string): { answer: boolean; text: string 
   return match ? { answer: match[1] === "answer", text: match[2] } : null;
 }
 
-// Codex and OpenCode end a turn on a turned-down request without passing on why, so an agent asked from a chat in Plan mode learns it with the ask.
+// A turned-down request's reason reaches only some coding agents, so an agent asked from a chat in Plan mode learns it with the ask.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/991
 const PLAN_MODE_JOB =
   "The chat that asked you is in Plan mode, so Copilot turns down any change you try. Say in your reply what you would change.";
