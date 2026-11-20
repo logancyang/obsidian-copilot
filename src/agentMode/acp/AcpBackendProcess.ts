@@ -56,6 +56,7 @@ import type {
 import { isCompactCommand } from "@/commands/compactCommand";
 import { ENABLED_MODEL_WAIT_MS } from "@/agentMode/session/enabledModelSelection";
 import { diffTargetPaths } from "@/agentMode/session/editTargets";
+import { buildCopilotChatPrompt } from "@/agentMode/session/copilotChatPrompt";
 import { isProtectedFile, type ProtectedFiles } from "@/agentMode/session/protectedFiles";
 import { isAgentMemoryFile } from "@/agents/agentMemoryFile";
 import { wrapStreamsForDebug } from "./debugTap";
@@ -697,7 +698,7 @@ export class AcpBackendProcess implements BackendProcess {
 
   // The agent's part rides on every session/new, load and resume, so it outlasts compaction after a resume; a backend that cannot take it would run the chat as Copilot under the agent's name.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/937
-  // The backend may add to each chat's part from the tool servers the chat is given; a chat without an agent whose adapter is too old to take a part goes without.
+  // A chat without an agent has Copilot's part instead, and the backend may add to each chat's part from the tool servers the chat is given; a chat without an agent whose adapter is too old to take a part goes without.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/986
   private systemPromptField(
     agent: SessionAgent | undefined,
@@ -709,7 +710,7 @@ export class AcpBackendProcess implements BackendProcess {
       agentPrompt,
       mcpServers: this.hasCapability("mcp/http") ? (servers ?? []) : [],
     });
-    const text = [agentPrompt, added].filter(Boolean).join("\n\n");
+    const text = [agentPrompt ?? buildCopilotChatPrompt(), added].filter(Boolean).join("\n\n");
     if (!text) return {};
     if (!this.hasCapability("systemPrompt")) {
       if (!agent) return {};

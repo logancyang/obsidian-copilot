@@ -1,5 +1,10 @@
 import type { ChatPromptInput } from "@/agentMode/acp/types";
-import { CodexBackend } from "@/agentMode/backends/codex/CodexBackend";
+import {
+  CODEX_QUESTION_CARD_STEERING,
+  CodexBackend,
+} from "@/agentMode/backends/codex/CodexBackend";
+import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
+import { buildCopilotChatPrompt } from "@/agentMode/session/copilotChatPrompt";
 import { promptHintsFor, type HostedTool } from "@/agentMode/session/copilotMcpServer";
 import {
   createAnswerAgentTool,
@@ -25,6 +30,9 @@ import { setSettings } from "@/settings/model";
 import type { App } from "obsidian";
 
 jest.mock("@/entitlement");
+jest.mock("@/services/obsidianCli/ObsidianCliClient", () => ({
+  isObsidianCliEnabled: () => false,
+}));
 
 const COCO = { name: "Coco", title: "Houseplant carer" };
 const MAYA = { name: "Maya", title: "Product critic" };
@@ -33,6 +41,7 @@ const ISSUE_987 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/
 const OWN_CHAT = { chatsFolder: "/vault/copilot/copilot-conversations" };
 
 const IDENTITY = "In this chat you are Coco (Houseplant carer), an agent the user made in Copilot.";
+const COPILOT_IDENTITY = "You are Obsidian Copilot.";
 const NOT_YOURS_TO_SAVE = "A rule the user gives another agent is not yours to save.";
 const ASK_AGENTS =
   "When the user's message @-mentions one of the user's agents by name or clearly points to one, ask that agent with the ask_agent tool from obsidian-copilot; never otherwise.";
@@ -57,12 +66,18 @@ type TeammatesSentence = keyof typeof TEAMMATES_SENTENCES;
 
 const APP = {} as App;
 const ASKED_CHAT = "asked-chat";
-const CHAT_PROMPT_EXTENSIONS: Readonly<
-  Record<"claude" | "codex" | "opencode", ((chat: ChatPromptInput) => string | null) | null>
+const CODING_AGENTS: Readonly<
+  Record<
+    "claude" | "codex" | "opencode",
+    { shared: () => string; extend: ((chat: ChatPromptInput) => string | null) | null }
+  >
 > = {
-  claude: null,
-  opencode: null,
-  codex: (chat) => new CodexBackend(APP).extendChatPrompt(chat),
+  claude: { shared: () => buildAgentSystemPrompt("claude", APP), extend: null },
+  opencode: { shared: () => buildAgentSystemPrompt("opencode", APP), extend: null },
+  codex: {
+    shared: () => buildAgentSystemPrompt("codex", APP, CODEX_QUESTION_CARD_STEERING),
+    extend: (chat) => new CodexBackend(APP).extendChatPrompt(chat),
+  },
 };
 
 function teammatesTools(store: CustomAgentStore): HostedTool[] {
@@ -84,7 +99,7 @@ function teammatesTools(store: CustomAgentStore): HostedTool[] {
 
 function chatPrompt(
   store: CustomAgentStore,
-  backendId: keyof typeof CHAT_PROMPT_EXTENSIONS,
+  backendId: keyof typeof CODING_AGENTS,
   sessionKey: string,
   agent: { slug: string; prompt: string } | null
 ): string {
@@ -97,8 +112,13 @@ function chatPrompt(
   const mcpServers = [
     { name: "obsidian-copilot", url: "", headers: {}, readOnlyToolNames: [], promptHints },
   ];
-  const added = CHAT_PROMPT_EXTENSIONS[backendId]?.({ agentPrompt, mcpServers }) ?? null;
-  return [agentPrompt, added].filter(Boolean).join("\n\n");
+  const { shared, extend } = CODING_AGENTS[backendId];
+  const added = extend?.({ agentPrompt, mcpServers }) ?? null;
+  return [shared(), agentPrompt ?? buildCopilotChatPrompt(), added].filter(Boolean).join("\n\n");
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function countOf(text: string, sentence: string): number {
@@ -193,7 +213,7 @@ describe("agentSessionPrompt", () => {
       expect(alone).not.toContain(NOT_YOURS_TO_SAVE);
     });
 
-    it(`tells an agent in its own chat that a rule the user gives another agent is not its own to save, and leaves naming ask_agent, check_agent, answer_agent, stop_agent and draft_agent to their tools (https://github.com/Brevilabs/obsidian-copilot-private/issues/969, ${ISSUE_986})`, () => {
+    it(`tells an agent in its own chat to ask another agent the user's message points to, right after the list of other agents, then that a rule the user gives another agent is not its own to save, and leaves naming check_agent, answer_agent, stop_agent and draft_agent to their tools (https://github.com/Brevilabs/obsidian-copilot-private/issues/969, ${ISSUE_986})`, () => {
       const ownChat = buildAgentPrompt({
         agent: COCO,
         folder: "/vault/copilot/agents/coco",
@@ -205,15 +225,10 @@ describe("agentSessionPrompt", () => {
       });
 
       expect(ownChat).toContain(
-        `Other agents: Maya (Product critic); Leo.\n\n${NOT_YOURS_TO_SAVE}\n\n`
+        `Other agents: Maya (Product critic); Leo.\n\n${ASK_AGENTS}\n\n${NOT_YOURS_TO_SAVE}\n\n`
       );
-      for (const tool of [
-        "ask_agent",
-        "check_agent",
-        "answer_agent",
-        "stop_agent",
-        "draft_agent",
-      ]) {
+      expect(countOf(ownChat, "ask_agent")).toBe(1);
+      for (const tool of ["check_agent", "answer_agent", "stop_agent", "draft_agent"]) {
         expect(ownChat).not.toContain(tool);
       }
     });
@@ -414,6 +429,9 @@ describe("agentSessionPrompt", () => {
     const ONE_OTHER = ["Maya"];
     const TWO_OTHERS = ["Maya", "Leo"];
     const MATRIX = [
+      { backendId: "claude", chat: "unlicensed", others: TWO_OTHERS, lines: [] },
+      { backendId: "opencode", chat: "unlicensed", others: TWO_OTHERS, lines: [] },
+      { backendId: "codex", chat: "unlicensed", others: TWO_OTHERS, lines: [] },
       { backendId: "claude", chat: "copilot", others: [], lines: [] },
       { backendId: "opencode", chat: "copilot", others: [], lines: [] },
       { backendId: "codex", chat: "copilot", others: [], lines: [DRAFT] },
@@ -426,21 +444,36 @@ describe("agentSessionPrompt", () => {
       { backendId: "claude", chat: "own", others: [], lines: [LIST, SCOPE] },
       { backendId: "opencode", chat: "own", others: [], lines: [LIST, SCOPE] },
       { backendId: "codex", chat: "own", others: [], lines: [LIST, SCOPE, DRAFT] },
-      { backendId: "claude", chat: "own", others: ONE_OTHER, lines: [SAVE_RULE, LIST, SCOPE] },
-      { backendId: "opencode", chat: "own", others: ONE_OTHER, lines: [SAVE_RULE, LIST, SCOPE] },
+      { backendId: "claude", chat: "own", others: ONE_OTHER, lines: [ASK, SAVE_RULE, LIST, SCOPE] },
+      {
+        backendId: "opencode",
+        chat: "own",
+        others: ONE_OTHER,
+        lines: [ASK, SAVE_RULE, LIST, SCOPE],
+      },
       {
         backendId: "codex",
         chat: "own",
         others: ONE_OTHER,
-        lines: [SAVE_RULE, LIST, SCOPE, ASK, CONTROL, DRAFT],
+        lines: [ASK, SAVE_RULE, LIST, SCOPE, CONTROL, DRAFT],
       },
-      { backendId: "claude", chat: "own", others: TWO_OTHERS, lines: [SAVE_RULE, LIST, SCOPE] },
-      { backendId: "opencode", chat: "own", others: TWO_OTHERS, lines: [SAVE_RULE, LIST, SCOPE] },
+      {
+        backendId: "claude",
+        chat: "own",
+        others: TWO_OTHERS,
+        lines: [ASK, SAVE_RULE, LIST, SCOPE],
+      },
+      {
+        backendId: "opencode",
+        chat: "own",
+        others: TWO_OTHERS,
+        lines: [ASK, SAVE_RULE, LIST, SCOPE],
+      },
       {
         backendId: "codex",
         chat: "own",
         others: TWO_OTHERS,
-        lines: [SAVE_RULE, LIST, SCOPE, ASK, CONTROL, DRAFT],
+        lines: [ASK, SAVE_RULE, LIST, SCOPE, CONTROL, DRAFT],
       },
       { backendId: "claude", chat: "asked", others: [], lines: [] },
       { backendId: "opencode", chat: "asked", others: [], lines: [] },
@@ -453,18 +486,24 @@ describe("agentSessionPrompt", () => {
     it.each(
       MATRIX.map((row) => ({
         ...row,
-        label: { copilot: "a Copilot", own: "an agent's own", asked: "an asked agent's" }[row.chat],
+        label: {
+          copilot: "a Copilot",
+          unlicensed: "an unlicensed user's",
+          own: "an agent's own",
+          asked: "an asked agent's",
+        }[row.chat],
         otherCount: row.others.length,
         summary: row.lines.length > 0 ? row.lines.join(", ") : "no Teammates line",
       }))
     )(
-      `on $backendId, gives $label chat with $otherCount other agents the agent's identity once if it runs one, and each of these Teammates lines exactly once and no other, naming only the tools it is offered: $summary (${ISSUE_986}, ${ISSUE_987})`,
+      `on $backendId, gives $label chat with $otherCount other agents one identity, the agent's if it runs one and Obsidian Copilot's otherwise, and each of these Teammates lines exactly once, in this order, and no other, naming only the tools it is offered: $summary (${ISSUE_986}, ${ISSUE_987})`,
       async ({ backendId, chat, others, lines }) => {
         if (chat !== "copilot") seedAgent(vault, "coco", COCO, "You handle houseplant care only.");
         for (const name of others) {
           seedAgent(vault, name.toLowerCase(), { name, title: "" }, "Another job.");
         }
         await store.start();
+        if (chat === "unlicensed") await setCustomAgentsAccess("free");
 
         const loaded =
           chat === "copilot"
@@ -477,17 +516,22 @@ describe("agentSessionPrompt", () => {
           loaded
         );
 
-        if (loaded) {
-          expect(prompt.startsWith(IDENTITY)).toBe(true);
-          expect(prompt.match(/\byou are\b/gi)).toEqual(["you are"]);
-        } else {
-          expect(prompt).not.toMatch(/\byou are\b/i);
-        }
+        expect(loaded === null).toBe(chat === "copilot" || chat === "unlicensed");
+        expect(loaded?.prompt.startsWith(IDENTITY) ?? true).toBe(true);
+        expect(prompt.match(/\byou are\b/gi)).toEqual([loaded ? "you are" : "You are"]);
+        expect(countOf(prompt, COPILOT_IDENTITY)).toBe(loaded ? 0 : 1);
         for (const [sentence, text] of Object.entries(TEAMMATES_SENTENCES)) {
           expect([sentence, countOf(prompt, text)]).toEqual([
             sentence,
             (lines as readonly TeammatesSentence[]).includes(sentence as TeammatesSentence) ? 1 : 0,
           ]);
+        }
+        const positions = lines.map((line) => prompt.indexOf(TEAMMATES_SENTENCES[line]));
+        expect(positions).toEqual([...positions].sort((a, b) => a - b));
+        if (chat === "own" && others.length > 0) {
+          expect(prompt).toMatch(
+            new RegExp(`Other agents: [^\\n]*\\.\\n\\n${escapeRegExp(ASK_AGENTS)}\\n\\n`)
+          );
         }
       }
     );

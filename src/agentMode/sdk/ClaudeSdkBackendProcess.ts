@@ -46,6 +46,7 @@ import type {
 } from "@/agentMode/session/types";
 import type { ProtectedFiles } from "@/agentMode/session/protectedFiles";
 import type { ProjectScopeId } from "@/agentMode/session/scope";
+import { buildCopilotChatPrompt } from "@/agentMode/session/copilotChatPrompt";
 import { AuthRequiredError, MethodUnsupportedError } from "@/agentMode/session/errors";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { agentShellPath } from "@/utils/loginShellPath";
@@ -245,7 +246,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
 
   private resolveSystemPromptAppend(agent: SessionAgent | undefined): string {
     const shared = this.opts.getSystemPromptAppend?.() ?? "";
-    return agent ? [shared, agent.prompt].filter(Boolean).join("\n\n") : shared;
+    return [shared, agent ? agent.prompt : buildCopilotChatPrompt()].filter(Boolean).join("\n\n");
   }
 
   registerSessionHandler(sessionId: SessionId, handler: SessionUpdateHandler): () => void {
