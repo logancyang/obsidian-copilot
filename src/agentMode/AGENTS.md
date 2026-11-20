@@ -1,8 +1,9 @@
 # Agent Mode — layer rules
 
-Six element types, strict imports. Enforced by `eslint-plugin-boundaries`
-(see root `eslint.config.mjs`). The list below mirrors `boundaries/elements` and
-`boundaries/dependencies` exactly — when in doubt, the lint config wins.
+Strict imports, enforced by `eslint-plugin-boundaries` with rules built from the
+root `architecture.json` (see `eslint.architecture.mjs`). That file names the box
+each folder below belongs to and the boxes it may import; when this page and that
+file disagree, the file wins.
 
 1. **`session/`** — **the contract layer.** Hosts the
    backend-agnostic session, message store, UI-state bridge,
@@ -24,34 +25,20 @@ Six element types, strict imports. Enforced by `eslint-plugin-boundaries`
    trail rendering all read session-domain types;
 7. **`skills/`** — canonical-store discovery, symlink lifecycle, reconciliation,
    and the Skills settings UI.
-8. **`src/miyo/agentMode/`** — Miyo's pieces of the agent trail. It may import
-   `ui/` and `session/`, and only `ui/` imports it, so the rest of `src/miyo`
-   stays free of Agent Mode.
+8. **`src/miyo/agentMode/`** — Miyo's pieces of the agent trail.
 9. **`src/connectors/agentMode/`** — Connectors' pieces of the chat: the
    `suggest_connector` tool, its chat state and extension, and its card slot.
-   It may import `ui/` and `session/`; only `ui/` and the Agent Mode entry
-   (`index.ts`) import it, so the rest of `src/connectors` stays free of Agent
-   Mode.
 10. **`navigator/`** — Copilot Navigator, the sessions sidebar: its view,
-    components, hooks, and stories. It may import `ui/` and `session/`; only
-    `ui/` and the Agent Mode entry (`index.ts`) import it, so removing the
-    Navigator means deleting the folder and those imports. Code whose purpose
+    components, hooks, and stories. Code whose purpose
     is the Navigator belongs here; generic helpers it uses belong in shared
     modules even when the Navigator is their only caller.
 11. **`src/agents/agentMode/`** — Custom agents' pieces of the chat: the
     lines that show a rule an agent saved to its memory, the tool card
     kind that puts them in place of the edit that wrote it, the tools an
-    agent calls (`ask_agent`, `draft_agent`), and the draft card. It may
-    import `ui/`, `session/` and `registry` (to start an agent's chat on the
-    backend that runs its model); only `ui/` and the Agent Mode entry
-    (`index.ts`) import it, so the rest of `src/agents` stays free of Agent
-    Mode.
+    agent calls (`ask_agent`, `draft_agent`), and the draft card.
 12. **`src/projects/ui/` and `src/projects/hooks/`** — the Projects feature's
     UI and hooks: the project home and its Files tab, the project header and
-    popover, and the create and edit forms. They may import `ui/` and
-    `session/`; only `ui/` and `navigator/` import them. The rest of
-    `src/projects` is plain project logic that plugin code outside Agent
-    Mode also reads, so it stays free of Agent Mode imports.
+    popover, and the create and edit forms.
 
 ## Why two adapters under one session
 
@@ -102,8 +89,8 @@ Then in either case:
 ## Adding a new layer
 
 1. Create `src/agentMode/<layer>/`.
-2. Add an entry under `boundaries/elements` in root `eslint.config.mjs` and a
-   corresponding rule in `boundaries/dependencies`.
+2. Add the folder to a box in the root `architecture.json`, or add a box and
+   its row under `edges`.
 3. Re-export from `src/agentMode/index.ts` if it should be visible to
    plugin host code.
 4. Update this doc.
