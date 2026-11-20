@@ -22,6 +22,11 @@ export interface AgentPromptInput {
   ownChat?: { chatsFolder: string };
 }
 
+// With ask_agent's whole description in view, weaker models passed a request that points at another agent by its job far less often unless the ask rule sat beside the list of agents.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/986
+export const ASK_AGENT_PROMPT_HINT =
+  "When the user's message @-mentions one of the user's agents by name or clearly points to one, ask that agent with the ask_agent tool from obsidian-copilot; never otherwise.";
+
 export const LIST_CHATS_PROMPT_HINT =
   "When the user asks what you and they worked on, discussed or decided before, list your earlier chats with list_chats from obsidian-copilot and read a listed note when you need what was said.";
 
@@ -54,7 +59,7 @@ export function buildAgentPrompt({
     `Your folder is ${folder}. Keep your own files in it, and add nothing else to the vault unless the user asks. Do not read or change other agents' folders.`,
     `Your instruction is the body of ${folder}/instructions.md, and only the user edits that file. Your memory is ${folder}/MEMORY.md. When your memory contradicts your instruction, follow your memory.`,
     `Other agents: ${roster}.`,
-    ...(ownChat && others.length > 0 ? [NOT_YOURS_TO_SAVE] : []),
+    ...(ownChat && others.length > 0 ? [ASK_AGENT_PROMPT_HINT, NOT_YOURS_TO_SAVE] : []),
     ...(ownChat ? [recallEarlierChats(ownChat.chatsFolder)] : []),
     buildMemorySaveRules(`${folder}/${MEMORY_FILE_NAME}`, instructionsPath),
     `<instruction>\n${instruction}\n</instruction>`,
