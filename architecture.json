@@ -1,4 +1,5 @@
 {
+  "runsAnywhere": ["core", "protocol", "client/"],
   "boxes": [
     {
       "box": "app",
@@ -15,7 +16,7 @@
       ]
     },
     {
-      "box": "client/protocol",
+      "box": "protocol",
       "files": ["src/agentMode/session/types.ts", "src/agentMode/session/errors.ts", "src/types/**"]
     },
     {
@@ -151,7 +152,7 @@
       ]
     },
     {
-      "box": "client/core",
+      "box": "core",
       "files": [
         "src/{utils,lib,hooks,styles,__tests__}/**",
         "src/components/ui/**",
@@ -162,20 +163,20 @@
     }
   ],
   "edges": {
-    "client/core": [],
-    "client/protocol": ["client/core"],
-    "client/chatKit": ["client/core", "client/protocol"],
-    "client/chat": ["client/core", "client/protocol", "client/chatKit"],
-    "client/features/*": ["client/core", "client/protocol", "client/chatKit", "client/chat"],
-    "host/platform": ["client/core"],
-    "host/chat": ["client/core", "host/platform", "client/protocol"],
-    "host/backends": ["client/core", "host/platform", "client/protocol", "host/chat"],
-    "host/features/*": ["client/core", "host/platform", "client/protocol", "host/chat"],
-    "quickChat": ["client/core", "host/platform", "client/protocol", "client/chatKit"],
+    "core": [],
+    "protocol": ["core"],
+    "client/chatKit": ["core", "protocol"],
+    "client/chat": ["core", "protocol", "client/chatKit"],
+    "client/features/*": ["core", "protocol", "client/chatKit", "client/chat"],
+    "host/platform": ["core"],
+    "host/chat": ["core", "host/platform", "protocol"],
+    "host/backends": ["core", "host/platform", "protocol", "host/chat"],
+    "host/features/*": ["core", "host/platform", "protocol", "host/chat"],
+    "quickChat": ["core", "host/platform", "protocol", "client/chatKit"],
     "app": [
-      "client/core",
+      "core",
       "host/platform",
-      "client/protocol",
+      "protocol",
       "client/chatKit",
       "client/chat",
       "host/chat",
