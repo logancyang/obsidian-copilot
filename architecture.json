@@ -165,7 +165,13 @@
     },
     {
       "box": "kernel",
-      "files": ["src/**"]
+      "files": [
+        "src/{utils,lib,hooks,styles,__tests__}/**",
+        "src/components/ui/**",
+        "src/components/gallery-hosts.*",
+        "src/{constants,context,errorFormat,logger,utils}.ts",
+        "src/**/*.test.{ts,tsx}"
+      ]
     }
   ],
   "edges": {

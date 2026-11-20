@@ -65,6 +65,7 @@ const debtRules = Object.entries(debt.imports).map(([file, sources]) => ({
 const nodeAccessRule = "copilot/no-node-in-portable-code";
 
 const nodeAccessConfigs = [
+  { files: ["src/**"], rules: { [nodeAccessRule]: "error" } },
   ...[...graph.boxes].reverse().map(({ files, desktop }) => ({
     files,
     rules: { [nodeAccessRule]: desktop ? "off" : "error" },

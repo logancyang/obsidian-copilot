@@ -515,6 +515,7 @@ export default [
     },
     rules: {
       "boundaries/dependencies": ["error", { default: "disallow", rules: architecture.rules }],
+      "boundaries/no-unknown-files": "error",
     },
   },
 
