@@ -23,7 +23,7 @@ export interface AgentPromptInput {
   ownChat?: { chatsFolder: string; toolDescriptionUpFront: ToolDescriptionUpFront };
 }
 
-export type AgentChatKind = { asked: true } | { toolDescriptionUpFront: ToolDescriptionUpFront };
+type AgentChatKind = { asked: true } | { toolDescriptionUpFront: ToolDescriptionUpFront };
 
 export const ASK_AGENT_PROMPT_HINT =
   "When the user's message @-mentions one of the user's agents by name or clearly points to one, ask that agent with the ask_agent tool from obsidian-copilot; never otherwise.";
@@ -58,7 +58,7 @@ export function buildAgentPrompt({
   ownChat,
 }: AgentPromptInput): string {
   const roster = others.length > 0 ? others.map(describeAgent).join("; ") : "none";
-  // A model shown only the start of a tool's description misses the rules after it: on OpenCode an agent stopped passing a request to the agent whose job it named unless the ask rule sat beside the list of agents, and drafted a duplicate of an agent without the draft rule.
+  // A model shown only the start of a tool's description misses the rules after it: an agent stopped passing a request to the agent whose job it named unless the ask rule sat beside the list of agents, and drafted a duplicate of an agent without the draft rule.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/986
   const toolRules = ownChat !== undefined && ownChat.toolDescriptionUpFront !== "full";
   return [
