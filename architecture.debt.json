@@ -1,7 +1,7 @@
 {
   "counts": {
     "imports": 485,
-    "nodeAccess": 19
+    "nodeAccess": 21
   },
   "imports": {
     "src/agentMode/acp/AcpBackendProcess.ts": [
@@ -651,6 +651,8 @@
     "src/connectors/custom/testing/fakeStdioServer.ts",
     "src/connectors/nodeFetch.ts",
     "src/connectors/oauth/testing/fakeOAuthService.ts",
+    "src/miyo/MiyoServiceDiscovery.ts",
+    "src/services/obsidianCli/ObsidianCliClient.ts",
     "src/utils/appPaths.ts",
     "src/utils/binaryPath.ts",
     "src/utils/electronShell.ts",
