@@ -1434,6 +1434,71 @@ describe("AcpBackendProcess", () => {
         expect(mockNewSession.mock.calls[0][0]).not.toHaveProperty("systemPrompt");
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/986 appends the backend's Copilot chat prompt on session/new for a chat without an agent, and the agent's part instead for an agent's chat", async () => {
+        mockInitializeResult = {
+          protocolVersion: 1,
+          agentCapabilities: { sessionCapabilities: { systemPrompt: {} } },
+        };
+        const backend = new AcpBackendProcess(
+          buildApp(),
+          buildStubBackend({ copilotChatPrompt: () => "Ask agents with ask_agent." }),
+          "1.0.0",
+          buildStubDescriptor()
+        );
+        await backend.start();
+
+        await backend.newSession({ cwd: "/vault" });
+        await backend.newSession({
+          cwd: "/vault",
+          agent: { slug: "coco", prompt: "You are Coco." },
+        });
+
+        expect(
+          mockNewSession.mock.calls.map(
+            ([request]) => (request as { systemPrompt?: unknown }).systemPrompt
+          )
+        ).toEqual([
+          { mode: "append", content: [{ type: "text", text: "Ask agents with ask_agent." }] },
+          { mode: "append", content: [{ type: "text", text: "You are Coco." }] },
+        ]);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/986 sends no system prompt for a Copilot chat while the backend's Copilot chat prompt is empty", async () => {
+        mockInitializeResult = {
+          protocolVersion: 1,
+          agentCapabilities: { sessionCapabilities: { systemPrompt: {} } },
+        };
+        const backend = new AcpBackendProcess(
+          buildApp(),
+          buildStubBackend({ copilotChatPrompt: () => null }),
+          "1.0.0",
+          buildStubDescriptor()
+        );
+        await backend.start();
+
+        await backend.newSession({ cwd: "/vault" });
+
+        expect(mockNewSession.mock.calls[0][0]).not.toHaveProperty("systemPrompt");
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/986 opens a Copilot chat without the backend's Copilot chat prompt when the adapter cannot take a system prompt, instead of refusing it", async () => {
+        const backend = new AcpBackendProcess(
+          buildApp(),
+          buildStubBackend({
+            id: "codex",
+            displayName: "Codex",
+            copilotChatPrompt: () => "Ask agents with ask_agent.",
+          }),
+          "1.0.0",
+          buildStubDescriptor({ id: "codex", displayName: "Codex" })
+        );
+        await backend.start();
+
+        await backend.newSession({ cwd: "/vault" });
+
+        expect(mockNewSession.mock.calls[0][0]).not.toHaveProperty("systemPrompt");
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/937 refuses a custom agent chat, without opening a session, and says the backend needs an update when it cannot take the agent's part", async () => {
         const backend = new AcpBackendProcess(
           buildApp(),
@@ -1741,6 +1806,29 @@ describe("AcpBackendProcess", () => {
 
         expect(mockResumeSession.mock.calls[0][0]).toMatchObject({
           systemPrompt: { mode: "append", content: [{ type: "text", text: "You are Coco." }] },
+        });
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/986 appends the backend's Copilot chat prompt again when it resumes a chat without an agent", async () => {
+        mockInitializeResult = {
+          protocolVersion: 1,
+          agentCapabilities: { sessionCapabilities: { resume: {}, systemPrompt: {} } },
+        };
+        const backend = new AcpBackendProcess(
+          buildApp(),
+          buildStubBackend({ copilotChatPrompt: () => "Ask agents with ask_agent." }),
+          "1.0.0",
+          buildStubDescriptor()
+        );
+        await backend.start();
+
+        await backend.resumeSession({ sessionId: "s1", cwd: "/vault" });
+
+        expect(mockResumeSession.mock.calls[0][0]).toMatchObject({
+          systemPrompt: {
+            mode: "append",
+            content: [{ type: "text", text: "Ask agents with ask_agent." }],
+          },
         });
       });
 

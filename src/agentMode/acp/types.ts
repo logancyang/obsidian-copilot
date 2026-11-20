@@ -26,6 +26,7 @@ export interface AcpBackend {
     promptResultMeta: Readonly<Record<string, unknown>> | null | undefined
   ): TurnDiff | null;
   readCopilotTools?(rawInput: unknown, toolName?: string): CopilotToolUse | null;
+  copilotChatPrompt?(): string | null;
   selectAgentMode?(
     agent: SessionAgent | null,
     configOptions: readonly BackendConfigOption[] | null

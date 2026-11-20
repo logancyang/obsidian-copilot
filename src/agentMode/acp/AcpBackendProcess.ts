@@ -695,12 +695,17 @@ export class AcpBackendProcess implements BackendProcess {
 
   // The agent's part rides on every session/new, load and resume, so it outlasts compaction after a resume; a backend that cannot take it would run the chat as Copilot under the agent's name.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/937
+  // A chat without an agent carries the backend's own per-chat text instead, which an adapter too old to take it goes without.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/986
   private systemPromptField(agent: SessionAgent | undefined): SystemPromptField {
-    if (!agent || this.backend.selectAgentMode) return {};
+    if (this.backend.selectAgentMode) return {};
+    const text = agent ? agent.prompt : this.backend.copilotChatPrompt?.();
+    if (!text) return {};
     if (!this.hasCapability("systemPrompt")) {
+      if (!agent) return {};
       throw new Error(`${this.descriptor.displayName} needs an update to run Copilot Teammates.`);
     }
-    return { systemPrompt: { mode: "append", content: [{ type: "text", text: agent.prompt }] } };
+    return { systemPrompt: { mode: "append", content: [{ type: "text", text }] } };
   }
 
   private async applyAgentMode(sessionId: SessionId, agent: SessionAgent | undefined) {

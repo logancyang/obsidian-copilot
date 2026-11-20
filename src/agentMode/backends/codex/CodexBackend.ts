@@ -5,6 +5,7 @@ import { detectBinary } from "@/utils/detectBinary";
 import { AcpBackend, AcpSpawnDescriptor } from "@/agentMode/acp/types";
 import { buildSimpleSpawnDescriptor } from "@/agentMode/backends/shared/simpleBinaryBackend";
 import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
+import { buildCopilotChatSteering } from "@/agents/agentSessionPrompt";
 import { pythonUtf8Env } from "@/agentMode/backends/shared/pythonUtf8Env";
 import {
   buildBuiltinSkillEnv,
@@ -27,6 +28,9 @@ export class CodexBackend implements AcpBackend {
   readonly id = "codex" as const;
   readonly displayName = "Codex";
   readonly readCopilotTools = readCodexCopilotTools;
+  // Codex finds MCP tools only through its tool search, so a Copilot chat is told which Teammates tools it has; the prompt every chat shares can't say it, because agents' chats share the process.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/986
+  readonly copilotChatPrompt = buildCopilotChatSteering;
 
   // Codex records each file's baseline inside apply_patch and sends its turn diff only to clients that opt in.
   // https://github.com/agentclientprotocol/codex-acp/issues/601

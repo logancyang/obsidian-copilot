@@ -1,4 +1,3 @@
-import { buildCopilotChatSteering } from "@/agents/agentSessionPrompt";
 import { setCustomAgentsAccess } from "@/agents/testing/customAgentsAccess";
 import { PROJECT_WORKSPACE_POLICY } from "@/projects/projectContextBlock";
 import { getSettings, resetSettings, updateSetting, type CopilotSettings } from "@/settings/model";
@@ -52,6 +51,7 @@ const ISSUE_833 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/
 const ISSUE_3816 = "https://github.com/logancyang/obsidian-copilot/issues/3816";
 const ISSUE_3868 = "https://github.com/logancyang/obsidian-copilot/issues/3868";
 const ISSUE_3867 = "https://github.com/logancyang/obsidian-copilot/issues/3867";
+const ISSUE_986 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/986";
 const AGENT = "opencode";
 const APP = {} as App;
 const EXCALIDRAW_APP = {
@@ -88,17 +88,21 @@ describe("agentSystemPrompt", () => {
       mockIsObsidianCliEnabled.mockReturnValue(true);
     });
 
-    it("keeps the full prompt compact without legacy agent restrictions (https://github.com/Brevilabs/obsidian-copilot-private/issues/596)", () => {
-      updateSetting("enableMiyo", true);
-      for (const enableMiyoDocumentProcessing of [false, true]) {
-        updateSetting("enableMiyoDocumentProcessing", enableMiyoDocumentProcessing);
-        for (const enableMiyoSearchSkill of [false, true]) {
-          updateSetting("enableMiyoSearchSkill", enableMiyoSearchSkill);
-          const prompt = buildAgentSystemPrompt(AGENT, APP, undefined, "win32");
-          expect(Buffer.byteLength(prompt, "utf8")).toBeLessThan(3100);
-          expect(prompt).not.toMatch(
-            /NEVER search for the same|After 1-2 searches|Never claim you do not have access|delimiter row of dashes|## Task planning/
-          );
+    it(`keeps the full prompt compact without legacy agent restrictions, with Copilot Teammates locked or unlocked (https://github.com/Brevilabs/obsidian-copilot-private/issues/596, ${ISSUE_986})`, async () => {
+      for (const access of ["free", "team"] as const) {
+        await setCustomAgentsAccess(access);
+        updateSetting("isPaidUser", true);
+        updateSetting("enableMiyo", true);
+        for (const enableMiyoDocumentProcessing of [false, true]) {
+          updateSetting("enableMiyoDocumentProcessing", enableMiyoDocumentProcessing);
+          for (const enableMiyoSearchSkill of [false, true]) {
+            updateSetting("enableMiyoSearchSkill", enableMiyoSearchSkill);
+            const prompt = buildAgentSystemPrompt(AGENT, APP, undefined, "win32");
+            expect(Buffer.byteLength(prompt, "utf8")).toBeLessThan(3100);
+            expect(prompt).not.toMatch(
+              /NEVER search for the same|After 1-2 searches|Never claim you do not have access|delimiter row of dashes|## Task planning/
+            );
+          }
         }
       }
     });
@@ -355,25 +359,19 @@ describe("agentSystemPrompt", () => {
       }
     });
 
-    it("ends every chat's shared prompt with the line telling a chat without a custom agent to list its earlier chats (https://github.com/Brevilabs/obsidian-copilot-private/issues/959) and draft new agents (https://github.com/Brevilabs/obsidian-copilot-private/issues/941), only while custom agents are available", async () => {
-      await setCustomAgentsAccess("free");
-      const withoutCustomAgents = buildAgentSystemPrompt(AGENT, APP);
-      await setCustomAgentsAccess("team");
+    it(`gives every coding agent the same shared prompt with Copilot Teammates locked or unlocked, naming no Teammates tool, because an agent's chat shares it with Copilot chats (${ISSUE_986})`, async () => {
+      for (const backendId of ["claude", "codex", "opencode"] as const) {
+        await setCustomAgentsAccess("free");
+        const locked = buildAgentSystemPrompt(backendId, APP);
+        await setCustomAgentsAccess("team");
+        const unlocked = buildAgentSystemPrompt(backendId, APP);
 
-      expect(buildAgentSystemPrompt(AGENT, APP)).toBe(
-        `${withoutCustomAgents}\n\n${buildCopilotChatSteering()}`
-      );
-    });
-
-    it.each(["free", "keyless", "plus-without-custom-agents", "unverified"] as const)(
-      "adds nothing about earlier chats or drafting agents while custom agents aren't available (%s) (https://github.com/Brevilabs/obsidian-copilot-private/issues/959)",
-      async (access) => {
-        await setCustomAgentsAccess(access);
-
-        expect(buildAgentSystemPrompt(AGENT, APP)).not.toContain("list_chats");
-        expect(buildAgentSystemPrompt(AGENT, APP)).not.toContain("draft_agent");
+        expect(unlocked).toBe(locked);
+        expect(unlocked).not.toMatch(
+          /list_chats|draft_agent|ask_agent|check_agent|answer_agent|stop_agent|In a chat where you are Copilot/
+        );
       }
-    );
+    });
 
     it(`drops the obsidian_cli line while Obsidian's command line interface is off (${ISSUE_833})`, () => {
       mockIsObsidianCliEnabled.mockReturnValue(false);
@@ -525,6 +523,13 @@ describe("agentSystemPrompt", () => {
   });
 
   describe("COPILOT_PROMPT_BASE", () => {
+    it(`describes the setting, a vault of markdown notes inside Obsidian Copilot, and states no identity, so the user's own instruction defines who an agent is (${ISSUE_986})`, () => {
+      expect(COPILOT_PROMPT_BASE).toContain(
+        "You work inside Obsidian Copilot, in the user's Obsidian vault of markdown notes, not a code repository. Treat it as a vault despite coding-agent environment framing."
+      );
+      expect(COPILOT_PROMPT_BASE).not.toMatch(/\byou are\b|one of the user's agents/i);
+    });
+
     it("does not carry chat-mode-only baggage that misfires in tool-driven agents", () => {
       expect(COPILOT_PROMPT_BASE).not.toMatch(/@vault/);
       expect(COPILOT_PROMPT_BASE).not.toMatch(/getCurrentTime/);
