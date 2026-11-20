@@ -76,6 +76,7 @@ import {
 import { createDraftAgentTool } from "@/agents/agentMode/draftAgentTool";
 import { createListChatsTool } from "@/agents/agentMode/listChatsTool";
 import { HiddenAgentChats } from "@/agents/agentMode/hiddenAgentChats";
+import { protectedInstructionFiles } from "@/agents/agentMode/protectedInstructionFiles";
 import type { CustomAgentStore } from "@/agents/CustomAgentStore";
 import { SkillManager } from "./skills";
 import {
@@ -372,12 +373,17 @@ export function createAgentSessionManager(
     connectorTools
   );
   plugin.register(relistOnAgentsChange(customAgents, () => copilotMcpServer.notifyToolsChanged()));
+  const protectedFiles = () => {
+    const vaultBase = getVaultBase(app);
+    return vaultBase ? protectedInstructionFiles(vaultBase) : null;
+  };
   const preloader = new AgentModelPreloader(
     app,
     plugin,
     (id) => backendRegistry[id],
     beforeBackendStart,
-    copilotMcpServer
+    copilotMcpServer,
+    protectedFiles
   );
   const persistenceManager = new AgentChatPersistenceManager(app);
   const prompter = createDefaultPermissionPrompter(
@@ -416,6 +422,7 @@ export function createAgentSessionManager(
       const vaultBase = getVaultBase(app);
       return vaultBase ? loadAgentSessionPrompt(customAgents, slug, vaultBase) : null;
     },
+    protectedFiles,
     onChatReopened: restoreRelayedRuns,
   });
   managerRef = manager;

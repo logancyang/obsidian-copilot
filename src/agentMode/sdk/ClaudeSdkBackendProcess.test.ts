@@ -3,6 +3,7 @@ import type {
   CanUseTool,
   HookCallback,
   ModelInfo,
+  Options,
   SDKMessage,
   SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
@@ -905,6 +906,41 @@ describe("ClaudeSdkBackendProcess", () => {
         }
       );
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/989 starts every chat's query with a hook that refuses a write to a file the process's rule protects, whatever the permission mode", async () => {
+        queryMock.mockImplementation(answering([resultMessage()]));
+        const rule = {
+          folder: "/vault/copilot/agents",
+          fileName: "instructions.md",
+          reason: "Only the user edits an agent's instruction.",
+        };
+        const proc = makeProc({ protectedFiles: () => rule });
+        const { sessionId } = await proc.newSession({ cwd: "/vault" });
+        await proc.setSessionMode({ sessionId, modeId: "bypassPermissions" });
+
+        await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "hi" }] });
+
+        const { options } = getPromptQueryCalls()[0][0] as { options: Options };
+        const [refuse] = options.hooks!.PreToolUse![0].hooks.slice(1);
+        const decide = (file_path: string) =>
+          refuse(
+            {
+              hook_event_name: "PreToolUse",
+              tool_name: "Write",
+              tool_input: { file_path, content: "x" },
+              tool_use_id: "tu-1",
+              session_id: sessionId,
+              transcript_path: "/tmp/t.jsonl",
+              cwd: "/vault",
+            },
+            "tu-1",
+            { signal: new AbortController().signal }
+          );
+        await expect(decide("/vault/copilot/agents/new/instructions.md")).resolves.toMatchObject({
+          hookSpecificOutput: { permissionDecision: "deny", permissionDecisionReason: rule.reason },
+        });
+        await expect(decide("/vault/copilot/agents/new/MEMORY.md")).resolves.toEqual({});
+      });
+
       it(`starts the chat's query with the claude_code preset, prompt echoes, interrupts that spare background agents, the background-subagent hook, and a fresh session id (${ISSUE_175})`, async () => {
         queryMock.mockImplementation(answering([resultMessage()]));
         const proc = makeProc();
@@ -920,7 +956,9 @@ describe("ClaudeSdkBackendProcess", () => {
         expect(options.disallowedTools).toBeUndefined();
         expect(options.extraArgs).toEqual({ "replay-user-messages": null });
         expect(options.perTaskStopAffordance).toBe(true);
-        expect(options.hooks).toEqual({ PreToolUse: [{ hooks: [runSubagentsInBackground] }] });
+        expect(options.hooks).toEqual({
+          PreToolUse: [{ hooks: [runSubagentsInBackground, expect.any(Function)] }],
+        });
         expect(options.sessionId).toBe(sessionId);
         expect(options.resume).toBeUndefined();
         expect(options.systemPrompt).toEqual({

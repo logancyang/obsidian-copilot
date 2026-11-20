@@ -471,6 +471,7 @@ interface ManagerOptions {
   copilotMcpServer?: ManagerDeps["copilotMcpServer"];
   chatExtensions?: ManagerDeps["chatExtensions"];
   resolveAgent?: ManagerDeps["resolveAgent"];
+  protectedFiles?: ManagerDeps["protectedFiles"];
   onChatReopened?: ManagerDeps["onChatReopened"];
 }
 
@@ -506,6 +507,7 @@ function buildManager(options: ManagerOptions = {}): AgentSessionManager {
       copilotMcpServer: options.copilotMcpServer,
       chatExtensions: options.chatExtensions,
       resolveAgent: options.resolveAgent ?? mockResolveAgent,
+      protectedFiles: options.protectedFiles,
       onChatReopened: options.onChatReopened,
     }
   );
@@ -1177,6 +1179,22 @@ describe("AgentSessionManager", () => {
 
         expect(descriptor.createBackendProcess).toHaveBeenCalledWith(
           expect.objectContaining({ copilotMcpServer })
+        );
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/989 starts the backend with the files no model may write, so every chat on it refuses them", async () => {
+        const protectedFiles = () => ({
+          folder: "/vault/copilot/agents",
+          fileName: "instructions.md",
+          reason: "Only the user edits an agent's instruction.",
+        });
+        const descriptor = buildDescriptor();
+        const mgr = buildManager({ protectedFiles, descriptor });
+
+        await mgr.createSession();
+
+        expect(descriptor.createBackendProcess).toHaveBeenCalledWith(
+          expect.objectContaining({ protectedFiles })
         );
       });
 

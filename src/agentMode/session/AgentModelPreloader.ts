@@ -3,6 +3,7 @@ import type CopilotPlugin from "@/main";
 import { getSettings } from "@/settings/model";
 import { App, FileSystemAdapter, Platform } from "obsidian";
 import type { CopilotMcpServer } from "./copilotMcpServer";
+import type { ProtectedFiles } from "./protectedFiles";
 import { MethodUnsupportedError } from "./errors";
 import type {
   BackendDescriptor,
@@ -34,7 +35,8 @@ export class AgentModelPreloader {
     private readonly plugin: CopilotPlugin,
     private readonly resolveDescriptor: (id: BackendId) => BackendDescriptor | undefined,
     private readonly beforeBackendStart?: (id: BackendId) => Promise<void>,
-    private readonly copilotMcpServer?: CopilotMcpServer
+    private readonly copilotMcpServer?: CopilotMcpServer,
+    private readonly protectedFiles?: () => ProtectedFiles | null
   ) {}
 
   getCachedModelCatalog(backendId: BackendId): BackendModelCatalog | null {
@@ -162,6 +164,7 @@ export class AgentModelPreloader {
       clientVersion: this.plugin.manifest.version,
       descriptor,
       copilotMcpServer: this.copilotMcpServer,
+      protectedFiles: this.protectedFiles,
     });
 
     // An agent can revise its model list after the probe session opens, so the cache follows it.

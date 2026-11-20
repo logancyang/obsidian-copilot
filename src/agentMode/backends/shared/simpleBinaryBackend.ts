@@ -4,6 +4,7 @@ import { AcpBackendProcess } from "@/agentMode/acp/AcpBackendProcess";
 import type { AcpBackend, AcpSpawnDescriptor } from "@/agentMode/acp/types";
 import { augmentPathForNodeShebang } from "@/agentMode/acp/nodeShebangPath";
 import type { BackendDescriptor, BackendProcess } from "@/agentMode/session/types";
+import type { ProtectedFiles } from "@/agentMode/session/protectedFiles";
 
 export function buildSimpleSpawnDescriptor(
   binaryPath: string | undefined,
@@ -30,8 +31,15 @@ export function simpleBinaryBackendProcess(
     app: App;
     clientVersion: string;
     descriptor: BackendDescriptor;
+    protectedFiles?: () => ProtectedFiles | null;
   },
   backend: AcpBackend
 ): BackendProcess {
-  return new AcpBackendProcess(args.app, backend, args.clientVersion, args.descriptor);
+  return new AcpBackendProcess(
+    args.app,
+    backend,
+    args.clientVersion,
+    args.descriptor,
+    args.protectedFiles
+  );
 }

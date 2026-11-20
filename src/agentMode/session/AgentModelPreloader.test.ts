@@ -157,6 +157,25 @@ describe("AgentModelPreloader", () => {
       );
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/989 starts the probe with the files no model may write, so the process it hands to a chat refuses them", async () => {
+      const { descriptor } = buildDescriptor(() => makeMockProc());
+      const protectedFiles = () => null;
+      const preloader = new AgentModelPreloader(
+        buildApp(),
+        buildPlugin(),
+        () => descriptor,
+        undefined,
+        undefined,
+        protectedFiles
+      );
+
+      await preloader.preload("claude-sdk");
+
+      expect(descriptor.createBackendProcess).toHaveBeenCalledWith(
+        expect.objectContaining({ protectedFiles })
+      );
+    });
+
     it("retains the probe subprocess after a successful preload and hands it to the manager", async () => {
       const { descriptor, procHandle } = buildDescriptor(() => makeMockProc());
       const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);

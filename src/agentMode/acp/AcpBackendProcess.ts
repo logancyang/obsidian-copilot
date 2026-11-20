@@ -56,6 +56,7 @@ import type {
 import { isCompactCommand } from "@/commands/compactCommand";
 import { ENABLED_MODEL_WAIT_MS } from "@/agentMode/session/enabledModelSelection";
 import { diffTargetPaths } from "@/agentMode/session/editTargets";
+import { isProtectedFile, type ProtectedFiles } from "@/agentMode/session/protectedFiles";
 import { isAgentMemoryFile } from "@/agents/agentMemoryFile";
 import { wrapStreamsForDebug } from "./debugTap";
 import { formToQuestionPrompt } from "./elicitation";
@@ -152,16 +153,15 @@ export class AcpBackendProcess implements BackendProcess {
   private planUsageReadQueued = false;
   private readonly backendContextWindows = new Map<string, number>();
   private readonly configOptionWaiters = new Map<SessionId, () => void>();
-  private readonly agentMemory = new Map<
-    SessionId,
-    { memoryPath: string; editTargets: Map<string, unknown[]> }
-  >();
+  private readonly agentMemory = new Map<SessionId, { memoryPath: string }>();
+  private readonly toolCallTargets = new Map<SessionId, Map<string, unknown[]>>();
 
   constructor(
     private readonly app: App,
     private readonly backend: AcpBackend,
     private readonly clientVersion: string,
-    private readonly descriptor: BackendDescriptor
+    private readonly descriptor: BackendDescriptor,
+    private readonly protectedFiles?: () => ProtectedFiles | null
   ) {}
 
   async start(): Promise<void> {
@@ -172,6 +172,7 @@ export class AcpBackendProcess implements BackendProcess {
     }
     const descriptor = await this.backend.buildSpawnDescriptor({
       vaultBasePath: adapter.getBasePath(),
+      protectedFiles: this.protectedFiles?.() ?? null,
     });
 
     const procOpts: AcpProcessManagerOptions = {
@@ -518,6 +519,7 @@ export class AcpBackendProcess implements BackendProcess {
     this.sessionWireState.delete(params.sessionId);
     this.pendingUpdates.delete(params.sessionId);
     this.agentMemory.delete(params.sessionId);
+    this.toolCallTargets.delete(params.sessionId);
   }
 
   async cancel(params: CancelInput): Promise<void> {
@@ -718,7 +720,7 @@ export class AcpBackendProcess implements BackendProcess {
 
   private async applyAgentMode(sessionId: SessionId, agent: SessionAgent | undefined) {
     if (agent?.memoryPath) {
-      this.agentMemory.set(sessionId, { memoryPath: agent.memoryPath, editTargets: new Map() });
+      this.agentMemory.set(sessionId, { memoryPath: agent.memoryPath });
     } else {
       this.agentMemory.delete(sessionId);
     }
@@ -769,6 +771,7 @@ export class AcpBackendProcess implements BackendProcess {
     this.pendingUpdates.clear();
     this.sessionWireState.clear();
     this.agentMemory.clear();
+    this.toolCallTargets.clear();
     this.todoToolCallIdsBySession.clear();
     this.sawLiveUsage.clear();
     this.permissionPrompter = null;
@@ -871,15 +874,19 @@ export class AcpBackendProcess implements BackendProcess {
       this.sawLiveUsage.add(sessionId);
     }
     const toolCall = update.update;
-    const editTargets = this.agentMemory.get(sessionId)?.editTargets;
-    if (
-      editTargets &&
-      (toolCall.sessionUpdate === "tool_call" || toolCall.sessionUpdate === "tool_call_update")
-    ) {
-      editTargets.set(toolCall.toolCallId, [
-        ...(editTargets.get(toolCall.toolCallId) ?? []),
-        ...editTargetsOf(toolCall),
-      ]);
+    if (toolCall.sessionUpdate === "tool_call" || toolCall.sessionUpdate === "tool_call_update") {
+      const reported = editTargetsOf(toolCall);
+      if (reported.length > 0) {
+        let targets = this.toolCallTargets.get(sessionId);
+        if (!targets) {
+          targets = new Map();
+          this.toolCallTargets.set(sessionId, targets);
+        }
+        targets.set(toolCall.toolCallId, [
+          ...(targets.get(toolCall.toolCallId) ?? []),
+          ...reported,
+        ]);
+      }
     }
 
     const handler = this.domainHandlers.get(sessionId);
@@ -989,6 +996,15 @@ export class AcpBackendProcess implements BackendProcess {
   private async handlePermission(
     req: RequestPermissionRequest
   ): Promise<RequestPermissionResponse> {
+    if (this.writesProtectedFile(req)) {
+      // A rejection lets the turn go on where the agent offers one; a request without one is cancelled like an unanswered card.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/989
+      const reject = req.options.find((option) => option.kind === "reject_once");
+      logInfo(`[AgentMode] refused a write to a protected file: ${req.toolCall.toolCallId}`);
+      return reject
+        ? { outcome: { outcome: "selected", optionId: reject.optionId } }
+        : { outcome: { outcome: "cancelled" } };
+    }
     const allowOnce = req.options.find((option) => option.kind === "allow_once");
     if (allowOnce && this.isAgentMemorySave(req)) {
       return { outcome: { outcome: "selected", optionId: allowOnce.optionId } };
@@ -1007,23 +1023,44 @@ export class AcpBackendProcess implements BackendProcess {
   }
 
   // A custom agent saves a rule to its own MEMORY.md without asking; an edit that names any other file, or none, asks as usual.
-  // Codex names only a patch's source files in the request, so the paths its tool call reported, such as a Move to, count too.
   // Plan mode saves nothing, and Codex Plan can still ask to write an agent folder outside a project chat's writable folder, so that ask keeps its card.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/942
   private isAgentMemorySave({ sessionId, toolCall }: RequestPermissionRequest): boolean {
     const memory = this.agentMemory.get(sessionIdFromAcp(sessionId));
     if (!memory || toolCall.kind !== "edit") return false;
     if (this.computeState(sessionId).mode?.current === "plan") return false;
-    const targets = [
-      ...editTargetsOf(toolCall),
-      ...(memory.editTargets.get(toolCall.toolCallId) ?? []),
-    ];
+    const targets = this.permissionTargets(sessionId, toolCall);
     return (
       targets.length > 0 &&
       targets.every(
         (target) => typeof target === "string" && isAgentMemoryFile(target, memory.memoryPath)
       )
     );
+  }
+
+  // A permission answer carries no text to the coding agent, so the refusal is a plain rejection; reads and commands still ask, since their paths do not say what they write.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/989
+  private writesProtectedFile({ sessionId, toolCall }: RequestPermissionRequest): boolean {
+    const rule = this.protectedFiles?.();
+    const adapter = this.app.vault.adapter;
+    if (!rule || !WRITE_KINDS.has(toolCall.kind ?? "") || !(adapter instanceof FileSystemAdapter)) {
+      return false;
+    }
+    return this.permissionTargets(sessionId, toolCall).some(
+      (target) => typeof target === "string" && isProtectedFile(rule, target, adapter.getBasePath())
+    );
+  }
+
+  // Codex names only a patch's source files in the request, so the paths its tool call reported, such as a Move to, count too.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/942
+  private permissionTargets(
+    sessionId: AcpSessionId,
+    toolCall: RequestPermissionRequest["toolCall"]
+  ): unknown[] {
+    return [
+      ...editTargetsOf(toolCall),
+      ...(this.toolCallTargets.get(sessionIdFromAcp(sessionId))?.get(toolCall.toolCallId) ?? []),
+    ];
   }
 
   private async handleElicitation(
@@ -1039,6 +1076,8 @@ export class AcpBackendProcess implements BackendProcess {
     return { action: "accept", content: form.toContent(answers) };
   }
 }
+
+const WRITE_KINDS = new Set(["edit", "delete", "move"]);
 
 function editTargetsOf(toolCall: {
   locations?: ReadonlyArray<{ path: string }> | null;

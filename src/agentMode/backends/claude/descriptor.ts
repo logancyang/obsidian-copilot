@@ -487,6 +487,7 @@ export const ClaudeBackendDescriptor: ClaudeDescriptor = {
       app: args.app,
       clientVersion: args.clientVersion,
       descriptor: args.descriptor,
+      protectedFiles: args.protectedFiles,
       getEnableThinking: () => Boolean(getSettings().agentMode?.backends?.claude?.enableThinking),
       ...claudeChatEnvOptions(args.clientVersion),
       checkAuth: async () =>

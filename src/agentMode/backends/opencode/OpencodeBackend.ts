@@ -26,7 +26,8 @@ import type { PlanUsageReading } from "@/agentMode/session/planUsage";
 import { CopilotPlusUsageReader } from "@/agentMode/backends/shared/copilotPlusUsage";
 import type { SelfHostWebSearchAgentChannel } from "@/LLMProviders/selfHostServices";
 import type { Config } from "@opencode/schema/config";
-import { installOpencodeCopilotPlugin } from "./opencodeCopilotPlugin";
+import { COPILOT_PROTECTED_FILES_ENV, installOpencodeCopilotPlugin } from "./opencodeCopilotPlugin";
+import type { ProtectedFiles } from "@/agentMode/session/protectedFiles";
 import { COPILOT_MCP_SERVER_NAME } from "@/agentMode/session/copilotMcpServer";
 import {
   createAgentsFolder,
@@ -104,7 +105,10 @@ export class OpencodeBackend implements AcpBackend {
     return this.#copilotPlus.readContextWindow(copilotPlusModelId(wireModelId));
   }
 
-  async buildSpawnDescriptor(ctx: { vaultBasePath: string }): Promise<AcpSpawnDescriptor> {
+  async buildSpawnDescriptor(ctx: {
+    vaultBasePath: string;
+    protectedFiles?: ProtectedFiles | null;
+  }): Promise<AcpSpawnDescriptor> {
     const settings = getSettings();
     const binaryPath = settings.agentMode?.backends?.opencode?.binaryPath;
     if (!binaryPath) {
@@ -205,6 +209,7 @@ export class OpencodeBackend implements AcpBackend {
         ...envOverrides,
         ...(this.#customAgents ? { OPENCODE_CONFIG: this.#customAgents.file } : {}),
         OPENCODE_CONFIG_CONTENT: configContent,
+        [COPILOT_PROTECTED_FILES_ENV]: JSON.stringify(ctx.protectedFiles ?? null),
       },
     };
   }

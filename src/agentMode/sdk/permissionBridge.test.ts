@@ -7,7 +7,12 @@ import type {
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { PermissionBridge, type AskUserQuestionPrompter } from "./permissionBridge";
+import type { ProtectedFiles } from "@/agentMode/session/protectedFiles";
+import {
+  PermissionBridge,
+  refuseProtectedWrites,
+  type AskUserQuestionPrompter,
+} from "./permissionBridge";
 
 jest.mock("@/agents/customAgentsGate", () => ({ getCustomAgentsGate: () => "full" }));
 
@@ -484,6 +489,97 @@ describe("permissionBridge", () => {
           expect(captured!.toolCall.kind).not.toBe("switch_mode");
         });
       });
+    });
+  });
+
+  describe("refuseProtectedWrites()", () => {
+    const ISSUE_989 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/989";
+    let vault: string;
+    let rule: ProtectedFiles | null;
+
+    beforeEach(() => {
+      vault = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "bridge-protected-")));
+      fs.mkdirSync(path.join(vault, "copilot", "agents", "coco"), { recursive: true });
+      fs.writeFileSync(path.join(vault, "copilot", "agents", "coco", "instructions.md"), "x");
+      rule = {
+        folder: path.join(vault, "copilot", "agents"),
+        fileName: "instructions.md",
+        reason: "Only the user edits an agent's instruction.",
+      };
+    });
+
+    afterEach(() => fs.rmSync(vault, { recursive: true, force: true }));
+
+    function preToolUse(tool_name: string, tool_input: Record<string, unknown>) {
+      return refuseProtectedWrites(() => rule)(
+        {
+          hook_event_name: "PreToolUse",
+          tool_name,
+          tool_input,
+          tool_use_id: "tu-1",
+          session_id: "session-1",
+          transcript_path: "/tmp/t.jsonl",
+          cwd: vault,
+        },
+        "tu-1",
+        { signal: new AbortController().signal }
+      );
+    }
+
+    const REFUSED = {
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "deny",
+        permissionDecisionReason: "Only the user edits an agent's instruction.",
+      },
+    };
+
+    it(`refuses an Edit or Write of an existing or a new instructions.md before any permission mode decides, with the rule's reason (${ISSUE_989})`, async () => {
+      const existing = path.join(vault, "copilot", "agents", "coco", "instructions.md");
+      const created = path.join(vault, "copilot", "agents", "new-agent", "instructions.md");
+
+      await expect(
+        preToolUse("Edit", { file_path: existing, old_string: "x", new_string: "y" })
+      ).resolves.toEqual(REFUSED);
+      await expect(preToolUse("Write", { file_path: existing, content: "y" })).resolves.toEqual(
+        REFUSED
+      );
+      await expect(preToolUse("MultiEdit", { file_path: existing, edits: [] })).resolves.toEqual(
+        REFUSED
+      );
+      await expect(preToolUse("Write", { file_path: created, content: "y" })).resolves.toEqual(
+        REFUSED
+      );
+    });
+
+    it(`refuses the file named through '..', another letter case, a nested folder or a path relative to the chat's folder (${ISSUE_989})`, async () => {
+      for (const file_path of [
+        path.join(vault, "notes", "..", "copilot", "agents", "coco", "instructions.md"),
+        path.join(vault, "copilot", "agents", "coco", "INSTRUCTIONS.md"),
+        path.join(vault, "copilot", "agents", "coco", "old", "instructions.md"),
+        "copilot/agents/maya/instructions.md",
+      ]) {
+        await expect(preToolUse("Write", { file_path, content: "y" })).resolves.toEqual(REFUSED);
+      }
+    });
+
+    it("leaves the agent's MEMORY.md and other files, reads, shell commands and chats without a rule to the permission mode", async () => {
+      const memory = path.join(vault, "copilot", "agents", "coco", "MEMORY.md");
+      const instructions = path.join(vault, "copilot", "agents", "coco", "instructions.md");
+
+      await expect(preToolUse("Write", { file_path: memory, content: "y" })).resolves.toEqual({});
+      await expect(
+        preToolUse("Write", {
+          file_path: path.join(vault, "copilot", "agents", "coco", "notes.md"),
+          content: "y",
+        })
+      ).resolves.toEqual({});
+      await expect(preToolUse("Read", { file_path: instructions })).resolves.toEqual({});
+      await expect(preToolUse("Bash", { command: `rm ${instructions}` })).resolves.toEqual({});
+      rule = null;
+      await expect(preToolUse("Write", { file_path: instructions, content: "y" })).resolves.toEqual(
+        {}
+      );
     });
   });
 });

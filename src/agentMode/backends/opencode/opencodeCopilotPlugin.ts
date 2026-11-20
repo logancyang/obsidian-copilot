@@ -15,6 +15,10 @@ export const COPILOT_PLUS_STEP_FAILURE_POLICY = `Write at most 200 lines per wri
 // the tool's result, because OpenCode names the file only milliseconds before writing it.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/687
 // MCP tools need independent names and approvals instead of an execute wrapper. https://github.com/Brevilabs/obsidian-copilot-private/issues/875
+// It rejects a write to a file the process's rule protects before the tool runs, in every mode, because a permission answer
+// carries no reason to the model and OpenCode's Auto mode asks for none. https://github.com/Brevilabs/obsidian-copilot-private/issues/989
+export const COPILOT_PROTECTED_FILES_ENV = "COPILOT_PROTECTED_FILES";
+
 export const OPENCODE_COPILOT_PLUGIN_SOURCE = `"use strict";
 const fs = require("fs");
 const path = require("path");
@@ -92,6 +96,37 @@ function captureOriginals(ctx) {
   };
 }
 
+function readProtectedFiles() {
+  try {
+    const rule = JSON.parse(process.env[${JSON.stringify(COPILOT_PROTECTED_FILES_ENV)}]);
+    return rule && typeof rule.folder === "string" && typeof rule.fileName === "string" ? rule : null;
+  } catch {
+    return null;
+  }
+}
+
+function landingPath(file) {
+  const missing = [];
+  for (let current = file; ; current = path.dirname(current)) {
+    try {
+      return path.join(fs.realpathSync.native(current), ...missing);
+    } catch {
+      if (path.dirname(current) === current) return file;
+      missing.unshift(path.basename(current));
+    }
+  }
+}
+
+function refuseProtectedWrite(ctx, rule, event) {
+  const folder = landingPath(path.resolve(rule.folder)).toLowerCase();
+  for (const file of writeTargets(event.tool, event.input)) {
+    const target = landingPath(path.resolve(ctx.location.directory, file)).toLowerCase();
+    if (path.basename(target) === rule.fileName.toLowerCase() && target.startsWith(folder + path.sep)) {
+      throw new Error(rule.reason);
+    }
+  }
+}
+
 function addPlusStepFailurePolicy(event) {
   event.system.push({ type: "text", text: ${JSON.stringify(COPILOT_PLUS_STEP_FAILURE_POLICY)} });
 }
@@ -112,7 +147,9 @@ module.exports = {
     });
     await ctx.skill.transform((skills) => skills.remove("report"));
     const originals = captureOriginals(ctx);
+    const protectedFiles = readProtectedFiles();
     await ctx.tool.hook("execute.before", async (event) => {
+      if (protectedFiles) refuseProtectedWrite(ctx, protectedFiles, event);
       await originals.before(event);
     });
     await ctx.tool.hook("execute.after", originals.after);

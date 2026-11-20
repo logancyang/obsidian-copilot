@@ -1,5 +1,6 @@
 import type {
   CanUseTool,
+  HookCallback,
   PermissionMode,
   PermissionResult,
   PermissionUpdate,
@@ -16,6 +17,7 @@ import type {
 } from "@/agentMode/session/types";
 import { PERMISSION_OPTION_KINDS } from "@/agentMode/session/types";
 import { resolveToolName } from "@/agentMode/session/toolName";
+import { isProtectedFile, type ProtectedFiles } from "@/agentMode/session/protectedFiles";
 import { isAgentMemoryFile } from "@/agents/agentMemoryFile";
 import { err2String } from "@/utils";
 import { logSdkInbound, logSdkOutbound } from "./sdkDebugTap";
@@ -41,6 +43,32 @@ export interface PermissionBridgeOptions {
 }
 
 const MEMORY_SAVE_TOOLS = new Set(["Write", "Edit"]);
+
+// Claude runs its PreToolUse hooks in every permission mode, before its own rules and canUseTool, so the refusal holds where edits are approved without asking.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/989
+export function refuseProtectedWrites(getRule: () => ProtectedFiles | null): HookCallback {
+  return async (input) => {
+    const rule = getRule();
+    if (!rule || input.hook_event_name !== "PreToolUse") return {};
+    const filePath = (input.tool_input as { file_path?: unknown } | null)?.file_path;
+    if (
+      deriveToolKind(input.tool_name) !== "edit" ||
+      typeof filePath !== "string" ||
+      !isProtectedFile(rule, filePath, input.cwd)
+    ) {
+      return {};
+    }
+    const output = {
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse" as const,
+        permissionDecision: "deny" as const,
+        permissionDecisionReason: rule.reason,
+      },
+    };
+    logSdkOutbound("preToolUse:refuse-protected-file", output, input.session_id);
+    return output;
+  };
+}
 
 export class PermissionBridge {
   constructor(

@@ -14,6 +14,7 @@ import {
   type SavedChatStates,
 } from "@/agentMode/session/chatExtension";
 import type { CopilotMcpServer, FindCallingChat } from "@/agentMode/session/copilotMcpServer";
+import type { ProtectedFiles } from "@/agentMode/session/protectedFiles";
 import { refreshLatestVersion } from "@/hooks/useLatestVersion";
 import { resolveEffort } from "@/lib/model-effort";
 import { logError, logInfo, logWarn } from "@/logger";
@@ -176,6 +177,7 @@ export interface AgentSessionManagerOptions {
   copilotMcpServer?: CopilotMcpServer;
   chatExtensions?: readonly ChatExtension<unknown>[];
   resolveAgent?: (slug: string) => Promise<SessionAgent | null>;
+  protectedFiles?: () => ProtectedFiles | null;
   onChatReopened?: (chat: AgentSession) => void;
 }
 
@@ -2838,6 +2840,7 @@ export class AgentSessionManager {
         clientVersion: this.plugin.manifest.version,
         descriptor,
         copilotMcpServer: this.opts.copilotMcpServer,
+        protectedFiles: this.opts.protectedFiles,
       });
       if (proc.start) await proc.start();
       this.wireProcessCallbacks(backendId, proc);

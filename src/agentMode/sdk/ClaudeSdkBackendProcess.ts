@@ -44,6 +44,7 @@ import type {
   StopTaskInput,
   WithdrawInput,
 } from "@/agentMode/session/types";
+import type { ProtectedFiles } from "@/agentMode/session/protectedFiles";
 import type { ProjectScopeId } from "@/agentMode/session/scope";
 import { AuthRequiredError, MethodUnsupportedError } from "@/agentMode/session/errors";
 import { requireNodeModule } from "@/utils/desktopRuntime";
@@ -55,7 +56,11 @@ import {
   createClaudeTranscriptReplay,
   type TranslatorState,
 } from "./sdkMessageTranslator";
-import { PermissionBridge, type AskUserQuestionPrompter } from "./permissionBridge";
+import {
+  PermissionBridge,
+  refuseProtectedWrites,
+  type AskUserQuestionPrompter,
+} from "./permissionBridge";
 import {
   getCachedSdkCatalog,
   probeClaudeSdkCatalog,
@@ -119,6 +124,7 @@ export interface ClaudeSdkBackendProcessOptions {
   getManagedEnv?: () => Promise<Readonly<Record<string, string>>>;
   checkAuth?: () => Promise<boolean>;
   checkCompatibility?: () => Promise<void>;
+  protectedFiles?: () => ProtectedFiles | null;
 }
 
 const THINKING_BUDGET_TOKENS = 31_999;
@@ -394,7 +400,16 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       extraArgs: { "replay-user-messages": null },
       // Stop ends the main turn only; background agents keep running. https://github.com/Brevilabs/obsidian-copilot-private/issues/748
       perTaskStopAffordance: true,
-      hooks: { PreToolUse: [{ hooks: [runSubagentsInBackground] }] },
+      hooks: {
+        PreToolUse: [
+          {
+            hooks: [
+              runSubagentsInBackground,
+              refuseProtectedWrites(() => this.opts.protectedFiles?.() ?? null),
+            ],
+          },
+        ],
+      },
     };
     options.systemPrompt = {
       type: "preset",

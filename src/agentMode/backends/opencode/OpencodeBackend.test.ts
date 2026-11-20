@@ -1170,6 +1170,28 @@ describe("OpencodeBackend", () => {
         expect(cfg.providers.anthropic.models).toEqual({ "claude-sonnet-4-6": {} });
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/989 hands Copilot's plugin the files no model may write, over a user's own value, and no rule when the chat runner sets none", async () => {
+        setOpencodeSettings({
+          binaryPath: "/path/to/opencode",
+          envOverrides: { COPILOT_PROTECTED_FILES: "null" },
+        });
+        const protectedFiles = {
+          folder: "/vault/copilot/agents",
+          fileName: "instructions.md",
+          reason: "Only the user edits an agent's instruction.",
+        };
+        const backend = new OpencodeBackend(NO_MODELS_DEPS);
+
+        const guarded = await backend.buildSpawnDescriptor({
+          vaultBasePath: "/vault",
+          protectedFiles,
+        });
+        const open = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault" });
+
+        expect(JSON.parse(guarded.env.COPILOT_PROTECTED_FILES as string)).toEqual(protectedFiles);
+        expect(open.env.COPILOT_PROTECTED_FILES).toBe("null");
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/650 runs OpenCode at INFO so server failure causes reach its stderr and log file", async () => {
         setOpencodeSettings({ binaryPath: "/path/to/opencode" });
 

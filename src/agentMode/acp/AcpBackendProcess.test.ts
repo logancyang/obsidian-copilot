@@ -1298,6 +1298,245 @@ describe("AcpBackendProcess", () => {
           expect(prompter).not.toHaveBeenCalled();
         });
       });
+      describe("with a rule that protects agents' instructions.md", () => {
+        const ISSUE_989 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/989";
+        let vault: string;
+        let agents: string;
+        let prompter: jest.Mock;
+
+        const CODEX_FILE_CHANGE_OPTIONS_WHOSE_ONLY_REFUSAL_IS_CANCEL = [
+          { optionId: "allow_once", name: "Yes, proceed", kind: "allow_once" },
+          { optionId: "allow_for_session", name: "Yes, and don't ask again", kind: "allow_always" },
+          {
+            optionId: "cancel",
+            name: "No, and tell Codex what to do differently",
+            kind: "reject_once",
+          },
+        ];
+
+        function codexSession(mode: "read-only" | "agent") {
+          return {
+            sessionId: `codex-${mode}`,
+            modes: {
+              currentModeId: mode,
+              availableModes: [
+                { id: "read-only", name: "Read Only" },
+                { id: "agent", name: "Agent" },
+              ],
+            },
+            configOptions: [
+              {
+                id: "collaboration_mode",
+                type: "select",
+                name: "Collaboration mode",
+                currentValue: "default",
+                options: [
+                  { value: "default", name: "Default" },
+                  { value: "plan", name: "Plan" },
+                ],
+              },
+            ],
+          } as { sessionId: string };
+        }
+
+        beforeEach(() => {
+          vault = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "acp-protected-")));
+          agents = path.join(vault, "copilot", "agents");
+          fs.mkdirSync(path.join(agents, "coco"), { recursive: true });
+          fs.writeFileSync(path.join(agents, "coco", "instructions.md"), "You are Coco.");
+          fs.writeFileSync(path.join(vault, "draft.md"), "draft");
+          prompter = jest.fn().mockResolvedValue({
+            outcome: { outcome: "selected", optionId: "allow_once" },
+          });
+          mockInitializeResult = {
+            protocolVersion: 1,
+            agentCapabilities: { sessionCapabilities: { systemPrompt: {}, resume: {} } },
+          };
+        });
+
+        afterEach(() => fs.rmSync(vault, { recursive: true, force: true }));
+
+        async function chat({
+          mode = "read-only",
+          agent,
+          agentBackend = buildStubBackend(),
+        }: {
+          mode?: "read-only" | "agent";
+          agent?: { slug: string; prompt: string; memoryPath?: string; variant?: string };
+          agentBackend?: AcpBackend;
+        } = {}) {
+          mockNewSession.mockResolvedValue(codexSession(mode));
+          const backend = new AcpBackendProcess(
+            buildApp(vault),
+            agentBackend,
+            "1.0.0",
+            buildStubDescriptor({ getModeState: buildCodexModeState }),
+            () => ({
+              folder: agents,
+              fileName: "instructions.md",
+              reason: "Only the user edits an agent's instruction.",
+            })
+          );
+          await backend.start();
+          backend.setPermissionPrompter(prompter);
+          const { sessionId } = await backend.newSession({ cwd: vault, agent });
+          const client = getVaultClient(backend);
+          const announce = (toolCallId: string, content: unknown[]) =>
+            client.sessionUpdate({
+              sessionId,
+              update: {
+                sessionUpdate: "tool_call",
+                toolCallId,
+                title: "Editing files",
+                kind: "edit",
+                status: "pending",
+                content,
+              },
+            } as unknown as Parameters<VaultClient["sessionUpdate"]>[0]);
+          const ask = (
+            toolCall: Record<string, unknown>,
+            toolCallId = "tc1",
+            options: unknown[] = CODEX_FILE_CHANGE_OPTIONS_WHOSE_ONLY_REFUSAL_IS_CANCEL
+          ) =>
+            client.requestPermission({
+              sessionId,
+              toolCall: { toolCallId, title: "Edit files", ...toolCall },
+              options,
+            } as unknown as Parameters<VaultClient["requestPermission"]>[0]);
+          return { ask, announce };
+        }
+
+        const REFUSED = { outcome: { outcome: "selected", optionId: "cancel" } };
+
+        it.each([
+          ["ask-first (Codex Default)", "read-only"],
+          ["auto (Codex Auto, for a file outside its writable folder)", "agent"],
+        ] as const)(
+          `refuses without a card an edit, a new file, a delete and a move away of an instructions.md in %s mode (${ISSUE_989})`,
+          async (_label, mode) => {
+            const { ask } = await chat({ mode });
+            const existing = path.join(agents, "coco", "instructions.md");
+            const created = path.join(agents, "new-agent", "instructions.md");
+
+            await expect(ask({ kind: "edit", locations: [{ path: existing }] })).resolves.toEqual(
+              REFUSED
+            );
+            await expect(
+              ask({
+                kind: "edit",
+                content: [{ type: "diff", path: created, oldText: null, newText: "You are new." }],
+              })
+            ).resolves.toEqual(REFUSED);
+            await expect(ask({ kind: "delete", locations: [{ path: existing }] })).resolves.toEqual(
+              REFUSED
+            );
+            await expect(
+              ask({ kind: "move", rawInput: { path: existing, destination: "draft.md" } })
+            ).resolves.toEqual(REFUSED);
+            expect(prompter).not.toHaveBeenCalled();
+          }
+        );
+
+        it(`refuses a move into a new agent folder whose request names only the source, as Codex reports a patch's Move to only in the tool call (${ISSUE_989})`, async () => {
+          const { ask, announce } = await chat();
+          await announce("tc-move", [
+            {
+              type: "diff",
+              path: path.join(agents, "new-agent", "instructions.md"),
+              oldText: "draft",
+              newText: "draft",
+            },
+          ]);
+
+          const response = await ask(
+            { kind: "edit", locations: [{ path: path.join(vault, "draft.md") }] },
+            "tc-move"
+          );
+
+          expect(response).toEqual(REFUSED);
+          expect(prompter).not.toHaveBeenCalled();
+        });
+
+        it(`refuses the file named through '..', another letter case, a nested folder or a path relative to the vault (${ISSUE_989})`, async () => {
+          const { ask } = await chat();
+
+          for (const target of [
+            path.join(vault, "notes", "..", "copilot", "agents", "coco", "instructions.md"),
+            path.join(agents, "coco", "Instructions.MD"),
+            path.join(agents, "coco", "archive", "instructions.md"),
+            "copilot/agents/maya/instructions.md",
+          ]) {
+            await expect(ask({ kind: "edit", rawInput: { filePath: target } })).resolves.toEqual(
+              REFUSED
+            );
+          }
+          expect(prompter).not.toHaveBeenCalled();
+        });
+
+        it.each([
+          ["a Copilot chat", undefined],
+          ["an agent's own chat", { slug: "coco", prompt: "You are Coco." }],
+          [
+            "the chat an agent runs when asked",
+            { slug: "maya", prompt: "You are Maya.", variant: "asked" },
+          ],
+        ])(`refuses in %s (${ISSUE_989})`, async (_label, agent) => {
+          const { ask } = await chat({ agent });
+
+          await expect(
+            ask({
+              kind: "edit",
+              locations: [{ path: path.join(agents, "maya", "instructions.md") }],
+            })
+          ).resolves.toEqual(REFUSED);
+          expect(prompter).not.toHaveBeenCalled();
+        });
+
+        it(`cancels a refused write whose request offers no rejection, as an unanswered card would be (${ISSUE_989})`, async () => {
+          const { ask } = await chat();
+
+          const response = await ask(
+            { kind: "edit", locations: [{ path: path.join(agents, "coco", "instructions.md") }] },
+            "tc1",
+            [{ optionId: "allow_once", name: "Allow", kind: "allow_once" }]
+          );
+
+          expect(response).toEqual({ outcome: { outcome: "cancelled" } });
+          expect(prompter).not.toHaveBeenCalled();
+        });
+
+        it("still saves the agent's own MEMORY.md without a card, and asks as usual for its other files, reads and commands", async () => {
+          const memoryPath = path.join(agents, "coco", "MEMORY.md");
+          const { ask } = await chat({
+            agent: { slug: "coco", prompt: "You are Coco.", memoryPath },
+          });
+          const instructions = path.join(agents, "coco", "instructions.md");
+
+          await expect(ask({ kind: "edit", locations: [{ path: memoryPath }] })).resolves.toEqual({
+            outcome: { outcome: "selected", optionId: "allow_once" },
+          });
+          expect(prompter).not.toHaveBeenCalled();
+          await ask({ kind: "edit", locations: [{ path: path.join(agents, "coco", "notes.md") }] });
+          await ask({ kind: "read", locations: [{ path: instructions }] });
+          await ask({ kind: "execute", rawInput: { command: `rm ${instructions}` } });
+          expect(prompter).toHaveBeenCalledTimes(3);
+        });
+
+        it(`gives the rule to the coding agent when it starts, so one that refuses writes itself can carry the reason (${ISSUE_989})`, async () => {
+          const agentBackend = buildStubBackend();
+
+          await chat({ agentBackend });
+
+          expect(agentBackend.buildSpawnDescriptor).toHaveBeenCalledWith({
+            vaultBasePath: vault,
+            protectedFiles: {
+              folder: agents,
+              fileName: "instructions.md",
+              reason: "Only the user edits an agent's instruction.",
+            },
+          });
+        });
+      });
     });
 
     describe("setAskUserQuestionPrompter()", () => {
