@@ -274,13 +274,18 @@ export function promptHintsFor(
 ): ReadonlyArray<string> {
   return Object.freeze(
     tools.flatMap((tool) =>
-      tool.promptHint &&
-      isToolOn(tool.definition.name) &&
-      (tool.listedAs ? tool.listedAs(listing) : tool.definition)
-        ? [tool.promptHint]
-        : []
+      tool.promptHint && offeredDefinition(tool, isToolOn, listing) ? [tool.promptHint] : []
     )
   );
+}
+
+function offeredDefinition(
+  tool: HostedTool,
+  isToolOn: ToolSwitch,
+  listing: ToolListing
+): McpToolDefinition | null {
+  if (!isToolOn(tool.definition.name)) return null;
+  return tool.listedAs ? tool.listedAs(listing) : tool.definition;
 }
 
 async function handleHttpRequest(
@@ -356,11 +361,9 @@ async function reply(
       return {
         result: {
           tools: [
-            ...hostedTools
-              .filter((tool) => isToolOn(tool.definition.name))
-              .flatMap(
-                (tool) => (tool.listedAs ? tool.listedAs(handlers.listing) : tool.definition) ?? []
-              ),
+            ...hostedTools.flatMap(
+              (tool) => offeredDefinition(tool, isToolOn, handlers.listing) ?? []
+            ),
             ...providedTools(hostedTools, toolProvider, handlers.listing),
           ],
         },
