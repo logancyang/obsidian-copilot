@@ -17,6 +17,10 @@ export default meta;
 
 export const Remembered: StoryObj<MemorySaveLineProps> = {};
 
+export const RememberedOpened: StoryObj<MemorySaveLineProps> = {
+  args: { defaultOpen: true },
+};
+
 export const ReplacedARule: StoryObj<MemorySaveLineProps> = {
   args: {
     rule: "Write summaries as short paragraphs, no bullet points.",
@@ -24,11 +28,19 @@ export const ReplacedARule: StoryObj<MemorySaveLineProps> = {
   },
 };
 
+export const ReplacedARuleOpened: StoryObj<MemorySaveLineProps> = {
+  args: { ...ReplacedARule.args, defaultOpen: true },
+};
+
 export const GoesAgainstTheInstruction: StoryObj<MemorySaveLineProps> = {
   args: {
     rule: "Taxes are Leo's job now. Point tax questions to Leo.",
     contradicts: "File quarterly estimated taxes.",
   },
+};
+
+export const GoesAgainstTheInstructionOpened: StoryObj<MemorySaveLineProps> = {
+  args: { ...GoesAgainstTheInstruction.args, defaultOpen: true },
 };
 
 export const LongRuleAndName: StoryObj<MemorySaveLineProps> = {
@@ -42,4 +54,8 @@ export const LongRuleAndName: StoryObj<MemorySaveLineProps> = {
     contradicts:
       "Write release notes as plain numbered lists with no links, so they paste cleanly into every channel we post to.",
   },
+};
+
+export const LongRuleAndNameOpened: StoryObj<MemorySaveLineProps> = {
+  args: { ...LongRuleAndName.args, defaultOpen: true },
 };

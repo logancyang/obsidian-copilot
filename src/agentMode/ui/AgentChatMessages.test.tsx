@@ -1030,7 +1030,7 @@ describe("AgentChatMessages", () => {
         expect(text.indexOf("Message fromMaya")).toBe(0);
         expect(text).toContain("Maya remembered“Flag video length first.”");
         expect(screen.getByRole("button", { name: "Plans/Launch plan.md" })).toBeTruthy();
-        expect(screen.getByRole("button", { name: `Open ${memoryPath}` })).toBeTruthy();
+        expect(screen.getByRole("button", { name: /^Maya remembered/ })).toBeTruthy();
       });
 
       it("draws a relay as a card while a stored license is still being verified, so a restart never shows the message the current agent received (https://github.com/Brevilabs/obsidian-copilot-private/issues/951)", async () => {
