@@ -439,7 +439,7 @@ describe("main", () => {
 
         expect(logError).toHaveBeenCalledWith("Failed to add a note to Agent Chat.", failure);
         expect(Notice).toHaveBeenCalledWith(
-          "Could not add the note to Agent Chat. Check the Copilot log."
+          "Could not add the note to the chat. Check the Copilot log."
         );
       });
 
@@ -465,7 +465,7 @@ describe("main", () => {
         expect(addContextNoteToActiveChat).not.toHaveBeenCalled();
         expect(logError).toHaveBeenCalledWith("Failed to add a note to Agent Chat.", failure);
         expect(Notice).toHaveBeenCalledWith(
-          "Could not add the note to Agent Chat. Check the Copilot log."
+          "Could not add the note to the chat. Check the Copilot log."
         );
       });
     });

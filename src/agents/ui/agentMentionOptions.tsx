@@ -11,7 +11,7 @@ import React from "react";
 
 export const AGENTS_MENTION_CATEGORY: CategoryOption = {
   key: "agents",
-  title: "Agents",
+  title: "Teammates",
   category: "agents",
   icon: <Users className="tw-size-4" />,
 };

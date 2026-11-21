@@ -189,7 +189,7 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<InstallOptions> 
   getDataDir(): string {
     const adapter = this.plugin.app.vault.adapter;
     if (!(adapter instanceof FileSystemAdapter)) {
-      throw new Error("Agent Chat requires Obsidian on desktop.");
+      throw new Error("Copilot Chat requires Obsidian on desktop.");
     }
     const home = requireNodeModule<typeof import("node:os")>("os").homedir();
     if (!home || !nodePath().isAbsolute(home) || nodePath().parse(home).root === home) {

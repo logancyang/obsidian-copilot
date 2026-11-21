@@ -45,7 +45,7 @@ export const FailedReply: StoryObj<FeedbackCardProps> = {
       ...draft,
       trigger: "turn_error",
       draft: {
-        title: "Agent Chat reply failed on opencode",
+        title: "Chat reply failed on opencode",
         whatHappened: "Internal error: Internal service failure",
         userSaid: "",
         repro: "",

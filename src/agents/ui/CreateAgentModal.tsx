@@ -39,7 +39,7 @@ export class CreateAgentModal extends Modal {
     private readonly options: CreateAgentDialogOptions
   ) {
     super(app);
-    this.titleEl.setText("New agent");
+    this.titleEl.setText("New teammate");
   }
 
   onOpen(): void {
@@ -85,7 +85,7 @@ export class CreateAgentModal extends Modal {
       this.app,
       () => this.closeForGood(),
       "",
-      `Discard ${this.closeGuard.name || "this agent"}?`,
+      `Discard ${this.closeGuard.name || "this teammate"}?`,
       "Discard",
       "Keep editing",
       () => {

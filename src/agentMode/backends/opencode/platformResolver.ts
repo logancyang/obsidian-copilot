@@ -112,7 +112,7 @@ export async function resolveOpencodeTarget(): Promise<ResolvedTarget> {
   const arch = mapNodeArch(process.arch);
   if (!platform || !arch) {
     throw new Error(
-      `Unsupported platform/arch: ${process.platform}/${process.arch}. Agent Chat runs on macOS, Linux, and Windows (x64 or Arm64).`
+      `Unsupported platform/arch: ${process.platform}/${process.arch}. Copilot Chat runs on macOS, Linux, and Windows (x64 or Arm64).`
     );
   }
   const [muslIsh, avx2] = await Promise.all([

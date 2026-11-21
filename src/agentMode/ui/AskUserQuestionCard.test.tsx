@@ -41,6 +41,12 @@ const chooseWithKeyboard = (control: HTMLElement): boolean =>
 
 describe("AskUserQuestionCard", () => {
   describe("AskUserQuestionCard()", () => {
+    it("heads the card 'Question for you', naming no one, since the asker may be an agent or a teammate", () => {
+      renderCard(makeRequest(NAVIGATION_QUESTIONS), jest.fn());
+
+      expect(screen.getByText("Question for you")).toBeTruthy();
+    });
+
     it("single-select 'Other' → the trimmed typed text is the answer", () => {
       const onResolve = jest.fn();
       const request = makeRequest([

@@ -1,6 +1,6 @@
 # Troubleshooting Copilot V4
 
-Start in **Settings → Copilot → Basic → Agents** and check the status beside the Agent Chat backend you want to use.
+Start in **Settings → Copilot → Basic → Agents** and check the status beside the agent you want to use.
 
 ## Copilot is starting or did not start
 
@@ -14,7 +14,7 @@ Keep the tab open. It turns back into your chat as soon as Copilot is ready, and
 
 Copilot ran into an error while loading and stayed off for this session. To see the error, open the developer console (**View → Toggle Developer Tools**, then the **Console** tab). Then turn Copilot off and on again under **Settings → Community plugins**, or restart Obsidian. If the notice comes back, open an issue and include the error from the console.
 
-## Agent Chat setup
+## Copilot Chat setup
 
 ### OpenCode shows “Not set up” or “Error”
 
@@ -37,13 +37,13 @@ Copilot uses your Claude Code login; there is no API key to paste here.
 Copilot connects through `codex-acp`, not the `codex` executable alone. Manual installations require a supported `@agentclientprotocol/codex-acp` adapter. **Configure** reports any required compatibility update; managed downloads use the version pinned by Copilot.
 
 1. Open **Basic → Agents → Codex → Configure**.
-2. Choose **Download & install** under **Managed by Copilot**. If this first installation fails, read the error in Configure, fix the reported problem, then choose **Download & install** again. Failed updates of an already-managed adapter show the same error in Settings and Agent Chat. Open **Configure** in Settings to retry, or use **Retry** in Agent Chat.
+2. Choose **Download & install** under **Managed by Copilot**. If this first installation fails, read the error in Configure, fix the reported problem, then choose **Download & install** again. Failed updates of an already-managed adapter show the same error in Settings and Copilot Chat. Open **Configure** in Settings to retry, or use **Retry** in Copilot Chat.
 3. For an adapter you manage yourself, choose **My own installation**, then **Auto-detect** or enter the absolute path to `codex-acp` on macOS/Linux or its `dist\index.js` on Windows. Copilot does not update custom binaries.
 4. Click **Sign in** and finish authentication in your browser. If it does not open, click **Open sign-in page**. Cancel or retry if needed. Managed Codex includes its runtime; Node.js and npm are not required.
 
-You can also choose **Sign in to Codex** on the Agent Chat status card. For terminal login, run your configured adapter with `cli login` using the same `CODEX_HOME` as Copilot.
+You can also choose **Sign in to Codex** on the chat's status card. For terminal login, run your configured adapter with `cli login` using the same `CODEX_HOME` as Copilot.
 
-See [Getting Started](getting-started.md) for the complete setup flow and [Windows setup for Agent Chat](agent-mode-windows-setup.md) for Windows-specific commands.
+See [Getting Started](getting-started.md) for the complete setup flow and [Windows setup for Copilot Chat](agent-mode-windows-setup.md) for Windows-specific commands.
 
 ## Models, licenses, and API keys
 
@@ -63,17 +63,17 @@ V4 stores secrets in the Obsidian Keychain. Keys are per device and do not follo
 
 Do not delete `data.json`: it contains the vault's Keychain namespace. Use the in-app reset; it does not delete Keychain entries.
 
-## Agent Chat is waiting or behaving unexpectedly
+## A chat is waiting or behaving unexpectedly
 
 ### Nothing happens after you send
 
-Look for **Permission required** or **Question from agent**. Review the inputs or diff, then choose an offered option. Another session tab may show an attention indicator.
+Look for **Permission required** or **Question for you**. Review the inputs or diff, then choose an offered option. Another chat tab may show an attention indicator.
 
-Permission choices depend on the active agent. **Stop** cancels the current turn and Claude's running subagents, including their unanswered requests. Review every persistent permission carefully.
+Permission choices depend on the active agent. **Stop** cancels the current reply and Claude's running subagents, including their unanswered requests. Review every persistent permission carefully.
 
-### You cannot switch agents in the current session
+### You cannot switch agents in the current chat
 
-An Agent Chat keeps its original backend after work begins. Create an empty chat to choose another. Use **Recent chats** for earlier work.
+A chat keeps its original agent after work begins. Create an empty chat to choose another. Use **Recent chats** for earlier work.
 
 ### A skill or skill command is missing
 
@@ -97,7 +97,7 @@ Open **Settings → Copilot → Miyo**.
 
 - **Miyo isn't running:** open Miyo, then choose **Retry** beside **Disconnect**.
 - **Register this vault with Miyo:** choose **Register & connect** on the same computer. For a remote connection or mobile device, register the vault in Miyo first, then retry.
-- **Chat sources are not set up:** this belongs to the separate **Search chat** row and does not block Agent Chat vault search. Configure chat sources only if you want ChatGPT or Claude history search.
+- **Chat sources are not set up:** this belongs to the separate **Search chat** row and does not block Copilot Chat vault search. Configure chat sources only if you want ChatGPT or Claude history search.
 
 Under **Powered by Miyo**, check that **Semantic search for agents** is on. Start a new chat after changing it; Claude, Codex and OpenCode then search through Copilot's Miyo search tool.
 
@@ -112,7 +112,7 @@ See [Copilot Commands and Quick Ask](custom-commands.md#quick-ask) for selection
 
 ## Logs and bug reports
 
-Use **Advanced → Debugging & support → Report an issue** for any Copilot problem, Agent Chat or Quick Chat alike. Turn on **Debug mode** in the same section first and reproduce the problem, so the logs you send actually contain it.
+Use **Advanced → Debugging & support → Report an issue** for any Copilot problem, Copilot Chat or Quick Chat alike. Turn on **Debug mode** in the same section first and reproduce the problem, so the logs you send actually contain it.
 
 ### Filing a report
 
@@ -121,17 +121,17 @@ Use **Advanced → Debugging & support → Report an issue** for any Copilot pro
 3. **Review what was packed, then upload.** Copilot lists what actually went into the zip, source by source, with the finished file's size and, beside anything skipped or failed, the reason. **Show zip** opens the file in your file manager if you want to look inside. Uploading is a separate click — **Upload & open issue** — and nothing leaves your machine until you press it. **Cancel** here deletes the zip unless you have already chosen **Open issue anyway**.
 4. **Finish the issue in your browser.** As soon as the upload lands, Copilot opens a prefilled GitHub issue with the report ID already in the body, closes the dialog, and shows a short notice. If your browser could not be opened, the notice carries the report ID and a link to the issue page instead. Nothing is filed until you press Submit in your browser.
 
-### Reporting from Agent Chat
+### Reporting from Copilot Chat
 
-When something goes wrong in an Agent Chat, select **More actions** (⋯) above the composer and choose **Report error**. **Report an issue** opens for that chat without going through Settings: the screenshot is of the Obsidian window, every available attachment starts ticked, and the description ends with which agent, model and chat the report came from. Write what went wrong above that line, then continue with the steps above.
+When something goes wrong in a chat, select **More actions** (⋯) above the composer and choose **Report error**. **Report an issue** opens for that chat without going through Settings: the screenshot is of the Obsidian window, every available attachment starts ticked, and the description ends with which agent, model and chat the report came from. Write what went wrong above that line, then continue with the steps above.
 
-When Copilot itself fails in Agent Chat, such as a Copilot tool erroring, a needed tool missing, or you telling the agent Copilot crashed or lost your text, the agent may draft a report for you. The agent's own mistakes and answers don't get a card, since the Copilot team can't change how a model reasons. Neither does a failing tool that isn't Copilot's, such as the agent's own shell or a connected service. A **Report this to the Copilot team?** card appears under its reply, with a one-line summary and your own words. The card never interrupts the agent, and it appears at most once each time you open a chat. The card is not saved with the chat, so it is gone once you close the chat or reload Obsidian.
+When Copilot itself fails in Copilot Chat, such as a Copilot tool erroring, a needed tool missing, or you telling the agent Copilot crashed or lost your text, the agent may draft a report for you. The agent's own mistakes and answers don't get a card, since the Copilot team can't change how a model reasons. Neither does a failing tool that isn't Copilot's, such as the agent's own shell or a connected service. A **Report this to the Copilot team?** card appears under its reply, with a one-line summary and your own words. The card never interrupts the agent, and it appears at most once each time you open a chat. The card is not saved with the chat, so it is gone once you close the chat or reload Obsidian.
 
 When Copilot makes a reply fail, the same card appears under it, carrying the error. Errors your agent or AI provider reports, such as used-up credit, a rate limit, a sign-in problem or a conversation too long for the model, get no card; the error says what to fix.
 
 - **Review & report** opens **Report an issue** with the draft already in the description: what happened, what you said, and steps to reproduce, or the error for a failed reply, plus which agent, model and chat it came from. Every available attachment starts ticked, so untick anything you would rather not send. Edit the description freely, then continue with the steps above. Once the upload lands, the card shows the report ID.
 - **Dismiss** removes the card. Nothing is sent.
-- **Don't offer again** removes the card and turns off **Offer feedback reports in Agent Chat** in **Advanced → Debugging & support**.
+- **Don't offer again** removes the card and turns off **Offer feedback reports in Copilot Chat** in **Advanced → Debugging & support**.
 
 ### What gets sent, and what does not
 
@@ -162,18 +162,18 @@ That deletion covers the uploaded copy only. The zip on your own computer is you
 
 ### Collecting logs by hand
 
-Run **Copilot: Open Copilot log file** from the command palette to save the Copilot log into your vault as a note and open it. The Agent Chat log can be opened or cleared under **Advanced → Debugging & support → Agent activity log**.
+Run **Copilot: Open Copilot log file** from the command palette to save the Copilot log into your vault as a note and open it. The agent activity log can be opened or cleared under **Advanced → Debugging & support → Agent activity log**.
 
 Logs and screenshots can contain prompts, note contents, paths, and tool inputs. Review them before attaching anything to a public issue.
 
 ## What works on mobile?
 
-Agent Chat, including OpenCode, Claude, Codex, Projects, Skill execution, and Connectors, is desktop-only. On mobile, use Quick Chat. Agent settings display **Agent settings are available on desktop.** Miyo on mobile requires a remote Miyo connection and manual vault registration in Miyo.
+Copilot Chat, including OpenCode, Claude, Codex, Projects, Skill execution, and Connectors, is desktop-only. On mobile, use Quick Chat. Agent settings display **Agent settings are available on desktop.** Miyo on mobile requires a remote Miyo connection and manual vault registration in Miyo.
 
 ## Related
 
 - [Getting Started](getting-started.md)
-- [Agent Chat](agent-mode-and-tools.md)
+- [Copilot Chat](agent-mode-and-tools.md)
 - [Context and Mentions](context-and-mentions.md)
 - [Copilot Settings](settings.md)
 - [Copilot Plans, Privacy, and Self-Hosting](copilot-plus-and-self-host.md)

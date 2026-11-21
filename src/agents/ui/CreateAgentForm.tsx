@@ -196,7 +196,7 @@ export function CreateAgentForm({
         <DialogNote icon={<Lightbulb className="tw-size-4 tw-shrink-0" />}>
           <span className="tw-flex-1">
             <span className="tw-font-semibold tw-text-normal">Tip:</span> you can also just ask.
-            Tell Copilot what you need and it drafts the agent for you.
+            Tell Copilot what you need and it drafts the teammate for you.
           </span>
           <Button type="button" variant="secondary" size="sm" onClick={askCopilot}>
             Ask Copilot
@@ -286,7 +286,7 @@ export function CreateAgentForm({
         />
         {instructionLeftEmpty && missingInstruction ? (
           <FieldError>
-            Write at least one sentence. Without it, {shownName || "this agent"} is just Copilot
+            Write at least one sentence. Without it, {shownName || "this teammate"} is just Copilot
             with a face.
           </FieldError>
         ) : (

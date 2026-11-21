@@ -68,7 +68,7 @@ export function findAgentNameConflict(
   const owner = agents.find((agent) => agent.slug.toLowerCase() === folder);
   return owner
     ? `${owner.name} already uses the folder ${folder}. Pick another name.`
-    : `A folder named ${folder} already exists in your agents folder. Pick another name.`;
+    : `A folder named ${folder} already exists in your teammates folder. Pick another name.`;
 }
 
 export function serializeInstructionsFile(

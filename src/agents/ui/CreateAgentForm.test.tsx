@@ -320,7 +320,7 @@ describe("CreateAgentForm", () => {
         case: "a folder holding no agent",
         props: { folderNames: ["leo", "Kai"] },
         name: "Kai",
-        message: "A folder named kai already exists in your agents folder. Pick another name.",
+        message: "A folder named kai already exists in your teammates folder. Pick another name.",
       },
     ])(
       `says when $case already has the name's folder, names no folder for it, and keeps Create unavailable (${NAMES_ISSUE})`,
@@ -466,7 +466,7 @@ describe("CreateAgentForm", () => {
       renderForm({ onAskCopilot });
 
       expect(document.querySelector("form")?.firstElementChild?.textContent).toBe(
-        "Tip: you can also just ask. Tell Copilot what you need and it drafts the agent for you.Ask Copilot"
+        "Tip: you can also just ask. Tell Copilot what you need and it drafts the teammate for you.Ask Copilot"
       );
       fireEvent.click(screen.getByRole("button", { name: "Ask Copilot" }));
 

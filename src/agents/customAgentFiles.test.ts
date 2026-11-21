@@ -113,7 +113,7 @@ describe("customAgentFiles", () => {
 
     it("says a folder of that name exists when it holds no agent, matching the folder in any case (https://github.com/Brevilabs/obsidian-copilot-private/issues/936)", () => {
       expect(findAgentNameConflict([COCO], ["coco", "Kai"], "Kai")).toBe(
-        "A folder named kai already exists in your agents folder. Pick another name."
+        "A folder named kai already exists in your teammates folder. Pick another name."
       );
     });
   });

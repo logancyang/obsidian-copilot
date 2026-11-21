@@ -163,7 +163,7 @@ export class AcpBackendProcess implements BackendProcess {
     if (this.connection) return;
     const adapter = this.app.vault.adapter;
     if (!(adapter instanceof FileSystemAdapter)) {
-      throw new Error("Agent Chat requires Obsidian on desktop.");
+      throw new Error("Copilot Chat requires Obsidian on desktop.");
     }
     const descriptor = await this.backend.buildSpawnDescriptor({
       vaultBasePath: adapter.getBasePath(),

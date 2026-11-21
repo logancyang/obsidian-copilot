@@ -72,7 +72,7 @@ describe("registerNoteHeaderAction", () => {
     layoutReady();
     const button = research.addAction.mock.results[0].value as HTMLButtonElement;
     expect(button.dataset.icon).toBe(COPILOT_AGENT_ICON_ID);
-    expect(button.getAttribute("aria-label")).toBe("Open Copilot Agent Chat with this note");
+    expect(button.getAttribute("aria-label")).toBe("Open Copilot Chat with this note");
 
     research.file = Object.assign(new TFile(), { path: "Reused tab.md" });
     button.click();

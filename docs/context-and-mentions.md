@@ -4,18 +4,18 @@ Context is the material Copilot gives an AI with your request. Choose the shorte
 
 Clicking a PDF page citation in a chat opens the target page at its top while keeping your current zoom. Citations to selected text, annotations, or an explicit position keep their original destination.
 
-| Context type                     | How long it lasts                                 |
-| -------------------------------- | ------------------------------------------------- |
-| Agent Chat attachment or mention | The next message                                  |
-| Project context                  | Every new chat started in that Project            |
-| Vault or Project `AGENTS.md`     | Every Agent Chat started in that vault or Project |
-| Quick Chat attachment            | The next Quick Chat message                       |
+| Context type                       | How long it lasts                           |
+| ---------------------------------- | ------------------------------------------- |
+| Copilot Chat attachment or mention | The next message                            |
+| Project context                    | Every new chat started in that Project      |
+| Vault or Project `AGENTS.md`       | Every chat started in that vault or Project |
+| Quick Chat attachment              | The next Quick Chat message                 |
 
-## Add context to Agent Chat
+## Add context to Copilot Chat
 
-Select **+** beside the Agent Chat composer to open **Add context**. Depending on what is open, you can add the **Active Note**, other **Notes**, **Folders**, the **Active Web Tab**, other **Web tabs**, or **Files** from your computer. Web tabs come from Copilot's desktop Web Viewer.
+Select **+** beside the Copilot Chat composer to open **Add context**. Depending on what is open, you can add the **Active Note**, other **Notes**, **Folders**, the **Active Web Tab**, other **Web tabs**, or **Files** from your computer. Web tabs come from Copilot's desktop Web Viewer.
 
-You can also select the Copilot icon in a note's header. Agent Chat opens with that specific note attached to the current draft. The attachment stays with the draft if you switch notes before sending.
+You can also select the Copilot icon in a note's header. Copilot Chat opens with that specific note attached to the current draft. The attachment stays with the draft if you switch notes before sending.
 
 You can also add context while typing:
 
@@ -31,13 +31,13 @@ A note mention gives the agent the note's vault path so it can read the current 
 
 ### Active note and selected text
 
-A new Agent Chat starts with an **Active Note** badge unless **Auto-attach active note** is off in settings. The badge stays attached to every message. Each message tells the agent which note is active when you send it, so switching notes mid-chat points the agent at the new note. The agent gets the note's path and opens the note only when it needs the contents. If you remove the badge, no active note is attached to later messages in that chat until you add the **Active Note** again from **Add context** or with `@`.
+A new chat starts with an **Active Note** badge unless **Auto-attach active note** is off in settings. The badge stays attached to every message. Each message tells the agent which note is active when you send it, so switching notes mid-chat points the agent at the new note. The agent gets the note's path and opens the note only when it needs the contents. If you remove the badge, no active note is attached to later messages in that chat until you add the **Active Note** again from **Add context** or with `@`.
 
 ### Active web tab
 
-When a page is open in the desktop Web Viewer, Agent Chat attaches it as an **Active Web Tab** badge on every message, so the agent sees the page you are reading, including pages you are signed in to. The page's full content is sent the first time. While it stays the same, later messages do not send it again, because the agent already has it earlier in the chat. If you go to another page, or the content changes, the new content is sent in full. If you remove the badge, no web page is attached to later messages in that chat, even after you open another page, until you add the **Active Web Tab** again from **Add context** or with `@`.
+When a page is open in the desktop Web Viewer, Copilot Chat attaches it as an **Active Web Tab** badge on every message, so the agent sees the page you are reading, including pages you are signed in to. The page's full content is sent the first time. While it stays the same, later messages do not send it again, because the agent already has it earlier in the chat. If you go to another page, or the content changes, the new content is sent in full. If you remove the badge, no web page is attached to later messages in that chat, even after you open another page, until you add the **Active Web Tab** again from **Add context** or with `@`.
 
-Active Note and selected text are separate attachments in Agent Chat and Quick Chat. You can include either one or both, even when the excerpt comes from the active note. Removing one badge leaves the other attached. Selection badges show the start of the selected text. Hover over a badge to see the full excerpt and its source.
+Active Note and selected text are separate attachments in Copilot Chat and Quick Chat. You can include either one or both, even when the excerpt comes from the active note. Removing one badge leaves the other attached. Selection badges show the start of the selected text. Hover over a badge to see the full excerpt and its source.
 
 To attach an excerpt from a note:
 
@@ -67,13 +67,13 @@ Quick Chat has a separate composer and context state. It can attach the active n
 
 Editing a sent Quick Chat message keeps its original attachments. Switching the active note or changing the composer attachments does not add them to the edited message.
 
-Quick Chat attachments apply to the next Quick Chat message. They do not become Agent Chat context, Project context, or `AGENTS.md` instructions.
+Quick Chat attachments apply to the next Quick Chat message. They do not become Copilot Chat context, Project context, or `AGENTS.md` instructions.
 
 For vault-wide semantic search and AI history that you own outside the plugin, use [Miyo](vault-search-and-indexing.md). Miyo provides the local-first search path for Copilot V4.
 
 ## Related
 
-- [Agent Chat](agent-mode-and-tools.md)
+- [Copilot Chat](agent-mode-and-tools.md)
 - [Projects](projects.md)
-- [Instructions for Agent Chat and Quick Chat](system-prompts.md)
+- [Instructions for Copilot Chat and Quick Chat](system-prompts.md)
 - [Quick Chat](chat-interface.md)

@@ -72,7 +72,7 @@ export const AgentTurnDurationIndicator: React.FC<AgentTurnDurationIndicatorProp
         </span>
         {isRunning ? (
           <span className="tw-sr-only" role="status" aria-live="polite">
-            {props.label ?? "Agent is working"}
+            {props.label ?? "Working"}
           </span>
         ) : null}
       </div>

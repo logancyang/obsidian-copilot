@@ -233,7 +233,7 @@ export const RelevantNotes = memo(
     const result = chat.context ? chat.result : noteResult;
     const refresh = chat.context ? chat.refresh : noteRefresh;
     const activeFileName = chat.context
-      ? "Agent chat context"
+      ? "Chat context"
       : activeFile?.extension === "md"
         ? activeFile.basename
         : undefined;

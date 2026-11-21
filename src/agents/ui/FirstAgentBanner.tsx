@@ -84,13 +84,13 @@ export function FirstAgentBannerView({
       </div>
       <div className="tw-min-w-0 tw-flex-1">
         <div className="tw-text-ui-small tw-font-semibold tw-text-normal">
-          Give each job its own agent
+          Give each job its own teammate
         </div>
         <div className="tw-mb-2.5 tw-mt-1 tw-text-ui-smaller tw-text-muted">
-          An agent has its own instructions and remembers the rules you give it.
+          A teammate has its own instructions and remembers the rules you give it.
         </div>
         <Button size="sm" onClick={onCreate}>
-          Create your first agent
+          Create your first teammate
         </Button>
       </div>
       <button

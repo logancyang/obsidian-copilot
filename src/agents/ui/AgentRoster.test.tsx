@@ -98,7 +98,7 @@ function rowNames(): string[] {
 }
 
 function openMoreMenu(count: number) {
-  fireEvent.pointerDown(screen.getByRole("button", { name: `Show ${count} more agents` }), {
+  fireEvent.pointerDown(screen.getByRole("button", { name: `Show ${count} more teammates` }), {
     button: 0,
     ctrlKey: false,
   });
@@ -122,7 +122,7 @@ describe("AgentRoster", () => {
       expect(screen.queryByRole("heading")).toBeNull();
       expect(screen.getByText("Who do you want to talk to?").closest("[hidden]")).not.toBeNull();
       expect(row.closest("[aria-label]")).toBeNull();
-      expect(rowNames()).toEqual(["Copilot", "Coco", "Maya", "Leo", "New agent"]);
+      expect(rowNames()).toEqual(["Copilot", "Coco", "Maya", "Leo", "New teammate"]);
     });
 
     it(`marks the selected agent in the row with a 2px accent ring on its 42px face (${ISSUE})`, () => {
@@ -170,7 +170,7 @@ describe("AgentRoster", () => {
       expect(screen.getByRole("button", { name: "Maya", pressed: true })).not.toBeNull();
     });
 
-    it(`rings Copilot's face in the row and shows Copilot above it, named Copilot and titled as a classic agent that starts fresh every chat (${ISSUE})`, () => {
+    it(`rings Copilot's face in the row and shows Copilot above it, named Copilot and titled as starting fresh every chat (${ISSUE})`, () => {
       renderRoster({ selectedSlug: null, onOpenProfile: jest.fn() });
 
       const copilot = screen.getByRole("button", { name: "Copilot", pressed: true });
@@ -181,7 +181,7 @@ describe("AgentRoster", () => {
       expect(picked.name).toBe("Copilot");
       expect(picked.block.querySelector("img")).toBeNull();
       expect(picked.block.querySelector("svg")).not.toBeNull();
-      expect(picked.text).toContain("Classic agent. Starts fresh every chat.");
+      expect(picked.text).toContain("Starts fresh every chat.");
     });
 
     it(`shrinks the picked agent's face, and Copilot's, to 64px in a window up to 640px tall so the row and chat input stay in view (${ISSUE})`, () => {
@@ -261,7 +261,7 @@ describe("AgentRoster", () => {
 
       expect(screen.getByRole("heading", { name: "What are you working on?" })).not.toBeNull();
       expect(screen.queryByRole("group")).toBeNull();
-      expect(screen.queryByText("Classic agent. Starts fresh every chat.")).toBeNull();
+      expect(screen.queryByText("Starts fresh every chat.")).toBeNull();
     });
 
     it(`keeps the hero it is given above a row of Copilot and the new-agent button while there are no agents yet (${CREATE_ISSUE})`, () => {
@@ -274,7 +274,7 @@ describe("AgentRoster", () => {
           .map((button) => button.textContent)
       ).toEqual(["Copilot", "New"]);
       expect(screen.getByRole("button", { name: "Copilot", pressed: true })).not.toBeNull();
-      expect(screen.queryByText("Classic agent. Starts fresh every chat.")).toBeNull();
+      expect(screen.queryByText("Starts fresh every chat.")).toBeNull();
     });
 
     it(`opens the selected agent's profile from its big face above the row, named Open <name>'s profile and placed before the row in the tab order (${ISSUE})`, () => {
@@ -356,7 +356,7 @@ describe("AgentRoster", () => {
         "Maya",
         "Leo",
         "Nora",
-        "Show 8 more agents",
+        "Show 8 more teammates",
         "New",
       ]);
     });
@@ -364,7 +364,7 @@ describe("AgentRoster", () => {
     it(`moves the agents that do not fit a 340px sidebar into a +N More menu (${ISSUE})`, () => {
       renderRoster({ agents: SIX, width: 300, newAgentButton: NEW_BUTTON });
 
-      expect(rowNames()).toEqual(["Copilot", "Coco", "Maya", "Show 4 more agents", "New"]);
+      expect(rowNames()).toEqual(["Copilot", "Coco", "Maya", "Show 4 more teammates", "New"]);
     });
 
     it(`keeps the selected agent in the row when it would otherwise be in the menu (${ISSUE})`, () => {
@@ -377,7 +377,7 @@ describe("AgentRoster", () => {
         "Leo",
         "Nora",
         "Gus",
-        "Show 7 more agents",
+        "Show 7 more teammates",
       ]);
       expect(screen.getByRole("button", { name: "Gus", pressed: true })).not.toBeNull();
     });
@@ -385,7 +385,7 @@ describe("AgentRoster", () => {
     it(`keeps Copilot, the selected agent, the More menu and the new-agent button in the row of a 300px sidebar (${ISSUE})`, () => {
       renderRoster({ agents: TWELVE, selectedSlug: "gus", width: 260, newAgentButton: NEW_BUTTON });
 
-      expect(rowNames()).toEqual(["Copilot", "Gus", "Show 11 more agents", "New"]);
+      expect(rowNames()).toEqual(["Copilot", "Gus", "Show 11 more teammates", "New"]);
     });
 
     it("selects an agent picked from the More menu, which lists each agent's name and title", () => {
@@ -409,7 +409,7 @@ describe("AgentRoster", () => {
         selectedSlug: "maya",
         locked: {
           onOpen: onOpenLocked,
-          note: "Your agents need a valid Supporter license to chat.",
+          note: "Your teammates need a valid Supporter license to chat.",
         },
       });
 
@@ -424,7 +424,7 @@ describe("AgentRoster", () => {
       expect(maya.querySelector(".lucide-lock")).not.toBeNull();
       expect(screen.getByRole("button", { name: "Copilot", pressed: true })).not.toBeNull();
       expect(
-        screen.getByText("Your agents need a valid Supporter license to chat.")
+        screen.getByText("Your teammates need a valid Supporter license to chat.")
       ).not.toBeNull();
       expect(pickedAgent().name).toBe("Copilot");
 
@@ -491,11 +491,11 @@ describe("AgentRoster", () => {
   });
 
   describe("NewAgentButton()", () => {
-    it("shows a New cell named New agent that opens the create dialog when clicked", () => {
+    it("shows a New cell named New teammate that opens the create dialog when clicked", () => {
       const onClick = jest.fn();
       render(<NewAgentButton onClick={onClick} />);
 
-      const button = screen.getByRole("button", { name: "New agent" });
+      const button = screen.getByRole("button", { name: "New teammate" });
       expect(button.textContent).toBe("New");
       fireEvent.click(button);
 
@@ -506,7 +506,7 @@ describe("AgentRoster", () => {
       const onClick = jest.fn();
       render(<NewAgentButton locked onClick={onClick} />);
 
-      const button = screen.getByRole("button", { name: "New agent · Supporter preview" });
+      const button = screen.getByRole("button", { name: "New teammate · Supporter preview" });
       expect(button.textContent).toBe("New");
       expect(button.querySelector(".lucide-lock")).not.toBeNull();
       fireEvent.click(button);

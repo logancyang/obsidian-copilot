@@ -62,8 +62,8 @@ const EARLY_STOP_CAUSES: Partial<Record<StopReason, string>> = {
 // A turn the agent ended on its own leaves the chat silent, as if it froze. https://github.com/logancyang/obsidian-copilot/issues/4062
 const AGENT_CANCEL_NOTICES: Record<AgentCancelCause, string> = {
   permission_declined:
-    "**Stopped:** the agent ended its turn after you declined a permission. Send a message to tell it what to do next.",
-  unspecified: "**Stopped:** the agent ended its turn early. Send a message to continue.",
+    "**Stopped:** the reply ended after you declined a permission. Send a message to say what to do next.",
+  unspecified: "**Stopped:** the reply ended early. Send a message to continue.",
 };
 
 function stopReasonNotice(

@@ -109,7 +109,7 @@ describe("feedbackOffer", () => {
         ...offer(""),
         trigger: "turn_error",
         draft: {
-          title: "Agent Chat reply failed on claude",
+          title: "Chat reply failed on claude",
           whatHappened: "rate limited",
           userSaid: "",
           repro: "",
@@ -118,7 +118,7 @@ describe("feedbackOffer", () => {
 
       expect(formatFeedbackNote(failed)).toBe(
         [
-          "Agent Chat reply failed on claude",
+          "Chat reply failed on claude",
           "",
           "Error: rate limited",
           "",
@@ -285,7 +285,7 @@ describe("feedbackOffer", () => {
         expect(fail(null)).toEqual({
           trigger: "turn_error",
           draft: {
-            title: "Agent Chat reply failed on claude",
+            title: "Chat reply failed on claude",
             whatHappened: "model not supported: gemini-4",
             userSaid: "",
             repro: "",

@@ -103,10 +103,10 @@ describe("CreateAgentModal", () => {
 
   describe("CreateAgentModal", () => {
     describe("open()", () => {
-      it("shows the New agent form saved under the Copilot folder's agents folder", () => {
+      it("shows the New teammate form saved under the Copilot folder's agents folder", () => {
         const { modal } = openDialog();
 
-        expect(modal.titleEl.textContent).toBe("New agent");
+        expect(modal.titleEl.textContent).toBe("New teammate");
         expect(screen.getByLabelText("Name")).not.toBeNull();
         expect(screen.getByText("Saved in copilot/agents/")).not.toBeNull();
       });
@@ -253,7 +253,7 @@ describe("CreateAgentModal", () => {
 
           act(() => void dismiss(modal));
           expect(modal.isOpen).toBe(true);
-          expect(screen.getByText("Discard this agent?")).not.toBeNull();
+          expect(screen.getByText("Discard this teammate?")).not.toBeNull();
 
           fireEvent.click(screen.getByRole("button", { name: "Discard" }));
           expect(modal.isOpen).toBe(false);

@@ -46,7 +46,7 @@ describe("AgentDeleteModal", () => {
       );
       expect(chats.closest("ul")).toBeNull();
       expect(
-        screen.getByText("What Coco said in chats with other agents stays there.")
+        screen.getByText("What Coco said in chats with other teammates stays there.")
       ).not.toBeNull();
     });
 

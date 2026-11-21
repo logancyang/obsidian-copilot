@@ -4989,7 +4989,7 @@ describe("AgentSession", () => {
         text.match(/<conversation_history>[\s\S]*<\/conversation_history>/)![0];
       const ISSUE_908 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/908";
       const TRIM_NOTICE =
-        "This chat is too long to send in full, so the agent wasn't told its oldest messages.";
+        "This chat is too long to send in full, so its oldest messages were left out.";
 
       it(`${ISSUE_908} sends a saved history longer than 48,000 characters in full and raises no notice`, async () => {
         const mock = makeMockBackend();

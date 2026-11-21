@@ -33,7 +33,7 @@
 
 ## Choose your agent
 
-**Agent** is the main Copilot experience for multi-step work. It can inspect notes, use tools, create Obsidian files, and continue across several turns with permissions you control.
+**Copilot Chat** is the main Copilot experience for multi-step work. It can inspect notes, use tools, create Obsidian files, and continue across several turns with permissions you control.
 
 - **OpenCode (recommended):** Let Copilot download and manage it, then use Copilot-hosted models, your own provider key, or a local model.
 - **Claude Code:** Connect an existing installation. Copilot detects common install locations and uses your Claude Code login.
@@ -41,24 +41,24 @@
 
 Already pay for Claude or ChatGPT, or already have model API access? You can bring that access to Copilot without buying a Copilot plan. Provider terms and usage limits still apply.
 
-[Learn how Agent works →](./docs/agent-mode-and-tools.md)
+[Learn how Copilot Chat works →](./docs/agent-mode-and-tools.md)
 
 ## Set up Copilot
 
 1. [Install Copilot](https://obsidian.md/plugins?id=copilot) from Obsidian Community Plugins.
 2. Open **Settings → Copilot → Basic → Agents**.
 3. Select **Download OpenCode**, connect Claude Code with **Auto-detect**, or let Copilot install its tested Codex adapter.
-4. Select the **Agent** ribbon icon, or run **Open Copilot Agent Chat window**.
+4. Select the **Open Copilot Chat** ribbon icon, or run **Open Copilot Chat window**.
 
 The [Getting Started guide](./docs/getting-started.md) covers each setup path, including managed and custom Codex adapters.
 
 ## Built around your vault
 
 - **Projects:** Give ongoing work its own instructions, reusable context, and chat history. A project works with OpenCode, Claude, or Codex. [Learn about Projects](./docs/projects.md).
-- **Skills shared across agents:** Add a skill once, then enable it for each installed agent. Copilot also includes skills for Obsidian Markdown, Bases, Canvas, and the Obsidian CLI. [Learn about Skills](./docs/agent-mode-and-tools.md#skills-shared-across-agents).
-- **Commands:** Save repeatable prompts, run them with `/` in Agent, or expose them in the editor and Command palette. [Create a Command](./docs/custom-commands.md).
+- **Skills shared across agents:** Add a skill once, then enable it for each installed agent. Copilot also includes skills for Obsidian Markdown, Bases, Canvas, and the Obsidian CLI. [Learn about Skills](./docs/agent-mode-and-tools.md#skills-across-agents).
+- **Commands:** Save repeatable prompts, run them with `/` in Copilot Chat, or expose them in the editor and Command palette. [Create a Command](./docs/custom-commands.md).
 - **Quick Ask:** Ask about a selection without leaving the note. Continue the conversation, replace text, insert the answer, or copy it. Quick Ask uses your Quick Chat model. [Set up Quick Ask](./docs/custom-commands.md#quick-ask).
-- **Multiple sessions:** Keep separate Agent tabs open for different tasks. With active Plus access, mention multiple installed agents with `@` for one read-only research or review request.
+- **Multiple chats:** Keep separate chat tabs open for different tasks.
 
 For a short conversation that does not need an agent, use [Quick Chat](./docs/chat-interface.md).
 
@@ -73,7 +73,7 @@ Your chosen route determines where prompts and included context are processed. R
 
 ## Plans
 
-The Copilot plugin is open source and works without a Copilot license when you use your own agent account, provider key, or local model. Free use includes Agent Chat, Projects with Markdown context, custom Skills and Commands, Quick Chat, Quick Ask, and local Miyo search.
+The Copilot plugin is open source and works without a Copilot license when you use your own agent account, provider key, or local model. Free use includes Copilot Chat, Projects with Markdown context, custom Skills and Commands, Quick Chat, Quick Ask, and local Miyo search.
 
 Paid access can include Copilot-hosted models and cloud-backed tools. Model availability and service limits can change, so the [pricing page](https://www.obsidiancopilot.com/en/pricing) and in-app model pickers are the current source of truth.
 

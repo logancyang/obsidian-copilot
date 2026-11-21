@@ -245,7 +245,7 @@ export function createAgentSessionManager(
   const connectorsOn = () => isConnectorsEnabled() === true;
   let managerRef: AgentSessionManager | null = null;
   const requireManager = (): AgentSessionManager => {
-    if (!managerRef) throw new Error("Agent Chat isn't ready yet.");
+    if (!managerRef) throw new Error("Copilot Chat isn't ready yet.");
     return managerRef;
   };
   const vaultId = getVaultId(app);

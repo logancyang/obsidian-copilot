@@ -375,9 +375,9 @@ describe("lockedCustomAgents", () => {
       const onCreate = jest.fn();
       renderWithApp(renderNewAgentButton("full", { emphasized: true, onCreate }));
 
-      fireEvent.click(screen.getByRole("button", { name: "New agent" }));
+      fireEvent.click(screen.getByRole("button", { name: "New teammate" }));
 
-      expect(screen.queryByText("New agent · Supporter preview")).toBeNull();
+      expect(screen.queryByText("New teammate · Supporter preview")).toBeNull();
       expect(onCreate).toHaveBeenCalledTimes(1);
     });
 
@@ -385,7 +385,7 @@ describe("lockedCustomAgents", () => {
       const onCreate = jest.fn();
       const { requestUrl, reply } = holdLicenseCheck();
       renderWithApp(renderNewAgentButton("locked", { emphasized: true, onCreate }));
-      const plus = screen.getByRole("button", { name: "New agent · Supporter preview" });
+      const plus = screen.getByRole("button", { name: "New teammate · Supporter preview" });
 
       fireEvent.click(plus);
       fireEvent.click(plus);
@@ -409,7 +409,7 @@ describe("lockedCustomAgents", () => {
         AGENTS
       );
 
-      fireEvent.click(screen.getByRole("button", { name: "New agent · Supporter preview" }));
+      fireEvent.click(screen.getByRole("button", { name: "New teammate · Supporter preview" }));
       await awaitRunningLicenseCheck();
 
       expect(LockedAgentsUpsellModal).toHaveBeenCalledWith(expect.anything(), AGENTS);
@@ -423,7 +423,7 @@ describe("lockedCustomAgents", () => {
       const onCreate = jest.fn();
       renderWithApp(renderNewAgentButton("locked", { emphasized: true, onCreate }));
 
-      fireEvent.click(screen.getByRole("button", { name: "New agent · Supporter preview" }));
+      fireEvent.click(screen.getByRole("button", { name: "New teammate · Supporter preview" }));
       await awaitRunningLicenseCheck();
 
       expect(onCreate).toHaveBeenCalledTimes(1);
@@ -432,11 +432,11 @@ describe("lockedCustomAgents", () => {
   });
 
   describe("useLockedAgentMention()", () => {
-    it(`offers the Agents row locked, marked Supporter preview, while the gate is locked (${MENTION_ISSUE})`, () => {
+    it(`offers the Teammates row locked, marked Supporter preview, while the gate is locked (${MENTION_ISSUE})`, () => {
       const { result } = renderMentionHook(true);
 
       expect(result.current?.option).toMatchObject({
-        title: "Agents",
+        title: "Teammates",
         category: "agents",
         lockedNote: "Supporter preview",
       });
@@ -478,11 +478,11 @@ describe("lockedCustomAgents", () => {
       expect(mockOpenUpsell).toHaveBeenCalledTimes(1);
     });
 
-    it(`keeps the locked Agents row in a vault with agents, and opens the dialog for them when it is chosen (${LOCKED_AGENTS_ISSUE})`, async () => {
+    it(`keeps the locked Teammates row in a vault with agents, and opens the dialog for them when it is chosen (${LOCKED_AGENTS_ISSUE})`, async () => {
       answerLicenseChecks(REFUSED_403);
       const { result } = renderMentionHook(true, AGENTS);
       expect(result.current?.option).toMatchObject({
-        title: "Agents",
+        title: "Teammates",
         lockedNote: "Supporter preview",
       });
       expect(result.current?.agents).toEqual(AGENTS);

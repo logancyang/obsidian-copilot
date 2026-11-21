@@ -6,7 +6,7 @@ This guide connects the Obsidian vault on your computer to Miyo and walks you th
 
 ## Before you start
 
-Use desktop Obsidian with Copilot 4.0.8 or newer. Download Miyo for your operating system from [miyo.md](https://www.miyo.md/) and open it. Use Miyo 0.2.27 or newer if you also want live suggestions while typing in Agent Chat.
+Use desktop Obsidian with Copilot 4.0.8 or newer. Download Miyo for your operating system from [miyo.md](https://www.miyo.md/) and open it. Use Miyo 0.2.27 or newer if you also want live suggestions while typing in Copilot Chat.
 
 Miyo's desktop app and local-agent connection are free. You do not need Relay for this setup. Your chat model or subscription is a separate choice.
 
@@ -81,7 +81,7 @@ Check that the highlighted **Semantic search for agents** switch is on. Keep **S
 
 ## 5. Try a question
 
-Open Agent Chat and ask about an idea you know you have written about. Describe it as you remember it, without copying a note title.
+Open Copilot Chat and ask about an idea you know you have written about. Describe it as you remember it, without copying a note title.
 
 For example, if you have meeting notes, try:
 

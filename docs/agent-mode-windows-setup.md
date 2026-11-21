@@ -1,6 +1,6 @@
-# Windows setup for Agent Chat
+# Windows setup for Copilot Chat
 
-Agent Chat runs in the Obsidian desktop app. On Windows, start with **OpenCode** unless you already use Claude Code or Codex.
+Copilot Chat runs in the Obsidian desktop app. On Windows, start with **OpenCode** unless you already use Claude Code or Codex.
 
 ## 1. Install OpenCode with Copilot
 
@@ -42,7 +42,7 @@ For manual installations, the Codex backend needs a supported `@agentclientproto
 3. Click **Sign in** and complete authentication in your browser. If the browser does not open, click **Open sign-in page**. Return to Obsidian to see the signed-in status.
 4. To use your own supported adapter, choose **My own installation** and Auto-detect it or enter its path. Copilot keeps your binary and credentials when you uninstall managed downloads.
 
-You can also choose **Sign in to Codex** on the Agent Chat status card. For terminal login, run your configured adapter with `cli login` using the same `CODEX_HOME` as Copilot.
+You can also choose **Sign in to Codex** on the chat's status card. For terminal login, run your configured adapter with `cli login` using the same `CODEX_HOME` as Copilot.
 
 ## Share Skills across agents
 
@@ -56,8 +56,8 @@ If a sync service replaces a folder link and a Skill disappears from an agent, t
 
 Agents run Python in UTF-8 mode (`PYTHONUTF8=1`). To use a different value, set `PYTHONUTF8` in Windows or under the agent's **Environment variables** in Settings.
 
-## Open Agent Chat
+## Open Copilot Chat
 
-Select the **Agent Chat** ribbon icon or run **Open Copilot Agent Chat window** from the command palette. Choose an installed agent and select **Start chat**.
+Select the **Open Copilot Chat** ribbon icon or run **Open Copilot Chat window** from the command palette. Choose an installed agent and select **Start chat**.
 
-For models, effort, permissions, and Projects, see [Agent Chat](agent-mode-and-tools.md).
+For models, effort, permissions, and Projects, see [Copilot Chat](agent-mode-and-tools.md).

@@ -44,7 +44,7 @@ export function AgentDraftCard({
     >
       <div className="tw-flex tw-items-center tw-gap-2 tw-font-semibold">
         <UserPlus className="tw-size-4 tw-shrink-0" />
-        New agent draft
+        New teammate draft
       </div>
       <div className="tw-flex tw-items-center tw-gap-2">
         <AgentFace src={NEUTRAL_FACE_SRC} size="m" />

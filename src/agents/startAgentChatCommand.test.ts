@@ -44,7 +44,7 @@ describe("startAgentChatCommand", () => {
       jest.mocked(AgentPickerModal).mockClear();
     });
 
-    it("adds Start a chat with an agent while custom agents are available, listing the store's agents, and starts a chat with the one picked", async () => {
+    it("adds Start a chat with a teammate while custom agents are available, listing the store's agents, and starts a chat with the one picked", async () => {
       await setCustomAgentsAccess("team");
       const { plugin, commands } = buildPlugin();
       const startChat = jest.fn(async () => undefined);
@@ -56,7 +56,7 @@ describe("startAgentChatCommand", () => {
       expect(plugin.addCommand).toHaveBeenCalledWith(
         expect.objectContaining({
           id: START_AGENT_CHAT_COMMAND_ID,
-          name: "Start a chat with an agent",
+          name: "Start a chat with a teammate",
         })
       );
       expect(jest.mocked(AgentPickerModal).mock.calls[0][1]).toEqual([COCO]);
