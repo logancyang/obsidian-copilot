@@ -46,8 +46,8 @@ describe("chatHistoryUtils", () => {
       });
     });
 
-    it("names the chat's custom agent from its frontmatter, and none for a Copilot chat (https://github.com/Brevilabs/obsidian-copilot-private/issues/588)", () => {
-      const agentChat = makeApp({ epoch: 1735732800000, agent: " coco " });
+    it("names the chat's teammate from its frontmatter, and none for a Copilot chat (https://github.com/Brevilabs/obsidian-copilot-private/issues/588)", () => {
+      const agentChat = makeApp({ epoch: 1735732800000, teammate: " coco " });
       const copilotChat = makeApp({ epoch: 1735732800000 });
 
       expect(fileToHistoryItem(agentChat, makeFile(), new RecentUsageManager()).agent).toBe("coco");
@@ -56,11 +56,11 @@ describe("chatHistoryUtils", () => {
       );
     });
 
-    it("names no agent for a hand-edited agent value that is not text, so archiving an agent's chats never matches it (https://github.com/Brevilabs/obsidian-copilot-private/issues/940)", () => {
+    it("names no teammate for a hand-edited teammate value that is not text, so archiving a teammate's chats never matches it (https://github.com/Brevilabs/obsidian-copilot-private/issues/940)", () => {
       const agents = [["coco"], 5, null].map(
-        (agent) =>
+        (teammate) =>
           fileToHistoryItem(
-            makeApp({ epoch: 1735732800000, agent }),
+            makeApp({ epoch: 1735732800000, teammate }),
             makeFile(),
             new RecentUsageManager()
           ).agent

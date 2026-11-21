@@ -5817,7 +5817,11 @@ describe("AgentSessionManager", () => {
           {
             message: "Got it.",
             memorySaves: [
-              { agentName: "Coco", memoryPath: "copilot/agents/coco/MEMORY.md", rule: "Be brief." },
+              {
+                agentName: "Coco",
+                memoryPath: "copilot/teammates/coco/MEMORY.md",
+                rule: "Be brief.",
+              },
             ],
           },
         ];
@@ -5841,7 +5845,7 @@ describe("AgentSessionManager", () => {
           { message: "Draft one." },
           { message: "Here." },
         ]);
-        const shown = { "agent-draft": { draft: { name: "Nora" } } };
+        const shown = { "teammate-draft": { draft: { name: "Nora" } } };
         jest.mocked(session.getNoteChatStates).mockReturnValue(shown);
         await mgr.saveActiveSession();
         jest.mocked(session.getNoteChatStates).mockReturnValue(NO_SAVED_CHAT_STATES);
@@ -6143,7 +6147,7 @@ describe("AgentSessionManager", () => {
           title: "Launch plan",
           createdAtMs: 1_000,
           lastAccessedAtMs: 2_000,
-          agent: "coco",
+          teammate: "coco",
         });
         for (let i = 0; i < 100; i++) {
           await index.updateAskedConversation("claude", `maya-hidden-${i}`, () => ({
@@ -7092,8 +7096,8 @@ describe("AgentSessionManager", () => {
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/941 restores the card states its note keeps, so a card the user can still act on comes back with the chat", async () => {
         const replay = buildReplayingBackend();
-        const chatStates = { "agent-draft": { draft: { name: "Nora" } } };
-        const draftCard: ChatStateKey<unknown> = { id: "agent-draft", initial: null };
+        const chatStates = { "teammate-draft": { draft: { name: "Nora" } } };
+        const draftCard: ChatStateKey<unknown> = { id: "teammate-draft", initial: null };
         const session = await buildManager({
           chatExtensions: [defineChatExtension({ key: draftCard, readFromNote: (saved) => saved })],
           persistence: {

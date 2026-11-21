@@ -9,7 +9,7 @@ import React from "react";
 
 type AgentTrailProps = React.ComponentProps<typeof AgentTrail>;
 
-const MEMORY_PATH = "copilot/agents/coco/MEMORY.md";
+const MEMORY_PATH = "copilot/teammates/coco/MEMORY.md";
 
 function turn(saves: readonly MemorySave[], reply: string): AgentMessagePart[] {
   return [

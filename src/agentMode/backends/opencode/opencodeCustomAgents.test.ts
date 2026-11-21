@@ -30,26 +30,26 @@ describe("opencodeCustomAgents", () => {
         customAgentModeId({ slug: "coco", variant: "alt", auto: true }),
         customAgentModeId({ slug: "coco-auto", auto: false }),
       ]).toEqual([
-        "copilot-agent-coco/default",
-        "copilot-agent-coco/auto",
-        "copilot-agent-coco/alt/default",
-        "copilot-agent-coco/alt/auto",
-        "copilot-agent-coco-auto/default",
+        "copilot-teammate-coco/default",
+        "copilot-teammate-coco/auto",
+        "copilot-teammate-coco/alt/default",
+        "copilot-teammate-coco/alt/auto",
+        "copilot-teammate-coco-auto/default",
       ]);
     });
   });
 
   describe("readCustomAgentModeId()", () => {
     it.each([
-      ["copilot-agent-coco/default", { slug: "coco", auto: false }],
-      ["copilot-agent-coco/auto", { slug: "coco", auto: true }],
-      ["copilot-agent-coco/alt/default", { slug: "coco", variant: "alt", auto: false }],
-      ["copilot-agent-coco/alt/auto", { slug: "coco", variant: "alt", auto: true }],
-      ["copilot-agent-auto/default", { slug: "auto", auto: false }],
-      ["copilot-agent-coco", null],
-      ["copilot-agent-coco/build", null],
-      ["copilot-agent-coco/alt", null],
-      ["copilot-agent-coco/alt/more/default", null],
+      ["copilot-teammate-coco/default", { slug: "coco", auto: false }],
+      ["copilot-teammate-coco/auto", { slug: "coco", auto: true }],
+      ["copilot-teammate-coco/alt/default", { slug: "coco", variant: "alt", auto: false }],
+      ["copilot-teammate-coco/alt/auto", { slug: "coco", variant: "alt", auto: true }],
+      ["copilot-teammate-auto/default", { slug: "auto", auto: false }],
+      ["copilot-teammate-coco", null],
+      ["copilot-teammate-coco/build", null],
+      ["copilot-teammate-coco/alt", null],
+      ["copilot-teammate-coco/alt/more/default", null],
       ["copilot-build", null],
       ["build", null],
     ])(
@@ -94,23 +94,23 @@ describe("opencodeCustomAgents", () => {
     it("adds the entries to those written since OpenCode started and writes them all", async () => {
       startAgentEntries(agentsFile());
 
-      await putAgentEntries(agentsFile(), { "copilot-agent-coco/default": { system: "Coco" } });
-      await putAgentEntries(agentsFile(), { "copilot-agent-maya/default": { system: "Maya" } });
+      await putAgentEntries(agentsFile(), { "copilot-teammate-coco/default": { system: "Coco" } });
+      await putAgentEntries(agentsFile(), { "copilot-teammate-maya/default": { system: "Maya" } });
 
       expect(readAgents()).toEqual({
-        "copilot-agent-coco/default": { system: "Coco" },
-        "copilot-agent-maya/default": { system: "Maya" },
+        "copilot-teammate-coco/default": { system: "Coco" },
+        "copilot-teammate-maya/default": { system: "Maya" },
       });
     });
 
     it("drops the entries an earlier OpenCode run wrote once OpenCode starts again", async () => {
       startAgentEntries(agentsFile());
-      await putAgentEntries(agentsFile(), { "copilot-agent-coco/default": { system: "Coco" } });
+      await putAgentEntries(agentsFile(), { "copilot-teammate-coco/default": { system: "Coco" } });
 
       startAgentEntries(agentsFile());
-      await putAgentEntries(agentsFile(), { "copilot-agent-maya/default": { system: "Maya" } });
+      await putAgentEntries(agentsFile(), { "copilot-teammate-maya/default": { system: "Maya" } });
 
-      expect(Object.keys(readAgents())).toEqual(["copilot-agent-maya/default"]);
+      expect(Object.keys(readAgents())).toEqual(["copilot-teammate-maya/default"]);
     });
   });
 
@@ -118,31 +118,33 @@ describe("opencodeCustomAgents", () => {
     it(`removes every entry of the agent, of each prompt variant, and keeps the other agents' entries (${ISSUE})`, async () => {
       startAgentEntries(agentsFile());
       await putAgentEntries(agentsFile(), {
-        "copilot-agent-coco/default": { system: "COCO-OWN" },
-        "copilot-agent-coco/alt/auto": { system: "COCO-ALT" },
-        "copilot-agent-coco-two/default": { system: "COCO-TWO" },
+        "copilot-teammate-coco/default": { system: "COCO-OWN" },
+        "copilot-teammate-coco/alt/auto": { system: "COCO-ALT" },
+        "copilot-teammate-coco-two/default": { system: "COCO-TWO" },
       });
 
       await removeAgentEntries(agentsFile(), "coco");
 
-      expect(readAgents()).toEqual({ "copilot-agent-coco-two/default": { system: "COCO-TWO" } });
+      expect(readAgents()).toEqual({ "copilot-teammate-coco-two/default": { system: "COCO-TWO" } });
     });
 
     it(`removes the agent from a file an earlier OpenCode run wrote, and the running OpenCode's next write does not bring it back (${ISSUE})`, async () => {
       startAgentEntries(agentsFile());
       await putAgentEntries(agentsFile(), {
-        "copilot-agent-coco/default": { system: "COCO-OWN" },
-        "copilot-agent-maya/default": { system: "MAYA" },
+        "copilot-teammate-coco/default": { system: "COCO-OWN" },
+        "copilot-teammate-maya/default": { system: "MAYA" },
       });
       startAgentEntries(agentsFile());
 
       await removeAgentEntries(agentsFile(), "coco");
-      expect(readAgents()).toEqual({ "copilot-agent-maya/default": { system: "MAYA" } });
-      await putAgentEntries(agentsFile(), { "copilot-agent-coco/default": { system: "COCO-2" } });
+      expect(readAgents()).toEqual({ "copilot-teammate-maya/default": { system: "MAYA" } });
+      await putAgentEntries(agentsFile(), {
+        "copilot-teammate-coco/default": { system: "COCO-2" },
+      });
       await removeAgentEntries(agentsFile(), "coco");
-      await putAgentEntries(agentsFile(), { "copilot-agent-leo/default": { system: "LEO" } });
+      await putAgentEntries(agentsFile(), { "copilot-teammate-leo/default": { system: "LEO" } });
 
-      expect(readAgents()).toEqual({ "copilot-agent-leo/default": { system: "LEO" } });
+      expect(readAgents()).toEqual({ "copilot-teammate-leo/default": { system: "LEO" } });
     });
 
     it(`writes nothing when OpenCode never ran an agent in the vault (${ISSUE})`, async () => {

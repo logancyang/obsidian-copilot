@@ -1811,7 +1811,7 @@ describe("ClaudeSdkBackendProcess", () => {
         const { canUseTool } = (
           getPromptQueryCalls()[0][0] as { options: { canUseTool: CanUseTool } }
         ).options;
-        await canUseTool("Edit", { file_path: "/vault/copilot/agents/coco/MEMORY.md" }, {
+        await canUseTool("Edit", { file_path: "/vault/copilot/teammates/coco/MEMORY.md" }, {
           signal: new AbortController().signal,
           toolUseID: "tool-1",
         } as never);

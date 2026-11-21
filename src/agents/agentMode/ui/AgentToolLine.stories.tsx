@@ -47,39 +47,39 @@ const meta = {
 export default meta;
 
 export const Asking: StoryObj<ToolLinesProps> = {
-  args: { lines: [{ tool: "ask_agent", agent: "Leo", status: "in_progress" }] },
+  args: { lines: [{ tool: "ask_teammate", agent: "Leo", status: "in_progress" }] },
 };
 
 export const AskingBeforeTheAgentIsNamed: StoryObj<ToolLinesProps> = {
-  args: { lines: [{ tool: "ask_agent", agent: null, status: "in_progress" }] },
+  args: { lines: [{ tool: "ask_teammate", agent: null, status: "in_progress" }] },
 };
 
 export const Messaged: StoryObj<ToolLinesProps> = {
-  args: { lines: [{ tool: "ask_agent", agent: "Leo" }] },
+  args: { lines: [{ tool: "ask_teammate", agent: "Leo" }] },
 };
 
 export const MessagedSeveralAgents: StoryObj<ToolLinesProps> = {
   args: {
     lines: [
-      { tool: "ask_agent", agent: "Maya" },
-      { tool: "ask_agent", agent: "Leo" },
-      { tool: "ask_agent", agent: "Nora", status: "in_progress" },
+      { tool: "ask_teammate", agent: "Maya" },
+      { tool: "ask_teammate", agent: "Leo" },
+      { tool: "ask_teammate", agent: "Nora", status: "in_progress" },
     ],
   },
 };
 
 export const MessagedLongName: StoryObj<ToolLinesProps> = {
-  args: { lines: [{ tool: "ask_agent", agent: LONG_NAMED_AGENT.name }] },
+  args: { lines: [{ tool: "ask_teammate", agent: LONG_NAMED_AGENT.name }] },
 };
 
 export const CheckedProgress: StoryObj<ToolLinesProps> = {
-  args: { lines: [{ tool: "check_agent", agent: "Leo" }] },
+  args: { lines: [{ tool: "check_teammate", agent: "Leo" }] },
 };
 
 export const PassedAnswer: StoryObj<ToolLinesProps> = {
-  args: { lines: [{ tool: "answer_agent", agent: "Leo" }] },
+  args: { lines: [{ tool: "answer_teammate", agent: "Leo" }] },
 };
 
 export const Stopped: StoryObj<ToolLinesProps> = {
-  args: { lines: [{ tool: "stop_agent", agent: "Leo" }] },
+  args: { lines: [{ tool: "stop_teammate", agent: "Leo" }] },
 };

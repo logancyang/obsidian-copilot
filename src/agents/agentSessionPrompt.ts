@@ -21,10 +21,10 @@ export interface AgentPromptInput {
   ownChat?: { chatsFolder: string };
 }
 
-// With ask_agent's whole description in view, weaker models passed a request that points at another agent by its job far less often unless the ask rule sat beside the list of agents.
+// With ask_teammate's whole description in view, weaker models passed a request that points at another agent by its job far less often unless the ask rule sat beside the list of agents.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/986
 export const ASK_AGENT_PROMPT_HINT =
-  "When the user's message @-mentions one of the user's agents by name or clearly points to one, ask that agent with the ask_agent tool from obsidian-copilot; never otherwise.";
+  "When the user's message @-mentions one of the user's agents by name or clearly points to one, ask that agent with the ask_teammate tool from obsidian-copilot; never otherwise.";
 
 export const LIST_CHATS_PROMPT_HINT =
   "When the user asks what you and they worked on, discussed or decided before, list your earlier chats with list_chats from obsidian-copilot and read a listed note when you need what was said.";

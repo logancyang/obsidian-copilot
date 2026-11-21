@@ -308,10 +308,13 @@ describe("agentChats", () => {
       resetSettings();
       const vault = createFakeAgentVault();
       for (const slug of ["coco", "cocoa", "maya"]) {
-        vault.writeByHand(`copilot/agents/${slug}/instructions.md`, `---\nname: ${slug}\n---\nHi.`);
+        vault.writeByHand(
+          `copilot/teammates/${slug}/instructions.md`,
+          `---\nname: ${slug}\n---\nHi.`
+        );
       }
-      vault.writeByHand("copilot/agents/coco/MEMORY.md", "## How to work\n");
-      vault.writeByHand("copilot/agents/coco/face.webp", new ArrayBuffer(1));
+      vault.writeByHand("copilot/teammates/coco/MEMORY.md", "## How to work\n");
+      vault.writeByHand("copilot/teammates/coco/face.webp", new ArrayBuffer(1));
       for (const { id, agent } of [...HISTORY, ...projectChats]) {
         if (!id.startsWith("native:"))
           vault.writeByHand(id, `---\nagent: ${agent ?? ""}\n---\nHi.`);
@@ -365,15 +368,15 @@ describe("agentChats", () => {
 
       expect(result).toEqual({ archivedChats: 2, agentDeleted: true });
       expect(archived()).toEqual([`${CHATS}/coco-1.md`, "native:claude:s1"]);
-      expect(vault.trashedPaths).toEqual(["copilot/agents/coco"]);
+      expect(vault.trashedPaths).toEqual(["copilot/teammates/coco"]);
       expect(vault.listPaths()).toEqual([
-        "copilot/agents/cocoa/instructions.md",
-        "copilot/agents/maya/instructions.md",
         `${CHATS}/coco-1.md`,
         `${CHATS}/coco-old.md`,
         `${CHATS}/cocoa.md`,
         `${CHATS}/copilot.md`,
         `${CHATS}/maya.md`,
+        "copilot/teammates/cocoa/instructions.md",
+        "copilot/teammates/maya/instructions.md",
       ]);
     });
 
@@ -432,7 +435,7 @@ describe("agentChats", () => {
       const result = await remove();
 
       expect(result).toEqual({ archivedChats: 2, agentDeleted: true });
-      expect(vault.trashedPaths).toEqual(["copilot/agents/coco"]);
+      expect(vault.trashedPaths).toEqual(["copilot/teammates/coco"]);
       expect(hiddenChats.stopAgent).toHaveBeenCalledWith("coco");
     });
 
@@ -446,11 +449,11 @@ describe("agentChats", () => {
 
     it(`stops new chats from opening on the deleted agent (${ISSUE})`, async () => {
       const { remove } = await setup();
-      setSettings({ agentMode: { ...getSettings().agentMode, lastCustomAgent: "coco" } });
+      setSettings({ agentMode: { ...getSettings().agentMode, lastTeammate: "coco" } });
 
       await remove();
 
-      expect(getSettings().agentMode.lastCustomAgent).toBeUndefined();
+      expect(getSettings().agentMode.lastTeammate).toBeUndefined();
     });
 
     it(`still deletes the agent when one of its chats can't be archived, and counts only the chats it archived (${ISSUE})`, async () => {
@@ -460,7 +463,7 @@ describe("agentChats", () => {
 
       expect(result).toEqual({ archivedChats: 1, agentDeleted: true });
       expect(archived()).toEqual(["native:claude:s1"]);
-      expect(vault.trashedPaths).toEqual(["copilot/agents/coco"]);
+      expect(vault.trashedPaths).toEqual(["copilot/teammates/coco"]);
     });
 
     it(`removes the agent's entries from the vault's OpenCode agents file and keeps the other agents' (${ENTRIES_ISSUE})`, async () => {
@@ -470,9 +473,9 @@ describe("agentChats", () => {
         file,
         JSON.stringify({
           agents: {
-            "copilot-agent-coco/default": { system: "COCO-OWN" },
-            "copilot-agent-coco/asked/auto": { system: "COCO-ASKED" },
-            "copilot-agent-cocoa/default": { system: "COCOA" },
+            "copilot-teammate-coco/default": { system: "COCO-OWN" },
+            "copilot-teammate-coco/asked/auto": { system: "COCO-ASKED" },
+            "copilot-teammate-cocoa/default": { system: "COCOA" },
           },
         })
       );
@@ -480,14 +483,14 @@ describe("agentChats", () => {
       await remove();
 
       expect(JSON.parse(fs.readFileSync(file, "utf8"))).toEqual({
-        agents: { "copilot-agent-cocoa/default": { system: "COCOA" } },
+        agents: { "copilot-teammate-cocoa/default": { system: "COCOA" } },
       });
     });
 
     it(`still deletes the agent and archives its chats when its OpenCode entries can't be removed (${ENTRIES_ISSUE})`, async () => {
       const { vault, remove, archived } = await setup();
       const file = opencodeAgentsFilePath(vault.app);
-      await writeAgentsFile(file, '{"agents":{"copilot-agent-coco/default":{}}}');
+      await writeAgentsFile(file, '{"agents":{"copilot-teammate-coco/default":{}}}');
       jest.spyOn(fs.promises, "rename").mockRejectedValueOnce(new Error("EPERM: file is open"));
 
       const result = await remove();
@@ -505,12 +508,12 @@ describe("agentChats", () => {
       await remove();
 
       expect(hiddenChats.stopAgent).toHaveBeenCalledWith("coco");
-      expect(vault.trashedPaths).toEqual(["copilot/agents/coco"]);
+      expect(vault.trashedPaths).toEqual(["copilot/teammates/coco"]);
     });
 
     it(`changes nothing when the agent's folder is already gone at confirm (${ISSUE})`, async () => {
       const { vault, steps, remove, store } = await setup();
-      vault.deleteByHand("copilot/agents/coco/instructions.md");
+      vault.deleteByHand("copilot/teammates/coco/instructions.md");
       await store.start();
 
       const result = await remove();
@@ -528,7 +531,7 @@ describe("agentChats", () => {
 
       expect(result).toEqual({ archivedChats: 0, agentDeleted: false });
       expect(steps).toEqual([]);
-      expect(vault.listPaths()).toContain("copilot/agents/coco/instructions.md");
+      expect(vault.listPaths()).toContain("copilot/teammates/coco/instructions.md");
     });
 
     it(`archives none of the agent's chats when its folder can't go to the trash (${ISSUE})`, async () => {

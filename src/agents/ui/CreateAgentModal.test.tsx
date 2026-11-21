@@ -103,12 +103,12 @@ describe("CreateAgentModal", () => {
 
   describe("CreateAgentModal", () => {
     describe("open()", () => {
-      it("shows the New teammate form saved under the Copilot folder's agents folder", () => {
+      it("shows the New teammate form saved under the Copilot folder's teammates folder", () => {
         const { modal } = openDialog();
 
         expect(modal.titleEl.textContent).toBe("New teammate");
         expect(screen.getByLabelText("Name")).not.toBeNull();
-        expect(screen.getByText("Saved in copilot/agents/")).not.toBeNull();
+        expect(screen.getByText("Saved in copilot/teammates/")).not.toBeNull();
       });
 
       it(`opens the first agent's dialog filled in as Coco, every field editable and Create available, in a vault with no agents (${FIRST_AGENT_ISSUE})`, () => {

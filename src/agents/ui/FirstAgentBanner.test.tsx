@@ -147,7 +147,7 @@ describe("FirstAgentBanner", () => {
       rerender({ count: 0 });
 
       expect(result.current).toBe(false);
-      expect(getSettings().agentMode.firstAgentBannerDismissed).toBe(true);
+      expect(getSettings().agentMode.firstTeammateBannerDismissed).toBe(true);
     });
 
     it(`hides the banner for good once it is dismissed, even after the settings are loaded again (${ISSUE})`, () => {
@@ -158,7 +158,7 @@ describe("FirstAgentBanner", () => {
 
       act(() => setSettings(sanitizeSettings(getSettings())));
       expect(result.current).toBe(false);
-      expect(getSettings().agentMode.firstAgentBannerDismissed).toBe(true);
+      expect(getSettings().agentMode.firstTeammateBannerDismissed).toBe(true);
     });
   });
 
@@ -166,7 +166,7 @@ describe("FirstAgentBanner", () => {
     it("records the dismissal in the settings", () => {
       dismissFirstAgentBanner();
 
-      expect(getSettings().agentMode.firstAgentBannerDismissed).toBe(true);
+      expect(getSettings().agentMode.firstTeammateBannerDismissed).toBe(true);
     });
   });
 });

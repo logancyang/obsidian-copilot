@@ -35,7 +35,7 @@ file disagree, the file wins.
 11. **`src/agents/agentMode/`** — Custom agents' pieces of the chat: the
     lines that show a rule an agent saved to its memory, the tool card
     kind that puts them in place of the edit that wrote it, the tools an
-    agent calls (`ask_agent`, `draft_agent`), and the draft card.
+    agent calls (`ask_teammate`, `draft_teammate`), and the draft card.
 12. **`src/projects/ui/` and `src/projects/hooks/`** — the Projects feature's
     UI and hooks: the project home and its Files tab, the project header and
     popover, and the create and edit forms.

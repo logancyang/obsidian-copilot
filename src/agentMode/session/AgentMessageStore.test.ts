@@ -11,7 +11,7 @@ jest.mock("@/logger", () => ({
 
 const MEMORY_SAVE = {
   agentName: "Coco",
-  memoryPath: "copilot/agents/coco/MEMORY.md",
+  memoryPath: "copilot/teammates/coco/MEMORY.md",
   rule: "Launch videos lead with user value, not the feature list.",
 };
 
@@ -1107,7 +1107,7 @@ describe("AgentMessageStore", () => {
       const store = new AgentMessageStore();
       const id = store.addMessage(placeholder());
 
-      store.setFileChanges(id, [change("copilot/agents/coco/MEMORY.md")], [MEMORY_SAVE]);
+      store.setFileChanges(id, [change("copilot/teammates/coco/MEMORY.md")], [MEMORY_SAVE]);
 
       expect(store.getMessage(id)?.memorySaves).toEqual([MEMORY_SAVE]);
     });

@@ -34,19 +34,19 @@ function claudeCall(
 }
 
 const BACKENDS = [
-  ["Claude", () => claudeCall(ASK_AGENT_TOOL_NAME, { agent: "Maya", message: SENT })],
+  ["Claude", () => claudeCall(ASK_AGENT_TOOL_NAME, { teammate: "Maya", message: SENT })],
   [
     "Codex",
     (): ToolCallPart => {
       const input = {
         server: "obsidian-copilot",
         tool: ASK_AGENT_TOOL_NAME,
-        arguments: { agent: "Maya", message: SENT },
+        arguments: { teammate: "Maya", message: SENT },
       };
       return {
         kind: "tool_call",
         id: "call-1",
-        title: "mcp.obsidian-copilot.ask_agent",
+        title: "mcp.obsidian-copilot.ask_teammate",
         status: "completed",
         input,
         copilotTools: readCodexCopilotTools(input) ?? undefined,
@@ -58,11 +58,13 @@ const BACKENDS = [
     (): ToolCallPart => ({
       kind: "tool_call",
       id: "call-1",
-      title: "obsidian-copilot_ask_agent",
+      title: "obsidian-copilot_ask_teammate",
       status: "completed",
       copilotTools:
-        readOpencodeCopilotTools({ agent: "Maya", message: SENT }, "obsidian-copilot_ask_agent") ??
-        undefined,
+        readOpencodeCopilotTools(
+          { teammate: "Maya", message: SENT },
+          "obsidian-copilot_ask_teammate"
+        ) ?? undefined,
     }),
   ],
 ] as const;
@@ -70,21 +72,21 @@ const BACKENDS = [
 describe("agentToolCalls", () => {
   describe("agentToolCall()", () => {
     it.each(BACKENDS)(
-      `reads the asked agent from a %s ask_agent call (${ISSUE})`,
+      `reads the asked agent from a %s ask_teammate call (${ISSUE})`,
       (_backend, call) => {
         expect(agentToolCall(call())).toEqual({ tool: ASK_AGENT_TOOL_NAME, agent: "Maya" });
       }
     );
 
     it("reads the agent from the other @ tools, without its @", () => {
-      expect(agentToolCall(claudeCall(STOP_AGENT_TOOL_NAME, { agent: "@Leo" }))).toEqual({
+      expect(agentToolCall(claudeCall(STOP_AGENT_TOOL_NAME, { teammate: "@Leo" }))).toEqual({
         tool: STOP_AGENT_TOOL_NAME,
         agent: "Leo",
       });
     });
 
     it("leaves Copilot's other tools, the agent draft among them, and a call without an agent to their own rows", () => {
-      expect(agentToolCall(claudeCall("miyo_search", { agent: "Maya" }))).toBeNull();
+      expect(agentToolCall(claudeCall("miyo_search", { teammate: "Maya" }))).toBeNull();
       expect(
         agentToolCall(
           claudeCall(DRAFT_AGENT_TOOL_NAME, { name: "Nora", instruction: "Plan pickups." })
@@ -110,7 +112,7 @@ describe("agentToolCalls", () => {
     it(`leaves a call that failed to its ordinary row, since it did nothing with the agent (${ISSUE})`, () => {
       expect(
         agentToolCall({
-          ...claudeCall(ASK_AGENT_TOOL_NAME, { agent: "Nora", message: SENT }),
+          ...claudeCall(ASK_AGENT_TOOL_NAME, { teammate: "Nora", message: SENT }),
           status: "failed",
         })
       ).toBeNull();

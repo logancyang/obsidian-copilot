@@ -329,7 +329,7 @@ describe("agentSystemPrompt", () => {
 
         expect(unlocked).toBe(locked);
         expect(unlocked).not.toMatch(
-          /list_chats|draft_agent|ask_agent|check_agent|answer_agent|stop_agent|In a chat where you are Copilot/
+          /list_chats|draft_teammate|ask_teammate|check_teammate|answer_teammate|stop_teammate|In a chat where you are Copilot/
         );
         expect(unlocked).not.toMatch(/\byou are\b/i);
       }

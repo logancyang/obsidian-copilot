@@ -194,7 +194,7 @@ describe("agentMemoryFile", () => {
   });
 
   describe("saveMemoryRule()", () => {
-    const PATH = "copilot/agents/coco/MEMORY.md";
+    const PATH = "copilot/teammates/coco/MEMORY.md";
 
     it("creates a missing memory file through the vault with the saved rule", async () => {
       const vault = createFakeAgentVault();
@@ -232,7 +232,7 @@ describe("agentMemoryFile", () => {
       const replacing = { ...toSave(BRIEF), replaces: "Keep replies short." };
 
       await expect(saveMemoryRule(vault.app.vault, PATH, replacing, TODAY)).resolves.toBeNull();
-      await saveMemoryRule(vault.app.vault, "copilot/agents/maya/MEMORY.md", replacing, TODAY);
+      await saveMemoryRule(vault.app.vault, "copilot/teammates/maya/MEMORY.md", replacing, TODAY);
 
       expect(vault.readText(PATH)).toBe(before);
       expect(vault.listPaths()).toEqual([PATH]);

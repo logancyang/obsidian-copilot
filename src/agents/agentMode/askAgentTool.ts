@@ -46,14 +46,14 @@ Pass a rule the user gives it for later in the user's own words.`,
   inputSchema: {
     type: "object",
     properties: {
-      agent: { type: "string", description: "The agent's name." },
+      teammate: { type: "string", description: "The agent's name." },
       message: {
         type: "string",
         description:
           "Everything the agent needs, since it can't see this chat: the user's request in their own words, and the notes and context that matter.",
       },
     },
-    required: ["agent", "message"],
+    required: ["teammate", "message"],
   },
   // Asking changes nothing by itself; the asked agent's own edits follow this chat's mode.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
@@ -168,10 +168,10 @@ export function relistOnAgentsChange(
   return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
 }
 
-// check_agent, answer_agent and stop_agent are always offered together, so each carries the one sentence that names all three.
+// check_teammate, answer_teammate and stop_teammate are always offered together, so each carries the one sentence that names all three.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/986
 const ASKED_AGENT_PROMPT_HINT =
-  "When the user asks how an agent you asked is doing, check with check_agent; when the user answers its question, pass the answer with answer_agent; when the user gives it a new instruction while it works, send that with ask_agent; when the user tells you to stop it, use stop_agent. All are in obsidian-copilot.";
+  "When the user asks how an agent you asked is doing, check with check_teammate; when the user answers its question, pass the answer with answer_teammate; when the user gives it a new instruction while it works, send that with ask_teammate; when the user tells you to stop it, use stop_teammate. All are in obsidian-copilot.";
 
 // The chat draws a call's line from its error flag, so a call that did nothing for the agent it names fails.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/945
@@ -188,9 +188,9 @@ export function createAskAgentTool(chats: HiddenAgentChats, host: AskAgentToolHo
     listedAs: listedForAskingChats(host, ASK_AGENT_TOOL),
     promptHint: ASK_AGENT_PROMPT_HINT,
     call: async (args, chat) => {
-      const { agent, message } = (args ?? {}) as Record<string, unknown>;
+      const { teammate: agent, message } = (args ?? {}) as Record<string, unknown>;
       if (typeof agent !== "string" || typeof message !== "string" || !message.trim()) {
-        return { text: "agent and message must be non-empty strings.", isError: true };
+        return { text: "teammate and message must be non-empty strings.", isError: true };
       }
       const result = chats.ask(chat, agent, message);
       return { text: resultText(result), isError: failed(result.kind, "asked", "sent") };
@@ -217,12 +217,12 @@ function askedAgentTool(
     inputSchema: {
       type: "object",
       properties: {
-        agent: { type: "string", description: "The name of an agent you asked from this chat." },
+        teammate: { type: "string", description: "The name of an agent you asked from this chat." },
         ...(textArgument
           ? { [textArgument.name]: { type: "string", description: textArgument.description } }
           : {}),
       },
-      required: ["agent", ...(textArgument ? [textArgument.name] : [])],
+      required: ["teammate", ...(textArgument ? [textArgument.name] : [])],
     },
     // Checking on or stopping an agent changes no file, and Codex asks the user before any tool that isn't read-only.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/945
@@ -237,9 +237,9 @@ function askedAgentTool(
     call: async (args, chat) => {
       const fields = (args ?? {}) as Record<string, unknown>;
       const text = textArgument ? fields[textArgument.name] : "";
-      const { agent } = fields;
+      const { teammate: agent } = fields;
       if (typeof agent !== "string" || !agent.trim() || typeof text !== "string") {
-        return { text: "agent must be a non-empty string.", isError: true };
+        return { text: "teammate must be a non-empty string.", isError: true };
       }
       if (textArgument && !text.trim()) {
         return { text: `${textArgument.name} must be a non-empty string.`, isError: true };
@@ -254,7 +254,7 @@ export function createCheckAgentTool(chats: HiddenAgentChats, host: AskAgentTool
     {
       name: CHECK_AGENT_TOOL_NAME,
       description:
-        "Read how an agent you asked from this chat is doing: call it each time the user asks how an agent you asked is doing, even if you think you know. It doesn't interrupt the agent. It returns how long the agent has worked, the end of what it has written and its latest steps; tell the user in your own words how far it got. To give it a new instruction while it works, call ask_agent again.",
+        "Read how an agent you asked from this chat is doing: call it each time the user asks how an agent you asked is doing, even if you think you know. It doesn't interrupt the agent. It returns how long the agent has worked, the end of what it has written and its latest steps; tell the user in your own words how far it got. To give it a new instruction while it works, call ask_teammate again.",
     },
     host,
     (chat, agent) => {

@@ -149,8 +149,8 @@ export interface CopilotSettings {
     offerFeedbackCards: boolean;
     notificationSound: boolean;
     notificationSoundId: NotificationSoundId;
-    lastCustomAgent?: string;
-    firstAgentBannerDismissed?: boolean;
+    lastTeammate?: string;
+    firstTeammateBannerDismissed?: boolean;
     skills: {
       folder: string;
       suppressMigrationConfirm?: boolean;
@@ -862,8 +862,8 @@ function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
     notificationSound,
     notificationSoundId,
     skills,
-    ...(typeof r.lastCustomAgent === "string" ? { lastCustomAgent: r.lastCustomAgent } : {}),
-    ...(r.firstAgentBannerDismissed === true ? { firstAgentBannerDismissed: true } : {}),
+    ...(typeof r.lastTeammate === "string" ? { lastTeammate: r.lastTeammate } : {}),
+    ...(r.firstTeammateBannerDismissed === true ? { firstTeammateBannerDismissed: true } : {}),
     ...(claudeCli ? { claudeCli } : {}),
     ...(deviceProfiles ? { deviceProfiles } : {}),
   };

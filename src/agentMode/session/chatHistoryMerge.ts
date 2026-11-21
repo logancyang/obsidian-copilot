@@ -77,7 +77,7 @@ export function mergeChatHistoryItems(
             ? new Date(twin.lastAccessedAtMs)
             : item.lastAccessedAt,
         projectId: item.projectId ?? twin.projectId,
-        agent: item.agent ?? twin.agent,
+        agent: item.agent ?? twin.teammate,
       });
       continue;
     }
@@ -93,7 +93,7 @@ export function mergeChatHistoryItems(
       backendId: entry.backendId,
       sessionId: entry.sessionId,
       projectId: entry.projectId,
-      agent: entry.agent,
+      agent: entry.teammate,
     });
   }
 

@@ -1008,13 +1008,13 @@ describe("AgentChatMessages", () => {
         expect(screen.getByRole("button", { name: "Plans/Launch plan.md" })).toBeTruthy();
         expect(container.textContent).toContain("Message fromMaya");
         expect(container.textContent).not.toContain("BIGGEST RISK");
-        expect(container.textContent).not.toContain("copilot-agent-reply");
+        expect(container.textContent).not.toContain("copilot-teammate-reply");
         expect(container.textContent).not.toContain("Pass the reply on");
       });
 
       it("shows the rule the asked agent saved under its card beside the files it changed (https://github.com/Brevilabs/obsidian-copilot-private/issues/969)", async () => {
         await setCustomAgentsAccess("team");
-        const memoryPath = "copilot/agents/maya/MEMORY.md";
+        const memoryPath = "copilot/teammates/maya/MEMORY.md";
         const saved = {
           ...relayMessage,
           memorySaves: [{ agentName: "Maya", memoryPath, rule: "Flag video length first." }],
@@ -1068,7 +1068,7 @@ describe("AgentChatMessages", () => {
     });
 
     describe("a custom agent's saved rules", () => {
-      const MEMORY = "copilot/agents/coco/MEMORY.md";
+      const MEMORY = "copilot/teammates/coco/MEMORY.md";
       const memorySaves = [
         { agentName: "Coco", memoryPath: MEMORY, rule: "Lead with user value." },
       ];

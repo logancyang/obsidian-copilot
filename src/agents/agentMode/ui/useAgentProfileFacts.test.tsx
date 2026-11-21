@@ -8,7 +8,7 @@ import { TFile } from "obsidian";
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/940";
 
-const FOLDER = "copilot/agents/coco";
+const FOLDER = "copilot/teammates/coco";
 const COCO = {
   slug: "coco",
   name: "Coco",

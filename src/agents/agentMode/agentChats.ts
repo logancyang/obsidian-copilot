@@ -150,8 +150,8 @@ export async function deleteAgentAndArchiveChats({
   if (!store.getAgents().some((agent) => agent.slug === slug)) return NOTHING_DELETED;
   // New chats must not reopen on the agent being deleted, or the new chat below would start as it.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/940
-  if (getSettings().agentMode.lastCustomAgent === slug) {
-    setSettings((cur) => ({ agentMode: { ...cur.agentMode, lastCustomAgent: undefined } }));
+  if (getSettings().agentMode.lastTeammate === slug) {
+    setSettings((cur) => ({ agentMode: { ...cur.agentMode, lastTeammate: undefined } }));
   }
   // The tab the profile covers goes back to the agent home as a new chat instead of closing with the agent's chat.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/940

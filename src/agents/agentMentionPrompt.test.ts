@@ -56,14 +56,14 @@ describe("agentMentionPrompt", () => {
       expect(agentMentionsBlock([])).toBeNull();
     });
 
-    it(`tells the agent to ask each mentioned agent with the ask_agent tool (${ISSUE})`, () => {
+    it(`tells the agent to ask each mentioned agent with the ask_teammate tool (${ISSUE})`, () => {
       expect(agentMentionsBlock(["Maya", "Leo"])).toBe(
         [
-          "<copilot-agents>",
-          "The user @-mentioned these agents in this message. Ask each of them with the ask_agent tool:",
+          "<copilot-teammates>",
+          "The user @-mentioned these agents in this message. Ask each of them with the ask_teammate tool:",
           "- Maya",
           "- Leo",
-          "</copilot-agents>",
+          "</copilot-teammates>",
         ].join("\n")
       );
     });

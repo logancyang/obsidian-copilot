@@ -101,9 +101,9 @@ describe("chatHistoryMerge", () => {
           { item: mdItem({ id: "b.md" }), backendId: "opencode", sessionId: "s2" },
         ],
         [
-          nativeEntry({ sessionId: "s1", agent: "maya" }),
-          nativeEntry({ sessionId: "s2", agent: "maya" }),
-          nativeEntry({ sessionId: "s3", agent: "leo" }),
+          nativeEntry({ sessionId: "s1", teammate: "maya" }),
+          nativeEntry({ sessionId: "s2", teammate: "maya" }),
+          nativeEntry({ sessionId: "s3", teammate: "leo" }),
         ]
       );
 

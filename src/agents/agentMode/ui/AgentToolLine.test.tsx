@@ -9,12 +9,12 @@ import React from "react";
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/947";
 const CARDS = "https://github.com/Brevilabs/obsidian-copilot-private/issues/967";
-const ASK: AgentToolCall = { tool: "ask_agent", agent: "maya" };
-const UNNAMED_ASK: AgentToolCall = { tool: "ask_agent", agent: null };
-const ORDINARY = <div>obsidian-copilot · Ask agent</div>;
+const ASK: AgentToolCall = { tool: "ask_teammate", agent: "maya" };
+const UNNAMED_ASK: AgentToolCall = { tool: "ask_teammate", agent: null };
+const ORDINARY = <div>obsidian-copilot · Ask teammate</div>;
 
 function part(status: ToolCallPart["status"] = "completed"): ToolCallPart {
-  return { kind: "tool_call", id: "call-1", title: "ask_agent", status };
+  return { kind: "tool_call", id: "call-1", title: "ask_teammate", status };
 }
 
 function line(call: AgentToolCall, status?: ToolCallPart["status"]) {
@@ -50,7 +50,7 @@ describe("AgentToolLine", () => {
 
     it(`opens the conversation the ask started, found by the call and the asked agent (${CARDS})`, () => {
       const openRun = jest.fn();
-      render(inChat(line({ tool: "ask_agent", agent: "Leo" }), openRun));
+      render(inChat(line({ tool: "ask_teammate", agent: "Leo" }), openRun));
 
       fireEvent.click(screen.getByRole("button", { name: "Open Coco's conversation with Leo" }));
 
@@ -69,7 +69,7 @@ describe("AgentToolLine", () => {
       const { container, rerender } = render(inChat(line(UNNAMED_ASK, "in_progress")));
       const header = container.querySelector("[data-agent-activity-card-header]");
 
-      rerender(inChat(line({ tool: "ask_agent", agent: "Leo" }, "in_progress")));
+      rerender(inChat(line({ tool: "ask_teammate", agent: "Leo" }, "in_progress")));
 
       expect(container.querySelector("[data-agent-activity-card-header]")).toBe(header);
       expect(header?.textContent).toBe("AskingLeo…");
@@ -77,14 +77,14 @@ describe("AgentToolLine", () => {
     });
 
     it(`names the agent in a line of its own, with nothing to open, for the tools that send no message (${ISSUE})`, () => {
-      const { container } = render(inChat(line({ tool: "check_agent", agent: "Maya" })));
+      const { container } = render(inChat(line({ tool: "check_teammate", agent: "Maya" })));
 
       expect(container.textContent).toBe("Checked Maya's progress");
       expect(screen.queryByRole("button")).toBeNull();
     });
 
     it("finds the agent whatever case the call wrote its name in", () => {
-      const { container } = render(inChat(line({ tool: "stop_agent", agent: "leo" })));
+      const { container } = render(inChat(line({ tool: "stop_teammate", agent: "leo" })));
 
       expect(container.textContent).toBe("Stopped Leo");
     });
@@ -95,14 +95,14 @@ describe("AgentToolLine", () => {
     ])(
       `keeps the ordinary row for a call naming %s, which the agent turned down (${ISSUE})`,
       (_case, agent) => {
-        const { container } = render(inChat(line({ tool: "stop_agent", agent })));
+        const { container } = render(inChat(line({ tool: "stop_teammate", agent })));
 
-        expect(container.textContent).toBe("obsidian-copilot · Ask agent");
+        expect(container.textContent).toBe("obsidian-copilot · Ask teammate");
       }
     );
 
     it(`holds "Asking …" with a blank face while an ask naming an agent the vault doesn't have runs, and shows the ordinary row only once it ends (${CARDS})`, () => {
-      const nora: AgentToolCall = { tool: "ask_agent", agent: "Nora" };
+      const nora: AgentToolCall = { tool: "ask_teammate", agent: "Nora" };
       const { container, rerender } = render(inChat(line(nora, "in_progress")));
 
       expect(container.textContent).toBe("Asking…");
@@ -110,13 +110,13 @@ describe("AgentToolLine", () => {
 
       rerender(inChat(line(nora, "completed")));
 
-      expect(container.textContent).toBe("obsidian-copilot · Ask agent");
+      expect(container.textContent).toBe("obsidian-copilot · Ask teammate");
     });
 
     it(`keeps the call's ordinary row where the chat lists no agents, as without custom agents (${ISSUE})`, () => {
       const { container } = render(line(ASK));
 
-      expect(container.textContent).toBe("obsidian-copilot · Ask agent");
+      expect(container.textContent).toBe("obsidian-copilot · Ask teammate");
     });
   });
 });

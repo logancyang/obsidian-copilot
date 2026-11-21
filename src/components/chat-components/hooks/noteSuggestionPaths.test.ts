@@ -18,8 +18,10 @@ describe("noteSuggestionPaths", () => {
       expect(isSuggestedVaultPath("copilot/copilot-custom-prompts/Fix.md", DEFAULT_ROOT)).toBe(
         false
       );
-      expect(isSuggestedVaultPath("copilot/agents/maya/instructions.md", DEFAULT_ROOT)).toBe(false);
-      expect(isSuggestedVaultPath("copilot/agents/maya", DEFAULT_ROOT)).toBe(false);
+      expect(isSuggestedVaultPath("copilot/teammates/maya/instructions.md", DEFAULT_ROOT)).toBe(
+        false
+      );
+      expect(isSuggestedVaultPath("copilot/teammates/maya", DEFAULT_ROOT)).toBe(false);
     });
 
     it("suggests the projects folder and the files and folders the user keeps in a project https://github.com/Brevilabs/obsidian-copilot-private/issues/961", () => {

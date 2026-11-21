@@ -105,7 +105,7 @@ describe("agentRelays", () => {
   describe("findRun()", () => {
     const mayaRun: AgentMention = { ...LEO_RUN, id: "run-2", agent: "maya", name: "Maya" };
     const askCall = (id: string): AgentChatMessage["parts"] => [
-      { kind: "tool_call", id, title: "ask_agent", status: "completed" },
+      { kind: "tool_call", id, title: "ask_teammate", status: "completed" },
     ];
     const ASKS = [
       message("ask", "@Leo @Maya does the budget hold?", { agentMentions: [LEO_RUN, mayaRun] }),
@@ -138,7 +138,7 @@ describe("agentRelays", () => {
     const ASKED_AT = { epoch: 1_000, display: "10:00", fileName: "1000" };
 
     function askCall(id: string, agent: string): NonNullable<AgentChatMessage["parts"]>[number] {
-      const input = { agent, message: "Reconcile October." };
+      const input = { teammate: agent, message: "Reconcile October." };
       return {
         kind: "tool_call",
         id,

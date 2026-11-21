@@ -43,12 +43,12 @@ describe("usePresetFaces", () => {
         )
       );
       const vault = createFakeAgentVault();
-      vault.writeByHand("copilot/agents/coco/face.webp", webpBytes(1));
+      vault.writeByHand("copilot/teammates/coco/face.webp", webpBytes(1));
 
       const { result } = renderHook(() =>
         usePresetFaces(
           vault.app.vault,
-          storeWith([{ slug: "coco", facePath: "copilot/agents/coco/face.webp" }])
+          storeWith([{ slug: "coco", facePath: "copilot/teammates/coco/face.webp" }])
         )
       );
 

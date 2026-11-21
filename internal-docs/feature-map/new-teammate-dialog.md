@@ -11,7 +11,7 @@ The `New teammate` dialog that makes a teammate: its face, name, optional title,
 - create-face-loading: while the preset faces download, `Pick a face` shows twelve round placeholders where the faces go, with a soft highlight sweeping across them; the faces take their places when they arrive.
 - create-face-offline: when the preset faces cannot load, the dialog opens with a blank face and `Pick a face` says "Couldn't load the preset faces. You can upload an image."; `Upload image` still works.
 - create-model: `Model` lists the models a chat can run on, grouped by agent, with the effort slider; it starts on the default model and the effort a chat would use with it.
-- create-saved-in: the bottom left reads `Saved in <Copilot folder>/agents/<name>/` for the name as of when the `Name` field was last left.
+- create-saved-in: the bottom left reads `Saved in <Copilot folder>/teammates/<name>/` for the name as of when the `Name` field was last left.
 - create-instruction-count: once the instruction has text, a count such as `372 / 4,000` shows under it; past 4,000 characters it turns orange, and Create still works.
 - create-missing-instruction: leaving the instruction empty shows "Write at least one sentence. Without it, Kai is just Copilot with a face." Create stays unavailable, and hovering it says what is missing: "Give it a name first" or "Write what Kai handles first".
 - create-name-in-use: a name already on the team, in any case, shows "Leo is already on your team. Pick another name." and Create stays unavailable.

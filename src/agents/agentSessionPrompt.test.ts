@@ -45,11 +45,11 @@ const IDENTITY = "In this chat you are Coco (Houseplant carer), an agent the use
 const COPILOT_IDENTITY = "You are Obsidian Copilot.";
 const NOT_YOURS_TO_SAVE = "A rule the user gives another agent is not yours to save.";
 const ASK_AGENTS =
-  "When the user's message @-mentions one of the user's agents by name or clearly points to one, ask that agent with the ask_agent tool from obsidian-copilot; never otherwise.";
+  "When the user's message @-mentions one of the user's agents by name or clearly points to one, ask that agent with the ask_teammate tool from obsidian-copilot; never otherwise.";
 const CONTROL_ASKED_AGENTS =
-  "When the user asks how an agent you asked is doing, check with check_agent; when the user answers its question, pass the answer with answer_agent; when the user gives it a new instruction while it works, send that with ask_agent; when the user tells you to stop it, use stop_agent. All are in obsidian-copilot.";
+  "When the user asks how an agent you asked is doing, check with check_teammate; when the user answers its question, pass the answer with answer_teammate; when the user gives it a new instruction while it works, send that with ask_teammate; when the user tells you to stop it, use stop_teammate. All are in obsidian-copilot.";
 const DRAFT_NEW_AGENTS =
-  "When the user asks you to make a new agent, draft it with the draft_agent tool from obsidian-copilot, which shows them a card to review and create it. If you or another agent already handles that job, say so and ask before drafting. You can't create an agent yourself.";
+  "When the user asks you to make a new agent, draft it with the draft_teammate tool from obsidian-copilot, which shows them a card to review and create it. If you or another agent already handles that job, say so and ask before drafting. You can't create an agent yourself.";
 const LIST_CHATS =
   "When the user asks what you and they worked on, discussed or decided before, list your earlier chats with list_chats from obsidian-copilot and read a listed note when you need what was said.";
 const RECALL_SCOPE =
@@ -59,9 +59,9 @@ const SAVE_MEMORY =
   "To save a rule to your memory, use the save_memory tool from obsidian-copilot.";
 const TEAMMATES_SENTENCES = {
   "the rule that another agent's rule is not its to save": NOT_YOURS_TO_SAVE,
-  "the ask_agent sentence": ASK_AGENTS,
-  "the check_agent, answer_agent and stop_agent sentence": CONTROL_ASKED_AGENTS,
-  "the draft_agent sentences": DRAFT_NEW_AGENTS,
+  "the ask_teammate sentence": ASK_AGENTS,
+  "the check_teammate, answer_teammate and stop_teammate sentence": CONTROL_ASKED_AGENTS,
+  "the draft_teammate sentences": DRAFT_NEW_AGENTS,
   "the list_chats sentence": LIST_CHATS,
   "the earlier-chats scope": RECALL_SCOPE,
   "the save_memory sentence": SAVE_MEMORY,
@@ -138,21 +138,21 @@ function seedAgent(
   memory?: string
 ): void {
   vault.writeByHand(
-    `copilot/agents/${slug}/instructions.md`,
+    `copilot/teammates/${slug}/instructions.md`,
     serializeInstructionsFile({ ...profile, model: null }, instruction)
   );
-  if (memory !== undefined) vault.writeByHand(`copilot/agents/${slug}/MEMORY.md`, memory);
+  if (memory !== undefined) vault.writeByHand(`copilot/teammates/${slug}/MEMORY.md`, memory);
 }
 
 describe("agentSessionPrompt", () => {
   describe("buildAgentPrompt()", () => {
     const prompt = buildAgentPrompt({
       agent: COCO,
-      folder: "/vault/copilot/agents/coco",
+      folder: "/vault/copilot/teammates/coco",
       others: [MAYA, { name: "Leo", title: "" }],
       instruction: "You handle houseplant care only.\n",
       memory: "## How to work\n- End every reply with ACORN.\n",
-      instructionsPath: "copilot/agents/coco/instructions.md",
+      instructionsPath: "copilot/teammates/coco/instructions.md",
     });
 
     it("names the agent with its title", () => {
@@ -163,11 +163,11 @@ describe("agentSessionPrompt", () => {
       for (const ownChat of [OWN_CHAT, undefined]) {
         const built = buildAgentPrompt({
           agent: COCO,
-          folder: "/vault/copilot/agents/coco",
+          folder: "/vault/copilot/teammates/coco",
           others: [MAYA],
           instruction: "",
           memory: "",
-          instructionsPath: "copilot/agents/coco/instructions.md",
+          instructionsPath: "copilot/teammates/coco/instructions.md",
           ownChat,
         });
 
@@ -189,16 +189,16 @@ describe("agentSessionPrompt", () => {
 
     it("says only the user edits instructions.md, that its MEMORY.md is its only memory, and that memory wins over the instruction", () => {
       expect(prompt).toContain(
-        "Your instruction is the body of /vault/copilot/agents/coco/instructions.md, and only the user edits that file."
+        "Your instruction is the body of /vault/copilot/teammates/coco/instructions.md, and only the user edits that file."
       );
       expect(prompt).toContain(
-        "Your memory is /vault/copilot/agents/coco/MEMORY.md. It is your only memory: never save to CLAUDE.md, AGENTS.md or any other memory. When your memory contradicts your instruction, follow your memory."
+        "Your memory is /vault/copilot/teammates/coco/MEMORY.md. It is your only memory: never save to CLAUDE.md, AGENTS.md or any other memory. When your memory contradicts your instruction, follow your memory."
       );
     });
 
     it("keeps the agent's files in its folder, adds nothing else to the vault unasked, and keeps it out of other agents' folders", () => {
       expect(prompt).toContain(
-        "Your folder is /vault/copilot/agents/coco. Keep your own files in it, and add nothing else to the vault unless the user asks. Do not read or change other agents' folders."
+        "Your folder is /vault/copilot/teammates/coco. Keep your own files in it, and add nothing else to the vault unless the user asks. Do not read or change other agents' folders."
       );
     });
 
@@ -209,31 +209,31 @@ describe("agentSessionPrompt", () => {
         others: [],
         instruction: "",
         memory: "",
-        instructionsPath: "copilot/agents/coco/instructions.md",
+        instructionsPath: "copilot/teammates/coco/instructions.md",
         ownChat: OWN_CHAT,
       });
 
       expect(alone).toContain("Other agents: none.");
-      expect(alone).not.toContain("ask_agent");
+      expect(alone).not.toContain("ask_teammate");
       expect(alone).not.toContain(NOT_YOURS_TO_SAVE);
     });
 
-    it(`tells an agent in its own chat to ask another agent the user's message points to, right after the list of other agents, then that a rule the user gives another agent is not its own to save, and leaves naming check_agent, answer_agent, stop_agent and draft_agent to their tools (https://github.com/Brevilabs/obsidian-copilot-private/issues/969, ${ISSUE_986})`, () => {
+    it(`tells an agent in its own chat to ask another agent the user's message points to, right after the list of other agents, then that a rule the user gives another agent is not its own to save, and leaves naming check_teammate, answer_teammate, stop_teammate and draft_teammate to their tools (https://github.com/Brevilabs/obsidian-copilot-private/issues/969, ${ISSUE_986})`, () => {
       const ownChat = buildAgentPrompt({
         agent: COCO,
-        folder: "/vault/copilot/agents/coco",
+        folder: "/vault/copilot/teammates/coco",
         others: [MAYA, { name: "Leo", title: "" }],
         instruction: "",
         memory: "",
-        instructionsPath: "copilot/agents/coco/instructions.md",
+        instructionsPath: "copilot/teammates/coco/instructions.md",
         ownChat: OWN_CHAT,
       });
 
       expect(ownChat).toContain(
         `Other agents: Maya (Product critic); Leo.\n\n${ASK_AGENTS}\n\n${NOT_YOURS_TO_SAVE}\n\n`
       );
-      expect(countOf(ownChat, "ask_agent")).toBe(1);
-      for (const tool of ["check_agent", "answer_agent", "stop_agent", "draft_agent"]) {
+      expect(countOf(ownChat, "ask_teammate")).toBe(1);
+      for (const tool of ["check_teammate", "answer_teammate", "stop_teammate", "draft_teammate"]) {
         expect(ownChat).not.toContain(tool);
       }
     });
@@ -241,11 +241,11 @@ describe("agentSessionPrompt", () => {
     it("tells an agent in its own chat to list its earlier chats with list_chats only when the user asks, to search or read no other chat note and to say when something was never discussed (https://github.com/Brevilabs/obsidian-copilot-private/issues/959)", () => {
       const ownChat = buildAgentPrompt({
         agent: COCO,
-        folder: "/vault/copilot/agents/coco",
+        folder: "/vault/copilot/teammates/coco",
         others: [],
         instruction: "",
         memory: "",
-        instructionsPath: "copilot/agents/coco/instructions.md",
+        instructionsPath: "copilot/teammates/coco/instructions.md",
         ownChat: OWN_CHAT,
       });
 
@@ -255,20 +255,20 @@ describe("agentSessionPrompt", () => {
     it("names no Teammates tool and has no ask, draft or earlier-chats line in a chat the agent was asked into, which has none of those tools (https://github.com/Brevilabs/obsidian-copilot-private/issues/944, https://github.com/Brevilabs/obsidian-copilot-private/issues/941, https://github.com/Brevilabs/obsidian-copilot-private/issues/959)", () => {
       const asked = buildAgentPrompt({
         agent: COCO,
-        folder: "/vault/copilot/agents/coco",
+        folder: "/vault/copilot/teammates/coco",
         others: [MAYA, { name: "Leo", title: "" }],
         instruction: "",
         memory: "",
-        instructionsPath: "copilot/agents/coco/instructions.md",
+        instructionsPath: "copilot/teammates/coco/instructions.md",
       });
 
       expect(asked).toContain("Other agents: Maya (Product critic); Leo.");
       for (const tool of [
-        "ask_agent",
-        "check_agent",
-        "answer_agent",
-        "stop_agent",
-        "draft_agent",
+        "ask_teammate",
+        "check_teammate",
+        "answer_teammate",
+        "stop_teammate",
+        "draft_teammate",
         "list_chats",
       ]) {
         expect(asked).not.toContain(tool);
@@ -281,11 +281,11 @@ describe("agentSessionPrompt", () => {
         Buffer.byteLength(
           buildAgentPrompt({
             agent: COCO,
-            folder: "/vault/copilot/agents/coco",
+            folder: "/vault/copilot/teammates/coco",
             others: [MAYA, { name: "Leo", title: "" }],
             instruction: "",
             memory: "",
-            instructionsPath: "copilot/agents/coco/instructions.md",
+            instructionsPath: "copilot/teammates/coco/instructions.md",
             ownChat,
           }),
           "utf8"
@@ -298,22 +298,22 @@ describe("agentSessionPrompt", () => {
     it("carries the memory save rules for its own MEMORY.md before the instruction in a chat of its own", () => {
       const ownChat = buildAgentPrompt({
         agent: COCO,
-        folder: "/vault/copilot/agents/coco",
+        folder: "/vault/copilot/teammates/coco",
         others: [],
         instruction: "",
         memory: "",
-        instructionsPath: "copilot/agents/coco/instructions.md",
+        instructionsPath: "copilot/teammates/coco/instructions.md",
         ownChat: { chatsFolder: "/vault/copilot/copilot-conversations" },
       });
 
       expect(ownChat).toContain(
-        `${buildMemorySaveRules("copilot/agents/coco/instructions.md")}\n\n<instruction>`
+        `${buildMemorySaveRules("copilot/teammates/coco/instructions.md")}\n\n<instruction>`
       );
     });
 
     it("carries the same memory save rules in a chat the agent was asked into, so a rule given through an @ is saved as in its own chat (https://github.com/Brevilabs/obsidian-copilot-private/issues/969)", () => {
       expect(prompt).toContain(
-        `${buildMemorySaveRules("copilot/agents/coco/instructions.md")}\n\n<instruction>`
+        `${buildMemorySaveRules("copilot/teammates/coco/instructions.md")}\n\n<instruction>`
       );
     });
   });
@@ -351,11 +351,11 @@ describe("agentSessionPrompt", () => {
         slug: "coco",
         prompt: buildAgentPrompt({
           agent: COCO,
-          folder: "/vault/copilot/agents/coco",
+          folder: "/vault/copilot/teammates/coco",
           others: [MAYA],
           instruction: "You handle houseplant care only.",
           memory: "End with ACORN.",
-          instructionsPath: "copilot/agents/coco/instructions.md",
+          instructionsPath: "copilot/teammates/coco/instructions.md",
           ownChat: { chatsFolder: "/vault/copilot/copilot-conversations" },
         }),
       });
@@ -373,15 +373,20 @@ describe("agentSessionPrompt", () => {
         slug: "coco",
         prompt: buildAgentPrompt({
           agent: COCO,
-          folder: "/vault/copilot/agents/coco",
+          folder: "/vault/copilot/teammates/coco",
           others: [MAYA],
           instruction: "You handle houseplant care only.",
           memory: "End with ACORN.",
-          instructionsPath: "copilot/agents/coco/instructions.md",
+          instructionsPath: "copilot/teammates/coco/instructions.md",
         }),
       });
       expect(loaded?.prompt).toContain("Save a rule to your memory only when");
-      for (const ownChatOnly of ["ask_agent", "check_agent", "draft_agent", "list_chats"]) {
+      for (const ownChatOnly of [
+        "ask_teammate",
+        "check_teammate",
+        "draft_teammate",
+        "list_chats",
+      ]) {
         expect(loaded?.prompt).not.toContain(ownChatOnly);
       }
     });
@@ -397,7 +402,7 @@ describe("agentSessionPrompt", () => {
       expect(loaded?.prompt).toContain(
         "<memory>\n## How to work\n\n\nUntil 2999-12-31: Answer in French.\n2026-11-01 · Asked\n\n</memory>"
       );
-      expect(vault.readText("copilot/agents/coco/MEMORY.md")).toBe(memory);
+      expect(vault.readText("copilot/teammates/coco/MEMORY.md")).toBe(memory);
     });
 
     it("loads a missing MEMORY.md as an empty memory", async () => {
@@ -422,7 +427,7 @@ describe("agentSessionPrompt", () => {
     it("returns null for an agent whose folder was removed outside the plugin (https://github.com/Brevilabs/obsidian-copilot-private/issues/937)", async () => {
       seedAgent(vault, "coco", COCO, "You handle houseplant care only.");
       await store.start();
-      vault.deleteByHand("copilot/agents/coco/instructions.md");
+      vault.deleteByHand("copilot/teammates/coco/instructions.md");
 
       await expect(loadAgentSessionPrompt(store, "coco", "/vault")).resolves.toBeNull();
     });
@@ -436,9 +441,10 @@ describe("agentSessionPrompt", () => {
     });
 
     const SAVE_RULE: TeammatesSentence = "the rule that another agent's rule is not its to save";
-    const ASK: TeammatesSentence = "the ask_agent sentence";
-    const CONTROL: TeammatesSentence = "the check_agent, answer_agent and stop_agent sentence";
-    const DRAFT: TeammatesSentence = "the draft_agent sentences";
+    const ASK: TeammatesSentence = "the ask_teammate sentence";
+    const CONTROL: TeammatesSentence =
+      "the check_teammate, answer_teammate and stop_teammate sentence";
+    const DRAFT: TeammatesSentence = "the draft_teammate sentences";
     const LIST: TeammatesSentence = "the list_chats sentence";
     const SCOPE: TeammatesSentence = "the earlier-chats scope";
     const SAVE: TeammatesSentence = "the save_memory sentence";

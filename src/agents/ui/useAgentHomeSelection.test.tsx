@@ -56,7 +56,7 @@ function renderSelection(
 }
 
 function rememberLastAgent(slug: string | undefined) {
-  setSettings((cur) => ({ agentMode: { ...cur.agentMode, lastCustomAgent: slug } }));
+  setSettings((cur) => ({ agentMode: { ...cur.agentMode, lastTeammate: slug } }));
 }
 
 describe("useAgentHomeSelection", () => {
@@ -399,7 +399,7 @@ describe("useAgentHomeSelection", () => {
 
       rerender({ current: { ...coco, isLanding: false } });
 
-      expect(getSettings().agentMode.lastCustomAgent).toBe("coco");
+      expect(getSettings().agentMode.lastTeammate).toBe("coco");
     });
 
     it("remembers Copilot when a Copilot chat is started", () => {
@@ -409,7 +409,7 @@ describe("useAgentHomeSelection", () => {
 
       rerender({ current: { ...NEW_CHAT, isLanding: false } });
 
-      expect(getSettings().agentMode.lastCustomAgent).toBeUndefined();
+      expect(getSettings().agentMode.lastTeammate).toBeUndefined();
     });
 
     it("remembers nothing when the home opens a saved chat", () => {
@@ -425,7 +425,7 @@ describe("useAgentHomeSelection", () => {
         },
       });
 
-      expect(getSettings().agentMode.lastCustomAgent).toBeUndefined();
+      expect(getSettings().agentMode.lastTeammate).toBeUndefined();
     });
 
     it("selects the agent of a chat already under way", () => {
@@ -477,7 +477,7 @@ describe("useAgentHomeSelection", () => {
       expect(result.current.agents).toEqual([]);
       expect(result.current.selected).toBeNull();
       expect(switchAgent).not.toHaveBeenCalled();
-      expect(getSettings().agentMode.lastCustomAgent).toBe("maya");
+      expect(getSettings().agentMode.lastTeammate).toBe("maya");
     });
   });
 

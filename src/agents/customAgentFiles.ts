@@ -10,7 +10,7 @@ export const FACE_SIZE_PX = 256;
 const FACE_MIME = "image/webp";
 const FACE_QUALITY = 0.9;
 const MAX_SLUG_LENGTH = 48;
-const FALLBACK_SLUG = "agent";
+const FALLBACK_SLUG = "teammate";
 const WINDOWS_DEVICE_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/;
 
 const NEUTRAL_FACE_SVG =

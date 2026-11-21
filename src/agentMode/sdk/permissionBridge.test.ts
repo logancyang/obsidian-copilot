@@ -320,7 +320,7 @@ describe("permissionBridge", () => {
           outcome: { outcome: "selected" as const, optionId: "allow_once" as const },
         }));
         const bridge = new PermissionBridge("session-1", { getPrompter: () => prompter });
-        const memoryPath = "/vault/copilot/agents/coco/MEMORY.md";
+        const memoryPath = "/vault/copilot/teammates/coco/MEMORY.md";
 
         await bridge.canUseTool("Write", { file_path: memoryPath, content: "x" }, ctx);
         await bridge.canUseTool(

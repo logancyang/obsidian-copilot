@@ -150,7 +150,7 @@ export function fileToHistoryItem(
   const backendId =
     typeof rawBackendId === "string" && rawBackendId.trim() ? rawBackendId.trim() : undefined;
   const projectId = coerceProjectId(frontmatter?.projectId);
-  const agent = typeof frontmatter?.agent === "string" ? frontmatter.agent.trim() : "";
+  const agent = typeof frontmatter?.teammate === "string" ? frontmatter.teammate.trim() : "";
   return {
     id: file.path,
     title: extractChatTitle(app, file),

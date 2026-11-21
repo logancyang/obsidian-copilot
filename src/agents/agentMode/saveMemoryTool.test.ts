@@ -22,13 +22,13 @@ const COCO = {
   slug: "coco",
   name: "Coco",
   title: "Houseplant carer",
-  memoryPath: "copilot/agents/coco/MEMORY.md",
+  memoryPath: "copilot/teammates/coco/MEMORY.md",
 } as CustomAgent;
 const MAYA = {
   slug: "maya",
   name: "Maya",
   title: "Product critic",
-  memoryPath: "copilot/agents/maya/MEMORY.md",
+  memoryPath: "copilot/teammates/maya/MEMORY.md",
 } as CustomAgent;
 const WATER = "Water the ferns on Sundays.";
 const SUNDAY_CONTEXT = "2026-11-01 · Asked to remember";

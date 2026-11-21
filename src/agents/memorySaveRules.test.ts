@@ -2,7 +2,7 @@ import { buildMemorySaveRules } from "@/agents/memorySaveRules";
 
 describe("memorySaveRules", () => {
   describe("buildMemorySaveRules()", () => {
-    const rules = buildMemorySaveRules("copilot/agents/coco/instructions.md");
+    const rules = buildMemorySaveRules("copilot/teammates/coco/instructions.md");
 
     it("saves only what the user asks to remember, a standing correction, or where something lives", () => {
       expect(rules).toContain(
@@ -40,7 +40,7 @@ describe("memorySaveRules", () => {
         "If the user asks to change your instruction, do not save a memory and do not edit any file. Tell them only they can edit it, and give them the Open instruction link."
       );
       expect(rules).toContain(
-        "The Open instruction link is [[copilot/agents/coco/instructions.md|Open instruction]]."
+        "The Open instruction link is [[copilot/teammates/coco/instructions.md|Open instruction]]."
       );
     });
 
