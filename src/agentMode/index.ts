@@ -71,7 +71,7 @@ import {
   createAskUserTool,
   createCheckAgentTool,
   createStopAgentTool,
-  relistOnCustomAgentsGateChange,
+  relistOnAgentsChange,
 } from "@/agents/agentMode/askAgentTool";
 import { createDraftAgentTool } from "@/agents/agentMode/draftAgentTool";
 import { createListChatsTool } from "@/agents/agentMode/listChatsTool";
@@ -282,6 +282,7 @@ export function createAgentSessionManager(
   plugin.register(() => hiddenAgentChats.dispose());
   const askingChatsHost = {
     isUnlistedChat: (sessionKey: string) => managerRef?.isUnlistedSession(sessionKey) ?? false,
+    agents: () => customAgents.getAgents(),
   };
   const copilotMcpServer = createCopilotMcpServer(
     (toolName) => isCopilotToolOn(toolName, getSettings(), app),
@@ -339,6 +340,7 @@ export function createAgentSessionManager(
         },
       }),
       createListChatsTool({
+        ...askingChatsHost,
         earlierChats: async (chat) => {
           const manager = requireManager();
           const session = manager.getSessions().find((candidate) => candidate === chat);
@@ -369,7 +371,7 @@ export function createAgentSessionManager(
     ],
     connectorTools
   );
-  plugin.register(relistOnCustomAgentsGateChange(() => copilotMcpServer.notifyToolsChanged()));
+  plugin.register(relistOnAgentsChange(customAgents, () => copilotMcpServer.notifyToolsChanged()));
   const preloader = new AgentModelPreloader(
     app,
     plugin,

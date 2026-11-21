@@ -2,6 +2,7 @@ import { fakeChat, fakeChatView } from "@/agentMode/session/testing/fakeChat";
 import type { ChatStateHost } from "@/agentMode/session/chatExtension";
 import { AGENT_DRAFT_CARD } from "@/agents/agentMode/agentDraftCard";
 import { createDraftAgentTool, DRAFT_AGENT_TOOL_NAME } from "@/agents/agentMode/draftAgentTool";
+import { CHAT_LISTINGS, listingCases, toolHost } from "@/agents/agentMode/testing/toolListings";
 import { CustomAgentStore } from "@/agents/CustomAgentStore";
 import { createFakeAgentVault } from "@/agents/testing/fakeAgentVault";
 import { setCustomAgentsAccess } from "@/agents/testing/customAgentsAccess";
@@ -11,6 +12,7 @@ import { resetSettings } from "@/settings/model";
 jest.mock("@/entitlement");
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/941";
+const SCOPE_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/987";
 const NORA = { name: "Nora", title: "Family logistics", instruction: "You plan pickups." };
 
 function buildTool(
@@ -76,6 +78,37 @@ describe("draftAgentTool", () => {
           })?.name
         ).toBe(DRAFT_AGENT_TOOL_NAME);
       });
+
+      it(`asks it to check the other agents listed for it only if any are, since a Copilot chat is given no list of agents (${SCOPE_ISSUE})`, () => {
+        const listed = buildTool().listedAs?.({ sessionKey: "copilot-chat", backendId: "claude" });
+
+        expect((listed as unknown as { description: string }).description).toContain(
+          "Before the first draft, check the other agents listed for you, if any: if you or one of them already handles the job,"
+        );
+      });
+
+      it.each(
+        listingCases({
+          "a Copilot chat": ["no agent", "only Coco", "Coco and Maya", "Coco, Maya and Leo"],
+          "Coco's own chat": ["no agent", "only Coco", "Coco and Maya", "Coco, Maya and Leo"],
+          "the chat Coco runs when asked": [],
+          "OpenCode's shared folder listing": [
+            "no agent",
+            "only Coco",
+            "Coco and Maya",
+            "Coco, Maya and Leo",
+          ],
+        })
+      )(
+        `$label: it stays in every chat the user sees, with or without agents, since asking for one is how a user gets a first agent (${SCOPE_ISSUE})`,
+        ({ chat, agents, listed }) => {
+          const tool = createDraftAgentTool({ ...toolHost(agents), callerOf: () => null });
+
+          expect(tool.listedAs?.(CHAT_LISTINGS[chat])?.name ?? null).toBe(
+            listed ? DRAFT_AGENT_TOOL_NAME : null
+          );
+        }
+      );
 
       it(`leaves the tool out of an asked agent's hidden chat (${ISSUE})`, () => {
         const tool = buildTool({ unlisted: ["hidden-1"] });

@@ -21,7 +21,7 @@ const DRAFT_AGENT_TOOL: McpToolDefinition = Object.freeze({
   name: DRAFT_AGENT_TOOL_NAME,
   description: `Show the user a draft of a new agent when they ask you to make one or to change the draft you showed. The user reviews it, picks a face and a model, and creates it; you can't create an agent yourself, even if asked, and never write its files.
 
-Before the first draft, check the other agents listed for you: if you or one of them already handles the job, say so and ask whether they want a new one anyway, and call this only after they say yes.
+Before the first draft, check the other agents listed for you, if any: if you or one of them already handles the job, say so and ask whether they want a new one anyway, and call this only after they say yes.
 
 Write the instruction to the new agent in the second person, in the user's language: what it handles, where things live in the vault, how it should answer. Keep the name short.
 

@@ -37,6 +37,7 @@ jest.mock("@/services/obsidianCli/ObsidianCliClient", () => ({
 const COCO = { name: "Coco", title: "Houseplant carer" };
 const MAYA = { name: "Maya", title: "Product critic" };
 const ISSUE_986 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/986";
+const ISSUE_987 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/987";
 const OWN_CHAT = { chatsFolder: "/vault/copilot/copilot-conversations" };
 
 const IDENTITY = "In this chat you are Coco (Houseplant carer), an agent the user made in Copilot.";
@@ -79,9 +80,12 @@ const CODING_AGENTS: Readonly<
   },
 };
 
-function teammatesTools(): HostedTool[] {
+function teammatesTools(store: CustomAgentStore): HostedTool[] {
   const chats = {} as HiddenAgentChats;
-  const host = { isUnlistedChat: (sessionKey: string) => sessionKey === ASKED_CHAT };
+  const host = {
+    isUnlistedChat: (sessionKey: string) => sessionKey === ASKED_CHAT,
+    agents: store.getAgents,
+  };
   return [
     createAskAgentTool(chats, host),
     createCheckAgentTool(chats, host),
@@ -89,16 +93,22 @@ function teammatesTools(): HostedTool[] {
     createAskUserTool(chats, host),
     createStopAgentTool(chats, host),
     createDraftAgentTool({ ...host, callerOf: () => null }),
-    createListChatsTool({ earlierChats: async () => null, vaultBase: () => "/vault" }),
+    createListChatsTool({ ...host, earlierChats: async () => null, vaultBase: () => "/vault" }),
   ];
 }
 
 function chatPrompt(
+  store: CustomAgentStore,
   backendId: keyof typeof CODING_AGENTS,
   sessionKey: string,
-  agentPrompt: string | null
+  agent: { slug: string; prompt: string } | null
 ): string {
-  const promptHints = promptHintsFor(teammatesTools(), () => true, { sessionKey, backendId });
+  const agentPrompt = agent?.prompt ?? null;
+  const promptHints = promptHintsFor(teammatesTools(store), () => true, {
+    sessionKey,
+    backendId,
+    agentSlug: agent?.slug,
+  });
   const mcpServers = [
     { name: "obsidian-copilot", url: "", headers: {}, readOnlyToolNames: [], promptHints },
   ];
@@ -416,22 +426,37 @@ describe("agentSessionPrompt", () => {
     const DRAFT: TeammatesSentence = "the draft_agent sentences";
     const LIST: TeammatesSentence = "the list_chats sentence";
     const SCOPE: TeammatesSentence = "the earlier-chats scope";
+    const ONE_OTHER = ["Maya"];
     const TWO_OTHERS = ["Maya", "Leo"];
     const MATRIX = [
-      { backendId: "claude", chat: "copilot", others: [], lines: [] },
-      { backendId: "opencode", chat: "copilot", others: [], lines: [] },
-      { backendId: "codex", chat: "copilot", others: [], lines: [ASK, CONTROL, DRAFT, LIST] },
-      { backendId: "claude", chat: "copilot", others: TWO_OTHERS, lines: [] },
-      { backendId: "opencode", chat: "copilot", others: TWO_OTHERS, lines: [] },
-      {
-        backendId: "codex",
-        chat: "copilot",
-        others: TWO_OTHERS,
-        lines: [ASK, CONTROL, DRAFT, LIST],
-      },
       { backendId: "claude", chat: "unlicensed", others: TWO_OTHERS, lines: [] },
       { backendId: "opencode", chat: "unlicensed", others: TWO_OTHERS, lines: [] },
       { backendId: "codex", chat: "unlicensed", others: TWO_OTHERS, lines: [] },
+      { backendId: "claude", chat: "copilot", others: [], lines: [] },
+      { backendId: "opencode", chat: "copilot", others: [], lines: [] },
+      { backendId: "codex", chat: "copilot", others: [], lines: [DRAFT] },
+      { backendId: "claude", chat: "copilot", others: ONE_OTHER, lines: [] },
+      { backendId: "opencode", chat: "copilot", others: ONE_OTHER, lines: [] },
+      { backendId: "codex", chat: "copilot", others: ONE_OTHER, lines: [ASK, CONTROL, DRAFT] },
+      { backendId: "claude", chat: "copilot", others: TWO_OTHERS, lines: [] },
+      { backendId: "opencode", chat: "copilot", others: TWO_OTHERS, lines: [] },
+      { backendId: "codex", chat: "copilot", others: TWO_OTHERS, lines: [ASK, CONTROL, DRAFT] },
+      { backendId: "claude", chat: "own", others: [], lines: [LIST, SCOPE] },
+      { backendId: "opencode", chat: "own", others: [], lines: [LIST, SCOPE] },
+      { backendId: "codex", chat: "own", others: [], lines: [LIST, SCOPE, DRAFT] },
+      { backendId: "claude", chat: "own", others: ONE_OTHER, lines: [ASK, SAVE_RULE, LIST, SCOPE] },
+      {
+        backendId: "opencode",
+        chat: "own",
+        others: ONE_OTHER,
+        lines: [ASK, SAVE_RULE, LIST, SCOPE],
+      },
+      {
+        backendId: "codex",
+        chat: "own",
+        others: ONE_OTHER,
+        lines: [ASK, SAVE_RULE, LIST, SCOPE, CONTROL, DRAFT],
+      },
       {
         backendId: "claude",
         chat: "own",
@@ -450,15 +475,12 @@ describe("agentSessionPrompt", () => {
         others: TWO_OTHERS,
         lines: [ASK, SAVE_RULE, LIST, SCOPE, CONTROL, DRAFT],
       },
-      { backendId: "claude", chat: "own", others: [], lines: [LIST, SCOPE] },
-      { backendId: "opencode", chat: "own", others: [], lines: [LIST, SCOPE] },
-      { backendId: "codex", chat: "own", others: [], lines: [LIST, SCOPE, ASK, CONTROL, DRAFT] },
-      { backendId: "claude", chat: "asked", others: TWO_OTHERS, lines: [] },
-      { backendId: "opencode", chat: "asked", others: TWO_OTHERS, lines: [] },
-      { backendId: "codex", chat: "asked", others: TWO_OTHERS, lines: [LIST] },
       { backendId: "claude", chat: "asked", others: [], lines: [] },
       { backendId: "opencode", chat: "asked", others: [], lines: [] },
-      { backendId: "codex", chat: "asked", others: [], lines: [LIST] },
+      { backendId: "codex", chat: "asked", others: [], lines: [] },
+      { backendId: "claude", chat: "asked", others: TWO_OTHERS, lines: [] },
+      { backendId: "opencode", chat: "asked", others: TWO_OTHERS, lines: [] },
+      { backendId: "codex", chat: "asked", others: TWO_OTHERS, lines: [] },
     ] as const;
 
     it.each(
@@ -474,7 +496,7 @@ describe("agentSessionPrompt", () => {
         summary: row.lines.length > 0 ? row.lines.join(", ") : "no Teammates line",
       }))
     )(
-      `on $backendId, gives $label chat with $otherCount other agents one identity, the agent's if it runs one and Obsidian Copilot's otherwise, and each of these Teammates lines exactly once, in this order, and no other: $summary (${ISSUE_986})`,
+      `on $backendId, gives $label chat with $otherCount other agents one identity, the agent's if it runs one and Obsidian Copilot's otherwise, and each of these Teammates lines exactly once, in this order, and no other, naming only the tools it is offered: $summary (${ISSUE_986}, ${ISSUE_987})`,
       async ({ backendId, chat, others, lines }) => {
         if (chat !== "copilot") seedAgent(vault, "coco", COCO, "You handle houseplant care only.");
         for (const name of others) {
@@ -488,9 +510,10 @@ describe("agentSessionPrompt", () => {
             ? null
             : await loadAgentSessionPrompt(store, "coco", "/vault", { asked: chat === "asked" });
         const prompt = chatPrompt(
+          store,
           backendId,
           chat === "asked" ? ASKED_CHAT : "listed-chat",
-          loaded?.prompt ?? null
+          loaded
         );
 
         expect(loaded === null).toBe(chat === "copilot" || chat === "unlicensed");

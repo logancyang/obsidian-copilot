@@ -1,6 +1,11 @@
 import type { AskedConversation } from "@/agentMode/session/AgentSessionIndex";
 import type { ChatStateHost } from "@/agentMode/session/chatExtension";
-import type { HostedTool, McpToolDefinition } from "@/agentMode/session/copilotMcpServer";
+import type {
+  HostedTool,
+  McpToolDefinition,
+  ToolListing,
+} from "@/agentMode/session/copilotMcpServer";
+import type { AskAgentToolHost } from "@/agents/agentMode/askAgentTool";
 import { LIST_CHATS_PROMPT_HINT } from "@/agents/agentSessionPrompt";
 import type { CustomAgent } from "@/agents/CustomAgentStore";
 import { getCustomAgentsGate } from "@/agents/customAgentsGate";
@@ -14,9 +19,8 @@ const UNAVAILABLE_TEXT = "Copilot Teammates isn't available right now. Tell the 
 const MAX_LISTED_CHATS = 20;
 // Small models search the chat folder for a topic after listing and then answer from another agent's chat, so the result itself repeats the scope.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/959
-function otherChats(agent: string | null): string {
-  return `Every other chat note belongs to ${agent ? "another agent or to Copilot" : "one of the user's agents"}: unless the user names it, never search, read or cite it.`;
-}
+const OTHER_CHATS =
+  "Every other chat note belongs to another agent or to Copilot: unless the user names it, never search, read or cite it.";
 
 // Codex's small model took "read a listed note" to need a chat-reading tool it doesn't have, so the result says how.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/959
@@ -40,7 +44,7 @@ export interface EarlierChats {
   agents: readonly Pick<CustomAgent, "slug" | "name">[];
 }
 
-export interface ListChatsToolHost {
+export interface ListChatsToolHost extends AskAgentToolHost {
   earlierChats: (chat: ChatStateHost | null) => Promise<EarlierChats | null>;
   vaultBase: () => string;
 }
@@ -84,16 +88,22 @@ export function createListChatsTool(host: ListChatsToolHost): HostedTool {
   return {
     definition: LIST_CHATS_TOOL,
     turnedOffText: UNAVAILABLE_TEXT,
-    // An asked agent's hidden chat that called list_chats without having it reported a missing Copilot tool, so it gets the tool and the call tells it that chat has no earlier chats.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/959
-    listedAs: () => (getCustomAgentsGate() === "full" ? LIST_CHATS_TOOL : null),
+    // Only an agent's own chat has earlier chats with the user to recall; OpenCode lists a folder's tools for every chat in it, so there it is listed while any agent exists and the call turns the other chats down.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/987
+    listedAs: ({ sessionKey, shared, agentSlug }: ToolListing) =>
+      getCustomAgentsGate() === "full" &&
+      (shared
+        ? host.agents().length > 0
+        : agentSlug !== undefined && !host.isUnlistedChat(sessionKey))
+        ? LIST_CHATS_TOOL
+        : null,
     promptHint: LIST_CHATS_PROMPT_HINT,
     call: async (_args, chat) => {
       if (getCustomAgentsGate() !== "full") return { text: UNAVAILABLE_TEXT, isError: false };
       const caller = await host.earlierChats(chat);
-      if (!caller) {
+      if (!caller?.agent) {
         return {
-          text: `Another agent asked you into this chat, so it has no earlier chats with the user. Say so, and don't call ${LIST_CHATS_TOOL_NAME} again.`,
+          text: `This chat can't list earlier chats. Don't call ${LIST_CHATS_TOOL_NAME} again.`,
           isError: false,
         };
       }
@@ -111,9 +121,9 @@ export function createListChatsTool(host: ListChatsToolHost): HostedTool {
       });
       const ownChats =
         chats.length === 0
-          ? [`You have no earlier chats with the user. ${otherChats(caller.agent)}`]
+          ? [`You have no earlier chats with the user. ${OTHER_CHATS}`]
           : [
-              `Your earlier chats with the user, newest first. ${OPEN_A_NOTE} ${otherChats(caller.agent)}`,
+              `Your earlier chats with the user, newest first. ${OPEN_A_NOTE} ${OTHER_CHATS}`,
               ...lines,
             ];
       const asked = caller.askedConversations
