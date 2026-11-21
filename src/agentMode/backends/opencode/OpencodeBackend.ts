@@ -15,6 +15,7 @@ import { AcpBackend, AcpSpawnDescriptor } from "@/agentMode/acp/types";
 import type { BackendConfigOption, CopilotMode, SessionAgent } from "@/agentMode/session/types";
 import { composeDenyList, getManagedSkills, SkillManager } from "@/agentMode/skills";
 import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
+import { COPILOT_CHAT_PROMPT } from "@/agentMode/session/copilotChatPrompt";
 import { pythonUtf8Env } from "@/agentMode/backends/shared/pythonUtf8Env";
 import {
   buildBuiltinSkillEnv,
@@ -244,7 +245,11 @@ export class OpencodeBackend implements AcpBackend {
       target.entries[customAgentModeId({ slug: agent.slug, auto })] = {
         ...base,
         mode: "primary",
-        system: [base.system, agent.prompt].filter(Boolean).join("\n\n"),
+        // The base entry also tells a Copilot chat it is Copilot, so an agent's entry starts from the shared prompt instead of the base's text.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/986
+        system: [buildAgentSystemPrompt(this.id, this.#deps.app), agent.prompt]
+          .filter(Boolean)
+          .join("\n\n"),
       };
     };
     define(OPENCODE_COPILOT_BUILD_AGENT_ID, false);
@@ -426,7 +431,14 @@ export async function buildOpencodeConfig(
 
   const readOnlyCopilotTools = (await deps.readCopilotReadOnlyToolNames?.()) ?? [];
   const skillManagerReady = SkillManager.hasInstance();
-  const system = buildAgentSystemPrompt(OpencodeBackendDescriptor.id, deps.app);
+  // A Copilot chat runs on these entries, so they carry its part the way an agent's entry carries the agent's.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/986
+  const system = [
+    buildAgentSystemPrompt(OpencodeBackendDescriptor.id, deps.app),
+    COPILOT_CHAT_PROMPT,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 
   if (!skillManagerReady) {
     logInfo(

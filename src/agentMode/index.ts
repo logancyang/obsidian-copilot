@@ -75,7 +75,6 @@ import {
 } from "@/agents/agentMode/askAgentTool";
 import { createDraftAgentTool } from "@/agents/agentMode/draftAgentTool";
 import { createListChatsTool } from "@/agents/agentMode/listChatsTool";
-import { subscribeToCustomAgentsGate } from "@/agents/customAgentsGate";
 import { HiddenAgentChats } from "@/agents/agentMode/hiddenAgentChats";
 import type { CustomAgentStore } from "@/agents/CustomAgentStore";
 import { SkillManager } from "./skills";
@@ -493,9 +492,6 @@ export function createAgentSessionManager(
     }
   };
   subscribeToSystemPromptChange(refreshSystemPromptAffected);
-  // The shared prompt's earlier-chats line follows the custom agents gate, which a stored license reaches only after Agent Chat is created; re-checking on the change keeps the warm Codex and OpenCode probes from being spawned twice at every start.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/959
-  subscribeToCustomAgentsGate(refreshSystemPromptAffected);
   // Codex and OpenCode bake the feedback pointer into their prompt at spawn, so toggling cards must reach a running backend.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
   subscribeToSettingsChange((prev, next) => {

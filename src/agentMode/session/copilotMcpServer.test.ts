@@ -1,6 +1,7 @@
 import {
   createCopilotMcpServer,
   COPILOT_MCP_SERVER_NAME,
+  promptHintsFor,
   SEND_FEEDBACK_TOOL,
   type CopilotMcpServer,
   type HostedTool,
@@ -184,6 +185,27 @@ describe("copilotMcpServer", () => {
       const channel = await server.connect("session-a", "claude", NO_CHAT);
 
       expect(channel.readOnlyToolNames).toEqual(["send_feedback", "peek"]);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/986 gives each session the prompt hints of the tools listed for it", async () => {
+      server.dispose();
+      server = createCopilotMcpServer(
+        () => true,
+        [
+          {
+            ...lookupTool(),
+            definition: { name: "ask" },
+            promptHint: "Ask with ask.",
+            listedAs: ({ sessionKey }) => (sessionKey === "session-a" ? { name: "ask" } : null),
+          },
+        ]
+      );
+
+      const listed = await server.connect("session-a", "codex", NO_CHAT);
+      const notListed = await server.connect("session-b", "codex", NO_CHAT);
+
+      expect(listed.promptHints).toEqual(["Ask with ask."]);
+      expect(notListed.promptHints).toEqual([]);
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/862 names the read-only tools, connected services' included after a refresh, for an agent whose permission rules are fixed when it starts", async () => {
@@ -876,6 +898,30 @@ describe("copilotMcpServer", () => {
       await expect(server.connect("session-a", "claude", NO_CHAT)).rejects.toThrow(
         "The Copilot MCP server is closed."
       );
+    });
+  });
+
+  describe("promptHintsFor()", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/986 returns, in tool order, the hint of each switched-on tool the listing offers, and nothing for a tool without a hint, one the listing leaves out, or one switched off", () => {
+      const tools: HostedTool[] = [
+        { ...lookupTool(), promptHint: "Look things up with lookup." },
+        { ...lookupTool(), definition: { name: "peek" } },
+        {
+          ...lookupTool(),
+          definition: { name: "ask" },
+          promptHint: "Ask with ask.",
+          listedAs: ({ sessionKey }) => (sessionKey === "session-a" ? { name: "ask" } : null),
+        },
+        { ...lookupTool(), definition: { name: "draw" }, promptHint: "Draw with draw." },
+      ];
+      const isToolOn = (toolName: string) => toolName !== "draw";
+
+      expect(
+        promptHintsFor(tools, isToolOn, { sessionKey: "session-a", backendId: "codex" })
+      ).toEqual(["Look things up with lookup.", "Ask with ask."]);
+      expect(
+        promptHintsFor(tools, isToolOn, { sessionKey: "session-b", backendId: "codex" })
+      ).toEqual(["Look things up with lookup."]);
     });
   });
 });

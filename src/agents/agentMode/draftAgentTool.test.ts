@@ -40,6 +40,14 @@ describe("draftAgentTool", () => {
   });
 
   describe("createDraftAgentTool()", () => {
+    describe("promptHint", () => {
+      it("gives a model that can't see tool descriptions the sentences naming draft_agent, when to call it and that it can't create an agent (https://github.com/Brevilabs/obsidian-copilot-private/issues/986)", () => {
+        expect(buildTool().promptHint).toBe(
+          "When the user asks you to make a new agent, draft it with the draft_agent tool from obsidian-copilot, which shows them a card to review and create it. If you or another agent already handles that job, say so and ask before drafting. You can't create an agent yourself."
+        );
+      });
+    });
+
     describe("listedAs()", () => {
       it(`lists the tool for a custom agent's chat, saying in its opening when to call it and that the user creates the agent (${ISSUE})`, () => {
         const listed = buildTool().listedAs?.({ sessionKey: "coco-chat", backendId: "claude" });

@@ -17,11 +17,7 @@ import type {
   ProviderType,
 } from "@/modelManagement";
 import type { Skill } from "@/agentMode/skills";
-import {
-  setDisableBuiltinSystemPrompt,
-  setSelectedPromptTitle,
-  updateCachedSystemPrompts,
-} from "@/system-prompts/state";
+import { setSelectedPromptTitle, updateCachedSystemPrompts } from "@/system-prompts/state";
 import {
   buildOpencodeConfig,
   type GeneratedOpencodeConfig,
@@ -36,7 +32,6 @@ import {
 } from "@/builtinSkills/builtinSkills";
 
 function resetPromptState(): void {
-  setDisableBuiltinSystemPrompt(false);
   setSelectedPromptTitle("");
   updateSetting("defaultSystemPromptTitle", "");
   updateCachedSystemPrompts([]);
@@ -987,11 +982,12 @@ describe("OpencodeBackend", () => {
       expect(cfg.agents.build.permissions).toBeUndefined();
     });
 
-    it("gives both agents the shared product prompt, byte for byte", async () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/986 gives both agents a Copilot chat runs on the shared product prompt byte for byte, then tells it it is Obsidian Copilot", async () => {
       const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
 
-      expect(cfg.agents["copilot-build"].system).toBe(buildAgentSystemPrompt("opencode", APP));
-      expect(cfg.agents.build.system).toBe(buildAgentSystemPrompt("opencode", APP));
+      const copilotChat = `${buildAgentSystemPrompt("opencode", APP)}\n\nYou are Obsidian Copilot.`;
+      expect(cfg.agents["copilot-build"].system).toBe(copilotChat);
+      expect(cfg.agents.build.system).toBe(copilotChat);
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/599 names only the builtin skills enabled for a paid OpenCode user in both agent prompts", async () => {
@@ -1471,9 +1467,10 @@ describe("OpencodeBackend", () => {
         await fs.promises.rm(dir, { recursive: true, force: true });
       });
 
-      it("defines the agent as an ask-first and an Auto OpenCode agent, each with the shared prompt followed by the agent's part, and picks the ask-first one", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/986 defines the agent as an ask-first and an Auto OpenCode agent, each with the shared prompt followed by the agent's part and without Copilot's, and picks the ask-first one", async () => {
         const backend = await spawnedBackend();
         const shared = (await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS)).agents;
+        const sharedPrompt = buildAgentSystemPrompt("opencode", APP);
 
         const mode = await backend.selectAgentMode(COCO, modeOption("copilot-build"));
 
@@ -1486,11 +1483,11 @@ describe("OpencodeBackend", () => {
         expect(agents["copilot-agent-coco/default"]).toEqual({
           ...shared["copilot-build"],
           mode: "primary",
-          system: `${shared["copilot-build"].system}\n\nIn this chat you are Coco.`,
+          system: `${sharedPrompt}\n\nIn this chat you are Coco.`,
         });
         expect(agents["copilot-agent-coco/auto"]).toEqual({
           mode: "primary",
-          system: `${shared.build.system}\n\nIn this chat you are Coco.`,
+          system: `${sharedPrompt}\n\nIn this chat you are Coco.`,
         });
         expect(fs.readdirSync(path.dirname(file))).toEqual(["opencode-agents.json"]);
       });
