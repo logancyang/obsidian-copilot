@@ -1,6 +1,6 @@
 {
   "counts": {
-    "imports": 743,
+    "imports": 741,
     "clientAccess": 151
   },
   "imports": {
@@ -21,11 +21,9 @@
     "src/agentMode/backends/opencode/descriptor.ts": ["@/main"],
     "src/agentMode/backends/opencode/opencodeApprovedRules.ts": ["@/main"],
     "src/agentMode/backends/shared/agentSystemPrompt.ts": [
-      "@/agents/agentSessionPrompt",
       "@/builtinSkills/builtinSkills",
       "@/excalidraw/excalidrawApi",
-      "@/miyo/miyoUtils",
-      "@/system-prompts/state"
+      "@/miyo/miyoUtils"
     ],
     "src/agentMode/backends/shared/builtinSkillEnv.ts": [
       "@/builtinSkills/builtinSkills",

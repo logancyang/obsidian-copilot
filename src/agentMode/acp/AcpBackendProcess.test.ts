@@ -153,6 +153,13 @@ function buildApp(basePath = "/vault"): App {
   } as unknown as App;
 }
 
+const HINTED_SERVER = Object.freeze({
+  name: "obsidian-copilot",
+  url: "http://127.0.0.1:4100/mcp",
+  headers: {},
+  readOnlyToolNames: [],
+});
+
 function buildStubBackend(overrides: Partial<AcpBackend> = {}): AcpBackend {
   return {
     id: "opencode",
@@ -1422,12 +1429,145 @@ describe("AcpBackendProcess", () => {
         });
       });
 
-      it("sends no system prompt for a Copilot chat", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/986 tells a Copilot chat it is Obsidian Copilot on session/new", async () => {
         mockInitializeResult = {
           protocolVersion: 1,
           agentCapabilities: { sessionCapabilities: { systemPrompt: {} } },
         };
         const backend = await startBackend();
+
+        await backend.newSession({ cwd: "/vault" });
+
+        expect(mockNewSession.mock.calls[0][0]).toMatchObject({
+          systemPrompt: {
+            mode: "append",
+            content: [{ type: "text", text: "You are Obsidian Copilot." }],
+          },
+        });
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/986 lets the backend add to a chat's prompt from the agent's part and the tool servers the chat is given, after the agent's part or Copilot's", async () => {
+        mockInitializeResult = {
+          protocolVersion: 1,
+          agentCapabilities: {
+            sessionCapabilities: { systemPrompt: {} },
+            mcpCapabilities: { http: true },
+          },
+        };
+        const extendChatPrompt = jest.fn(
+          ({ mcpServers }: { mcpServers: ReadonlyArray<{ promptHints?: readonly string[] }> }) =>
+            mcpServers.flatMap((server) => server.promptHints ?? []).join(" ") || null
+        );
+        const backend = new AcpBackendProcess(
+          buildApp(),
+          buildStubBackend({ extendChatPrompt }),
+          "1.0.0",
+          buildStubDescriptor()
+        );
+        await backend.start();
+        const mcpServers = [
+          { ...HINTED_SERVER, promptHints: ["Ask with ask.", "Draw with draw."] },
+        ];
+
+        await backend.newSession({ cwd: "/vault", mcpServers });
+        await backend.newSession({
+          cwd: "/vault",
+          mcpServers,
+          agent: { slug: "coco", prompt: "You are Coco." },
+        });
+
+        expect(extendChatPrompt.mock.calls.map(([chat]) => chat)).toEqual([
+          { agentPrompt: null, mcpServers },
+          { agentPrompt: "You are Coco.", mcpServers },
+        ]);
+        expect(
+          mockNewSession.mock.calls.map(
+            ([request]) => (request as { systemPrompt?: unknown }).systemPrompt
+          )
+        ).toEqual([
+          {
+            mode: "append",
+            content: [
+              { type: "text", text: "You are Obsidian Copilot.\n\nAsk with ask. Draw with draw." },
+            ],
+          },
+          {
+            mode: "append",
+            content: [{ type: "text", text: "You are Coco.\n\nAsk with ask. Draw with draw." }],
+          },
+        ]);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/986 sends only Copilot's part for a chat without an agent and only the agent's part for an agent's chat when the backend adds nothing or has no way to add", async () => {
+        mockInitializeResult = {
+          protocolVersion: 1,
+          agentCapabilities: {
+            sessionCapabilities: { systemPrompt: {} },
+            mcpCapabilities: { http: true },
+          },
+        };
+        const mcpServers = [{ ...HINTED_SERVER, promptHints: ["Ask with ask."] }];
+        for (const stub of [
+          buildStubBackend({ extendChatPrompt: () => null }),
+          buildStubBackend(),
+        ]) {
+          mockNewSession.mockClear();
+          const backend = new AcpBackendProcess(buildApp(), stub, "1.0.0", buildStubDescriptor());
+          await backend.start();
+
+          await backend.newSession({ cwd: "/vault", mcpServers });
+          await backend.newSession({
+            cwd: "/vault",
+            mcpServers,
+            agent: { slug: "coco", prompt: "You are Coco." },
+          });
+
+          expect(mockNewSession.mock.calls[0][0]).toMatchObject({
+            systemPrompt: {
+              mode: "append",
+              content: [{ type: "text", text: "You are Obsidian Copilot." }],
+            },
+          });
+          expect(mockNewSession.mock.calls[1][0]).toMatchObject({
+            systemPrompt: { mode: "append", content: [{ type: "text", text: "You are Coco." }] },
+          });
+        }
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/986 hands the backend no tool servers when the agent cannot take Copilot's tools, so a chat is never told of a tool it isn't offered", async () => {
+        mockInitializeResult = {
+          protocolVersion: 1,
+          agentCapabilities: { sessionCapabilities: { systemPrompt: {} } },
+        };
+        const extendChatPrompt = jest.fn(() => null);
+        const backend = new AcpBackendProcess(
+          buildApp(),
+          buildStubBackend({ extendChatPrompt }),
+          "1.0.0",
+          buildStubDescriptor()
+        );
+        await backend.start();
+
+        await backend.newSession({
+          cwd: "/vault",
+          mcpServers: [{ ...HINTED_SERVER, promptHints: ["Ask with ask."] }],
+        });
+
+        expect(extendChatPrompt).toHaveBeenCalledWith({ agentPrompt: null, mcpServers: [] });
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/986 opens a chat without an agent, without Copilot's part or what the backend adds, when the adapter cannot take a system prompt, instead of refusing it", async () => {
+        const backend = new AcpBackendProcess(
+          buildApp(),
+          buildStubBackend({
+            id: "codex",
+            displayName: "Codex",
+            extendChatPrompt: () => "Ask agents with ask_agent.",
+          }),
+          "1.0.0",
+          buildStubDescriptor({ id: "codex", displayName: "Codex" })
+        );
+        await backend.start();
 
         await backend.newSession({ cwd: "/vault" });
 
@@ -1741,6 +1881,31 @@ describe("AcpBackendProcess", () => {
 
         expect(mockResumeSession.mock.calls[0][0]).toMatchObject({
           systemPrompt: { mode: "append", content: [{ type: "text", text: "You are Coco." }] },
+        });
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/986 appends Copilot's part and what the backend adds again when it resumes a chat without an agent", async () => {
+        mockInitializeResult = {
+          protocolVersion: 1,
+          agentCapabilities: { sessionCapabilities: { resume: {}, systemPrompt: {} } },
+        };
+        const backend = new AcpBackendProcess(
+          buildApp(),
+          buildStubBackend({ extendChatPrompt: () => "Ask agents with ask_agent." }),
+          "1.0.0",
+          buildStubDescriptor()
+        );
+        await backend.start();
+
+        await backend.resumeSession({ sessionId: "s1", cwd: "/vault" });
+
+        expect(mockResumeSession.mock.calls[0][0]).toMatchObject({
+          systemPrompt: {
+            mode: "append",
+            content: [
+              { type: "text", text: "You are Obsidian Copilot.\n\nAsk agents with ask_agent." },
+            ],
+          },
         });
       });
 

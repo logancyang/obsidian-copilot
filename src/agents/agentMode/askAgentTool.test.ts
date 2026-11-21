@@ -33,6 +33,9 @@ const CONTROL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/94
 const MAYA = { slug: "maya", name: "Maya", title: "Product critic" } as CustomAgent;
 const LEO = { slug: "leo", name: "Leo", title: "" } as CustomAgent;
 const CHAT = {} as ChatStateHost;
+const HINTS_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/986";
+const CONTROL_HINT =
+  "When the user asks how an agent you asked is doing, check with check_agent; when the user answers its question, pass the answer with answer_agent; when the user gives it a new instruction while it works, send that with ask_agent; when the user tells you to stop it, use stop_agent. All are in obsidian-copilot.";
 
 function buildTool(options: { unlisted?: string[]; asked?: AskAgentResult } = {}) {
   const ask = jest.fn(() => options.asked ?? { kind: "asked" as const, agent: MAYA });
@@ -58,6 +61,12 @@ describe("askAgentTool", () => {
   beforeEach(() => setCustomAgentsAccess("team"));
 
   describe("createAskAgentTool()", () => {
+    it(`gives a model that can't see tool descriptions the sentence naming ask_agent and when to call it (${HINTS_ISSUE})`, () => {
+      expect(buildTool().tool.promptHint).toBe(
+        "When the user's message @-mentions one of the user's agents by name or clearly points to one, ask that agent with the ask_agent tool from obsidian-copilot; never otherwise."
+      );
+    });
+
     it(`lists one definition naming no agent for every chat the user sees, so an agent created, renamed or deleted after an agent listed its tools is asked by its current name (${ISSUE})`, () => {
       const { tool } = buildTool();
 
@@ -214,6 +223,10 @@ describe("askAgentTool", () => {
       };
     }
 
+    it(`gives a model that can't see tool descriptions the one sentence naming check_agent, answer_agent and stop_agent (${HINTS_ISSUE})`, () => {
+      expect(buildAnswer({ kind: "answered", agent: MAYA }).tool.promptHint).toBe(CONTROL_HINT);
+    });
+
     it(`lists the answer tool for the chats that can ask, and leaves it out of an asked agent's own chat (${CONTROL})`, () => {
       const { tool } = buildAnswer({ kind: "answered", agent: MAYA });
 
@@ -267,6 +280,10 @@ describe("askAgentTool", () => {
       return { tool: createAskUserTool({ askUser } as unknown as HiddenAgentChats, HOST), askUser };
     }
 
+    it(`has no prompt hint, since the message that asks the agent already names ask_user (${HINTS_ISSUE})`, () => {
+      expect(buildAskUser("asked").tool.promptHint).toBeUndefined();
+    });
+
     it(`lists the question tool only for an asked agent's own chat, or a folder's shared listing that also reaches it, and never for a chat the user sees (${CONTROL})`, () => {
       const { tool } = buildAskUser("asked");
 
@@ -315,6 +332,10 @@ describe("askAgentTool", () => {
       const check = jest.fn(() => result);
       return { tool: createCheckAgentTool({ check } as unknown as HiddenAgentChats, HOST), check };
     }
+
+    it(`gives a model that can't see tool descriptions the one sentence naming check_agent, answer_agent and stop_agent (${HINTS_ISSUE})`, () => {
+      expect(buildCheck({ kind: "not_asked", agent: MAYA }).tool.promptHint).toBe(CONTROL_HINT);
+    });
 
     it(`lists the check tool for the chats that can ask, says to call it each time the user asks, and leaves it out of an asked agent's own chat (${CONTROL})`, () => {
       const { tool } = buildCheck({ kind: "not_asked", agent: MAYA });
@@ -365,6 +386,10 @@ describe("askAgentTool", () => {
       const stop = jest.fn(() => result);
       return { tool: createStopAgentTool({ stop } as unknown as HiddenAgentChats, HOST), stop };
     }
+
+    it(`gives a model that can't see tool descriptions the one sentence naming check_agent, answer_agent and stop_agent (${HINTS_ISSUE})`, () => {
+      expect(buildStop({ kind: "not_asked", agent: MAYA }).tool.promptHint).toBe(CONTROL_HINT);
+    });
 
     it(`lists the stop tool for the chats that can ask, and leaves it out of an asked agent's own chat (${CONTROL})`, () => {
       const { tool } = buildStop({ kind: "stopped", agent: MAYA });

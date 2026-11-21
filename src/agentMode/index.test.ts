@@ -45,7 +45,7 @@ jest.mock("@/utils/appPaths", () => ({
 }));
 jest.mock("./backends/shared/agentSystemPrompt", () => ({
   buildAgentSystemPrompt: (id: string, app: { plugins?: { getPlugin(id: string): unknown } }) =>
-    `prompt:${id}:${mockCustomAgentsGate}:${JSON.stringify(mockSettings.agentMode.skills.builtinPreferences ?? {})}:${mockSettings.agentMode.offerFeedbackCards}:${mockSettings.enableMiyoSearchSkill}:${mockSettings.enableMiyoDocumentProcessing}:${app.plugins?.getPlugin("obsidian-excalidraw-plugin") != null}:${jest.requireMock<typeof import("@/services/obsidianCli/ObsidianCliClient")>("@/services/obsidianCli/ObsidianCliClient").isObsidianCliEnabled()}`,
+    `prompt:${id}:${JSON.stringify(mockSettings.agentMode.skills.builtinPreferences ?? {})}:${mockSettings.agentMode.offerFeedbackCards}:${mockSettings.enableMiyoSearchSkill}:${mockSettings.enableMiyoDocumentProcessing}:${app.plugins?.getPlugin("obsidian-excalidraw-plugin") != null}:${jest.requireMock<typeof import("@/services/obsidianCli/ObsidianCliClient")>("@/services/obsidianCli/ObsidianCliClient").isObsidianCliEnabled()}`,
 }));
 jest.mock("./backends/shared/builtinSkillEnv", () => ({
   getBuiltinSkillEnvRestartPolicy: () => "none",
@@ -383,24 +383,6 @@ describe("agentMode", () => {
         "system prompt changed"
       );
       expect(reconcile).toHaveBeenCalledTimes(passes);
-    });
-
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/959 re-checks the shared prompt as soon as the custom agents gate changes, so a stored license verified after start doesn't restart the backends at the next agent start", async () => {
-      mockCustomAgentsGate = "pending";
-      createAgentSessionManager({} as App, plugin, customAgents);
-      await mockManager.registerPreload.mock.calls[0][1];
-
-      mockCustomAgentsGate = "full";
-      mockGateListeners.forEach((listener) => listener());
-      expect(mockManager.noteSpawnConfigChanged).toHaveBeenCalledWith(
-        "opencode",
-        "system prompt changed"
-      );
-
-      mockManager.noteSpawnConfigChanged.mockClear();
-      const { beforeBackendStart } = jest.mocked(AgentSessionManager).mock.calls[0][2];
-      await beforeBackendStart!("claude");
-      expect(mockManager.noteSpawnConfigChanged).not.toHaveBeenCalled();
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/787 offers a reload when the Excalidraw plugin is turned on between agent starts, so new chats gain the Excalidraw steering, without re-reconciling skills", async () => {

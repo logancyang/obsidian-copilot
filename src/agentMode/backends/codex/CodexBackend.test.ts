@@ -1,7 +1,6 @@
 import { getSettings, resetSettings, setSettings, updateSetting } from "@/settings/model";
 import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
 import { detectBinary } from "@/utils/detectBinary";
-import { setDisableBuiltinSystemPrompt } from "@/system-prompts/state";
 import { CODEX_QUESTION_CARD_STEERING, CodexBackend } from "./CodexBackend";
 import * as codexVersion from "./codexVersion";
 import type { App } from "obsidian";
@@ -95,22 +94,6 @@ describe("CodexBackend", () => {
         expect(JSON.parse(desc.env.CODEX_CONFIG as string).developer_instructions).toBe(
           buildAgentSystemPrompt("codex", APP, CODEX_QUESTION_CARD_STEERING)
         );
-      });
-
-      it("https://github.com/logancyang/obsidian-copilot/issues/3536 steers Codex to the request_user_input card even when the built-in system prompt is disabled", async () => {
-        setDisableBuiltinSystemPrompt(true);
-        try {
-          const desc = await new CodexBackend(APP).buildSpawnDescriptor({
-            vaultBasePath: "/vault",
-          });
-          const prompt = JSON.parse(desc.env.CODEX_CONFIG as string).developer_instructions;
-
-          expect(prompt).not.toContain("You work inside Obsidian Copilot");
-          expect(prompt).toContain("call the `request_user_input` tool");
-          expect(prompt).toContain("including Default");
-        } finally {
-          setDisableBuiltinSystemPrompt(false);
-        }
       });
 
       it("passes the plugin version to built-in Copilot Plus skills", async () => {
@@ -224,6 +207,43 @@ describe("CodexBackend", () => {
         await expect(
           new CodexBackend(APP).buildSpawnDescriptor({ vaultBasePath: "/vault" })
         ).rejects.toThrow(/Codex isn't set up/);
+      });
+    });
+
+    describe("extendChatPrompt()", () => {
+      const hinted = (...promptHints: string[]) => ({
+        name: "obsidian-copilot",
+        url: "http://127.0.0.1/mcp",
+        headers: {},
+        readOnlyToolNames: [],
+        promptHints,
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/986 tells a chat the prompt hints of the Copilot tools its servers offer it, since Codex finds MCP tools only through its tool search: each hint once, in order", () => {
+        expect(
+          new CodexBackend(APP).extendChatPrompt({
+            agentPrompt: null,
+            mcpServers: [hinted("Ask with ask.", "Check with check.", "Check with check.")],
+          })
+        ).toBe("Ask with ask. Check with check.");
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/986 leaves out a hint the agent's part already says, so no chat is told the same sentence twice", () => {
+        const codex = new CodexBackend(APP);
+
+        expect(
+          codex.extendChatPrompt({
+            agentPrompt: "You are Coco. Recall with recall. Remember rules.",
+            mcpServers: [hinted("Ask with ask.", "Recall with recall.")],
+          })
+        ).toBe("Ask with ask.");
+        expect(
+          codex.extendChatPrompt({
+            agentPrompt: "You are Coco. Recall with recall.",
+            mcpServers: [hinted("Recall with recall.")],
+          })
+        ).toBeNull();
+        expect(codex.extendChatPrompt({ agentPrompt: null, mcpServers: [] })).toBeNull();
       });
     });
 
