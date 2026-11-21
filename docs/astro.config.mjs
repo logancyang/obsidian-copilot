@@ -12,6 +12,7 @@ const sidebar = [
       { label: "Copilot Chat overview", link: "/agent-mode-and-tools/" },
       { label: "Choose an agent", link: "/agent-mode-and-tools/#choose-an-agent" },
       { label: "Skills across agents", link: "/agent-mode-and-tools/#skills-across-agents" },
+      { slug: "copilot-teammates" },
       { slug: "connectors" },
       { slug: "projects" },
       { slug: "context-and-mentions" },
