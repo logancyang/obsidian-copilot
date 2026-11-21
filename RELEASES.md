@@ -1,12 +1,10 @@
 # Release Notes
 
-# v4.1.0 - Copilot Teammates, GPT-6.2 Sol and Astra for Codex
+# v4.1.0 - Copilot Teammates
 
 [![Demo video: Copilot Teammates: The First AI Team Built Into Obsidian](https://images.brevilabs.com/newsletters/copilot-plugin/copilot-teammates/teammates-video-play-7008237f.webp)](https://www.youtube.com/watch?v=Ri4YB0qR-Go)
 
 This is a big one. Copilot Teammates lets you build a small AI team inside Obsidian: an editor for your drafts, a researcher for your sources, a planner for your weekly review. Each teammate has its own instructions and its own memory, and it remembers what you teach it.
-
-Also in this release: Codex users get GPT-6.2 Sol and Astra, you can archive the chat you're reading, and every change an agent makes is marked in the margin so a small edit doesn't slip past you.
 
 ## 🤝 Copilot Teammates
 
