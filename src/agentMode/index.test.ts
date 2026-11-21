@@ -113,7 +113,10 @@ jest.mock("./session/debugSink", () => ({}));
 jest.mock("./backends/shared/ui/AgentBackendHeader", () => ({}));
 jest.mock("./session/useBackendAuthState", () => ({}));
 jest.mock("@/connectors/connectorsEntitlement", () => ({ isConnectorsEnabled: jest.fn() }));
-jest.mock("@/agents/agentSessionPrompt", () => ({ loadAgentSessionPrompt: jest.fn() }));
+jest.mock("@/agents/agentSessionPrompt", () => ({
+  ...jest.requireActual("@/agents/agentSessionPrompt"),
+  loadAgentSessionPrompt: jest.fn(),
+}));
 let mockCustomAgentsGate = "full";
 const mockGateListeners: Array<() => void> = [];
 jest.mock("@/agents/customAgentsGate", () => ({
@@ -807,7 +810,7 @@ describe("agentMode", () => {
       storeListeners.forEach((listener) => listener());
 
       expect(notifyToolsChanged).toHaveBeenCalledTimes(1);
-      expect(askAgent.listedAs?.(copilotChat)).toBe(askAgent.definition);
+      expect(askAgent.listedAs?.(copilotChat)?.name).toBe(askAgent.definition.name);
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/945 offers check_teammate, answer_teammate, stop_teammate and ask_user and hands the profile's delete the asked agents' chats to stop", () => {
@@ -842,7 +845,7 @@ describe("agentMode", () => {
       expect(listedFor("copilot-chat")).not.toBeNull();
       expect(listedFor("hidden-chat")).toBeNull();
       expect((await draftAgent.call(nora, fakeChat())).text).toContain(
-        "Only a chat the user sees can draft an agent"
+        "Only a chat the user sees can draft an AI teammate"
       );
       expect((await draftAgent.call(nora, coco)).text).toContain("Shown to the user as a card");
       expect(coco.readChatState(AGENT_DRAFT_CARD)?.draftedBy).toBe("coco");

@@ -293,7 +293,7 @@ describe("CreateAgentModal", () => {
 
         expect(modal.isOpen).toBe(false);
         expect(onAskCopilot).toHaveBeenCalledWith(
-          "Create a new agent for me and suggest a name for it. Here's what it should do: "
+          "Create a new teammate for me and suggest a name for it. Here's what it should do: "
         );
       });
 
@@ -314,7 +314,7 @@ describe("CreateAgentModal", () => {
         fireEvent.click(screen.getByRole("button", { name: "Ask Copilot" }));
         fireEvent.click(screen.getByRole("button", { name: "Discard" }));
         expect(onAskCopilot).toHaveBeenCalledWith(
-          "Create a new agent named Kai for me. Here's what it should do: "
+          "Create a new teammate named Kai for me. Here's what it should do: "
         );
       });
 

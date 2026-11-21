@@ -956,5 +956,26 @@ describe("copilotMcpServer", () => {
         promptHintsFor(tools, isToolOn, { sessionKey: "session-b", backendId: "codex" })
       ).toEqual(["Look things up with lookup."]);
     });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/999 words a tool's hint for the chat that lists it when the tool gives its hint per listing", () => {
+      const tools: HostedTool[] = [
+        {
+          ...lookupTool(),
+          promptHint: ({ agentSlug }) =>
+            agentSlug ? "Look things up with lookup." : "Lookup is here. Look things up with it.",
+        },
+      ];
+
+      expect(
+        promptHintsFor(tools, () => true, {
+          sessionKey: "a",
+          backendId: "codex",
+          agentSlug: "coco",
+        })
+      ).toEqual(["Look things up with lookup."]);
+      expect(promptHintsFor(tools, () => true, { sessionKey: "b", backendId: "codex" })).toEqual([
+        "Lookup is here. Look things up with it.",
+      ]);
+    });
   });
 });

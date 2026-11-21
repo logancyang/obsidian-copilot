@@ -21,7 +21,7 @@ const MAX_LISTED_CHATS = 20;
 // Small models search the chat folder for a topic after listing and then answer from another agent's chat, so the result itself repeats the scope.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/959
 const OTHER_CHATS =
-  "Every other chat note belongs to another agent or to Copilot: unless the user names it, never search, read or cite it.";
+  "Every other chat note belongs to another AI teammate or to Copilot: unless the user names it, never search, read or cite it.";
 
 // Codex's small model took "read a listed note" to need a chat-reading tool it doesn't have, so the result says how.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/959
@@ -31,7 +31,7 @@ const OPEN_A_NOTE = "Open a listed note with your file or shell tools to see wha
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/980
 const MAX_LISTED_ASKED_CONVERSATIONS = 10;
 const ASKED_CONVERSATIONS =
-  "Conversations another agent or Copilot asked you into on the user's behalf, newest first. Your answers went back to the chat that asked: you know only what each line says, and there's no note to open for them.";
+  "Conversations another AI teammate or Copilot asked you into on the user's behalf, newest first. Your answers went back to the chat that asked: you know only what each line says, and there's no note to open for them.";
 const ENDINGS: Record<NonNullable<AskedConversation["ending"]>, string> = {
   finished: "your latest answer",
   stopped: "the user stopped you before you finished; your answer so far",

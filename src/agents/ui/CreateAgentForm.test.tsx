@@ -471,7 +471,7 @@ describe("CreateAgentForm", () => {
       fireEvent.click(screen.getByRole("button", { name: "Ask Copilot" }));
 
       expect(onAskCopilot).toHaveBeenCalledWith(
-        "Create a new agent for me and suggest a name for it. Here's what it should do: "
+        "Create a new teammate for me and suggest a name for it. Here's what it should do: "
       );
     });
 
@@ -484,7 +484,7 @@ describe("CreateAgentForm", () => {
       fireEvent.click(screen.getByRole("button", { name: "Ask Copilot" }));
 
       expect(onAskCopilot).toHaveBeenCalledWith(
-        "Create a new agent named Kai for me. Here's what it should do: You handle marketing."
+        "Create a new teammate named Kai for me. Here's what it should do: You handle marketing."
       );
     });
 
@@ -496,7 +496,7 @@ describe("CreateAgentForm", () => {
       fireEvent.click(screen.getByRole("button", { name: "Ask Copilot" }));
 
       expect(onAskCopilot).toHaveBeenCalledWith(
-        "Create a new agent for me and suggest a name for it. Here's what it should do: You handle marketing."
+        "Create a new teammate for me and suggest a name for it. Here's what it should do: You handle marketing."
       );
     });
 
@@ -511,7 +511,7 @@ describe("CreateAgentForm", () => {
       fireEvent.click(screen.getByRole("button", { name: "Ask Copilot" }));
 
       expect(onAskCopilot).toHaveBeenCalledWith(
-        "Create a new agent for me and suggest a name for it. Here's what it should do: "
+        "Create a new teammate for me and suggest a name for it. Here's what it should do: "
       );
     });
 

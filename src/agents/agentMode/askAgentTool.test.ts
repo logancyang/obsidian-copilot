@@ -4,6 +4,7 @@ import {
   CHECK_AGENT_TOOL_NAME,
   STOP_AGENT_TOOL_NAME,
 } from "@/agents/agentMode/agentToolCalls";
+import { promptHintsFor } from "@/agentMode/session/copilotMcpServer";
 import {
   ASK_USER_TOOL_NAME,
   createAnswerAgentTool,
@@ -42,6 +43,8 @@ const LEO = { slug: "leo", name: "Leo", title: "" } as CustomAgent;
 const CHAT = {} as ChatStateHost;
 const HINTS_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/986";
 const SCOPE_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/987";
+const DEFINITION_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/999";
+const DEFINITION = "An AI teammate is an AI assistant the user made in Copilot, not a person.";
 const ASKING_TOOLS_LISTED_FOR: Record<ChatKind, AgentSet[]> = {
   "a Copilot chat": ["only Coco", "Coco and Maya", "Coco, Maya and Leo"],
   "Coco's own chat": ["Coco and Maya", "Coco, Maya and Leo"],
@@ -49,7 +52,7 @@ const ASKING_TOOLS_LISTED_FOR: Record<ChatKind, AgentSet[]> = {
   "OpenCode's shared folder listing": ["only Coco", "Coco and Maya", "Coco, Maya and Leo"],
 };
 const CONTROL_HINT =
-  "When the user asks how an agent you asked is doing, check with check_teammate; when the user answers its question, pass the answer with answer_teammate; when the user gives it a new instruction while it works, send that with ask_teammate; when the user tells you to stop it, use stop_teammate. All are in obsidian-copilot.";
+  "When the user asks how an AI teammate you asked is doing, check with check_teammate; when the user answers its question, pass the answer with answer_teammate; when the user gives it a new instruction while it works, send that with ask_teammate; when the user tells you to stop it, use stop_teammate. All are in obsidian-copilot.";
 
 function buildTool(options: { unlisted?: string[]; asked?: AskAgentResult } = {}) {
   const ask = jest.fn(() => options.asked ?? { kind: "asked" as const, agent: MAYA });
@@ -69,7 +72,7 @@ function descriptionFor(
   tool: ReturnType<typeof buildTool>["tool"],
   sessionKey: string
 ): string | null {
-  const listed = tool.listedAs?.({ sessionKey, backendId: "claude" });
+  const listed = tool.listedAs?.({ sessionKey, backendId: "claude", agentSlug: "coco" });
   return listed ? (listed as unknown as { description: string }).description : null;
 }
 
@@ -78,20 +81,42 @@ describe("askAgentTool", () => {
 
   describe("createAskAgentTool()", () => {
     it(`gives a model that can't see tool descriptions the sentence naming ask_teammate and when to call it (${HINTS_ISSUE})`, () => {
-      expect(buildTool().tool.promptHint).toBe(
-        "When the user's message @-mentions one of the user's agents by name or clearly points to one, ask that agent with the ask_teammate tool from obsidian-copilot; never otherwise."
+      expect(
+        promptHintsFor([buildTool().tool], () => true, CHAT_LISTINGS["Coco's own chat"])
+      ).toEqual([
+        "When the user's message @-mentions one of the user's AI teammates by name or clearly points to one, ask that AI teammate with the ask_teammate tool from obsidian-copilot; never otherwise.",
+      ]);
+    });
+
+    it(`opens its description and its hint with what an AI teammate is in a listing that can reach a Copilot chat: a Copilot chat's own, and OpenCode's shared folder listing, which a teammate's own chat in the folder reads too; not in a teammate's own listing, since its prompt says it (${DEFINITION_ISSUE})`, () => {
+      const tool = createAskAgentTool({} as HiddenAgentChats, toolHost("Coco and Maya"));
+      const listedFor = (chat: ChatKind) => ({
+        description: (tool.listedAs?.(CHAT_LISTINGS[chat]) as unknown as { description: string })
+          .description,
+        hint: promptHintsFor([tool], () => true, CHAT_LISTINGS[chat])[0],
+      });
+      const own = listedFor("Coco's own chat");
+
+      expect(listedFor("a Copilot chat")).toEqual({
+        description: `${DEFINITION} ${own.description}`,
+        hint: `${DEFINITION} ${own.hint}`,
+      });
+      expect(own.description).toMatch(/^Ask another AI teammate only when/);
+      expect(own.hint).toMatch(
+        /^When the user's message @-mentions one of the user's AI teammates/
       );
+      expect(listedFor("OpenCode's shared folder listing")).toEqual(listedFor("a Copilot chat"));
     });
 
     it(`lists one definition naming no agent for every chat the user sees, so an agent created, renamed or deleted after an agent listed its tools is asked by its current name (${ISSUE})`, () => {
       const { tool } = buildTool();
 
-      const listed = ["coco-chat", "copilot-chat", "opencode:/vault"].map((sessionKey) =>
-        tool.listedAs?.({ sessionKey, backendId: "opencode" })
+      const listed = Object.values(CHAT_LISTINGS).map((listing) =>
+        JSON.stringify(tool.listedAs?.(listing) ?? null)
       );
 
-      expect(listed).toEqual([tool.definition, tool.definition, tool.definition]);
-      expect(descriptionFor(tool, "coco-chat")).not.toContain("Agents you can ask");
+      expect(tool.listedAs?.(CHAT_LISTINGS["Coco's own chat"])).toBe(tool.definition);
+      expect(listed.filter((text) => /Maya|Leo|you can ask:/.test(text))).toEqual([]);
     });
 
     it(`says when to call it in the opening that OpenCode's catalog shows, then to answer in one line and end the turn (${ISSUE})`, () => {
@@ -110,7 +135,7 @@ describe("askAgentTool", () => {
       const description = descriptionFor(buildTool().tool, "chat-1")!;
 
       expect(description).toContain(
-        "Never call it otherwise, and never for yourself.\n\nWhen the user names an agent without an @, or only describes its job, call this with the name or job they gave: a name no agent has answers with the agents you can ask.\n\nThe agent works in the background,"
+        "Never call it otherwise, and never for yourself.\n\nWhen the user names an AI teammate without an @, or only describes its job, call this with the name or job they gave: a name no AI teammate has answers with the AI teammates you can ask.\n\nThe AI teammate works in the background,"
       );
       expect(description).not.toContain("aren't listed");
     });
@@ -120,7 +145,9 @@ describe("askAgentTool", () => {
       ({ chat, agents, listed }) => {
         const tool = createAskAgentTool({} as HiddenAgentChats, toolHost(agents));
 
-        expect(tool.listedAs?.(CHAT_LISTINGS[chat]) ?? null).toBe(listed ? tool.definition : null);
+        expect(tool.listedAs?.(CHAT_LISTINGS[chat])?.name ?? null).toBe(
+          listed ? ASK_AGENT_TOOL_NAME : null
+        );
       }
     );
 
@@ -161,7 +188,7 @@ describe("askAgentTool", () => {
       const { tool } = buildTool({ asked: { kind: "unknown_agent", roster: [MAYA, LEO] } });
 
       await expect(tool.call({ teammate: "Nora", message: "Hi" }, CHAT)).resolves.toEqual({
-        text: "No agent has that name. Agents you can ask: Maya (Product critic); Leo.",
+        text: "No AI teammate has that name. AI teammates you can ask: Maya (Product critic); Leo.",
         isError: false,
       });
     });
@@ -170,7 +197,7 @@ describe("askAgentTool", () => {
       const { tool } = buildTool({ asked: { kind: "unknown_agent", roster: [] } });
 
       await expect(tool.call({ teammate: "Maya", message: "Hi" }, CHAT)).resolves.toEqual({
-        text: "There are no other agents to ask.",
+        text: "There are no other AI teammates to ask.",
         isError: false,
       });
     });
@@ -288,7 +315,7 @@ describe("askAgentTool", () => {
           CHAT
         )
       ).resolves.toEqual({
-        text: "No agent has that name. Agents you can ask: Maya (Product critic).",
+        text: "No AI teammate has that name. AI teammates you can ask: Maya (Product critic).",
         isError: false,
       });
     });
@@ -376,7 +403,7 @@ describe("askAgentTool", () => {
       await expect(
         buildAskUser("not_from_here").tool.call({ question: "October?" }, CHAT)
       ).resolves.toEqual({
-        text: "Only an agent asked into another agent's chat can use ask_user. Ask the user directly in your reply.",
+        text: "Only an AI teammate asked into another AI teammate's or Copilot's chat can use ask_user. Ask the user directly in your reply.",
         isError: false,
       });
     });
@@ -398,7 +425,7 @@ describe("askAgentTool", () => {
       const listed = tool.listedAs?.({ sessionKey: "chat-1", backendId: "claude" });
 
       expect((listed as unknown as { description: string }).description.slice(0, 120)).toContain(
-        "each time the user asks how an agent you asked is doing"
+        "call it each time the user asks how an AI teammate"
       );
     });
 
@@ -441,14 +468,14 @@ describe("askAgentTool", () => {
     it(`answers a name no agent has with who can be asked, without failing the call (${SCOPE_ISSUE})`, async () => {
       await expect(
         buildCheck({ kind: "unknown_agent", roster: [] }).tool.call({ teammate: "Nora" }, CHAT)
-      ).resolves.toEqual({ text: "There are no other agents to ask.", isError: false });
+      ).resolves.toEqual({ text: "There are no other AI teammates to ask.", isError: false });
     });
 
     it(`turns down a call from an asked agent's own chat, failing it so the chat doesn't show a check (${CONTROL})`, async () => {
       await expect(
         buildCheck({ kind: "not_from_here" }).tool.call({ teammate: "Maya" }, CHAT)
       ).resolves.toEqual({
-        text: "You can't ask another agent from this chat. Don't call check_teammate again.",
+        text: "You can't ask another AI teammate from this chat. Don't call check_teammate again.",
         isError: true,
       });
     });
@@ -491,7 +518,7 @@ describe("askAgentTool", () => {
       await expect(
         buildStop({ kind: "unknown_agent", roster: [LEO] }).tool.call({ teammate: "Nora" }, CHAT)
       ).resolves.toEqual({
-        text: "No agent has that name. Agents you can ask: Leo.",
+        text: "No AI teammate has that name. AI teammates you can ask: Leo.",
         isError: false,
       });
     });
@@ -515,7 +542,7 @@ describe("askAgentTool", () => {
       const { tool } = buildStop({ kind: "not_from_here" });
 
       await expect(tool.call({ teammate: "Maya" }, CHAT)).resolves.toEqual({
-        text: "You can't ask another agent from this chat. Don't call stop_teammate again.",
+        text: "You can't ask another AI teammate from this chat. Don't call stop_teammate again.",
         isError: true,
       });
     });

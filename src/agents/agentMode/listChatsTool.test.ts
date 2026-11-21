@@ -19,7 +19,7 @@ const ASKED_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issue
 const SCOPE_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/987";
 const VAULT = "/Users/me/Vault";
 const SCOPE =
-  "Every other chat note belongs to another agent or to Copilot: unless the user names it, never search, read or cite it.";
+  "Every other chat note belongs to another AI teammate or to Copilot: unless the user names it, never search, read or cite it.";
 
 function chatItem(
   title: string,
@@ -42,7 +42,7 @@ const OTHER_CHATS = [
 ];
 
 const ASKED_HEADER =
-  "Conversations another agent or Copilot asked you into on the user's behalf, newest first. Your answers went back to the chat that asked: you know only what each line says, and there's no note to open for them.";
+  "Conversations another AI teammate or Copilot asked you into on the user's behalf, newest first. Your answers went back to the chat that asked: you know only what each line says, and there's no note to open for them.";
 const REX_CHAT: ChatHistoryItem = {
   ...chatItem("Launch budget review", 16, "rex"),
   backendId: "claude",

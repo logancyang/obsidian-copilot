@@ -148,7 +148,7 @@ export function CreateAgentForm({
     const typedName = typed(name, 0);
     const naming = typedName ? `named ${typedName} for me` : "for me and suggest a name for it";
     onAskCopilot?.(
-      `Create a new agent ${naming}. Here's what it should do: ${typed(instruction, 2)}`
+      `Create a new teammate ${naming}. Here's what it should do: ${typed(instruction, 2)}`
     );
   };
 
