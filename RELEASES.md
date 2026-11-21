@@ -10,12 +10,12 @@ This is a big one. Copilot Teammates lets you build a small AI team inside Obsid
 
 One assistant for everything forgets what you told it, and the rules you give it for one kind of work leak into the rest. Copilot Teammates gives each kind of work its own teammate, with its own instructions and memory.
 
-![Four tiles from Copilot Chat. Create a teammate: Coco's New teammate draft card for Maya, a writing editor. It remembers what you teach it: a Maya remembered card saving that the meal-planning app is for busy parents. Chat with any teammate: the row of teammate faces from Copilot to New. Ask other teammates: a message to @Steve Jobs and @Charlie Munger asking whether to pay a top designer $30k before launch, with Messaged rows for both and Steve Jobs's reply: only if it's the product, not the paint](https://images.brevilabs.com/newsletters/copilot-releases/4.1.0/teammates-bento-326d6b66.png)
+![Four tiles from Copilot Chat. Create a teammate: Coco's New teammate draft card for Maya, a writing editor. It remembers what you teach it: a Maya remembered card saving that the meal-planning app is for busy parents. Chat with any teammate: the row of teammate faces from Copilot to Socrates. Get a second opinion: in Maya's chat, the user tells @Socrates they keep going in circles on a newsletter, and Socrates sends back three questions about what readers would care about](https://images.brevilabs.com/newsletters/copilot-releases/4.1.0/teammates-bento-d97ad211.png)
 
 - **Create a teammate.** Ask Copilot or any teammate for one, like "I need a writing editor called Maya who cuts AI slop from my posts." It drafts the teammate for you to check, then you pick a face and a model and choose **Create**. You can also choose **+** on the start screen.
 - **It remembers.** Correct a teammate or tell it to remember something, and it saves the rule and shows "Maya remembered" in the chat.
 - **Keep work separate.** Your editor's rules stay out of your CPA's work. Instructions and memory are notes in your vault that you can open and edit.
-- **Ask other teammates.** Type `@` and a teammate's name in any chat. That teammate works on it in the background while you keep chatting, and the teammate you're chatting with brings back the answer.
+- **Get a second opinion.** When you're going in circles with one teammate, `@` another one built to think differently, such as one that only asks questions. It works in the background while you keep chatting, and the teammate you're chatting with brings back its answer.
 - **Bring it to every project.** A teammate isn't tied to a project, so the one that knows how you write comes with you.
 
 Copilot Teammates is a preview for Supporters.
