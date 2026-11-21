@@ -14,10 +14,33 @@ language, comment, styling, and code-structure rules.
 ## Import boundaries
 
 ESLint enforces module boundaries in two forms: layer rules
-(`eslint-plugin-boundaries`, e.g. the agent-mode layers in
-`src/agentMode/AGENTS.md`) and path fences (`no-restricted-imports`
+(`eslint-plugin-boundaries`, built from the boxes and edges in the root
+`architecture.json`) and path fences (`no-restricted-imports`
 allowlists, e.g. the gallery/story fence and the `src/components/ui`
 purity fence).
+
+`architecture.json` splits `src/` by where code runs, and each box is named
+after the monorepo module its code belongs in. Three boxes, listed under
+`runsAnywhere`, must run in any shell, the phone app included: `core` (the
+basics everything shares, package `packages/core`), `protocol` (the session
+protocol, `packages/protocol`) and the **client** boxes, `client/chat` and
+`client/features/<name>` (`packages/client`). They import no `obsidian`, no
+Electron, no Node, and no host box, and client code reaches the host only
+through the session protocol or the shell interface. **Host** boxes
+(`host/chat` for the chat engine, `host/backends`, `host/platform` for
+settings and services, and `host/features/<name>`) belong to the Obsidian
+plugin, `apps/obsidian`, and may use all of those. **Quick Chat** is a legacy
+box of its own in the plugin: it runs in Obsidian on desktop and phones,
+stays outside the session protocol, and only the app imports it, so it can be
+deleted as one box.
+
+A feature is two modules with the same name: its client half (screens,
+hooks, and the types and protocol messages both halves share) and its host
+half (stores, tools, prompt sections), which may import its own client half
+and nothing of another feature. Inside the client, the chat UI never imports
+a feature and features never import each other: a feature plugs into slots
+the chat UI defines, so it can be removed by deleting its two folders and its
+registration.
 
 **When a fence rejects an import, fix the structure — never the fence.**
 A rejected import means the file is in the wrong place or the dependency
@@ -38,7 +61,10 @@ points the wrong way. In order of preference:
 Never widen a fence with a per-file exemption (a `SomeComponent$` regex
 carve-out, an extra `!@/...` negation for one module). Each carve-out
 silently redefines what the boundary means, invites the next one, and
-leaves the file somewhere its folder no longer describes. If none of the
+leaves the file somewhere its folder no longer describes. The same holds
+for `architecture.debt.json`: it lists the violations that existed when the
+rules landed and only shrinks; never add an entry to make a new import pass.
+If none of the
 three options above works, the boundary itself is wrong — change the
 boundary deliberately, in its own reviewed change, with the layer rules
 in `src/agentMode/AGENTS.md` updated to match.
