@@ -21,7 +21,7 @@ export const MemorySaveLine: React.FC<MemorySaveLineProps> = ({
   onOpen,
   onOpenInstruction,
 }) => (
-  <div className="tw-group/memory tw-relative tw-my-1 tw-flex tw-items-start tw-gap-2 tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-modifier-hover tw-px-2.5 tw-py-1.5 tw-text-sm tw-text-muted hover:tw-bg-modifier-active-hover">
+  <div className="tw-group/memory tw-relative tw-my-1 tw-flex tw-flex-wrap tw-items-start tw-gap-x-2 tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-modifier-hover tw-px-2.5 tw-py-1.5 tw-text-sm tw-text-muted hover:tw-bg-modifier-active-hover">
     <button
       type="button"
       title={memoryPath}
@@ -38,24 +38,6 @@ export const MemorySaveLine: React.FC<MemorySaveLineProps> = ({
         <div className="tw-text-faint tw-line-through">{replaced}</div>
       )}
       <div className="tw-text-normal">“{rule}”</div>
-      {contradicts === undefined ? null : (
-        <div className="tw-mt-1.5 tw-flex tw-items-start tw-gap-1.5 tw-border-0 tw-border-t tw-border-solid tw-border-border tw-pt-1.5 tw-text-warning">
-          <AlertTriangle aria-hidden="true" className="tw-mt-0.5 tw-size-3.5 tw-shrink-0" />
-          <span>
-            Goes against what {agentName} handles: “{contradicts}” This rule wins for now.{" "}
-            <a
-              href="#"
-              className="tw-pointer-events-auto tw-text-muted tw-underline tw-underline-offset-2 hover:tw-text-normal"
-              onClick={(event) => {
-                event.preventDefault();
-                onOpenInstruction();
-              }}
-            >
-              Open instruction
-            </a>
-          </span>
-        </div>
-      )}
     </div>
     <span
       aria-hidden="true"
@@ -66,5 +48,23 @@ export const MemorySaveLine: React.FC<MemorySaveLineProps> = ({
     >
       Open
     </span>
+    {contradicts === undefined ? null : (
+      <div className="tw-pointer-events-none tw-relative tw-mt-1.5 tw-flex tw-basis-full tw-items-start tw-gap-2 tw-break-words tw-border-0 tw-border-t tw-border-solid tw-border-border tw-pt-1.5 tw-text-warning">
+        <AlertTriangle aria-hidden="true" className="tw-mt-0.5 tw-size-3.5 tw-shrink-0" />
+        <span>
+          Goes against what {agentName} handles: “{contradicts}” This rule wins for now.{" "}
+          <a
+            href="#"
+            className="tw-pointer-events-auto tw-text-muted tw-underline tw-underline-offset-2 hover:tw-text-normal"
+            onClick={(event) => {
+              event.preventDefault();
+              onOpenInstruction();
+            }}
+          >
+            Open instruction
+          </a>
+        </span>
+      </div>
+    )}
   </div>
 );

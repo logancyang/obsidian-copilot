@@ -101,7 +101,7 @@ jest.mock("@/agentMode/ui/AgentTrailView", () => ({
     errorText?: string;
     agentCancelCause?: string;
     fileChanges?: TurnFileChange[];
-    memorySaves?: { anchorId: string | null } | null;
+    memorySaves?: { byCall: ReadonlyMap<string, unknown> } | null;
     onOpenFileChange?: (change: TurnFileChange) => void;
     onContinue?: () => void;
   }) => {
@@ -115,7 +115,9 @@ jest.mock("@/agentMode/ui/AgentTrailView", () => ({
       >
         {timestampMs}
         {memorySaves ? (
-          <span data-testid="agent-trail-memory-anchor">{memorySaves.anchorId}</span>
+          <span data-testid="agent-trail-memory-anchor">
+            {Array.from(memorySaves.byCall.keys()).join(",")}
+          </span>
         ) : null}
         {onContinue ? (
           <button type="button" onClick={onContinue}>
@@ -1010,15 +1012,11 @@ describe("AgentChatMessages", () => {
         expect(container.textContent).not.toContain("Pass the reply on");
       });
 
-      it("shows the rule the asked agent saved under its card, and leaves its MEMORY.md out of the files it changed (https://github.com/Brevilabs/obsidian-copilot-private/issues/969)", async () => {
+      it("shows the rule the asked agent saved under its card beside the files it changed (https://github.com/Brevilabs/obsidian-copilot-private/issues/969)", async () => {
         await setCustomAgentsAccess("team");
         const memoryPath = "copilot/agents/maya/MEMORY.md";
         const saved = {
           ...relayMessage,
-          fileChanges: [
-            ...relayMessage.fileChanges,
-            { ...relayMessage.fileChanges[0], path: memoryPath },
-          ],
           memorySaves: [{ agentName: "Maya", memoryPath, rule: "Flag video length first." }],
         };
 
@@ -1032,7 +1030,6 @@ describe("AgentChatMessages", () => {
         expect(text.indexOf("Message fromMaya")).toBe(0);
         expect(text).toContain("Maya remembered“Flag video length first.”");
         expect(screen.getByRole("button", { name: "Plans/Launch plan.md" })).toBeTruthy();
-        expect(screen.queryByRole("button", { name: memoryPath })).toBeNull();
         expect(screen.getByRole("button", { name: `Open ${memoryPath}` })).toBeTruthy();
       });
 
@@ -1075,23 +1072,23 @@ describe("AgentChatMessages", () => {
       const memorySaves = [
         { agentName: "Coco", memoryPath: MEMORY, rule: "Lead with user value." },
       ];
-      const saveEdit = {
+      const saveCall = {
         kind: "tool_call" as const,
         id: "save",
-        title: "Edit MEMORY.md",
+        title: "save_memory",
         status: "completed" as const,
-        toolKind: "edit" as const,
-        locations: [{ path: MEMORY }],
+        mcpServer: "obsidian-copilot",
+        copilotTools: { calls: [{ name: "save_memory", args: { rule: "Lead with user value." } }] },
       };
 
       afterEach(async () => {
         await setCustomAgentsAccess("free");
       });
 
-      it("hands the trail the saves to show in place of the edit that wrote them (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", async () => {
+      it("hands the trail the saves to show in place of the save_memory call that made them (https://github.com/Brevilabs/obsidian-copilot-private/issues/988)", async () => {
         await setCustomAgentsAccess("team");
 
-        renderMessages([assistantMessage("reply", 1, { parts: [saveEdit], memorySaves })], false);
+        renderMessages([assistantMessage("reply", 1, { parts: [saveCall], memorySaves })], false);
 
         expect(screen.getByTestId("agent-trail-memory-anchor").textContent).toBe("save");
         expect(screen.queryByText("Coco remembered")).toBeNull();
@@ -1110,7 +1107,7 @@ describe("AgentChatMessages", () => {
         expect(text.indexOf("Coco remembered")).toBeLessThan(text.indexOf("Got it."));
       });
 
-      it("leaves MEMORY.md out of the reply's changed files while its saves show, so a save has no Undo (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", async () => {
+      it("lists an edit of MEMORY.md among the reply's changed files, with its diff and Undo, beside the save lines, since only an edit the user approved lands there (https://github.com/Brevilabs/obsidian-copilot-private/issues/988)", async () => {
         await setCustomAgentsAccess("team");
         const fileChanges = [MEMORY, "notes/plan.md"].map((path) => ({
           path,
@@ -1122,12 +1119,12 @@ describe("AgentChatMessages", () => {
         }));
 
         renderMessages(
-          [assistantMessage("reply", 1, { parts: [saveEdit], memorySaves, fileChanges })],
+          [assistantMessage("reply", 1, { parts: [saveCall], memorySaves, fileChanges })],
           false
         );
 
         expect(screen.getByRole("button", { name: "notes/plan.md" })).toBeTruthy();
-        expect(screen.queryByRole("button", { name: MEMORY })).toBeNull();
+        expect(screen.getByRole("button", { name: MEMORY })).toBeTruthy();
       });
     });
   });

@@ -318,7 +318,7 @@ describe("hiddenAgentChats", () => {
         expect(startChat).not.toHaveBeenCalled();
       });
 
-      it(`starts the asked agent's chat with its own instruction, memory and save rules, and the path of its own MEMORY.md that it writes without a card (${ASKED_MEMORY})`, async () => {
+      it(`starts the asked agent's chat with its own instruction, memory and save rules (${ASKED_MEMORY})`, async () => {
         vault.writeByHand("copilot/agents/maya/MEMORY.md", "Flag video length first.");
         const coco = await openChat({ agentSlug: "coco" });
 
@@ -331,7 +331,6 @@ describe("hiddenAgentChats", () => {
         expect(prompt.prompt).toContain("<memory>\nFlag video length first.\n</memory>");
         expect(prompt.prompt).toContain("Save a rule to your memory only when");
         expect(prompt.prompt).not.toContain("ask_agent");
-        expect(prompt.memoryPath).toBe("/vault/copilot/agents/maya/MEMORY.md");
       });
 
       it(`starts the asked agent's chat on its own prompt variant, so a coding agent that stores prompts by agent keeps it apart from the agent's own chat (${ENTRIES})`, async () => {
@@ -443,38 +442,46 @@ describe("hiddenAgentChats", () => {
         expect(relayMessage?.fileChanges).toEqual([PLAN_CHANGE]);
       });
 
-      it(`carries the rule the agent saved or replaced in its own MEMORY.md onto the relayed reply, as its own chat shows it, and names to the asking agent only the files the user sees under the reply (${ASKED_MEMORY})`, async () => {
+      it(`carries the rule the agent saved through save_memory onto the relayed reply, as its own chat shows it, even when the run changed no file (${ASKED_MEMORY}, https://github.com/Brevilabs/obsidian-copilot-private/issues/988)`, async () => {
         const coco = await openChat({ agentSlug: "coco" });
         const maya = await askedAndPrompted(coco, "From now on, flag the budget first.");
-        const memory = {
-          path: "copilot/agents/maya/MEMORY.md",
-          status: "modified" as const,
-          before: "## How to work\n\nFlag video length first.\n2026-11-16 · asked in Coco's chat\n",
-          after:
-            '## How to work\n\nFlag the budget first.\n2026-11-18 · Replaces "Flag video length first." (2026-11-16)\n',
-          additions: 2,
-          deletions: 2,
+        const save = {
+          rule: "Flag the budget first.",
+          replaced: "Flag video length first.",
+          agentName: "Maya",
+          memoryPath: "copilot/agents/maya/MEMORY.md",
         };
-        maya.store.setFileChanges(maya.store.getDisplayMessages().at(-1)!.id, [
-          memory,
-          PLAN_CHANGE,
-        ]);
+        maya.store.setFileChanges(maya.store.getDisplayMessages().at(-1)!.id, [], [save]);
 
         answer(maya, "Noted.");
 
         const relayed = await fake.untilPrompt(sessionIdOf(coco));
         const relayMessage = coco.store.getDisplayMessages().find((m) => m.message === relayed);
-        expect(relayMessage?.memorySaves).toEqual([
-          {
-            agentName: "Maya",
-            memoryPath: "copilot/agents/maya/MEMORY.md",
-            rule: "Flag the budget first.",
-            replaced: "Flag video length first.",
-          },
-        ]);
-        expect(relayMessage?.fileChanges).toEqual([memory, PLAN_CHANGE]);
-        expect(relayed).toContain("Maya changed Plans/Launch plan.md.");
+        expect(relayMessage?.memorySaves).toEqual([save]);
+        expect(relayMessage?.fileChanges).toEqual([]);
         expect(relayed).not.toContain("MEMORY.md");
+      });
+
+      it(`names to the asking agent a direct edit of the asked agent's MEMORY.md like any other changed file (https://github.com/Brevilabs/obsidian-copilot-private/issues/988)`, async () => {
+        const coco = await openChat({ agentSlug: "coco" });
+        const maya = await askedAndPrompted(coco, "Tidy your memory file.");
+        const memory = {
+          path: "copilot/agents/maya/MEMORY.md",
+          status: "modified" as const,
+          before: "## How to work\n\nFlag video length first.\n",
+          after: "## How to work\n",
+          additions: 0,
+          deletions: 2,
+        };
+        maya.store.setFileChanges(maya.store.getDisplayMessages().at(-1)!.id, [memory]);
+
+        answer(maya, "Done.");
+
+        const relayed = await fake.untilPrompt(sessionIdOf(coco));
+        const relayMessage = coco.store.getDisplayMessages().find((m) => m.message === relayed);
+        expect(relayed).toContain("Maya changed copilot/agents/maya/MEMORY.md.");
+        expect(relayMessage?.fileChanges).toEqual([memory]);
+        expect(relayMessage?.memorySaves).toBeUndefined();
       });
 
       it(`carries no saves onto a relayed reply whose run left the agent's memory alone (${ASKED_MEMORY})`, async () => {
@@ -2101,6 +2108,17 @@ describe("hiddenAgentChats", () => {
         ).toBeNull();
         expect(chats.askedChat(coco, { ...run, chat: undefined })).toBeNull();
         expect(chats.askedChat(coco, { ...run, agent: "coco" })).toBeNull();
+      });
+    });
+
+    describe("askedChatOf()", () => {
+      it("gives an asked agent's chat with the chat that asked it, and nothing for a chat no agent was asked into", async () => {
+        const coco = await openChat({ agentSlug: "coco" });
+        const maya = await askedAndPrompted(coco);
+
+        expect(chats.askedChatOf(maya)).toEqual({ session: maya, askedFrom: coco });
+        expect(chats.askedChatOf(coco)).toBeNull();
+        expect(chats.askedChatOf(null)).toBeNull();
       });
     });
 

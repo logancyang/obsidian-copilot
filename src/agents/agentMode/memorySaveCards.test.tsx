@@ -10,6 +10,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { TFile, type App } from "obsidian";
 import React from "react";
 
+const ISSUE_988 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/988";
 const MEMORY = "copilot/agents/coco/MEMORY.md";
 const RULE = "Launch videos lead with user value, not the feature list.";
 const SAVE = { agentName: "Coco", memoryPath: MEMORY, rule: RULE };
@@ -26,6 +27,23 @@ function edit(id: string, path: string, overrides: Partial<ToolCallPart> = {}): 
     toolKind: "edit",
     locations: [{ path }],
     ...overrides,
+  };
+}
+
+function saveCall(id: string, rule: string, call: { code: string } | null = null): ToolCallPart {
+  return {
+    kind: "tool_call",
+    id,
+    title: "save_memory",
+    status: "completed",
+    mcpServer: "obsidian-copilot",
+    copilotTools: {
+      calls: [
+        call
+          ? { name: "save_memory", ...call }
+          : { name: "save_memory", args: { rule, why: "Asked" } },
+      ],
+    },
   };
 }
 
@@ -65,37 +83,53 @@ function fakeApp(openPaths: string[] = []) {
 
 describe("memorySaveCards", () => {
   describe("memorySaveTrail()", () => {
-    it("anchors the saves at the edit of the agent's MEMORY.md, so they stand in for it", () => {
-      const parts = [edit("other", "notes/plan.md"), edit("save", `/vault/${MEMORY}`)];
-
-      expect(memorySaveTrail(reply({ parts, memorySaves: [SAVE] }), "/vault")).toEqual({
-        saves: [SAVE],
-        anchorId: "save",
-      });
-    });
-
-    it("anchors nowhere when the edit that wrote MEMORY.md also edited another note, so that note's edit card stays in the trail (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", () => {
+    it(`places each save at the save_memory call that made it, the last one with its rule after a turned-down try (${ISSUE_988})`, () => {
+      const other = { ...SAVE, rule: "Taxes go to Leo." };
       const parts = [
-        edit("patch", `/vault/${MEMORY}`, {
-          locations: [{ path: `/vault/${MEMORY}` }, { path: "/vault/notes/plan.md" }],
-        }),
+        saveCall("refused", RULE),
+        edit("note", "notes/plan.md"),
+        saveCall("saved", ` ${RULE}\n`),
+        saveCall("other", other.rule),
       ];
 
-      expect(memorySaveTrail(reply({ parts, memorySaves: [SAVE] }), "/vault")).toEqual({
-        saves: [SAVE],
-        anchorId: null,
+      expect(memorySaveTrail(reply({ parts, memorySaves: [SAVE, other] }))).toEqual({
+        saves: [SAVE, other],
+        byCall: new Map([
+          ["saved", [SAVE]],
+          ["other", [other]],
+        ]),
+        unplaced: [],
       });
     });
 
-    it("anchors nowhere for a reply opened from its note, which has no tool calls", () => {
-      expect(memorySaveTrail(reply({ memorySaves: [SAVE] }), "/vault")).toEqual({
+    it(`reads the rule from a save_memory call Codex wrote as code (${ISSUE_988})`, () => {
+      const parts = [saveCall("code", RULE, { code: `save_memory({ rule: "${RULE}" })` })];
+
+      expect(memorySaveTrail(reply({ parts, memorySaves: [SAVE] }))?.byCall).toEqual(
+        new Map([["code", [SAVE]]])
+      );
+    });
+
+    it(`leaves a save from a chat saved before the tool existed unplaced, to be drawn at the top of its reply, since the agent then edited MEMORY.md itself (${ISSUE_988})`, () => {
+      const parts = [edit("other", "notes/plan.md"), edit("save", `/vault/${MEMORY}`)];
+
+      expect(memorySaveTrail(reply({ parts, memorySaves: [SAVE] }))).toEqual({
         saves: [SAVE],
-        anchorId: null,
+        byCall: new Map(),
+        unplaced: [SAVE],
       });
     });
 
-    it("returns nothing for a reply that saved no rule", () => {
-      expect(memorySaveTrail(reply({ parts: [edit("save", MEMORY)] }), "/vault")).toBeNull();
+    it("leaves every save unplaced for a reply opened from its note, which has no tool calls", () => {
+      expect(memorySaveTrail(reply({ memorySaves: [SAVE] }))).toEqual({
+        saves: [SAVE],
+        byCall: new Map(),
+        unplaced: [SAVE],
+      });
+    });
+
+    it(`returns nothing for a reply that saved no rule, even one whose save_memory call was turned down (${ISSUE_988})`, () => {
+      expect(memorySaveTrail(reply({ parts: [saveCall("refused", RULE)] }))).toBeNull();
     });
   });
 
@@ -190,12 +224,27 @@ describe("memorySaveCards", () => {
   });
 
   describe("memorySaveCardKind", () => {
-    it("claims only the edit its message's saves are anchored at", () => {
-      const ctx = { tasks: null, memorySaves: { saves: [SAVE], anchorId: "save" } };
+    it(`claims only the calls a save was placed at, and draws that call's saves in its place (${ISSUE_988})`, () => {
+      const { app } = fakeApp();
+      const memorySaves = { saves: [SAVE], byCall: new Map([["saved", [SAVE]]]), unplaced: [] };
+      const ctx = { tasks: null, memorySaves };
 
-      expect(memorySaveCardKind.place(edit("save", MEMORY), ctx)).toEqual({ joinKey: null });
-      expect(memorySaveCardKind.place(edit("again", MEMORY), ctx)).toBeNull();
-      expect(memorySaveCardKind.place(edit("save", MEMORY), { tasks: null })).toBeNull();
+      expect(memorySaveCardKind.place(saveCall("saved", RULE), ctx)).toEqual({ joinKey: null });
+      expect(memorySaveCardKind.place(saveCall("refused", RULE), ctx)).toBeNull();
+      expect(memorySaveCardKind.place(saveCall("saved", RULE), { tasks: null })).toBeNull();
+      render(
+        <>
+          {memorySaveCardKind.render([saveCall("saved", RULE)], {
+            ...ctx,
+            app,
+            open: false,
+            onToggle: () => {},
+            renderCall: () => null,
+          })}
+        </>
+      );
+      expect(screen.getByText("Coco remembered")).toBeTruthy();
+      expect(screen.getByText(`“${RULE}”`)).toBeTruthy();
     });
   });
 });

@@ -75,6 +75,7 @@ import {
 } from "@/agents/agentMode/askAgentTool";
 import { createDraftAgentTool } from "@/agents/agentMode/draftAgentTool";
 import { createListChatsTool } from "@/agents/agentMode/listChatsTool";
+import { createSaveMemoryTool } from "@/agents/agentMode/saveMemoryTool";
 import { HiddenAgentChats } from "@/agents/agentMode/hiddenAgentChats";
 import type { CustomAgentStore } from "@/agents/CustomAgentStore";
 import { SkillManager } from "./skills";
@@ -358,6 +359,14 @@ export function createAgentSessionManager(
           };
         },
         vaultBase: () => getVaultBase(app) ?? "",
+      }),
+      createSaveMemoryTool({
+        agents: () => customAgents.getAgents(),
+        callerOf: (chat) => {
+          const listed = managerRef?.getSessions().find((session) => session === chat);
+          return listed ? { session: listed, askedFrom: null } : hiddenAgentChats.askedChatOf(chat);
+        },
+        vault: app.vault,
       }),
       ...(connectionManager
         ? [

@@ -419,8 +419,6 @@ export interface AgentMcpServer {
 export interface SessionAgent {
   slug: string;
   prompt: string;
-  name?: string;
-  memoryPath?: string;
   // One agent can run on different prompts in different chats; a backend that keeps an agent's prompt under a name keeps each variant under its own.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/991
   variant?: string;

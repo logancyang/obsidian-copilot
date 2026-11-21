@@ -783,29 +783,21 @@ describe("AgentTrail", () => {
     expect(screen.getByTestId("agent-md").getAttribute("data-miyo-paths")).toBe("v/a.md|v/b.md");
   });
 
-  it("shows a custom agent's saved rule in place of the edit that wrote it, in the turn's order (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", () => {
+  it("shows a custom agent's saved rule in place of the save_memory call that saved it, in the turn's order (https://github.com/Brevilabs/obsidian-copilot-private/issues/988)", () => {
+    const rule = "Launch videos lead with user value.";
     const save = toolCall("save", {
-      vendorToolName: "Edit",
-      toolKind: "edit",
-      title: "Edit MEMORY.md",
-      locations: [{ path: "copilot/agents/coco/MEMORY.md" }],
+      title: "save_memory",
+      mcpServer: "obsidian-copilot",
+      copilotTools: { calls: [{ name: "save_memory", args: { rule } }] },
     });
+    const saved = { agentName: "Coco", memoryPath: "copilot/agents/coco/MEMORY.md", rule };
     const { container } = renderTrail({
       parts: [READ_A, save, text("Reworked the outline.")],
-      memorySaves: {
-        anchorId: "save",
-        saves: [
-          {
-            agentName: "Coco",
-            memoryPath: "copilot/agents/coco/MEMORY.md",
-            rule: "Launch videos lead with user value.",
-          },
-        ],
-      },
+      memorySaves: { saves: [saved], byCall: new Map([["save", [saved]]]), unplaced: [] },
     });
 
     const shown = container.textContent ?? "";
-    expect(shown).not.toContain("MEMORY.md");
+    expect(shown).not.toContain("Save memory");
     expect(shown.indexOf("Coco remembered")).toBeGreaterThan(-1);
     expect(shown.indexOf("Coco remembered")).toBeLessThan(shown.indexOf("Reworked the outline."));
   });

@@ -1,15 +1,14 @@
 import type { CustomAgent, CustomAgentStore } from "@/agents/CustomAgentStore";
 import { getCustomAgentsGate } from "@/agents/customAgentsGate";
-import { MEMORY_FILE_NAME } from "@/agents/customAgentFiles";
+import { localDate } from "@/agents/agentMemoryFile";
 import { buildMemorySaveRules } from "@/agents/memorySaveRules";
+import { withoutEndedRules } from "@/agents/memorySaves";
 import { getEffectiveConversationsFolder } from "@/settings/copilotFolder";
 import { logWarn } from "@/logger";
 
 export interface AgentSessionPrompt {
   slug: string;
   prompt: string;
-  name: string;
-  memoryPath: string;
 }
 
 export interface AgentPromptInput {
@@ -57,11 +56,11 @@ export function buildAgentPrompt({
   return [
     `In this chat you are ${describeAgent(agent)}, an agent the user made in Copilot.`,
     `Your folder is ${folder}. Keep your own files in it, and add nothing else to the vault unless the user asks. Do not read or change other agents' folders.`,
-    `Your instruction is the body of ${folder}/instructions.md, and only the user edits that file. Your memory is ${folder}/MEMORY.md. When your memory contradicts your instruction, follow your memory.`,
+    `Your instruction is the body of ${folder}/instructions.md, and only the user edits that file. Your memory is ${folder}/MEMORY.md. It is your only memory: never save to CLAUDE.md, AGENTS.md or any other memory. When your memory contradicts your instruction, follow your memory.`,
     `Other agents: ${roster}.`,
     ...(ownChat && others.length > 0 ? [ASK_AGENT_PROMPT_HINT, NOT_YOURS_TO_SAVE] : []),
     ...(ownChat ? [recallEarlierChats(ownChat.chatsFolder)] : []),
-    buildMemorySaveRules(`${folder}/${MEMORY_FILE_NAME}`, instructionsPath),
+    buildMemorySaveRules(instructionsPath),
     `<instruction>\n${instruction}\n</instruction>`,
     `<memory>\n${memory}\n</memory>`,
   ].join("\n\n");
@@ -90,18 +89,16 @@ export async function loadAgentSessionPrompt(
   const folder = `${vaultBase}/${agent.folderPath}`;
   return {
     slug,
-    name: agent.name,
     prompt: buildAgentPrompt({
       agent,
       folder,
       others: agents.filter((other) => other !== agent),
       instruction: files.instruction,
-      memory: files.memory,
+      memory: withoutEndedRules(files.memory, localDate(new Date())),
       instructionsPath: agent.instructionsPath,
       ...(asked
         ? {}
         : { ownChat: { chatsFolder: `${vaultBase}/${getEffectiveConversationsFolder()}` } }),
     }),
-    memoryPath: `${vaultBase}/${agent.memoryPath}`,
   };
 }

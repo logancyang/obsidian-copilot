@@ -19,7 +19,7 @@ import type {
 import type { AgentMention } from "@/agents/agentMentions";
 import { formatAgentReply } from "@/agents/agentReply";
 import { loadAgentSessionPrompt } from "@/agents/agentSessionPrompt";
-import { readTurnMemorySaves, type MemorySave } from "@/agents/memorySaves";
+import type { MemorySave } from "@/agents/memorySaves";
 import type { CustomAgent, CustomAgentStore } from "@/agents/CustomAgentStore";
 import { getCustomAgentsGate } from "@/agents/customAgentsGate";
 import { USER_SENDER } from "@/constants";
@@ -87,6 +87,7 @@ interface AskingChat {
 interface HiddenRunEnd {
   reply: string;
   files: readonly TurnFileChange[];
+  memorySaves?: readonly MemorySave[];
   error?: Error;
 }
 
@@ -206,6 +207,15 @@ export class HiddenAgentChats {
     if (!run) return "not_from_here";
     run.question = question;
     return "asked";
+  }
+
+  askedChatOf(
+    chat: ChatStateHost | null
+  ): { session: AgentSession; askedFrom: AgentSession } | null {
+    const hidden = Array.from(this.chats.values()).find(
+      (candidate) => chat !== null && candidate.started === chat
+    );
+    return hidden?.started ? { session: hidden.started, askedFrom: hidden.parent } : null;
   }
 
   answer(chat: ChatStateHost | null, agentName: string, answer: string): AnswerAgentResult {
@@ -531,6 +541,7 @@ export class HiddenAgentChats {
       return {
         reply: run.reply.trim(),
         files: buildChatFileChanges(messages.slice(asked + 1)),
+        memorySaves: messages.slice(asked + 1).flatMap((m) => m.memorySaves ?? []),
         ...(error ? { error } : {}),
       };
     } finally {
@@ -561,15 +572,6 @@ export class HiddenAgentChats {
           }
       );
     }
-    // The asking chat shows the asked agent's save as its own chat does, as a line in place of its MEMORY.md among the changed files, so the asking agent hears only the files the user sees.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/969
-    const memorySaves = readTurnMemorySaves(end.files, {
-      agentName: hidden.agent.name,
-      memoryPath: hidden.agent.memoryPath,
-    });
-    const shown = memorySaves.length
-      ? end.files.filter((change) => change.path !== hidden.agent.memoryPath)
-      : end.files;
     void relay(
       hidden.parent,
       formatAgentReply({
@@ -579,7 +581,7 @@ export class HiddenAgentChats {
         status,
         chat: chatOf(hidden.started),
         reply: end.reply,
-        changed: shown.map((change) => change.path),
+        changed: end.files.map((change) => change.path),
         error: end.error?.message,
         stopped: run.stopped ?? undefined,
         declined: run.declined,
@@ -591,7 +593,7 @@ export class HiddenAgentChats {
           .map((other) => other.agent.name),
       }),
       end.files,
-      memorySaves
+      end.memorySaves
     );
     if (run.stopped !== "agent_deleted") return;
     this.chats.delete(key);
@@ -685,8 +687,11 @@ function attachFiles(
   files: readonly TurnFileChange[],
   memorySaves: readonly MemorySave[]
 ): () => void {
+  // A reply whose agent only saved a rule changed no file but still carries the save's line.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/988
   const attach = () =>
-    files.length === 0 || parent.store.setFileChanges(messageId, [...files], memorySaves);
+    (files.length === 0 && memorySaves.length === 0) ||
+    parent.store.setFileChanges(messageId, [...files], memorySaves);
   if (attach()) return () => {};
   const unsubscribe = parent.subscribe({
     onMessagesChanged: () => {},
