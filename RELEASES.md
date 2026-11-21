@@ -4,21 +4,20 @@
 
 [![Demo video: Copilot Teammates: The First AI Team Built Into Obsidian](https://images.brevilabs.com/newsletters/copilot-plugin/copilot-teammates/teammates-video-play-7008237f.webp)](https://www.youtube.com/watch?v=Ri4YB0qR-Go)
 
-This is a big one. Copilot Teammates lets you build a small AI team inside Obsidian: an editor who cuts AI slop from your posts, a CPA who knows your books, a family helper who knows your kid's schedule. Each teammate has its own instructions and its own memory, and it remembers what you teach it.
+Have you ever brainstormed with an AI and found yourselves going in circles? Sometimes what you need is a second opinion from someone who thinks differently.
+
+Or maybe you keep personal and business notes in the same vault, and you want one AI for your family's schedule and another for your clients, each with its own memory.
+
+That's why we built Copilot Teammates. Each teammate has its own instructions and memory, and you can bring one into any conversation for a fresh pair of eyes. It's out today for Supporters, and for Black Friday, Supporter is 20% off before the price goes back up on December 6.
 
 ## 🤝 Copilot Teammates
-
-One assistant for everything forgets what you told it, and the rules you give it for one kind of work leak into the rest. Copilot Teammates gives each kind of work its own teammate, with its own instructions and memory.
 
 ![Four tiles from Copilot Chat. Create a teammate: Coco's New teammate draft card for Maya, a writing editor. It remembers what you teach it: a Maya remembered card saving that the meal-planning app is for busy parents. Chat with any teammate: the row of teammate faces from Copilot to Socrates. Get a second opinion: in Maya's chat, the user tells @Socrates they keep going in circles on a newsletter, and Socrates sends back three questions about what readers would care about](https://images.brevilabs.com/newsletters/copilot-releases/4.1.0/teammates-bento-d97ad211.png)
 
 - **Create a teammate.** Ask Copilot or any teammate for one, like "I need a writing editor called Maya who cuts AI slop from my posts." It drafts the teammate for you to check, then you pick a face and a model and choose **Create**. You can also choose **+** on the start screen.
-- **It remembers.** Correct a teammate or tell it to remember something, and it saves the rule and shows "Maya remembered" in the chat.
-- **Keep work separate.** Your editor's rules stay out of your CPA's work. Instructions and memory are notes in your vault that you can open and edit.
-- **Get a second opinion.** When you're going in circles with one teammate, `@` another one built to think differently, such as one that only asks questions. It works in the background while you keep chatting, and the teammate you're chatting with brings back its answer.
+- **It remembers.** Correct a teammate or tell it to remember something, and it saves the rule and shows "Maya remembered" in the chat. Instructions and memory are notes in your vault that you can open and edit.
+- **Get a second opinion.** `@` a teammate in any chat, like one that only asks questions. It works in the background while you keep chatting, and the teammate you're chatting with brings back its answer.
 - **Bring it to every project.** A teammate isn't tied to a project, so the one that knows how you write comes with you.
-
-Copilot Teammates is a preview for Supporters.
 
 ## ✨ Enhancements
 
