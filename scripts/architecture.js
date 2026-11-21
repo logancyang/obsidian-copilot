@@ -89,6 +89,12 @@ function importRows(graph) {
   );
 }
 
+function keyName(key, computed) {
+  if (key.type === "Literal") return key.value;
+  return computed ? undefined : key.name;
+}
+
+// The bundler replaces only the static form; process.env[name] stays runtime Node access: https://github.com/Brevilabs/obsidian-copilot-private/issues/993
 function isBuildTimeNodeEnv(identifier) {
   const env = identifier.parent;
   const nodeEnv = env?.parent;
@@ -96,9 +102,11 @@ function isBuildTimeNodeEnv(identifier) {
     identifier.name === "process" &&
     env?.type === "MemberExpression" &&
     env.object === identifier &&
+    !env.computed &&
     env.property.name === "env" &&
     nodeEnv?.type === "MemberExpression" &&
     nodeEnv.object === env &&
+    !nodeEnv.computed &&
     nodeEnv.property.name === "NODE_ENV"
   );
 }
@@ -115,6 +123,17 @@ const noHostAccessInClient = {
   create(context) {
     const report = (node, access) =>
       context.report({ node, messageId: "hostAccess", data: { access } });
+    const reportProperty = (node, name, object) => {
+      if (name === "require" || name === "requireNodeModule") {
+        report(node, `.${name}`);
+      } else if (
+        NODE_GLOBALS.has(name) &&
+        object.type === "Identifier" &&
+        GLOBAL_OBJECTS.has(object.name)
+      ) {
+        report(node, `${object.name}.${name}`);
+      }
+    };
     const reportHostSource = (node) => {
       const source = node.source?.value;
       if (typeof source === "string" && isHostModule(source)) report(node, `import "${source}"`);
@@ -134,16 +153,15 @@ const noHostAccessInClient = {
         if (node.imported.name === "requireNodeModule") report(node, "requireNodeModule");
       },
       MemberExpression(node) {
-        const name = node.computed ? node.property.value : node.property.name;
-        const object = unwrapExpression(node.object);
-        if (name === "require" || name === "requireNodeModule") {
-          report(node, `.${name}`);
-        } else if (
-          NODE_GLOBALS.has(name) &&
-          object.type === "Identifier" &&
-          GLOBAL_OBJECTS.has(object.name)
-        ) {
-          report(node, `${object.name}.${name}`);
+        reportProperty(node, keyName(node.property, node.computed), unwrapExpression(node.object));
+      },
+      VariableDeclarator(node) {
+        if (node.id.type !== "ObjectPattern" || !node.init) return;
+        const object = unwrapExpression(node.init);
+        for (const property of node.id.properties) {
+          if (property.type === "Property") {
+            reportProperty(property, keyName(property.key, property.computed), object);
+          }
         }
       },
       "Program:exit"() {

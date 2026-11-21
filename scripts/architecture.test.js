@@ -243,10 +243,35 @@ describe("architecture", () => {
       ]);
     });
 
+    it(`reports Node globals and require destructured from an object (${ISSUE})`, () => {
+      const code = [
+        "const { process: nodeProcess } = globalThis;",
+        'const { "Buffer": NodeBuffer } = window as any;',
+        "const { require: load } = activeWindow.app;",
+        "const { document } = window;",
+      ].join("\n");
+
+      expect(hostAccessInCode(code).sort()).toEqual([
+        ".require",
+        "globalThis.process",
+        "window.Buffer",
+      ]);
+    });
+
     it("allows process.env.NODE_ENV, which the bundler replaces at build time", () => {
       expect(hostAccessInCode('const production = process.env.NODE_ENV === "production";')).toEqual(
         []
       );
+    });
+
+    it(`reports process.env read with a computed key, which the bundler leaves as runtime access (${ISSUE})`, () => {
+      const code = [
+        'const NODE_ENV = "HOME";',
+        "export const home = process.env[NODE_ENV];",
+        'export const mode = process["env"].NODE_ENV;',
+      ].join("\n");
+
+      expect(hostAccessInCode(code)).toEqual(["process", "process"]);
     });
 
     it("allows a local variable that only shares a Node global's name", () => {
