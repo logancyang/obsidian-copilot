@@ -48,6 +48,7 @@ const { __setRequestUrlImpl: setRequestUrlImpl } = obsidianModule as unknown as 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/582";
 const LOCKED_AGENTS_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/950";
 const MENTION_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/947";
+const UNLOCK_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/1016";
 const NO_AGENTS: readonly CustomAgent[] = [];
 const AGENTS = [COCO, MAYA] as unknown as readonly CustomAgent[];
 
@@ -228,7 +229,7 @@ describe("lockedCustomAgents", () => {
       }
     );
 
-    it(`gives the feature instead of the dialog when the check grants custom_agents (${ISSUE})`, async () => {
+    it(`opens what was clicked, and no dialog, when the click's own check grants custom_agents (${UNLOCK_ISSUE})`, async () => {
       await enterLicenseKey("supporter-key");
       mockSignedClaims(["multi_agent", "custom_agents"]);
       answerLicenseChecks(GRANTED);
@@ -281,11 +282,10 @@ describe("lockedCustomAgents", () => {
       expect(mockOpenUpsell).toHaveBeenCalledTimes(1);
     });
 
-    it(`opens the create dialog by itself once the entitlement turns on after the dialog was shown from + (${ISSUE})`, async () => {
+    it(`opens no create dialog when a license with custom_agents is entered after + showed the dialog (${UNLOCK_ISSUE})`, async () => {
       answerLicenseChecks(REFUSED_403);
       const onUnlocked = jest.fn();
       await openLockedCustomAgents(new App(), "custom_agent_dialog", NO_AGENTS, onUnlocked);
-      expect(onUnlocked).not.toHaveBeenCalled();
 
       setSettings({ plusLicenseKey: "supporter-key" });
       mockSignedClaims(["multi_agent", "custom_agents"]);
@@ -294,37 +294,9 @@ describe("lockedCustomAgents", () => {
       });
       setSettings({ isPaidUser: true });
 
-      expect(onUnlocked).toHaveBeenCalledTimes(1);
-    });
-
-    it(`keeps waiting through license changes that do not grant custom_agents (${ISSUE})`, async () => {
-      answerLicenseChecks(REFUSED_403);
-      const onUnlocked = jest.fn();
-      await openLockedCustomAgents(new App(), "custom_agent_dialog", NO_AGENTS, onUnlocked);
-
-      setSettings({ plusLicenseKey: "plus-key" });
-      mockSignedClaims(["multi_agent"]);
-      await applyEntitlement("plus-entitlement-token");
+      expect(customAgentsGate.getCustomAgentsGate()).toBe("full");
       expect(onUnlocked).not.toHaveBeenCalled();
-
-      mockSignedClaims(["multi_agent", "custom_agents"]);
-      await applyEntitlement("upgraded-entitlement-token");
-      expect(onUnlocked).toHaveBeenCalledTimes(1);
-    });
-
-    it(`opens one create dialog when + showed the dialog several times before the entitlement turned on (${ISSUE})`, async () => {
-      answerLicenseChecks(REFUSED_403);
-      const firstUnlock = jest.fn();
-      const latestUnlock = jest.fn();
-      await openLockedCustomAgents(new App(), "custom_agent_dialog", NO_AGENTS, firstUnlock);
-      await openLockedCustomAgents(new App(), "custom_agent_dialog", NO_AGENTS, latestUnlock);
-
-      setSettings({ plusLicenseKey: "supporter-key" });
-      mockSignedClaims(["multi_agent", "custom_agents"]);
-      await applyEntitlement("license-entitlement-token");
-
-      expect(firstUnlock).not.toHaveBeenCalled();
-      expect(latestUnlock).toHaveBeenCalledTimes(1);
+      expect(mockOpenUpsell).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -416,7 +388,7 @@ describe("lockedCustomAgents", () => {
       expect(mockOpenUpsell).not.toHaveBeenCalled();
     });
 
-    it(`opens the create dialog from the locked + once the license it checks grants custom_agents (${ISSUE})`, async () => {
+    it(`opens the create dialog from the locked + when the license it checks grants custom_agents (${UNLOCK_ISSUE})`, async () => {
       await setCustomAgentsAccess("free");
       mockSignedClaims(["multi_agent", "custom_agents"]);
       answerLicenseChecks(GRANTED);
