@@ -1,5 +1,18 @@
 const fs = require("fs");
 const path = require("path");
+const { isBuiltin } = require("module");
+
+const NODE_GLOBALS = new Set(["process", "Buffer", "__dirname", "__filename", "require", "NodeJS"]);
+const GLOBAL_OBJECTS = new Set(["window", "globalThis", "global", "self", "activeWindow"]);
+const TS_WRAPPERS = new Set(["TSAsExpression", "TSNonNullExpression", "TSTypeAssertion"]);
+
+function unwrapExpression(node) {
+  return TS_WRAPPERS.has(node.type) ? unwrapExpression(node.expression) : node;
+}
+
+function isHostModule(source) {
+  return source === "obsidian" || source === "electron" || isBuiltin(source);
+}
 
 function readJson(root, name) {
   return JSON.parse(fs.readFileSync(path.join(root, name), "utf8"));
@@ -76,10 +89,105 @@ function importRows(graph) {
   );
 }
 
+function keyName(key, computed) {
+  if (key.type === "Literal") return key.value;
+  return computed ? undefined : key.name;
+}
+
+// The bundler replaces only the static form; process.env[name] stays runtime Node access: https://github.com/Brevilabs/obsidian-copilot-private/issues/993
+function isBuildTimeNodeEnv(identifier) {
+  const env = identifier.parent;
+  const nodeEnv = env?.parent;
+  return (
+    identifier.name === "process" &&
+    env?.type === "MemberExpression" &&
+    env.object === identifier &&
+    !env.computed &&
+    env.property.name === "env" &&
+    nodeEnv?.type === "MemberExpression" &&
+    nodeEnv.object === env &&
+    !nodeEnv.computed &&
+    nodeEnv.property.name === "NODE_ENV"
+  );
+}
+
+const noHostAccessInClient = {
+  meta: {
+    type: "problem",
+    schema: [],
+    messages: {
+      hostAccess:
+        "{{access}} reaches Node, Electron or Obsidian, which chat client code cannot use: it must run in any shell. This file is client code in architecture.json. Move the code to the host, or reach it through the session protocol or the shell interface.",
+    },
+  },
+  create(context) {
+    const report = (node, access) =>
+      context.report({ node, messageId: "hostAccess", data: { access } });
+    const reportProperty = (node, name, object) => {
+      if (name === "require" || name === "requireNodeModule") {
+        report(node, `.${name}`);
+      } else if (
+        NODE_GLOBALS.has(name) &&
+        object.type === "Identifier" &&
+        GLOBAL_OBJECTS.has(object.name)
+      ) {
+        report(node, `${object.name}.${name}`);
+      }
+    };
+    const reportHostSource = (node) => {
+      const source = node.source?.value;
+      if (typeof source === "string" && isHostModule(source)) report(node, `import "${source}"`);
+    };
+    return {
+      ImportDeclaration: reportHostSource,
+      ExportNamedDeclaration: reportHostSource,
+      ExportAllDeclaration: reportHostSource,
+      ImportExpression(node) {
+        const source = node.source.type === "Literal" ? node.source.value : null;
+        if (typeof source === "string" && isHostModule(source)) report(node, `import("${source}")`);
+      },
+      TSImportType(node) {
+        if (isHostModule(node.source.value)) report(node, `import("${node.source.value}")`);
+      },
+      ImportSpecifier(node) {
+        if (node.imported.name === "requireNodeModule") report(node, "requireNodeModule");
+      },
+      MemberExpression(node) {
+        reportProperty(node, keyName(node.property, node.computed), unwrapExpression(node.object));
+      },
+      VariableDeclarator(node) {
+        if (node.id.type !== "ObjectPattern" || !node.init) return;
+        const object = unwrapExpression(node.init);
+        for (const property of node.id.properties) {
+          if (property.type === "Property") {
+            reportProperty(property, keyName(property.key, property.computed), object);
+          }
+        }
+      },
+      "Program:exit"() {
+        const globalScope = context.sourceCode.scopeManager.globalScope;
+        const references = [
+          ...globalScope.through,
+          ...[...NODE_GLOBALS].flatMap((name) => globalScope.set.get(name)?.references ?? []),
+        ];
+        const reported = new Set();
+        for (const reference of references) {
+          const { identifier } = reference;
+          if (!NODE_GLOBALS.has(identifier.name) || reported.has(identifier)) continue;
+          if (isBuildTimeNodeEnv(identifier)) continue;
+          reported.add(identifier);
+          report(identifier, identifier.name);
+        }
+      },
+    };
+  },
+};
+
 module.exports = {
   clientBoxes,
   createBoxOf,
   globToRegExp,
   importRows,
   loadArchitecture,
+  noHostAccessInClient,
 };

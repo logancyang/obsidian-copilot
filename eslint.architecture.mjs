@@ -1,6 +1,6 @@
 import architectureModule from "./scripts/architecture.js";
 
-const { importRows, loadArchitecture } = architectureModule;
+const { clientBoxes, importRows, loadArchitecture, noHostAccessInClient } = architectureModule;
 const { graph, debt } = loadArchitecture(import.meta.dirname);
 
 const BACKEND_LAYERS = [
@@ -45,7 +45,24 @@ const debtRules = Object.entries(debt.imports).map(([file, sources]) => ({
   allow: { dependency: { source: sources } },
 }));
 
+const clientAccessRule = "copilot/no-host-access-in-client";
+
+const runsAnywhere = clientBoxes(graph);
+
+const clientAccessConfigs = [
+  ...[...graph.boxes].reverse().map(({ box, files }) => ({
+    files,
+    rules: { [clientAccessRule]: runsAnywhere.has(box) ? "error" : "off" },
+  })),
+  {
+    files: ["**/*.test.{ts,tsx}", "**/__mocks__/**", ...debt.clientAccess],
+    rules: { [clientAccessRule]: "off" },
+  },
+];
+
 export const architecture = {
   elements,
   rules: [...boxRules, ...backendRules, ...debtRules],
+  clientAccessConfigs,
+  lintRules: { "no-host-access-in-client": noHostAccessInClient },
 };
