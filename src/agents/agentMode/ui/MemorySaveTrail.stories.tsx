@@ -58,6 +58,27 @@ const REPLACED_AND_AGAINST: MemorySave[] = [
   },
 ];
 
+const MIYO_QUERY = "launch video structure";
+
+const MIYO_SEARCH: AgentMessagePart = {
+  kind: "tool_call",
+  id: "miyo-run",
+  title: "miyo_search",
+  status: "completed",
+  mcpServer: "obsidian-copilot",
+  vendorToolName: "miyo_search",
+  input: { query: MIYO_QUERY },
+  copilotTools: { calls: [{ name: "miyo_search", args: { query: MIYO_QUERY } }] },
+  output: [
+    {
+      type: "text",
+      text: JSON.stringify({
+        results: [{ path: "Launch/4.0.20 video script.md" }, { path: "Launch/Video notes.md" }],
+      }),
+    },
+  ],
+};
+
 const TrailWithSave: React.FC<{ parts: AgentMessagePart[]; memorySaves: MemorySaveTrail }> = ({
   parts,
   memorySaves,
@@ -104,6 +125,21 @@ export const ReplacedAndAgainstTheInstruction: StoryObj<AgentTrailProps> = {
         REPLACED_AND_AGAINST,
         "You shipped 4.0.20 on Tuesday and talked to two users. October's books still aren't reconciled."
       )}
+      memorySaves={trailOf(REPLACED_AND_AGAINST)}
+    />
+  ),
+};
+
+export const BesideAMiyoSearch: StoryObj<AgentTrailProps> = {
+  render: () => (
+    <TrailWithSave
+      parts={[
+        MIYO_SEARCH,
+        ...turn(
+          REPLACED_AND_AGAINST,
+          "Your last two scripts opened on the feature list. I reworked this one to open on the user's question."
+        ),
+      ]}
       memorySaves={trailOf(REPLACED_AND_AGAINST)}
     />
   ),
