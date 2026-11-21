@@ -8,15 +8,15 @@ This is a big one. Copilot Teammates lets you build a small AI team inside Obsid
 
 ## 🤝 Copilot Teammates
 
-One assistant for everything has two problems. It forgets what you told it, so you repeat the same rule in every new chat. And the rules you give it for one kind of work spill into another, so the way you like blog posts written shows up in your weekly plan.
+One assistant for everything forgets what you told it, and the rules you give it for one kind of work leak into the rest. Copilot Teammates gives each kind of work its own teammate, with its own instructions and memory.
 
-Copilot Teammates gives each kind of work its own teammate. Make one from the start screen: give it a name, a face and a model, and write in your own words what it handles. Pick its face to start a chat with it. A teammate isn't tied to a project, so the one that knows how you write comes with you from one project to the next.
+- **Make a teammate.** Choose **+** on the start screen, give it a name, a face and a model, and say in your own words what it handles. Or ask Copilot to draft one for you.
+- **Teach it once.** Correct a teammate or tell it to remember something, and it saves the rule and shows "Maya remembered" in the chat.
+- **Keep work separate.** Your editor's rules stay out of your planner's work. Instructions and memory are notes in your vault that you can open and edit.
+- **Get a second opinion.** Type `@Maya` with a question and Maya works on it in the background while you keep chatting. The answer comes back unsoftened, because a teammate with a different job pushes back.
+- **Bring it to every project.** A teammate isn't tied to a project, so the one that knows how you write comes with you.
 
-Teach a teammate once. When you correct it or tell it to remember something, it saves the rule to its own memory and shows "Maya remembered" in the chat, so you see exactly what it kept. Each teammate has its own memory, so your editor's rules stay out of your planner's work. Instructions and memory are plain notes in your vault that you can open and edit.
-
-Get a second opinion without leaving your chat. Type `@Maya` with a question and Maya works on it in the background while you keep talking. When Maya is done, the teammate you're chatting with brings the answer back without softening it. An assistant checking its own work misses things. A teammate with a different job pushes back. You can ask several at once, like `@Maya @Leo does the launch budget hold up?`
-
-Copilot Teammates is a preview for Supporters. Choose **+** on the start screen to make your first teammate, or ask Copilot to draft one for you.
+Copilot Teammates is a preview for Supporters.
 
 ## ✨ Enhancements
 
