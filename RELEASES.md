@@ -1,5 +1,57 @@
 # Release Notes
 
+# v4.1.0 - Copilot Teammates, GPT-6.2 Sol and Astra for Codex
+
+[![Demo video: Copilot Teammates: The First AI Team Built Into Obsidian](https://images.brevilabs.com/newsletters/copilot-plugin/copilot-teammates/teammates-video-play-7008237f.webp)](https://www.youtube.com/watch?v=Ri4YB0qR-Go)
+
+This is a big one. Copilot Teammates lets you build a small AI team inside Obsidian: an editor for your drafts, a researcher for your sources, a planner for your weekly review. Each teammate has its own instructions and its own memory, and it remembers what you teach it.
+
+Also in this release: Codex users get GPT-6.2 Sol and Astra, you can archive the chat you're reading, and every change an agent makes is marked in the margin so a small edit doesn't slip past you.
+
+## 🤝 Copilot Teammates
+
+One assistant for everything has two problems. It forgets what you told it, so you repeat the same rule in every new chat. And the rules you give it for one kind of work spill into another, so the way you like blog posts written shows up in your weekly plan.
+
+Copilot Teammates gives each kind of work its own teammate. Make one from the start screen: give it a name, a face and a model, and write in your own words what it handles. Pick its face to start a chat with it. A teammate isn't tied to a project, so the one that knows how you write comes with you from one project to the next.
+
+Teach a teammate once. When you correct it or tell it to remember something, it saves the rule to its own memory and shows "Maya remembered" in the chat, so you see exactly what it kept. Each teammate has its own memory, so your editor's rules stay out of your planner's work. Instructions and memory are plain notes in your vault that you can open and edit.
+
+Get a second opinion without leaving your chat. Type `@Maya` with a question and Maya works on it in the background while you keep talking. When Maya is done, the teammate you're chatting with brings the answer back without softening it. An assistant checking its own work misses things. A teammate with a different job pushes back. You can ask several at once, like `@Maya @Leo does the launch budget hold up?`
+
+Copilot Teammates is a preview for Supporters. Choose **+** on the start screen to make your first teammate, or ask Copilot to draft one for you.
+
+## ✨ Enhancements
+
+- Codex users can pick OpenAI's GPT-6.2 Sol and GPT-6.2 Astra, with effort from Low to Ultra. Turn them on in Codex's settings tab. ([#4488](https://github.com/logancyang/obsidian-copilot/pull/4488), @zeroliu)
+- Archive the chat you're reading from **More actions**. An archived chat says so at the top, with **Unarchive** one click away. ([#4506](https://github.com/logancyang/obsidian-copilot/pull/4506), @zeroliu)
+- Small edits no longer slip past you. Every change an agent makes gets a bar in the margin of its diff, so a one-letter edit is easy to spot. ([#4372](https://github.com/logancyang/obsidian-copilot/pull/4372), @zeroliu)
+- Drag a folder from the file explorer into the chat to point the agent at it. Folders you add with **Add context** now reach the agent too. ([#4367](https://github.com/logancyang/obsidian-copilot/pull/4367), @zeroliu)
+- A note you mention with `@` or `[[` shows once, in your message, instead of also as a badge above it. Those menus also stop suggesting Copilot's own files, such as saved chats and commands. ([#4375](https://github.com/logancyang/obsidian-copilot/pull/4375), [#4458](https://github.com/logancyang/obsidian-copilot/pull/4458), @zeroliu)
+- Text you select in a note stays highlighted while you type in the chat, so you can see what you attached. ([#4553](https://github.com/logancyang/obsidian-copilot/pull/4553), @zeroliu)
+- File cards in a chat show the file's name instead of its full path, so the name isn't cut off in a narrow pane. ([#4554](https://github.com/logancyang/obsidian-copilot/pull/4554), @zeroliu)
+- Answering several questions from an agent takes half the clicks. Picking an answer to a pick-one question moves straight to the next. ([#4524](https://github.com/logancyang/obsidian-copilot/pull/4524), @zeroliu)
+- Claude can publish claude.ai artifacts and upload to Claude Docs from Copilot, as it does in the terminal. It asks your permission first. ([#4421](https://github.com/logancyang/obsidian-copilot/pull/4421), @zeroliu)
+- Podwise joins **Browse connectors**, and custom connectors that use a browser login offer **Log in** instead of asking for an API key. ([#4366](https://github.com/logancyang/obsidian-copilot/pull/4366), [#4418](https://github.com/logancyang/obsidian-copilot/pull/4418), @zeroliu)
+
+## 🛠️ Bug Fixes
+
+- Approving a Claude plan goes back to the mode you were working in, or **Auto** if the chat started in **Plan**, instead of switching to **Safe**. ([#4444](https://github.com/logancyang/obsidian-copilot/pull/4444), @zeroliu)
+- After you send your first message from the start screen, the cursor stays in the message box so you can keep typing. ([#4595](https://github.com/logancyang/obsidian-copilot/pull/4595), @zeroliu)
+- Copilot offers to report a failed reply only when the Copilot team can fix it. Errors from your model provider, your agent's own tools or a connected service show alone. ([#4485](https://github.com/logancyang/obsidian-copilot/pull/4485), @zeroliu)
+
+## ⚠️ Compatibility Notes
+
+- Agent Chat is now called **Copilot Chat** in its tab, the ribbon and the command palette. Your hotkeys keep working.
+- `@claude`, `@codex` and `@opencode`, which sent one message to several agents at once, are removed. To get another view on your work, `@` a teammate.
+- If Copilot installed Codex for you, it updates to 2.7.0 the next time the plugin loads. ([#4488](https://github.com/logancyang/obsidian-copilot/pull/4488), @zeroliu)
+
+## 🧰 Troubleshoot
+
+- If models are missing, navigate to Copilot settings -> Models tab and click "Refresh Built-in Models".
+- Please report any issue you see in the member channel!
+
+---
+
 # v4.0.20 - Project Files tab, continue a chat from any reply, approved rules
 
 [![Demo video: Obsidian Copilot 4.0.20: Project Files, Branch Any Chat](https://images.brevilabs.com/newsletters/copilot-releases/4.0.20/github-thumbnail-97d4e013.png)](https://youtube.com/shorts/4EaHfVt2PpM)
