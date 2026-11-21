@@ -548,7 +548,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
     const agentReady = this.canUseAgentView();
     this.ribbonIconEl = this.addRibbonIcon(
       agentReady ? COPILOT_AGENT_ICON_ID : "message-square",
-      agentReady ? "Open Copilot Agent Chat" : "Open Copilot Chat",
+      agentReady ? "Open Copilot Chat" : "Open Copilot Quick Chat",
       () => (this.canUseAgentView() ? this.activateAgentView() : this.activateView())
     );
 
@@ -1026,7 +1026,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
       await this.agentSessionManager?.addContextNoteToActiveChat(note);
     } catch (error) {
       logError("Failed to add a note to Agent Chat.", error);
-      new Notice("Could not add the note to Agent Chat. Check the Copilot log.");
+      new Notice("Could not add the note to the chat. Check the Copilot log.");
     }
   }
 
@@ -1104,11 +1104,11 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
 
   private requireAgentView(): AgentSessionManager | null {
     if (!isDesktopRuntime()) {
-      new Notice("Agent Chat is not available on mobile.");
+      new Notice("Copilot Chat is not available on mobile.");
       return null;
     }
     if (!this.agentSessionManager) {
-      new Notice("Agent Chat is not initialized.");
+      new Notice("Copilot Chat is not initialized.");
       return null;
     }
     return this.agentSessionManager;

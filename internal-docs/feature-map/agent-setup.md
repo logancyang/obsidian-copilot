@@ -1,10 +1,10 @@
 # Agent setup
 
-Choosing and installing an agent, signing in, and its defaults: the `Select your agent` panel in Agent Chat and the Agents section of Copilot settings.
+Choosing and installing an agent, signing in, and its defaults: the `Select your agent` panel in the chat and the Agents section of Copilot settings.
 
 ## Sub-features
 
-- setup-select: when the default agent cannot start and no chat is open, Agent Chat shows `Select your agent`: each agent with a line on what it runs, a `Recommended` or status badge such as `Installed`, `Update required`, or `Sign in required`, then `Start chat` or `Configure`.
+- setup-select: when the default agent cannot start and no chat is open, the chat shows `Select your agent`: each agent with a line on what it runs, a `Recommended` or status badge such as `Installed`, `Update required`, or `Sign in required`, then `Start chat` or `Configure`.
 - setup-status: each agent's tab in Settings shows its status, such as `Ready`, the path it runs from, which service it sends requests to, and `Configure`.
 - setup-configure: `Configure <agent>` sets up the installation. OpenCode and Codex offer `Managed by Copilot` (`Download & install`, `Update`, `Reinstall & use managed`, `Uninstall`) or `My own installation` (`Auto-detect`, `Apply`); Claude offers `Auto-detect` and the `Install Claude Code` command.
 - setup-sign-in: under Authentication, `Sign in with your browser` or `Sign in using a terminal instead`; once signed in, `Signed in as <account>` and `Sign out`.
@@ -18,12 +18,12 @@ Choosing and installing an agent, signing in, and its defaults: the `Select your
 ## How to get to it
 
 - Settings → Copilot → Basic → Agents: `Default agent` and `Notification`, then a tab per agent (OpenCode, Claude, Codex) with its status, `Configure`, defaults, models, and options. Claude's, OpenCode's, and Codex's tabs also offer `Edit approved rules`.
-- Agent Chat shows `Select your agent` when the default agent cannot start and no chat is open.
+- Copilot Chat shows `Select your agent` when the default agent cannot start and no chat is open.
 - `Install <agent>`, `Configure <agent>`, `Update`, and `Sign in` on a [status card](status-and-error-cards.md).
 
 ## Driving it
 
-- Select: set `Default agent` to an agent that is not set up and close every chat tab. Agent Chat shows `Select your agent` with OpenCode (`Recommended`), Claude (`Installed`), and Codex. With the agent that is not set up picked, it reads "<agent> isn't set up on this machine yet." and offers `Configure`.
+- Select: set `Default agent` to an agent that is not set up and close every chat tab. The chat shows `Select your agent` with OpenCode (`Recommended`), Claude (`Installed`), and Codex. With the agent that is not set up picked, it reads "<agent> isn't set up on this machine yet." and offers `Configure`.
 - Start: pick Claude and choose `Start chat`. A new chat opens on Claude, and `Default agent` in Settings reads Claude.
 - Status: open Settings → Claude. It shows `Ready`, the path to `claude`, "Sends requests to: Anthropic", and `Configure`.
 - Configure, managed agent: in `Select your agent`, pick Codex and choose `Configure`. `Configure Codex` shows its status, `Managed by Copilot` with Platform, Version, Location, and its install action. `My own installation` shows `Auto-detect` and `Apply`. `Done` closes it.

@@ -1,19 +1,19 @@
-# Instructions for Agent Chat and Quick Chat
+# Instructions for Copilot Chat and Quick Chat
 
 Instructions are rules Copilot should keep following, such as your writing style, folder conventions, preferred formats, and safety boundaries.
 
-Agent Chat and Quick Chat both use the vault-root `AGENTS.md` for your custom instructions.
+Copilot Chat and Quick Chat both use the vault-root `AGENTS.md` for your custom instructions.
 
-- **Agent Chat** reads it when starting a session with OpenCode, Claude, or Codex.
+- **Copilot Chat** reads it when starting a chat with OpenCode, Claude, or Codex.
 - **Quick Chat** reads the latest saved file for each request on desktop and mobile, unless you explicitly select a saved system prompt.
 
-Agent Chat's built-in guidance covers vault context, Obsidian links and tool routing. The selected agent decides how much searching and planning the task needs, and can report unavailable tools or access honestly.
+Copilot Chat's built-in guidance covers vault context, Obsidian links and tool routing. The selected agent decides how much searching and planning the task needs, and can report unavailable tools or access honestly.
 
 ## Choose the right instruction tool
 
 | Use                          | Best for                                                      |
 | ---------------------------- | ------------------------------------------------------------- |
-| Vault `AGENTS.md`            | Default rules for Agent Chat and Quick Chat                   |
+| Vault `AGENTS.md`            | Default rules for Copilot Chat and Quick Chat                 |
 | Project `AGENTS.md`          | More specific rules for one Project                           |
 | **Skill**                    | A reusable workflow with instructions and supporting files    |
 | **Copilot command**          | A short saved prompt or template you want to run again        |
@@ -24,7 +24,7 @@ Keep stable conventions in `AGENTS.md`. Use a [Skill](agent-mode-and-tools.md#sk
 
 ## Vault instructions
 
-Vault-wide instructions live in `AGENTS.md` at the root of your vault. They apply to new Agent Chats with OpenCode, Claude, and Codex, and to Quick Chat by default.
+Vault-wide instructions live in `AGENTS.md` at the root of your vault. They apply to new chats with OpenCode, Claude, and Codex, and to Quick Chat by default.
 
 Open [**Settings → Copilot → Basic → Custom instructions**](settings.md#basic) and edit **Custom vault instructions**. Copilot saves the text to the vault-root file as you type. Select **Open AGENTS.md** to edit the same file as a normal note.
 
@@ -39,7 +39,7 @@ Good instructions are short and concrete:
 
 Quick Chat picks up saved edits on the next request in the same conversation, including retries and edited messages. Clearing or deleting the file removes those custom instructions from subsequent requests. Copilot does not fall back to an old saved default prompt.
 
-Start a new Agent Chat after changing `AGENTS.md` so the selected backend reads the latest version.
+Start a new chat after changing `AGENTS.md` so the selected agent reads the latest version.
 
 ## Project instructions
 
@@ -70,7 +70,7 @@ Create a `.md` file in that folder. The filename becomes the prompt name, and th
 
 In Quick Chat, open **Chat settings** and choose a **System prompt**. Select **Default (AGENTS.md)** to return to the vault instructions.
 
-An explicitly selected system prompt replaces the vault instructions for that Quick Chat session. It does not change `AGENTS.md` or Agent Chat.
+An explicitly selected system prompt replaces the vault instructions for that Quick Chat session. It does not change `AGENTS.md` or Copilot Chat.
 
 ## Examples and next steps
 
@@ -78,7 +78,7 @@ Start with the [`AGENTS.md` examples](agents-md-examples.md), then keep only rul
 
 ## Related
 
-- [Agent Chat](agent-mode-and-tools.md)
+- [Copilot Chat](agent-mode-and-tools.md)
 - [Projects](projects.md)
 - [Copilot Commands and Quick Ask](custom-commands.md)
 - [Quick Chat](chat-interface.md)

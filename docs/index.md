@@ -1,29 +1,29 @@
 # Copilot for Obsidian V4
 
-Copilot V4 starts with **Agent Chat**, where OpenCode, Claude Code, or Codex can read your vault, use tools, and complete multi-step work with your approval. Quick Ask, Copilot Commands, and Quick Chat remain available for smaller jobs and mobile use.
+Copilot V4 starts with **Copilot Chat**, where OpenCode, Claude Code, or Codex can read your vault, use tools, and complete multi-step work with your approval. Quick Ask, Copilot Commands, and Quick Chat remain available for smaller jobs and mobile use.
 
 ## Start here
 
 1. Install Copilot from Obsidian's Community Plugins.
 2. Open **Settings → Copilot → Basic → Agents**. Follow [Getting Started with Copilot V4](getting-started.md) to download managed OpenCode or Codex, or auto-detect Claude Code.
-3. Run **Open Copilot Agent Chat window**. A ready default agent opens automatically; if **Select your agent** appears, choose an **Installed** agent and select **Start chat**.
+3. Run **Open Copilot Chat window**. A ready default agent opens automatically; if **Select your agent** appears, choose an **Installed** agent and select **Start chat**.
 
-For most people, OpenCode is the best starting point. Copilot can install and manage both OpenCode and the Codex adapter; Claude Code and Codex use their existing command-line accounts. Windows users can also follow [Windows setup for Agent Chat](agent-mode-windows-setup.md).
+For most people, OpenCode is the best starting point. Copilot can install and manage both OpenCode and the Codex adapter; Claude Code and Codex use their existing command-line accounts. Windows users can also follow [Windows setup for Copilot Chat](agent-mode-windows-setup.md).
 
-## Agent Chat
+## Copilot Chat
 
-- [Agent Chat](agent-mode-and-tools.md) explains agents, models, permissions, sessions, and safe use.
+- [Copilot Chat](agent-mode-and-tools.md) explains agents, models, permissions, chats, and safe use.
 - [Choose an agent](agent-mode-and-tools.md#choose-an-agent) for OpenCode, Claude Code, or Codex.
 - [Share Skills across agents](agent-mode-and-tools.md#skills-across-agents) so one reusable workflow works in OpenCode, Claude Code, and Codex.
 - [Connectors](connectors.md) let agents work with services such as Notion, Linear, and Todoist.
 - [Projects](projects.md) give ongoing work its own instructions, context, and chat history.
 - [Context and Mentions](context-and-mentions.md) add notes, selections, folders, and URLs to a request.
-- [Instructions for Agent Chat and Quick Chat](system-prompts.md) and [`AGENTS.md` examples](agents-md-examples.md) set durable guidance for your vault and projects.
+- [Instructions for Copilot Chat and Quick Chat](system-prompts.md) and [`AGENTS.md` examples](agents-md-examples.md) set durable guidance for your vault and projects.
 
 ## Everyday tools
 
 - [Copilot Commands and Quick Ask](custom-commands.md) reuse prompts or work with selected text without leaving the editor.
-- [Quick Chat](chat-interface.md) handles lightweight conversations and is the main chat view on mobile, where Agent Chat is unavailable.
+- [Quick Chat](chat-interface.md) handles lightweight conversations and is the main chat view on mobile, where Copilot Chat is unavailable.
 - [Live Relevant Notes](relevant-notes.md) shows how to preview related notes, drag links into your writing, and add chat context.
 
 ## Models, plans, and Miyo
@@ -41,4 +41,4 @@ For most people, OpenCode is the best starting point. Copilot can install and ma
 
 ## Help
 
-- [Troubleshooting and FAQ](troubleshooting-and-faq.md) fixes common Agent Chat, model, search, and Quick Ask problems.
+- [Troubleshooting and FAQ](troubleshooting-and-faq.md) fixes common Copilot Chat, model, search, and Quick Ask problems.

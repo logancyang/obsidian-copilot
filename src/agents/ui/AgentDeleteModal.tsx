@@ -66,7 +66,7 @@ export function AgentDeleteForm({
         </p>
       )}
       <p className="tw-m-0 tw-px-1 tw-text-ui-small tw-text-muted">
-        What {name} said in chats with other agents stays there.
+        What {name} said in chats with other teammates stays there.
       </p>
       <div className="tw-flex tw-justify-end tw-gap-2">
         <Button variant="secondary" autoFocus onClick={onCancel} className="tw-shrink-0">

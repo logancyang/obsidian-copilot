@@ -1,16 +1,16 @@
 # Projects
 
-A project groups chats with its own instructions and context. Agent Chat shows the project's header while the user is inside it.
+A project groups chats with its own instructions and context. The chat shows the project's header while the user is inside it.
 
 ## Sub-features
 
 - project-create: `New project` asks for a `Project name`; `Create` makes the project and enters it.
-- project-list: the `Projects` tab on the [start screen](agent-home.md) lists projects, filtered by `Search projects...`; choose one to enter it.
+- project-list: the `Projects` tab on the [start screen](start-screen.md) lists projects, filtered by `Search projects...`; choose one to enter it.
 - project-row-actions: a project row offers `Reveal in vault`, `Edit project`, `Archive`, and `Delete`. Archiving moves the project under `View archived`; deleting asks first and keeps the notes in the vault.
 - project-enter: inside a project, the start screen reads `Chat in <project>` and opens on the tab last chosen in any project, `Files` at first; `Recent chats` lists only its chats. It has its own [chat tabs](chat-tabs.md).
-- project-agent-row: with Copilot Teammates, the project home shows the same row of faces as the [start screen](agent-home.md), with `New` for the [create agent dialog](create-agent-dialog.md), instead of `Chat in <project>`; the agent selected there or on the start screen carries over, `Recent chats` narrows to the selected agent's chats in the project, and the first message starts that agent's chat in the project.
+- project-agent-row: with a Supporter license, the project home shows the same row of faces as the [start screen](start-screen.md), with `New` for the [New teammate dialog](new-teammate-dialog.md), instead of `Chat in <project>`; the teammate selected there or on the start screen carries over, `Recent chats` narrows to the selected teammate's chats in the project, and the first message starts that teammate's chat in the project.
 - project-header: the header shows the project name, `Project settings`, and `Reveal project folder in vault`. Inside a chat it also shows `Project info for <project>`. Its leading control differs between the two layouts below.
-- project-header-tabs: with the [chat tabs](chat-tabs.md) showing, the header starts with `Leave project`, a Back button that returns to the [start screen](agent-home.md). The project name is plain text and cannot be chosen.
+- project-header-tabs: with the [chat tabs](chat-tabs.md) showing, the header starts with `Leave project`, a Back button that returns to the [start screen](start-screen.md). The project name is plain text and cannot be chosen.
 - project-header-navigator: with the [Copilot Navigator](copilot-navigator.md) open, the header has no `Leave project`. Choosing the project name opens the project home.
 - project-info: inside a project chat, `Project info for <project>` shows `Changed in this chat`, followed by `Project folder` and `Linked` to browse. It has no `Link context` and takes no drops.
 - project-edit: `Edit project` opens `Project name`, `Description`, and `Project instructions`, with `Cancel` and `Save`. The agent reads the description at the start of each new chat in the project.
@@ -21,20 +21,20 @@ A project groups chats with its own instructions and context. Agent Chat shows t
 
 ## How to get to it
 
-- The `Projects` tab on the [start screen](agent-home.md): `New project`, or choose a project.
+- The `Projects` tab on the [start screen](start-screen.md): `New project`, or choose a project.
 - `New project`, a project folder, or `New chat in <project>` in the [Copilot Navigator](copilot-navigator.md).
 - Opening a project's chat from `Chat history` in the [chat controls](chat-controls.md) or from Recent chats.
 
 ## Driving it
 
-- Create: in `Projects`, choose `New project`, type a name, and choose `Create`. Agent Chat enters the new project: the header shows its name and the greeting reads `Chat in <project>`.
+- Create: in `Projects`, choose `New project`, type a name, and choose `Create`. The chat enters the new project: the header shows its name and the greeting reads `Chat in <project>`.
 - List: type part of a project name into `Search projects...`. Only matching projects remain.
 - Enter: choose a project in `Projects`. The header shows its name, and the home opens on `Files`. Choose `Recent chats` to see only that project's chats; enter another project and its home opens on `Recent chats` too.
-- Agent in a project: with Copilot Teammates, enter a project. The row of faces shows the agents, with the agent of the last chat started selected. Send a message: the chat that opens is that agent's, and it is listed in the project's `Recent chats` with the agent's face.
+- Teammate in a project: with a Supporter license, enter a project. The row of faces shows the teammates, with the teammate of the last chat started selected. Send a message: the chat that opens is that teammate's, and it is listed in the project's `Recent chats` with the teammate's face.
 - Leave with tabs: with the chat tabs showing, choose `Leave project` at the left of the header, from the project home or a project chat. The global start screen returns with its `Recent chats`, `Relevant Notes`, and `Projects` shelf. Click the project name: nothing happens, and hovering it shows no link.
 - Project home with the Navigator: open the [Copilot Navigator](copilot-navigator.md). `Leave project` disappears from the header. Inside a project chat, choose the project name: the project home returns with `Chat in <project>`.
 - Leave with the Navigator: choose `New chat` in the Navigator. The global start screen returns.
-- Switch layouts: inside a project, open and close the Navigator. `Leave project` disappears and returns without reopening Agent Chat.
+- Switch layouts: inside a project, open and close the Navigator. `Leave project` disappears and returns without reopening Copilot Chat.
 - Header reveal: choose `Reveal project folder in vault` in the header. The file explorer selects the project folder.
 - Info: ask the agent to create or edit a project file, then choose `Project info for <project>`. `Changed in this chat` shows the file and its line counts. Choose the row: the file opens and the popover closes.
 - Folder tree: on the project home, ask the agent to generate a file: it appears at the top of the project folder. Expand a folder and its nested folders, then choose a file. It opens in a tab. Create, rename, or delete a file in the folder: the tree updates without restarting.
@@ -54,7 +54,7 @@ A project groups chats with its own instructions and context. Agent Chat shows t
 
 ## Gotchas
 
-- Without Copilot Teammates in the license, the project home's row shows `New` and every agent locked, as on the [start screen](agent-home.md).
+- Without a Supporter license, the project home's row shows `New` and every teammate locked, as on the [start screen](start-screen.md).
 - `Project instructions` in `Edit project` and the project's `AGENTS.md` are the same text; editing either changes both.
 - A chat that is already open keeps the description it started with; an edited description reaches new chats only.
 - Files appears alone without a tab bar when the project has no chats or the [Copilot Navigator](copilot-navigator.md) is open. Otherwise the home offers `Files` and `Recent chats`.

@@ -1017,7 +1017,7 @@ export class AgentSessionManager {
   private resolveSessionCwd(projectId: ProjectScopeId): string {
     const adapter = this.app.vault.adapter;
     if (!(adapter instanceof FileSystemAdapter)) {
-      throw new Error("Agent Chat requires Obsidian on desktop.");
+      throw new Error("Copilot Chat requires Obsidian on desktop.");
     }
     return resolveScopeCwd(adapter.getBasePath(), projectId);
   }

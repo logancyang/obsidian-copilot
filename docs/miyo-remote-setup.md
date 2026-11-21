@@ -6,7 +6,7 @@ Run Miyo on one computer and connect Copilot on your other devices to that same 
 
 - Choose a host computer that can stay awake with Miyo running. Add the folders you want to search and let indexing finish. The [local Miyo setup guide](miyo-setup.md) explains folder registration and indexing.
 - Install [Tailscale](https://tailscale.com/download) on **every participating device**, including the Miyo host, and connect them to the same Tailscale network. Your network's access rules must allow clients to reach the host.
-- Use Copilot on each client. Agent Chat searches the remote server directly. Only the host needs to run the server and maintain an index. To have Agent Chat read PDFs and EPUBs, install the [Miyo desktop app](https://www.miyo.md/) on each desktop client.
+- Use Copilot on each client. Copilot Chat searches the remote server directly. Only the host needs to run the server and maintain an index. To have Copilot Chat read PDFs and EPUBs, install the [Miyo desktop app](https://www.miyo.md/) on each desktop client.
 
 Tailscale gives the devices a private connection. It does not copy your notes or synchronize Miyo indexes. Keep your vault files synchronized separately if you want the same notes available in Obsidian on each device.
 
@@ -86,7 +86,7 @@ In Copilot's Miyo settings, check that **Semantic search for agents** is on. Kee
 
 For Current vault searches, the vault's name must match the folder name registered in Miyo. Notes must also use the same paths within that folder. The vault's full disk location may differ between devices. A note returned by Miyo must exist in the client's vault to open there. The other folders you can tick under **Current vault** come from the Miyo host, not from this device.
 
-Open Agent Chat and ask about a note you know is indexed on the host. For example:
+Open Copilot Chat and ask about a note you know is indexed on the host. For example:
 
 > Use Miyo to find my notes about making meetings more useful. Show me the matching notes before summarizing them.
 
@@ -94,7 +94,7 @@ Check that the returned note is one you expected. **Unrestricted** searches ever
 
 In this example, a Miyo search returns **Better team meetings.md** and the expected excerpt.
 
-![Copilot Agent Chat showing the matching Better team meetings note and its excerpt](https://raw.githubusercontent.com/logancyang/obsidian-copilot/d68cde1889ed5ac48f8f03ce5e18c6530acd8185/tutorial-media/remote-miyo/remote-search-result.png)
+![Copilot Chat showing the matching Better team meetings note and its excerpt](https://raw.githubusercontent.com/logancyang/obsidian-copilot/d68cde1889ed5ac48f8f03ce5e18c6530acd8185/tutorial-media/remote-miyo/remote-search-result.png)
 
 ## If the connection or search fails
 
@@ -106,6 +106,6 @@ In this example, a Miyo search returns **Better team meetings.md** and the expec
 | Connected, but the vault is missing       | Add the corresponding folder in Miyo on the host and check that its name matches the Obsidian vault.                       |
 | Connected, but a note is missing or stale | Check the host's copy of the note, indexing status, and exclusions. File synchronization is separate from this connection. |
 | A returned note cannot open locally       | Confirm the note exists in the client's vault at the same relative path.                                                   |
-| Agent Chat cannot read a PDF or EPUB      | Install the Miyo desktop app on that client, then retry. The server address alone does not install the command-line tool.  |
+| Copilot Chat cannot read a PDF or EPUB    | Install the Miyo desktop app on that client, then retry. The server address alone does not install the command-line tool.  |
 
 When the host is asleep, offline, or no longer running Miyo, remote searches are unavailable. Keep using your existing vault synchronization method to deliver note changes to the host for indexing.

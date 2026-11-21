@@ -134,7 +134,7 @@ describe("LockedAgentNotices", () => {
       const { container } = render(<LockedHomeNote onUnlock={onUnlock} />);
 
       expect(container.textContent).toBe(
-        "Your agents need a valid Supporter license to chat. Enter license key"
+        "Your teammates need a valid Supporter license to chat. Enter license key"
       );
       fireEvent.click(screen.getByRole("button", { name: "Enter license key" }));
 

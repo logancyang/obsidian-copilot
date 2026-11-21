@@ -22,7 +22,7 @@ a BYOK provider, or connect an agent account.
 
 Open **Settings → Copilot → Basic → Agents**.
 
-1. Set **Default agent** to the agent you want when a new Agent Chat opens.
+1. Set **Default agent** to the agent you want when a new chat opens.
 2. Select **OpenCode**, **Claude**, **Codex**, or **Quick Chat**.
 3. Turn on the models you want shown in that experience's model picker.
 4. Choose **Default model**. For an agent, **Agent default** leaves the choice
@@ -56,9 +56,9 @@ You can click the row or lock icon, or activate the row with the keyboard.
 Opening pricing from the model-and-effort picker discards any pending changes
 in that picker and keeps your current model and effort.
 
-In **Agent Chat**, the model picker is grouped by agent. Before the first message in
-an empty session, choosing a model from another installed agent switches that
-session to the other agent. After the conversation has started, the picker
+In **Copilot Chat**, the model picker is grouped by agent. Before the first message in
+an empty chat, choosing a model from another installed agent switches that
+chat to the other agent. After the conversation has started, the picker
 stays with the current agent.
 
 In the **OpenCode** group, models from a custom provider appear as
@@ -90,12 +90,12 @@ behavior.
 
 Copilot V4 does not expose temperature, top-p, or similar tuning in these model
 lists. Quick Chat uses your vault-root `AGENTS.md` by default. **Chat settings**
-can select a saved prompt for that session; it does not add Agent Chat effort
+can select a saved prompt for that chat; it does not add Copilot Chat effort
 or permission controls.
 
 ## Related
 
 - [Model Sources and BYOK](llm-providers.md)
-- [Agent Chat](agent-mode-and-tools.md)
+- [Copilot Chat](agent-mode-and-tools.md)
 - [Settings: Basic](settings.md#basic)
 - [Copilot Plans, Privacy, and Self-Hosting](copilot-plus-and-self-host.md)

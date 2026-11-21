@@ -16,7 +16,7 @@ The Connectors tab in Copilot settings: the services the user connected, each wi
 ## How to get to it
 
 - Settings → Copilot → Connectors.
-- `Manage` on the [connectors banner](status-and-error-cards.md) in Agent Chat.
+- `Manage` on the [connectors banner](status-and-error-cards.md) in Copilot Chat.
 - `Back` from [Browse connectors](browse-connectors.md) or a [tools page](connector-tools-page.md).
 
 ## Driving it

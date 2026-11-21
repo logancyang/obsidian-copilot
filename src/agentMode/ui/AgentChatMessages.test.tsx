@@ -454,7 +454,7 @@ describe("AgentChatMessages", () => {
       );
 
       expect(screen.getByText("12s")).toBeTruthy();
-      expect(screen.queryByText("Agent is working")).toBeNull();
+      expect(screen.queryByText("Working")).toBeNull();
     });
 
     it("passes the message's sent time to a structured trail without a duration", () => {
@@ -790,7 +790,7 @@ describe("AgentChatMessages", () => {
         pendingAskUserQuestions: [question("question-first")],
       });
 
-      const rail = screen.getByRole("region", { name: "Pending agent actions" });
+      const rail = screen.getByRole("region", { name: "Pending actions" });
       const firstAction = rail.querySelector("[data-action-id]");
       expect(Array.from(rail.querySelectorAll("[data-action-id]"), (el) => el.textContent)).toEqual(
         ["Question question-first"]
@@ -822,7 +822,7 @@ describe("AgentChatMessages", () => {
         pendingToolPermissions: [permission("search-1")],
       });
 
-      expect(screen.getByRole("region", { name: "Pending agent actions" }).textContent).toBe(
+      expect(screen.getByRole("region", { name: "Pending actions" }).textContent).toBe(
         "Permission search-1 via websearch"
       );
     });
@@ -846,7 +846,7 @@ describe("AgentChatMessages", () => {
 
       renderMessages([toolTurn], true, { pendingToolPermissions: [request] });
 
-      const rail = screen.getByRole("region", { name: "Pending agent actions" });
+      const rail = screen.getByRole("region", { name: "Pending actions" });
       expect(rail.textContent).toBe("Permission create-1");
       expect(screen.getByTitle("Notion · Create page")).toBeTruthy();
     });
@@ -871,7 +871,7 @@ describe("AgentChatMessages", () => {
       request.toolCall.title = name;
       request.toolCall.rawInput = args;
       renderMessages([toolTurn], true, { pendingToolPermissions: [request] });
-      expect(screen.getByRole("region", { name: "Pending agent actions" }).textContent).toBe(
+      expect(screen.getByRole("region", { name: "Pending actions" }).textContent).toBe(
         "Permission direct-1"
       );
       expect(screen.getByTitle("Notion · Create page")).toBeTruthy();
@@ -895,7 +895,7 @@ describe("AgentChatMessages", () => {
         </AgentTasksProvider>
       );
 
-      expect(screen.getByRole("region", { name: "Pending agent actions" }).textContent).toBe(
+      expect(screen.getByRole("region", { name: "Pending actions" }).textContent).toBe(
         'Permission sub-bash from general-purpose "Count words in Welcome"'
       );
     });
@@ -908,7 +908,7 @@ describe("AgentChatMessages", () => {
 
       renderMessages([], true, { pendingToolPermissions: [request] });
 
-      const rail = screen.getByRole("region", { name: "Pending agent actions" });
+      const rail = screen.getByRole("region", { name: "Pending actions" });
       expect(rail.textContent).toBe("Permission leo-edit from Leo");
       expect(rail.querySelector("img")?.getAttribute("src")).toBe("data:image/webp;base64,leo");
     });

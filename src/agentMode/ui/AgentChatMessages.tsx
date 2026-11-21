@@ -401,7 +401,7 @@ const AgentChatMessages = memo(
         {pendingActionId ? (
           <div
             role="region"
-            aria-label="Pending agent actions"
+            aria-label="Pending actions"
             data-testid="agent-action-rail"
             // max-h + overflow-y: a verbose question can exceed a short chat pane, and its
             // resolution controls must stay reachable.

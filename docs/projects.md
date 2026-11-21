@@ -1,15 +1,15 @@
 # Projects
 
-Projects are focused workspaces inside Agent Chat. Each Project keeps its own instructions, reusable context, and chat history, so ongoing work for a client, codebase, course, or research topic stays together.
+Projects are focused workspaces inside Copilot Chat. Each Project keeps its own instructions, reusable context, and chat history, so ongoing work for a client, codebase, course, or research topic stays together.
 
 A Project works with OpenCode, Claude, or Codex. It uses the agent, model, effort, and permission setting selected for the current chat. It does not lock you to a separate model.
 
-On the Agent Chat home screen, open **Projects** to browse your most recently used Projects. Scroll the list to see more, or use **Search projects** to find a Project by name or description. Search includes every Project, even those you have not scrolled to yet.
+On the Copilot Chat home screen, open **Projects** to browse your most recently used Projects. Scroll the list to see more, or use **Search projects** to find a Project by name or description. Search includes every Project, even those you have not scrolled to yet.
 
 ## Create a Project
 
-1. Open **Agent Chat** from the ribbon or command palette.
-2. From the Agent Chat home screen, open **Projects** and select **New project**.
+1. Open **Copilot Chat** from the ribbon or command palette.
+2. From the Copilot Chat home screen, open **Projects** and select **New project**.
 3. Enter a name and select **Create**.
 
 Copilot opens the new Project immediately. Creation asks only for a name. Use **Edit project** to add a description and instructions, and the **Files** tab to add saved context.
@@ -30,7 +30,7 @@ Useful Project instructions include:
 - naming, style, or citation rules; and
 - actions that should always require confirmation.
 
-Keep stable rules in `AGENTS.md` and put one-off requests in chat. Start a new Project chat after changing the file so every backend reads the latest instructions. See [Instructions for Agent Chat and Quick Chat](system-prompts.md).
+Keep stable rules in `AGENTS.md` and put one-off requests in chat. Start a new Project chat after changing the file so every backend reads the latest instructions. See [Instructions for Copilot Chat and Quick Chat](system-prompts.md).
 
 ## Browse Project files
 
@@ -87,11 +87,11 @@ Inside a Project:
 
 - **Recent chats** and **Chat history** show that Project's conversations.
 - **New chat** starts a clean conversation with the latest Project instructions and context.
-- **Leave project**, the back arrow in the header, returns to the Agent Chat home screen.
-- With the Copilot Navigator open, the back arrow is hidden: the Project name in the header returns to the Project's home screen, and **New chat** in the Navigator returns to the Agent Chat home screen.
+- **Leave project**, the back arrow in the header, returns to the Copilot Chat home screen.
+- With the Copilot Navigator open, the back arrow is hidden: the Project name in the header returns to the Project's home screen, and **New chat** in the Navigator returns to the Copilot Chat home screen.
 - **Project settings** beside the name edits the Project, and **Reveal project folder in vault** shows its folder in the file explorer.
 
-From the Projects list, hover over a Project to **Reveal in vault**, **Edit project**, **Archive**, or **Delete** it. The global **Recent chats** list on the Agent Chat home screen includes conversations from across Projects.
+From the Projects list, hover over a Project to **Reveal in vault**, **Edit project**, **Archive**, or **Delete** it. The global **Recent chats** list on the Copilot Chat home screen includes conversations from across Projects.
 
 Archiving a Project puts it away without deleting it. The Project and all of its chats, pinned ones included, disappear from the Projects list, **Recent chats** and **Chat history**. A chat that is still running keeps running. Select **View archived** below **Recent chats** to unarchive the Project, which brings back the Project and every chat in it, or to open it.
 
@@ -103,7 +103,7 @@ Use a Project when a task has a stable scope or will continue across several cha
 
 ## Related
 
-- [Agent Chat](agent-mode-and-tools.md)
+- [Copilot Chat](agent-mode-and-tools.md)
 - [Context and Mentions](context-and-mentions.md)
 - [`AGENTS.md` Examples](agents-md-examples.md)
 - [Copilot Plans, Privacy, and Self-Hosting](copilot-plus-and-self-host.md)

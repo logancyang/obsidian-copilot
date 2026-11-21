@@ -67,7 +67,7 @@ describe("revealSessionsSidebar", () => {
 
       await revealSessionsSidebar(plugin);
 
-      expect(Notice).toHaveBeenCalledWith("Agent Chat is not initialized.");
+      expect(Notice).toHaveBeenCalledWith("Copilot Chat is not initialized.");
       expect(workspace.getLeftLeaf).not.toHaveBeenCalled();
     });
   });

@@ -15,7 +15,7 @@ export function registerNoteHeaderAction(plugin: CopilotPlugin): void {
       if (actions.has(view)) continue;
       const action = view.addAction(
         COPILOT_AGENT_ICON_ID,
-        "Open Copilot Agent Chat with this note",
+        "Open Copilot Chat with this note",
         () => {
           // Revealing Agent Chat can move focus, so use the note under this button.
           // https://github.com/Brevilabs/obsidian-copilot-private/issues/579

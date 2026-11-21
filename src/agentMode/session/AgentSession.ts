@@ -964,9 +964,7 @@ export class AgentSession implements ChatStateHost, ChatView {
       // The agent answers without the oldest saved messages, so the user learns why it may not know them.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/908
       if (savedHistory?.truncated) {
-        new Notice(
-          "This chat is too long to send in full, so the agent wasn't told its oldest messages."
-        );
+        new Notice("This chat is too long to send in full, so its oldest messages were left out.");
       }
       const outcome = await this.turns.submit(
         { promptId: userMessageId, prompt: promptBlocks },

@@ -41,7 +41,7 @@ describe("NavigatorUpsell", () => {
         <NavigatorUpsellContent onClose={jest.fn()} />
       );
 
-      const intro = screen.getByText(/keeps all your agent chats in one sidebar/);
+      const intro = screen.getByText(/keeps all your chats in one sidebar/);
       const animation = screen.getByRole("img");
       expect(animation.getAttribute("src")).toBe(NAVIGATOR_HIGHLIGHT_URL);
       expect(
@@ -139,7 +139,7 @@ describe("NavigatorUpsell", () => {
       expect(screen.getByText("Your preview access ended")).toBeTruthy();
       expect(
         screen.getByText(
-          "Copilot Navigator is a preview for Supporters. Your chats are still under Recent chats in Agent Chat."
+          "Copilot Navigator is a preview for Supporters. Your chats are still under Recent chats in Copilot Chat."
         )
       ).toBeTruthy();
     });

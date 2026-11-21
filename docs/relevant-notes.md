@@ -10,9 +10,9 @@ Use desktop Copilot 4.0.8 or newer with Miyo 0.2.27 or newer, running and connec
 
 ## 1. Open Relevant Notes
 
-Open Copilot's Agent Chat view and choose **Relevant Notes**. Use **Open in separate pane** if you want to keep the suggestions visible beside your editor or chat.
+Open the Copilot Chat view and choose **Relevant Notes**. Use **Open in separate pane** if you want to keep the suggestions visible beside your editor or chat.
 
-Turn on **Live**. The source label tells you what the suggestions relate to, such as the open note or the Agent Chat context.
+Turn on **Live**. The source label tells you what the suggestions relate to, such as the open note or the chat context.
 
 ## 2. Discover related notes while writing
 
@@ -44,7 +44,7 @@ Obsidian inserts a link to that note. This adds a reference, not a copy of its c
 
 ## 4. Find context before sending a question
 
-With Live on, start typing in Agent Chat. Suggestions follow your draft and conversation, so you can discover useful context before sending the message.
+With Live on, start typing in Copilot Chat. Suggestions follow your draft and conversation, so you can discover useful context before sending the message.
 
 Try a question related to material in your vault. The demo uses:
 
@@ -52,9 +52,9 @@ Try a question related to material in your vault. The demo uses:
 
 Hover over a useful suggestion and choose **Add to chat**. Check that the note appears in your chat context, then make your question more specific using what you found.
 
-<video controls muted loop playsinline preload="metadata" aria-label="Preview a related note and add it to Agent Chat while drafting a question" style="width: 100%; height: auto;">
+<video controls muted loop playsinline preload="metadata" aria-label="Preview a related note and add it to Copilot Chat while drafting a question" style="width: 100%; height: auto;">
   <source src="https://pub-d0d5db63b5e446cc848d32b65229d622.r2.dev/copilot/2026-09/live-relevant-notes-clean-35f7a92dda84.mp4" type="video/mp4">
-  <a href="https://pub-d0d5db63b5e446cc848d32b65229d622.r2.dev/copilot/2026-09/live-relevant-notes-clean-35f7a92dda84.mp4">Watch: Preview a related note and add it to Agent Chat while drafting a question</a>
+  <a href="https://pub-d0d5db63b5e446cc848d32b65229d622.r2.dev/copilot/2026-09/live-relevant-notes-clean-35f7a92dda84.mp4">Watch: Preview a related note and add it to Copilot Chat while drafting a question</a>
 </video>
 
 For example, a note about silent writing might remind you to ask for a workshop that starts with five minutes of individual thinking.
@@ -63,7 +63,7 @@ Suggested notes are not all attached automatically. You choose which ones to add
 
 ## Which context is being used?
 
-When chat-based Live suggestions are active, they follow your Agent Chat draft and conversation. When Live is off, Relevant Notes stays tied to the editor note.
+When chat-based Live suggestions are active, they follow your chat draft and conversation. When Live is off, Relevant Notes stays tied to the editor note.
 
 If suggestions seem unrelated to what you intended, check the source label first. Then check that the note or chat you want to work with is active.
 

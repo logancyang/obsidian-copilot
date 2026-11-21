@@ -6,7 +6,7 @@ export async function revealSessionsSidebar(plugin: CopilotPlugin): Promise<void
   // The Navigator lists Agent Mode sessions, so it waits for Agent Mode to finish starting.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/801
   if (!plugin.agentSessionManager) {
-    new Notice("Agent Chat is not initialized.");
+    new Notice("Copilot Chat is not initialized.");
     return;
   }
   const { workspace } = plugin.app;

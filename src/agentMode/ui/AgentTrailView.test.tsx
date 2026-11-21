@@ -432,7 +432,7 @@ describe("AgentTrail", () => {
     expect(screen.getAllByTestId("agent-md")).toHaveLength(1);
   });
 
-  it("https://github.com/logancyang/obsidian-copilot/issues/4062 says the agent ended its turn after a declined permission, so a reply the agent cancelled does not look frozen", () => {
+  it("https://github.com/logancyang/obsidian-copilot/issues/4062 says the reply ended after a declined permission, so a reply the agent cancelled does not look frozen", () => {
     renderTrail({
       parts: [text("I'll ask before running it."), toolCall("x1", { status: "failed" })],
       turnStopReason: "cancelled",
@@ -441,15 +441,15 @@ describe("AgentTrail", () => {
 
     expect(screen.getAllByTestId("agent-md").map((el) => el.textContent)).toEqual([
       "I'll ask before running it.",
-      "**Stopped:** the agent ended its turn after you declined a permission. Send a message to tell it what to do next.",
+      "**Stopped:** the reply ended after you declined a permission. Send a message to say what to do next.",
     ]);
   });
 
-  it("https://github.com/logancyang/obsidian-copilot/issues/4062 says only that the agent ended its turn when no permission was declined, even before any text or tool activity", () => {
+  it("https://github.com/logancyang/obsidian-copilot/issues/4062 says only that the reply ended when no permission was declined, even before any text or tool activity", () => {
     renderTrail({ parts: [], turnStopReason: "cancelled", agentCancelCause: "unspecified" });
 
     expect(screen.getAllByTestId("agent-md").map((el) => el.textContent)).toEqual([
-      "**Stopped:** the agent ended its turn early. Send a message to continue.",
+      "**Stopped:** the reply ended early. Send a message to continue.",
     ]);
   });
 

@@ -37,7 +37,7 @@ export function registerStartAgentChatCommand(
     }
     plugin.addCommand({
       id: START_AGENT_CHAT_COMMAND_ID,
-      name: "Start a chat with an agent",
+      name: "Start a chat with a teammate",
       callback: () => new AgentPickerModal(plugin.app, store.getAgents(), start).open(),
     });
   };

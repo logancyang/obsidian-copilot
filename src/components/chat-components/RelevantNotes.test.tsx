@@ -193,7 +193,7 @@ describe("RelevantNotes", () => {
       render(<RelevantNotes onAddToChat={jest.fn()} />);
 
       expect(await screen.findByText("Embeddings")).toBeTruthy();
-      expect(screen.getByText("Agent chat context")).toBeTruthy();
+      expect(screen.getByText("Chat context")).toBeTruthy();
       expect(screen.queryByText("Target")).toBeNull();
       expect(findChatRelevantNotes).toHaveBeenCalledWith(mockApp, chat);
       expect(mockFindRelevantNotes).not.toHaveBeenCalled();
@@ -253,7 +253,7 @@ describe("RelevantNotes", () => {
       });
       render(<RelevantNotes onAddToChat={jest.fn()} />);
       await screen.findByText("Target");
-      expect(screen.queryByText("Agent chat context")).toBeNull();
+      expect(screen.queryByText("Chat context")).toBeNull();
       expect(screen.getByText("Source")).toBeTruthy();
       expect(mockFindRelevantNotes).toHaveBeenCalledWith({ app: mockApp, filePath: "Source.md" });
       act(() => getChatRelevantNotesStore(mockApp).select(null));
