@@ -25,6 +25,7 @@ import {
   type OpencodeModelDeps,
 } from "./OpencodeBackend";
 import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
+import { useHermeticHome } from "./testing/hermeticHome";
 import {
   SELF_HOST_WEB_SEARCH_ENV,
   SELF_HOST_WEB_SEARCH_TOKEN_ENV,
@@ -1434,7 +1435,8 @@ describe("OpencodeBackend", () => {
 
     describe("selectAgentMode()", () => {
       const COCO = { slug: "coco", prompt: "In this chat you are Coco." };
-      let dir: string;
+      const COCO_ALT = { slug: "coco", prompt: "Coco, alt.", variant: "alt" };
+      const sandbox = useHermeticHome();
       let file: string;
 
       const modeOption = (currentValue: string) => [
@@ -1459,12 +1461,13 @@ describe("OpencodeBackend", () => {
         resetSettings();
         seedSkills([]);
         resetPromptState();
-        dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "opencode-agents-"));
-        file = path.join(dir, "vaults", "v1", "opencode-agents.json");
-      });
-
-      afterEach(async () => {
-        await fs.promises.rm(dir, { recursive: true, force: true });
+        file = path.join(
+          sandbox.home(),
+          ".obsidian-copilot",
+          "vaults",
+          "v1",
+          "opencode-agents.json"
+        );
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/986 defines the agent as an ask-first and an Auto OpenCode agent, each with the shared prompt followed by the agent's part and without Copilot's, and picks the ask-first one", async () => {
@@ -1491,6 +1494,53 @@ describe("OpencodeBackend", () => {
         });
         expect(fs.readdirSync(path.dirname(file))).toEqual(["opencode-agents.json"]);
       });
+
+      it(`https://github.com/Brevilabs/obsidian-copilot-private/issues/991 gives a prompt variant of an agent its own pair of entries, so running the variant leaves the agent's own entries as they were`, async () => {
+        const backend = await spawnedBackend();
+        const sharedPrompt = buildAgentSystemPrompt("opencode", APP);
+        await backend.selectAgentMode(COCO, modeOption("copilot-build"));
+        const ownBefore = readAgents()["copilot-agent-coco/default"];
+
+        const alt = await backend.selectAgentMode(COCO_ALT, modeOption("copilot-build"));
+        const ownAgain = await backend.selectAgentMode(
+          COCO,
+          modeOption("copilot-agent-coco/default")
+        );
+
+        expect(alt).toEqual({ configId: "mode", value: "copilot-agent-coco/alt/default" });
+        expect(ownAgain).toEqual({ configId: "mode", value: "copilot-agent-coco/default" });
+        const agents = readAgents();
+        expect(Object.keys(agents)).toEqual([
+          "copilot-agent-coco/default",
+          "copilot-agent-coco/auto",
+          "copilot-agent-coco/alt/default",
+          "copilot-agent-coco/alt/auto",
+        ]);
+        expect(agents["copilot-agent-coco/default"]).toEqual(ownBefore);
+        expect(agents["copilot-agent-coco/default"].system).toBe(
+          `${sharedPrompt}\n\nIn this chat you are Coco.`
+        );
+        expect(agents["copilot-agent-coco/alt/default"].system).toBe(
+          `${sharedPrompt}\n\nCoco, alt.`
+        );
+        expect(agents["copilot-agent-coco/alt/auto"].system).toBe(`${sharedPrompt}\n\nCoco, alt.`);
+      });
+
+      it.each([
+        ["copilot-agent-coco/default", "copilot-agent-coco/alt/default"],
+        ["copilot-agent-coco/auto", "copilot-agent-coco/alt/auto"],
+      ])(
+        "https://github.com/Brevilabs/obsidian-copilot-private/issues/991 moves a prompt variant's chat saved on %s, the entry it shared with the agent's own chat, to its own %s",
+        async (current, moved) => {
+          const backend = await spawnedBackend();
+
+          await expect(backend.selectAgentMode(COCO_ALT, modeOption(current))).resolves.toEqual({
+            configId: "mode",
+            value: moved,
+          });
+          expect(readAgents()[moved].system).toMatch(/Coco, alt\.$/);
+        }
+      );
 
       it("keeps a reopened agent chat in Auto when it last ran there", async () => {
         const backend = await spawnedBackend();

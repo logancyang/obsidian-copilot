@@ -34,6 +34,7 @@ import {
   customAgentModeId,
   opencodeAgentsFilePath,
   readCustomAgentModeId,
+  removeAgentEntries,
 } from "./opencodeCustomAgents";
 import { opencodeApprovedRules } from "./opencodeApprovedRules";
 import type { ModelSelectionSession } from "@/agentMode/session/types";
@@ -227,6 +228,8 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
   SettingsPanel: OpencodeSettingsPanel,
 
   approvedRules: opencodeApprovedRules,
+
+  forgetAgent: (app, slug) => removeAgentEntries(opencodeAgentsFilePath(app), slug),
 
   async onPluginLoad(plugin: CopilotPlugin): Promise<void> {
     const manager = getOpencodeBinaryManager(plugin);
