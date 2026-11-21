@@ -12,12 +12,12 @@ That's why we built Copilot Teammates. Each teammate has its own instructions an
 
 ## 🤝 Copilot Teammates
 
-![Four tiles from Copilot Chat. Create a teammate: Coco's New teammate draft card for Maya, a writing editor. It remembers what you teach it: a Maya remembered card saving that the meal-planning app is for busy parents. Chat with any teammate: the row of teammate faces from Copilot to Socrates. Get a second opinion: in Maya's chat, the user tells @Socrates they keep going in circles on a newsletter, and Socrates sends back three questions about what readers would care about](https://images.brevilabs.com/newsletters/copilot-releases/4.1.0/teammates-bento-d97ad211.png)
+![Four tiles from Copilot Chat. Create a teammate: Coco's New teammate draft card for Maya, a writing editor. It remembers what you teach it: Maya's chat, where a Maya remembered card saves that the meal-planning app is for busy parents. Chat with any teammate: the row of teammate faces from Copilot to Socrates. Get a second opinion: in Maya's chat, the user tells @Socrates they keep going in circles on a newsletter, and Socrates sends back three questions about what readers would care about](https://images.brevilabs.com/newsletters/copilot-releases/4.1.0/teammates-bento-f8c0cf1b.png)
 
-- **Create one in a sentence.** Describe the teammate you need, and Copilot drafts it for you.
+- **Create one from the chat.** Describe the teammate you need, and Copilot creates it for you.
 - **Stop repeating yourself.** A teammate remembers what you teach it. Its instructions and memory are notes in your vault, so they stay yours.
 - **Get a second opinion.** Bring in a teammate who thinks differently, right in the chat you're in.
-- **Works in every project.** The teammate that knows how you write is there wherever you work.
+- **Keep personal and business apart.** Point each teammate at the notes it needs, so family plans never mix with client work.
 
 ## ✨ Enhancements
 
