@@ -105,10 +105,16 @@ export function createListChatsTool(host: ListChatsToolHost): HostedTool {
       }
       // Archiving a chat or its project means the user is done talking there, not that the agent should forget it, so archived chats are listed too.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/959
-      const chats = caller.chats
+      const allChats = caller.chats
         .filter((item) => (item.agent ?? null) === caller.agent)
-        .sort((a, b) => b.lastAccessedAt.getTime() - a.lastAccessedAt.getTime())
-        .slice(0, MAX_LISTED_CHATS);
+        .sort((a, b) => b.lastAccessedAt.getTime() - a.lastAccessedAt.getTime());
+      const chats = allChats.slice(0, MAX_LISTED_CHATS);
+      // Past the limit the teammate's own older chats are unlisted too, so the scope can't call them someone else's and a topic missing from the list isn't proof it was never discussed.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/990
+      const scope =
+        allChats.length > chats.length
+          ? `Older chats of yours left out of this list: ${allChats.length - chats.length}. Every other chat note is one of those or belongs to another AI teammate or to Copilot: unless the user names it, never search, read or cite it. If none listed covers the question, say it may be in an older chat you can read if the user names it, not that you haven't discussed it.`
+          : OTHER_CHATS;
       const lines = chats.map((item) => {
         const note = isNativeChatId(item.id)
           ? "not saved as a note, so only its title and date are known"
@@ -118,10 +124,7 @@ export function createListChatsTool(host: ListChatsToolHost): HostedTool {
       const ownChats =
         chats.length === 0
           ? [`You have no earlier chats with the user. ${OTHER_CHATS}`]
-          : [
-              `Your earlier chats with the user, newest first. ${OPEN_A_NOTE} ${OTHER_CHATS}`,
-              ...lines,
-            ];
+          : [`Your earlier chats with the user, newest first. ${OPEN_A_NOTE} ${scope}`, ...lines];
       const asked = caller.askedConversations
         .filter((conversation) => conversation.agent === caller.agent)
         .sort((a, b) => b.lastAtMs - a.lastAtMs)

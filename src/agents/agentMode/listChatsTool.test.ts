@@ -17,6 +17,7 @@ jest.mock("@/entitlement");
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/959";
 const ASKED_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/980";
 const SCOPE_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/987";
+const CUT_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/990";
 const VAULT = "/Users/me/Vault";
 const SCOPE =
   "Every other chat note belongs to another AI teammate or to Copilot: unless the user names it, never search, read or cite it.";
@@ -174,6 +175,34 @@ describe("listChatsTool", () => {
         expect(lines).toHaveLength(20);
         expect(lines[0]).toContain("Chat 25");
         expect(lines[19]).toContain("Chat 6");
+      });
+
+      it(`says how many older chats a cut list left out, that unlisted notes include them, and that an answer missing from the list may be in one, so the teammate doesn't deny a chat that happened (${CUT_ISSUE})`, async () => {
+        const history = Array.from({ length: 25 }, (_, i) =>
+          chatItem(`Chat ${i + 1}`, i + 1, "juno")
+        );
+
+        const { text } = await buildTool({ caller: "juno", history }).call({}, fakeChat());
+
+        expect(text.split("\n")[0]).toBe(
+          "Your earlier chats with the user, newest first. Open a listed note with your file or shell tools to see what was said. Older chats of yours left out of this list: 5. Every other chat note is one of those or belongs to another AI teammate or to Copilot: unless the user names it, never search, read or cite it. If none listed covers the question, say it may be in an older chat you can read if the user names it, not that you haven't discussed it."
+        );
+      });
+
+      it(`keeps the scope that every unlisted chat note is someone else's when all 20 of the caller's chats fit the list (${CUT_ISSUE})`, async () => {
+        const history = Array.from({ length: 20 }, (_, i) =>
+          chatItem(`Chat ${i + 1}`, i + 1, "juno")
+        );
+
+        const { text } = await buildTool({
+          caller: "juno",
+          history: [...history, ...OTHER_CHATS],
+        }).call({}, fakeChat());
+
+        expect(text.split("\n")[0]).toBe(
+          `Your earlier chats with the user, newest first. Open a listed note with your file or shell tools to see what was said. ${SCOPE}`
+        );
+        expect(text.split("\n")).toHaveLength(21);
       });
 
       it(`lists the caller's archived chats among its current ones, newest first within the 20 limit, and never another agent's archived chat (${ISSUE})`, async () => {
