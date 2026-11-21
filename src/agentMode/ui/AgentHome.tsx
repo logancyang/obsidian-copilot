@@ -48,6 +48,7 @@ import { useAgentInputDrafts } from "@/agentMode/ui/hooks/useAgentInputDrafts";
 import { useAttentionChatIds } from "@/agentMode/ui/hooks/useAttentionChatIds";
 import { useRunningChatIds } from "@/agentMode/ui/hooks/useRunningChatIds";
 import { useChatInputAutoFocus } from "@/agentMode/ui/hooks/useChatInputAutoFocus";
+import { useComposerFocusAfterLandingSend } from "@/agentMode/ui/hooks/useComposerFocusAfterLandingSend";
 import { useComposerFocusAfterTaskView } from "@/agentMode/ui/hooks/useComposerFocusAfterTaskView";
 import { useRefreshEmptyLandingOnContextSourceChange } from "@/projects/hooks/useRefreshEmptyLandingOnContextSourceChange";
 import { useAgentModelPicker } from "@/agentMode/ui/useAgentModelPicker";
@@ -433,6 +434,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
 
   const isLanding = !manager.getActiveSession()?.hasUserVisibleMessages();
   const isProjectLanding = isLanding && isProjectScope;
+  useComposerFocusAfterLandingSend(sessionId, isLanding);
 
   const switchLandingAgent = useCallback(
     async (agent: CustomAgent | null) => {

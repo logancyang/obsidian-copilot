@@ -15,7 +15,7 @@ The start screen of a new chat in Agent Chat: a greeting, the [chat input](chat-
 - home-agent-default: a new chat starts with the agent of the last chat started, on the start screen and in every project; when that agent is gone, Copilot.
 - home-agent-hint: the chat input's hint names the selected agent: "Ask Coco anything • @ to add context • / for commands".
 - home-agent-chat: the first message starts a chat with the selected agent, on its model; with Copilot selected, a Copilot chat.
-- home-first-message: sending the first message turns the start screen into the conversation, with the [chat controls](chat-controls.md) above the chat input.
+- home-first-message: sending the first message turns the start screen into the conversation, with the [chat controls](chat-controls.md) above the chat input, which keeps the cursor.
 - home-shelf: the shelf's `Recent chats`, `Relevant Notes`, and `Projects` tabs, with the project count on `Projects`; the last tab chosen stays selected for every new chat.
 - home-recent-chats: `Recent chats` lists past chats as [chat rows](chat-rows.md), pinned chats first, filtered by `Search chats...`. It lists only chats had in Copilot, on every coding agent; a session started with a coding agent outside Copilot does not show.
 - home-recent-agent-chats: with Copilot Teammates, each agent chat in `Recent chats` shows its agent's face. With an agent selected, the list holds only that agent's chats and the search reads `Search chats with <name>...`; an agent with no chats yet shows "No chats with <name> yet."
@@ -45,7 +45,7 @@ The start screen of a new chat in Agent Chat: a greeting, the [chat input](chat-
 - More agents: narrow the sidebar until faces no longer fit, or add more agents. `+N More` lists the rest with their titles; choose one and it joins the row, selected.
 - Agent chat: choose an agent and send a message. The chat that opens is that agent's and answers by its instructions.
 - Default agent: start a chat with an agent, then open a new chat, or reload Copilot and open one. That agent is selected. Delete its folder and open a new chat: Copilot is selected.
-- First message: send a message from the start screen. The greeting and shelf give way to the conversation, with `New chat`, `Chat history`, and `More actions` above the chat input.
+- First message: send a message from the start screen with Enter. The greeting and shelf give way to the conversation, with `New chat`, `Chat history`, and `More actions` above the chat input. Type again without clicking: the text goes into the chat input.
 - Shelf tab: choose `Projects`, close Agent Chat, and open it again. The shelf opens on `Projects`.
 - Recent chats: in the vault folder, start an OpenCode session outside Copilot, then send a message in a new OpenCode chat in Copilot. `Recent chats` lists the Copilot chat and not the outside session. Delete the Copilot chat and reload Copilot: it stays gone.
 - Search: in `Recent chats`, type part of a chat title into `Search chats...`. Only matching chats remain; clearing the box brings the rest back.
