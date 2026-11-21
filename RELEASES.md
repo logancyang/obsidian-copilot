@@ -4,19 +4,19 @@
 
 [![Demo video: Copilot Teammates: The First AI Team Built Into Obsidian](https://images.brevilabs.com/newsletters/copilot-plugin/copilot-teammates/teammates-video-play-7008237f.webp)](https://www.youtube.com/watch?v=Ri4YB0qR-Go)
 
-This is a big one. Copilot Teammates lets you build a small AI team inside Obsidian: an editor for your drafts, a researcher for your sources, a planner for your weekly review. Each teammate has its own instructions and its own memory, and it remembers what you teach it.
+This is a big one. Copilot Teammates lets you build a small AI team inside Obsidian: an editor who cuts AI slop from your posts, a CPA who knows your books, a family helper who knows your kid's schedule. Each teammate has its own instructions and its own memory, and it remembers what you teach it.
 
 ## 🤝 Copilot Teammates
 
 One assistant for everything forgets what you told it, and the rules you give it for one kind of work leak into the rest. Copilot Teammates gives each kind of work its own teammate, with its own instructions and memory.
 
-- **Make a teammate.** Choose **+** on the start screen, give it a name, a face and a model, and say in your own words what it handles. Or ask Copilot to draft one for you.
-  ![The Copilot Chat start screen with Maya, titled Edits my drafts, selected in a row of teammate faces next to Copilot, Coco, Leo, Nora and New, above a chat box that reads Ask Maya anything](https://images.brevilabs.com/newsletters/copilot-releases/4.1.0/start-screen-db91c545.png)
+- **Make a teammate.** Ask Copilot or any teammate for one, like "I need a writing editor called Maya who cuts AI slop from my posts." It drafts the teammate for you to check, then you pick a face and a model and choose **Create**. You can also choose **+** on the start screen.
+  ![A chat with Coco, titled Chief of staff, where the user asks for a writing editor called Maya who cuts AI slop. Coco answers with a New teammate draft card for Maya, a writing editor, with her instructions and a Review and create button](https://images.brevilabs.com/newsletters/copilot-releases/4.1.0/draft-card-a16e2ada.png)
 - **Teach it once.** Correct a teammate or tell it to remember something, and it saves the rule and shows "Maya remembered" in the chat.
-  ![A chat with Maya where the user asks Maya to tighten a launch post and to never open posts with filler, followed by a Maya remembered card quoting the saved rule and Maya's edit to the post](https://images.brevilabs.com/newsletters/copilot-releases/4.1.0/remembered-43e97ad5.png)
-- **Keep work separate.** Your editor's rules stay out of your planner's work. Instructions and memory are notes in your vault that you can open and edit.
+  ![A chat with Maya where the user says: Remember: my meal-planning app is for busy parents, not chefs. A Maya remembered card quotes the saved rule, and Maya replies that she'll edit with busy parents in mind](https://images.brevilabs.com/newsletters/copilot-releases/4.1.0/remember-b8c25f26.png)
+- **Keep work separate.** Your editor's rules stay out of your CPA's work. Instructions and memory are notes in your vault that you can open and edit.
 - **Get a second opinion.** Type `@Maya` with a question and Maya works on it in the background while you keep chatting. The answer comes back unsoftened, because a teammate with a different job pushes back.
-  ![A chat with Coco where the user asks @Maya whether the launch post is ready for Friday, with Messaged Maya and Message from Maya cards and Coco passing on Maya's answer that it is not ready, with three problems](https://images.brevilabs.com/newsletters/copilot-releases/4.1.0/ask-teammate-3c5fc309.png)
+  ![A chat with Coco where the user asks @Maya to fix Coco's launch post. Coco shows Messaged Maya and Message from Maya cards, then Maya's shorter version of the post for the Weeknight meal-planning app](https://images.brevilabs.com/newsletters/copilot-releases/4.1.0/second-opinion-126253a7.png)
 - **Bring it to every project.** A teammate isn't tied to a project, so the one that knows how you write comes with you.
 
 Copilot Teammates is a preview for Supporters.
