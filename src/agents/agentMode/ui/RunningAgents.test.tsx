@@ -189,7 +189,7 @@ describe("RunningAgents", () => {
         ["leo", "Leo"],
       ]) {
         vault.writeByHand(
-          `copilot/agents/${slug}/instructions.md`,
+          `copilot/teammates/${slug}/instructions.md`,
           serializeInstructionsFile({ name, title: `${name}'s title`, model: null }, "Help.")
         );
       }

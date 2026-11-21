@@ -2,6 +2,12 @@ import type { AskedConversation } from "@/agentMode/session/AgentSessionIndex";
 import { fakeChat } from "@/agentMode/session/testing/fakeChat";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { createListChatsTool, LIST_CHATS_TOOL_NAME } from "@/agents/agentMode/listChatsTool";
+import {
+  CHAT_LISTINGS,
+  listingCases,
+  toolHost,
+  type AgentSet,
+} from "@/agents/agentMode/testing/toolListings";
 import { setCustomAgentsAccess } from "@/agents/testing/customAgentsAccess";
 import { resetSettings } from "@/settings/model";
 import { buildNativeChatId } from "@/utils/nativeChatId";
@@ -10,9 +16,11 @@ jest.mock("@/entitlement");
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/959";
 const ASKED_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/980";
+const SCOPE_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/987";
+const CUT_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/990";
 const VAULT = "/Users/me/Vault";
 const SCOPE =
-  "Every other chat note belongs to another agent or to Copilot: unless the user names it, never search, read or cite it.";
+  "Every other chat note belongs to another AI teammate or to Copilot: unless the user names it, never search, read or cite it.";
 
 function chatItem(
   title: string,
@@ -35,7 +43,7 @@ const OTHER_CHATS = [
 ];
 
 const ASKED_HEADER =
-  "Conversations another agent or Copilot asked you into on the user's behalf, newest first. Your answers went back to the chat that asked: you know only what each line says, and there's no note to open for them.";
+  "Conversations another AI teammate or Copilot asked you into on the user's behalf, newest first. Your answers went back to the chat that asked: you know only what each line says, and there's no note to open for them.";
 const REX_CHAT: ChatHistoryItem = {
   ...chatItem("Launch budget review", 16, "rex"),
   backendId: "claude",
@@ -73,9 +81,11 @@ function buildTool(
     caller?: string | null;
     history?: ChatHistoryItem[];
     askedConversations?: AskedConversation[];
+    agents?: AgentSet;
   } = {}
 ) {
   return createListChatsTool({
+    ...toolHost(options.agents),
     earlierChats: async (chat) =>
       chat && options.caller !== undefined
         ? {
@@ -96,9 +106,17 @@ describe("listChatsTool", () => {
   });
 
   describe("createListChatsTool()", () => {
+    describe("promptHint", () => {
+      it("gives a model that can't see tool descriptions the sentence naming list_chats and when to call it, the same sentence that opens an agent's earlier-chats paragraph (https://github.com/Brevilabs/obsidian-copilot-private/issues/986)", () => {
+        expect(buildTool().promptHint).toBe(
+          "When the user asks what you and they worked on, discussed or decided before, list your earlier chats with list_chats from obsidian-copilot and read a listed note when you need what was said."
+        );
+      });
+    });
+
     describe("listedAs()", () => {
       it(`lists the tool, saying in its opening when to call it (${ISSUE})`, () => {
-        const listed = buildTool().listedAs?.({ sessionKey: "juno-chat", backendId: "claude" });
+        const listed = buildTool().listedAs?.(CHAT_LISTINGS["Coco's own chat"]);
 
         expect(listed?.name).toBe(LIST_CHATS_TOOL_NAME);
         const description = (listed as unknown as { description: string }).description;
@@ -110,9 +128,23 @@ describe("listChatsTool", () => {
         async (access) => {
           await setCustomAgentsAccess(access);
 
-          expect(
-            buildTool().listedAs?.({ sessionKey: "juno-chat", backendId: "claude" })
-          ).toBeNull();
+          expect(buildTool().listedAs?.(CHAT_LISTINGS["Coco's own chat"])).toBeNull();
+        }
+      );
+
+      it.each(
+        listingCases({
+          "a Copilot chat": [],
+          "Coco's own chat": ["no agent", "only Coco", "Coco and Maya", "Coco, Maya and Leo"],
+          "the chat Coco runs when asked": [],
+          "OpenCode's shared folder listing": ["only Coco", "Coco and Maya", "Coco, Maya and Leo"],
+        })
+      )(
+        `$label: it is offered only in an agent's own chat, even before its agent loads or after it is deleted while the chat is open, or in a folder's shared listing that can reach one while any agent exists (${SCOPE_ISSUE})`,
+        ({ chat, agents, listed }) => {
+          expect(buildTool({ agents }).listedAs?.(CHAT_LISTINGS[chat])?.name ?? null).toBe(
+            listed ? LIST_CHATS_TOOL_NAME : null
+          );
         }
       );
     });
@@ -132,17 +164,6 @@ describe("listChatsTool", () => {
         });
       });
 
-      it(`lists only the chats without a custom agent for a Copilot chat (${ISSUE})`, async () => {
-        const result = await buildTool({ caller: null }).call({}, fakeChat());
-
-        expect(result.text).toBe(
-          [
-            "Your earlier chats with the user, newest first. Open a listed note with your file or shell tools to see what was said. Every other chat note belongs to one of the user's agents: unless the user names it, never search, read or cite it.",
-            `- 2026-11-09 · Release video music · ${VAULT}/copilot/copilot-conversations/Release video music.md`,
-          ].join("\n")
-        );
-      });
-
       it(`lists at most the 20 newest chats, so a long history can't flood the agent's context (${ISSUE})`, async () => {
         const history = Array.from({ length: 25 }, (_, i) =>
           chatItem(`Chat ${i + 1}`, i + 1, "juno")
@@ -154,6 +175,34 @@ describe("listChatsTool", () => {
         expect(lines).toHaveLength(20);
         expect(lines[0]).toContain("Chat 25");
         expect(lines[19]).toContain("Chat 6");
+      });
+
+      it(`says how many older chats a cut list left out, that unlisted notes include them, and that an answer missing from the list may be in one, so the teammate doesn't deny a chat that happened (${CUT_ISSUE})`, async () => {
+        const history = Array.from({ length: 25 }, (_, i) =>
+          chatItem(`Chat ${i + 1}`, i + 1, "juno")
+        );
+
+        const { text } = await buildTool({ caller: "juno", history }).call({}, fakeChat());
+
+        expect(text.split("\n")[0]).toBe(
+          "Your earlier chats with the user, newest first. Open a listed note with your file or shell tools to see what was said. Older chats of yours left out of this list: 5. Every other chat note is one of those or belongs to another AI teammate or to Copilot: unless the user names it, never search, read or cite it. If none listed covers the question, say it may be in an older chat you can read if the user names it, not that you haven't discussed it."
+        );
+      });
+
+      it(`keeps the scope that every unlisted chat note is someone else's when all 20 of the caller's chats fit the list (${CUT_ISSUE})`, async () => {
+        const history = Array.from({ length: 20 }, (_, i) =>
+          chatItem(`Chat ${i + 1}`, i + 1, "juno")
+        );
+
+        const { text } = await buildTool({
+          caller: "juno",
+          history: [...history, ...OTHER_CHATS],
+        }).call({}, fakeChat());
+
+        expect(text.split("\n")[0]).toBe(
+          `Your earlier chats with the user, newest first. Open a listed note with your file or shell tools to see what was said. ${SCOPE}`
+        );
+        expect(text.split("\n")).toHaveLength(21);
       });
 
       it(`lists the caller's archived chats among its current ones, newest first within the 20 limit, and never another agent's archived chat (${ISSUE})`, async () => {
@@ -306,25 +355,19 @@ describe("listChatsTool", () => {
         expect(text).not.toContain("Juno asked you");
       });
 
-      it(`lists no asked conversations for a plain Copilot chat, which no agent can ask (${ASKED_ISSUE})`, async () => {
-        const { text } = await buildTool({
+      it(`turns down a call from a Copilot chat or an asked agent's chat, which OpenCode's shared listing still reaches, and lists nothing (${SCOPE_ISSUE})`, async () => {
+        const fromCopilot = await buildTool({
           caller: null,
           askedConversations: [askedConversation()],
         }).call({}, fakeChat());
-
-        expect(text).not.toContain(ASKED_HEADER);
-      });
-
-      it(`tells an asked agent's hidden chat, which the user never had, that it has no earlier chats, and lists nothing (${ISSUE})`, async () => {
-        const fromHidden = await buildTool({ caller: "juno" }).call({}, null);
-        const fromUnknown = await buildTool().call({}, fakeChat());
+        const fromAsked = await buildTool().call({}, fakeChat());
+        const unattributed = await buildTool({ caller: "juno" }).call({}, null);
 
         const refused = {
-          text: `Another agent asked you into this chat, so it has no earlier chats with the user. Say so, and don't call ${LIST_CHATS_TOOL_NAME} again.`,
+          text: `This chat can't list earlier chats. Don't call ${LIST_CHATS_TOOL_NAME} again.`,
           isError: false,
         };
-        expect(fromHidden).toEqual(refused);
-        expect(fromUnknown).toEqual(refused);
+        expect([fromCopilot, fromAsked, unattributed]).toEqual([refused, refused, refused]);
       });
 
       it(`refuses while custom agents aren't available and lists nothing (${ISSUE})`, async () => {

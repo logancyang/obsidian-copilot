@@ -20,7 +20,7 @@ export interface AgentDraftCard {
 // One draft per chat: a newer draft replaces the card, and "Not now" clears it, so two cards can never open the dialog with different drafts.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/941
 export const AGENT_DRAFT_CARD: ChatStateKey<AgentDraftCard | null> = Object.freeze({
-  id: "agent-draft",
+  id: "teammate-draft",
   initial: null,
 });
 

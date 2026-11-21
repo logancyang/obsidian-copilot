@@ -101,7 +101,7 @@ jest.mock("@/agentMode/ui/AgentTrailView", () => ({
     errorText?: string;
     agentCancelCause?: string;
     fileChanges?: TurnFileChange[];
-    memorySaves?: { anchorId: string | null } | null;
+    memorySaves?: { byCall: ReadonlyMap<string, unknown> } | null;
     onOpenFileChange?: (change: TurnFileChange) => void;
     onContinue?: () => void;
   }) => {
@@ -115,7 +115,9 @@ jest.mock("@/agentMode/ui/AgentTrailView", () => ({
       >
         {timestampMs}
         {memorySaves ? (
-          <span data-testid="agent-trail-memory-anchor">{memorySaves.anchorId}</span>
+          <span data-testid="agent-trail-memory-anchor">
+            {Array.from(memorySaves.byCall.keys()).join(",")}
+          </span>
         ) : null}
         {onContinue ? (
           <button type="button" onClick={onContinue}>
@@ -452,7 +454,7 @@ describe("AgentChatMessages", () => {
       );
 
       expect(screen.getByText("12s")).toBeTruthy();
-      expect(screen.queryByText("Agent is working")).toBeNull();
+      expect(screen.queryByText("Working")).toBeNull();
     });
 
     it("passes the message's sent time to a structured trail without a duration", () => {
@@ -788,7 +790,7 @@ describe("AgentChatMessages", () => {
         pendingAskUserQuestions: [question("question-first")],
       });
 
-      const rail = screen.getByRole("region", { name: "Pending agent actions" });
+      const rail = screen.getByRole("region", { name: "Pending actions" });
       const firstAction = rail.querySelector("[data-action-id]");
       expect(Array.from(rail.querySelectorAll("[data-action-id]"), (el) => el.textContent)).toEqual(
         ["Question question-first"]
@@ -820,7 +822,7 @@ describe("AgentChatMessages", () => {
         pendingToolPermissions: [permission("search-1")],
       });
 
-      expect(screen.getByRole("region", { name: "Pending agent actions" }).textContent).toBe(
+      expect(screen.getByRole("region", { name: "Pending actions" }).textContent).toBe(
         "Permission search-1 via websearch"
       );
     });
@@ -844,7 +846,7 @@ describe("AgentChatMessages", () => {
 
       renderMessages([toolTurn], true, { pendingToolPermissions: [request] });
 
-      const rail = screen.getByRole("region", { name: "Pending agent actions" });
+      const rail = screen.getByRole("region", { name: "Pending actions" });
       expect(rail.textContent).toBe("Permission create-1");
       expect(screen.getByTitle("Notion · Create page")).toBeTruthy();
     });
@@ -869,7 +871,7 @@ describe("AgentChatMessages", () => {
       request.toolCall.title = name;
       request.toolCall.rawInput = args;
       renderMessages([toolTurn], true, { pendingToolPermissions: [request] });
-      expect(screen.getByRole("region", { name: "Pending agent actions" }).textContent).toBe(
+      expect(screen.getByRole("region", { name: "Pending actions" }).textContent).toBe(
         "Permission direct-1"
       );
       expect(screen.getByTitle("Notion · Create page")).toBeTruthy();
@@ -893,7 +895,7 @@ describe("AgentChatMessages", () => {
         </AgentTasksProvider>
       );
 
-      expect(screen.getByRole("region", { name: "Pending agent actions" }).textContent).toBe(
+      expect(screen.getByRole("region", { name: "Pending actions" }).textContent).toBe(
         'Permission sub-bash from general-purpose "Count words in Welcome"'
       );
     });
@@ -906,7 +908,7 @@ describe("AgentChatMessages", () => {
 
       renderMessages([], true, { pendingToolPermissions: [request] });
 
-      const rail = screen.getByRole("region", { name: "Pending agent actions" });
+      const rail = screen.getByRole("region", { name: "Pending actions" });
       expect(rail.textContent).toBe("Permission leo-edit from Leo");
       expect(rail.querySelector("img")?.getAttribute("src")).toBe("data:image/webp;base64,leo");
     });
@@ -1006,19 +1008,15 @@ describe("AgentChatMessages", () => {
         expect(screen.getByRole("button", { name: "Plans/Launch plan.md" })).toBeTruthy();
         expect(container.textContent).toContain("Message fromMaya");
         expect(container.textContent).not.toContain("BIGGEST RISK");
-        expect(container.textContent).not.toContain("copilot-agent-reply");
+        expect(container.textContent).not.toContain("copilot-teammate-reply");
         expect(container.textContent).not.toContain("Pass the reply on");
       });
 
-      it("shows the rule the asked agent saved under its card, and leaves its MEMORY.md out of the files it changed (https://github.com/Brevilabs/obsidian-copilot-private/issues/969)", async () => {
+      it("shows the rule the asked agent saved under its card beside the files it changed (https://github.com/Brevilabs/obsidian-copilot-private/issues/969)", async () => {
         await setCustomAgentsAccess("team");
-        const memoryPath = "copilot/agents/maya/MEMORY.md";
+        const memoryPath = "copilot/teammates/maya/MEMORY.md";
         const saved = {
           ...relayMessage,
-          fileChanges: [
-            ...relayMessage.fileChanges,
-            { ...relayMessage.fileChanges[0], path: memoryPath },
-          ],
           memorySaves: [{ agentName: "Maya", memoryPath, rule: "Flag video length first." }],
         };
 
@@ -1032,8 +1030,7 @@ describe("AgentChatMessages", () => {
         expect(text.indexOf("Message fromMaya")).toBe(0);
         expect(text).toContain("Maya remembered“Flag video length first.”");
         expect(screen.getByRole("button", { name: "Plans/Launch plan.md" })).toBeTruthy();
-        expect(screen.queryByRole("button", { name: memoryPath })).toBeNull();
-        expect(screen.getByRole("button", { name: `Open ${memoryPath}` })).toBeTruthy();
+        expect(screen.getByRole("button", { name: /^Maya remembered/ })).toBeTruthy();
       });
 
       it("draws a relay as a card while a stored license is still being verified, so a restart never shows the message the current agent received (https://github.com/Brevilabs/obsidian-copilot-private/issues/951)", async () => {
@@ -1071,27 +1068,27 @@ describe("AgentChatMessages", () => {
     });
 
     describe("a custom agent's saved rules", () => {
-      const MEMORY = "copilot/agents/coco/MEMORY.md";
+      const MEMORY = "copilot/teammates/coco/MEMORY.md";
       const memorySaves = [
         { agentName: "Coco", memoryPath: MEMORY, rule: "Lead with user value." },
       ];
-      const saveEdit = {
+      const saveCall = {
         kind: "tool_call" as const,
         id: "save",
-        title: "Edit MEMORY.md",
+        title: "save_memory",
         status: "completed" as const,
-        toolKind: "edit" as const,
-        locations: [{ path: MEMORY }],
+        mcpServer: "obsidian-copilot",
+        copilotTools: { calls: [{ name: "save_memory", args: { rule: "Lead with user value." } }] },
       };
 
       afterEach(async () => {
         await setCustomAgentsAccess("free");
       });
 
-      it("hands the trail the saves to show in place of the edit that wrote them (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", async () => {
+      it("hands the trail the saves to show in place of the save_memory call that made them (https://github.com/Brevilabs/obsidian-copilot-private/issues/988)", async () => {
         await setCustomAgentsAccess("team");
 
-        renderMessages([assistantMessage("reply", 1, { parts: [saveEdit], memorySaves })], false);
+        renderMessages([assistantMessage("reply", 1, { parts: [saveCall], memorySaves })], false);
 
         expect(screen.getByTestId("agent-trail-memory-anchor").textContent).toBe("save");
         expect(screen.queryByText("Coco remembered")).toBeNull();
@@ -1110,7 +1107,7 @@ describe("AgentChatMessages", () => {
         expect(text.indexOf("Coco remembered")).toBeLessThan(text.indexOf("Got it."));
       });
 
-      it("leaves MEMORY.md out of the reply's changed files while its saves show, so a save has no Undo (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", async () => {
+      it("lists an edit of MEMORY.md among the reply's changed files, with its diff and Undo, beside the save lines, since only an edit the user approved lands there (https://github.com/Brevilabs/obsidian-copilot-private/issues/988)", async () => {
         await setCustomAgentsAccess("team");
         const fileChanges = [MEMORY, "notes/plan.md"].map((path) => ({
           path,
@@ -1122,12 +1119,12 @@ describe("AgentChatMessages", () => {
         }));
 
         renderMessages(
-          [assistantMessage("reply", 1, { parts: [saveEdit], memorySaves, fileChanges })],
+          [assistantMessage("reply", 1, { parts: [saveCall], memorySaves, fileChanges })],
           false
         );
 
         expect(screen.getByRole("button", { name: "notes/plan.md" })).toBeTruthy();
-        expect(screen.queryByRole("button", { name: MEMORY })).toBeNull();
+        expect(screen.getByRole("button", { name: MEMORY })).toBeTruthy();
       });
     });
   });

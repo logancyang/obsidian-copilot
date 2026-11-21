@@ -453,12 +453,27 @@ describe("descriptor", () => {
         ).toEqual({ default: "copilot-build", auto: "build" });
       });
 
-      it.each(["copilot-agent-coco/default", "copilot-agent-coco/auto"])(
+      it.each(["copilot-teammate-coco/default", "copilot-teammate-coco/auto"])(
         "https://github.com/Brevilabs/obsidian-copilot-private/issues/937 maps Default and Auto to the custom agent's own pair while the chat runs as %s",
         (current) => {
           expect(
             OpencodeBackendDescriptor.getModeMapping?.(null, modeOption(current))?.canonical
-          ).toEqual({ default: "copilot-agent-coco/default", auto: "copilot-agent-coco/auto" });
+          ).toEqual({
+            default: "copilot-teammate-coco/default",
+            auto: "copilot-teammate-coco/auto",
+          });
+        }
+      );
+
+      it.each(["copilot-teammate-coco/alt/default", "copilot-teammate-coco/alt/auto"])(
+        "https://github.com/Brevilabs/obsidian-copilot-private/issues/991 maps Default and Auto to the prompt variant's own pair while its chat runs as %s",
+        (current) => {
+          expect(
+            OpencodeBackendDescriptor.getModeMapping?.(null, modeOption(current))?.canonical
+          ).toEqual({
+            default: "copilot-teammate-coco/alt/default",
+            auto: "copilot-teammate-coco/alt/auto",
+          });
         }
       );
     });

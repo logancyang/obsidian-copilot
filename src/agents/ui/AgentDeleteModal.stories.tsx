@@ -4,8 +4,8 @@ import type { Meta, StoryObj } from "@/lib/story";
 
 function files(slug: string) {
   return {
-    instructionsPath: `copilot/agents/${slug}/instructions.md`,
-    memoryPath: `copilot/agents/${slug}/MEMORY.md`,
+    instructionsPath: `copilot/teammates/${slug}/instructions.md`,
+    memoryPath: `copilot/teammates/${slug}/MEMORY.md`,
   };
 }
 

@@ -128,7 +128,7 @@ export const FEEDBACK_OFFER_EXTENSION = defineChatExtension({
     // https://github.com/logancyang/obsidian-copilot/issues/4483
     if (error instanceof AuthRequiredError || error instanceof AgentReportedError) return offer;
     return openFeedbackOffer(chat, "turn_error", {
-      title: `Agent Chat reply failed on ${chat.backendId}`,
+      title: `Chat reply failed on ${chat.backendId}`,
       whatHappened: errorText,
       userSaid: "",
       repro: "",

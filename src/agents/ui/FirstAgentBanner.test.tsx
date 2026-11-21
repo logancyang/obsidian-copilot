@@ -51,15 +51,15 @@ describe("FirstAgentBanner", () => {
   });
 
   describe("FirstAgentBanner()", () => {
-    it("explains custom agents and opens the create dialog from Create your first agent", () => {
+    it("explains teammates and opens the create dialog from Create your first teammate", () => {
       const onCreate = jest.fn();
       render(<FirstAgentBanner onCreate={onCreate} onDismiss={jest.fn()} />);
 
-      expect(screen.getByText("Give each job its own agent")).not.toBeNull();
+      expect(screen.getByText("Give each job its own teammate")).not.toBeNull();
       expect(
-        screen.getByText("An agent has its own instructions and remembers the rules you give it.")
+        screen.getByText("A teammate has its own instructions and remembers the rules you give it.")
       ).not.toBeNull();
-      fireEvent.click(screen.getByRole("button", { name: "Create your first agent" }));
+      fireEvent.click(screen.getByRole("button", { name: "Create your first teammate" }));
 
       expect(onCreate).toHaveBeenCalledTimes(1);
     });
@@ -147,7 +147,7 @@ describe("FirstAgentBanner", () => {
       rerender({ count: 0 });
 
       expect(result.current).toBe(false);
-      expect(getSettings().agentMode.firstAgentBannerDismissed).toBe(true);
+      expect(getSettings().agentMode.firstTeammateBannerDismissed).toBe(true);
     });
 
     it(`hides the banner for good once it is dismissed, even after the settings are loaded again (${ISSUE})`, () => {
@@ -158,7 +158,7 @@ describe("FirstAgentBanner", () => {
 
       act(() => setSettings(sanitizeSettings(getSettings())));
       expect(result.current).toBe(false);
-      expect(getSettings().agentMode.firstAgentBannerDismissed).toBe(true);
+      expect(getSettings().agentMode.firstTeammateBannerDismissed).toBe(true);
     });
   });
 
@@ -166,7 +166,7 @@ describe("FirstAgentBanner", () => {
     it("records the dismissal in the settings", () => {
       dismissFirstAgentBanner();
 
-      expect(getSettings().agentMode.firstAgentBannerDismissed).toBe(true);
+      expect(getSettings().agentMode.firstTeammateBannerDismissed).toBe(true);
     });
   });
 });

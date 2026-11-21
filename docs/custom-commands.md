@@ -6,7 +6,7 @@ For a fast question or rewrite while you are editing, use **Quick Ask** instead.
 
 ## Commands or skills?
 
-Commands appear when you type `/` in Quick Chat or Agent Chat. Skills appear only in Agent Chat. You can also run saved commands from the editor or command palette.
+Commands appear when you type `/` in Quick Chat or Copilot Chat. Skills appear only in Copilot Chat. You can also run saved commands from the editor or command palette.
 
 | Use                 | Best for                                                                     | Managed in                                              |
 | ------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------- |
@@ -23,7 +23,7 @@ Skills can be shared with OpenCode, Claude, and Codex. Commands stay inside Copi
 4. Optionally choose **Model (optional)**, **Show in context menu**, and **Show in slash menu**.
 5. Click **Save**.
 
-Choose **Default model** to use **Default quick command model** from **Settings → Copilot → Command**. A command-specific model applies to editor and command-palette runs. A slash run uses the model selected for that Quick Chat or Agent Chat.
+Choose **Default model** to use **Default quick command model** from **Settings → Copilot → Command**. A command-specific model applies to editor and command-palette runs. A slash run uses the model selected for that Quick Chat or Copilot Chat.
 
 If a saved command’s selected model or the shared default is unavailable, configure it in **Settings → Copilot → Command**, then rerun the command. Copilot does not substitute your chat model or another enabled model, and changing the popup picker does not retry the original command. Quick Ask and Quick Command keep your unsent input while you choose a model.
 
@@ -47,14 +47,14 @@ For example:
 Rewrite {} as a concise project update. Match the style of {[[Writing Guide]]}.
 ```
 
-Tags must be in note properties, not only written inline in the note body. When you run a command from Agent Chat, the active agent resolves note, folder, and tag references with its vault tools.
+Tags must be in note properties, not only written inline in the note body. When you run a command from Copilot Chat, the active agent resolves note, folder, and tag references with its vault tools.
 
 ## Run a command
 
 - **From the editor:** select text if needed, then right-click and choose **Copilot → _command name_**. The command must have **Show in context menu** enabled.
 - **From the command palette:** run **Apply custom command**, then choose any command. Each saved command is also registered by name in the palette.
-- **From Quick Chat:** type `/`, choose a command, add any extra instruction, and send. Copilot replaces `/command-name` with the saved prompt before displaying and sending the message, matching Agent Chat.
-- **From Agent Chat:** type `/`, choose a command, add any extra instruction, and send. Choosing an item inserts it without sending, so you can review it first.
+- **From Quick Chat:** type `/`, choose a command, add any extra instruction, and send. Copilot replaces `/command-name` with the saved prompt before displaying and sending the message, matching Copilot Chat.
+- **From Copilot Chat:** type `/`, choose a command, add any extra instruction, and send. Choosing an item inserts it without sending, so you can review it first.
 
 Editor and command-palette runs open a result panel. You can refine the result, copy it, insert it at the cursor, or replace the original selection.
 
@@ -67,7 +67,7 @@ Editor and command-palette runs open a result panel. You can refine the result, 
 3. Ask your question. Use the model picker if needed, and enable **Note** to include the full active note.
 4. Use **Copy to clipboard**, **Insert at cursor**, or **Replace selection** on the answer. You can continue with follow-up questions in the same panel.
 
-Quick Ask is an inline panel, not an Agent Chat session or the full Quick Chat view. It uses a Copilot-hosted or [BYOK](settings.md#byok) Quick Chat model, not the model selected in Agent Chat. It starts with **Default quick command model**, shared with **Trigger quick command** and saved commands set to **Default model**. Model changes in either popup apply only to that run; change the shared default in **Settings → Copilot → Command**. The **Note** choice is remembered and shared.
+Quick Ask is an inline panel, not a chat in Copilot Chat or the full Quick Chat view. It uses a Copilot-hosted or [BYOK](settings.md#byok) Quick Chat model, not the model selected in Copilot Chat. It starts with **Default quick command model**, shared with **Trigger quick command** and saved commands set to **Default model**. Model changes in either popup apply only to that run; change the shared default in **Settings → Copilot → Command**. The **Note** choice is remembered and shared.
 
 Quick Ask is unavailable in Source mode. **Replace selection** appears only when text was selected and stays available only while Copilot can safely identify the original text in the same note and editor pane.
 
@@ -85,6 +85,6 @@ When upgrading from older command settings, Copilot migrates supported commands 
 
 ## Related
 
-- [Agent Chat](agent-mode-and-tools.md)
+- [Copilot Chat](agent-mode-and-tools.md)
 - [Context and Mentions](context-and-mentions.md)
 - [Getting Started](getting-started.md)

@@ -8,7 +8,7 @@ Settings show where each source sends your requests. Hover the small icon next t
 
 ## Choose a model source
 
-| Model source                        | Quick Chat | Agent Chat                                 |
+| Model source                        | Quick Chat | Copilot Chat                               |
 | ----------------------------------- | ---------- | ------------------------------------------ |
 | **Copilot-hosted models**           | Yes        | OpenCode                                   |
 | **Your API key or endpoint (BYOK)** | Yes        | OpenCode, when the provider is shown there |
@@ -34,7 +34,7 @@ enable a model; a license is still required to use it.
 Licensed models can appear in both places:
 
 - **Basic → Agents → Quick Chat** for regular Copilot chat on desktop, or **Basic → Quick Chat models** on mobile.
-- **Basic → Agents → OpenCode** for Agent Chat.
+- **Basic → Agents → OpenCode** for Copilot Chat.
 
 They do not appear under Claude or Codex, because those agents use their own
 accounts and models. The available Copilot lineup changes over time, so use the
@@ -111,7 +111,7 @@ keep streaming instead.
 
 ## Claude Code and Codex accounts
 
-Claude and Codex are Agent Chat backends, not BYOK providers:
+Claude and Codex are agents, not BYOK providers:
 
 - **Claude** inherits authentication and models from the Claude Code CLI. Its
   usage follows your Claude Code account or CLI environment.
@@ -140,7 +140,7 @@ BYOK**.
 ## Related
 
 - [Getting Started](getting-started.md)
-- [Agent Chat](agent-mode-and-tools.md)
+- [Copilot Chat](agent-mode-and-tools.md)
 - [Models, Effort, and Permissions](models-and-parameters.md)
 - [Settings: BYOK](settings.md#byok)
 - [Copilot Plans, Privacy, and Self-Hosting](copilot-plus-and-self-host.md)

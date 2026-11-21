@@ -55,8 +55,7 @@ import type {
 } from "@/agentMode/session/types";
 import { isCompactCommand } from "@/commands/compactCommand";
 import { ENABLED_MODEL_WAIT_MS } from "@/agentMode/session/enabledModelSelection";
-import { diffTargetPaths } from "@/agentMode/session/editTargets";
-import { isAgentMemoryFile } from "@/agents/agentMemoryFile";
+import { COPILOT_CHAT_PROMPT } from "@/agentMode/session/copilotChatPrompt";
 import { wrapStreamsForDebug } from "./debugTap";
 import { formToQuestionPrompt } from "./elicitation";
 import { deliverSessionUpdatesInWireOrder } from "./sessionUpdateWireOrder";
@@ -152,10 +151,6 @@ export class AcpBackendProcess implements BackendProcess {
   private planUsageReadQueued = false;
   private readonly backendContextWindows = new Map<string, number>();
   private readonly configOptionWaiters = new Map<SessionId, () => void>();
-  private readonly agentMemory = new Map<
-    SessionId,
-    { memoryPath: string; editTargets: Map<string, unknown[]> }
-  >();
 
   constructor(
     private readonly app: App,
@@ -168,7 +163,7 @@ export class AcpBackendProcess implements BackendProcess {
     if (this.connection) return;
     const adapter = this.app.vault.adapter;
     if (!(adapter instanceof FileSystemAdapter)) {
-      throw new Error("Agent Chat requires Obsidian on desktop.");
+      throw new Error("Copilot Chat requires Obsidian on desktop.");
     }
     const descriptor = await this.backend.buildSpawnDescriptor({
       vaultBasePath: adapter.getBasePath(),
@@ -360,7 +355,7 @@ export class AcpBackendProcess implements BackendProcess {
     const req: NewSessionRequest & SystemPromptField = {
       cwd: params.cwd,
       mcpServers: this.mcpServersField(params.mcpServers),
-      ...this.systemPromptField(params.agent),
+      ...this.systemPromptField(params.agent, params.mcpServers),
     };
     const wireResp = await this.requireConnection()
       .agent.request("session/new", req)
@@ -517,7 +512,6 @@ export class AcpBackendProcess implements BackendProcess {
     );
     this.sessionWireState.delete(params.sessionId);
     this.pendingUpdates.delete(params.sessionId);
-    this.agentMemory.delete(params.sessionId);
   }
 
   async cancel(params: CancelInput): Promise<void> {
@@ -645,7 +639,7 @@ export class AcpBackendProcess implements BackendProcess {
   }
 
   async resumeSession(params: ResumeSessionInput): Promise<ResumeSessionOutput> {
-    const systemPrompt = this.systemPromptField(params.agent);
+    const systemPrompt = this.systemPromptField(params.agent, params.mcpServers);
     const wireResp = await this.dispatchCapability(
       "session/resume",
       (c) =>
@@ -670,7 +664,7 @@ export class AcpBackendProcess implements BackendProcess {
   }
 
   async loadSession(params: LoadSessionInput): Promise<LoadSessionOutput> {
-    const systemPrompt = this.systemPromptField(params.agent);
+    const systemPrompt = this.systemPromptField(params.agent, params.mcpServers);
     const sessionId = params.sessionId;
     this.loadingSessions.add(sessionId);
     const wireResp = await this.dispatchCapability(
@@ -695,20 +689,27 @@ export class AcpBackendProcess implements BackendProcess {
 
   // The agent's part rides on every session/new, load and resume, so it outlasts compaction after a resume; a backend that cannot take it would run the chat as Copilot under the agent's name.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/937
-  private systemPromptField(agent: SessionAgent | undefined): SystemPromptField {
-    if (!agent || this.backend.selectAgentMode) return {};
+  // A chat without an agent has Copilot's part instead, and the backend may add to each chat's part from the tool servers the chat is given; a chat without an agent whose adapter is too old to take a part goes without.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/986
+  private systemPromptField(
+    agent: SessionAgent | undefined,
+    servers: ReadonlyArray<AgentMcpServer> | undefined
+  ): SystemPromptField {
+    if (this.backend.selectAgentMode) return {};
+    const agentPrompt = agent?.prompt ?? null;
+    const added = this.backend.extendChatPrompt?.({
+      agentPrompt,
+      mcpServers: this.hasCapability("mcp/http") ? (servers ?? []) : [],
+    });
+    const text = [agentPrompt ?? COPILOT_CHAT_PROMPT, added].filter(Boolean).join("\n\n");
     if (!this.hasCapability("systemPrompt")) {
+      if (!agent) return {};
       throw new Error(`${this.descriptor.displayName} needs an update to run Copilot Teammates.`);
     }
-    return { systemPrompt: { mode: "append", content: [{ type: "text", text: agent.prompt }] } };
+    return { systemPrompt: { mode: "append", content: [{ type: "text", text }] } };
   }
 
   private async applyAgentMode(sessionId: SessionId, agent: SessionAgent | undefined) {
-    if (agent?.memoryPath) {
-      this.agentMemory.set(sessionId, { memoryPath: agent.memoryPath, editTargets: new Map() });
-    } else {
-      this.agentMemory.delete(sessionId);
-    }
     const configOptions = this.sessionWireState.get(sessionId)?.configOptions;
     const mode = await this.backend.selectAgentMode?.(
       agent ?? null,
@@ -755,7 +756,6 @@ export class AcpBackendProcess implements BackendProcess {
     this.domainHandlers.clear();
     this.pendingUpdates.clear();
     this.sessionWireState.clear();
-    this.agentMemory.clear();
     this.todoToolCallIdsBySession.clear();
     this.sawLiveUsage.clear();
     this.permissionPrompter = null;
@@ -856,17 +856,6 @@ export class AcpBackendProcess implements BackendProcess {
     }
     if (update.update.sessionUpdate === "usage_update") {
       this.sawLiveUsage.add(sessionId);
-    }
-    const toolCall = update.update;
-    const editTargets = this.agentMemory.get(sessionId)?.editTargets;
-    if (
-      editTargets &&
-      (toolCall.sessionUpdate === "tool_call" || toolCall.sessionUpdate === "tool_call_update")
-    ) {
-      editTargets.set(toolCall.toolCallId, [
-        ...(editTargets.get(toolCall.toolCallId) ?? []),
-        ...editTargetsOf(toolCall),
-      ]);
     }
 
     const handler = this.domainHandlers.get(sessionId);
@@ -976,10 +965,6 @@ export class AcpBackendProcess implements BackendProcess {
   private async handlePermission(
     req: RequestPermissionRequest
   ): Promise<RequestPermissionResponse> {
-    const allowOnce = req.options.find((option) => option.kind === "allow_once");
-    if (allowOnce && this.isAgentMemorySave(req)) {
-      return { outcome: { outcome: "selected", optionId: allowOnce.optionId } };
-    }
     if (!this.permissionPrompter) {
       logWarn(`[AgentMode] permission requested but no prompter is registered; auto-cancelling`);
       return { outcome: { outcome: "cancelled" } };
@@ -991,26 +976,6 @@ export class AcpBackendProcess implements BackendProcess {
       )
     );
     return decisionToAcpResponse(decision);
-  }
-
-  // A custom agent saves a rule to its own MEMORY.md without asking; an edit that names any other file, or none, asks as usual.
-  // Codex names only a patch's source files in the request, so the paths its tool call reported, such as a Move to, count too.
-  // Plan mode saves nothing, and Codex Plan can still ask to write an agent folder outside a project chat's writable folder, so that ask keeps its card.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/942
-  private isAgentMemorySave({ sessionId, toolCall }: RequestPermissionRequest): boolean {
-    const memory = this.agentMemory.get(sessionIdFromAcp(sessionId));
-    if (!memory || toolCall.kind !== "edit") return false;
-    if (this.computeState(sessionId).mode?.current === "plan") return false;
-    const targets = [
-      ...editTargetsOf(toolCall),
-      ...(memory.editTargets.get(toolCall.toolCallId) ?? []),
-    ];
-    return (
-      targets.length > 0 &&
-      targets.every(
-        (target) => typeof target === "string" && isAgentMemoryFile(target, memory.memoryPath)
-      )
-    );
   }
 
   private async handleElicitation(
@@ -1025,19 +990,4 @@ export class AcpBackendProcess implements BackendProcess {
     if (Object.keys(answers).length === 0) return { action: "cancel" };
     return { action: "accept", content: form.toContent(answers) };
   }
-}
-
-function editTargetsOf(toolCall: {
-  locations?: ReadonlyArray<{ path: string }> | null;
-  content?: ReadonlyArray<{ type: string; path?: string | null }> | null;
-  rawInput?: unknown;
-}): unknown[] {
-  const input = toolCall.rawInput as Record<string, unknown> | null | undefined;
-  return [
-    ...(toolCall.locations ?? []).map((location) => location.path),
-    ...diffTargetPaths(toolCall.content),
-    input?.file_path,
-    input?.filePath,
-    input?.path,
-  ].filter((target) => target !== undefined);
 }

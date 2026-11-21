@@ -12,9 +12,9 @@ const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/940"
 
 const COCO: AgentDeleteFormProps["agent"] = {
   name: "Coco",
-  instructionsPath: "copilot/agents/coco/instructions.md",
-  memoryPath: "copilot/agents/coco/MEMORY.md",
-  faceSrc: "app://vault/copilot/agents/coco/face.webp",
+  instructionsPath: "copilot/teammates/coco/instructions.md",
+  memoryPath: "copilot/teammates/coco/MEMORY.md",
+  faceSrc: "app://vault/copilot/teammates/coco/face.webp",
 };
 
 function renderForm(props: Partial<AgentDeleteFormProps> = {}) {
@@ -32,8 +32,8 @@ describe("AgentDeleteModal", () => {
         screen.getByText("This deletes Coco and everything below. You can't undo it.")
       ).not.toBeNull();
       expect(screen.getAllByRole("listitem").map((item) => item.textContent)).toEqual([
-        "What Coco handlescopilot/agents/coco/instructions.md",
-        "Rules Coco remembers · 9 rulescopilot/agents/coco/MEMORY.md",
+        "What Coco handlescopilot/teammates/coco/instructions.md",
+        "Rules Coco remembers · 9 rulescopilot/teammates/coco/MEMORY.md",
         "Coco's face",
       ]);
     });
@@ -46,7 +46,7 @@ describe("AgentDeleteModal", () => {
       );
       expect(chats.closest("ul")).toBeNull();
       expect(
-        screen.getByText("What Coco said in chats with other agents stays there.")
+        screen.getByText("What Coco said in chats with other teammates stays there.")
       ).not.toBeNull();
     });
 

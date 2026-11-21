@@ -1,15 +1,15 @@
+import type { ToolListing } from "@/agentMode/session/copilotMcpServer";
 import type { CustomAgent, CustomAgentStore } from "@/agents/CustomAgentStore";
 import { getCustomAgentsGate } from "@/agents/customAgentsGate";
-import { MEMORY_FILE_NAME } from "@/agents/customAgentFiles";
+import { localDate } from "@/agents/agentMemoryFile";
 import { buildMemorySaveRules } from "@/agents/memorySaveRules";
+import { withoutEndedRules } from "@/agents/memorySaves";
 import { getEffectiveConversationsFolder } from "@/settings/copilotFolder";
 import { logWarn } from "@/logger";
 
 export interface AgentSessionPrompt {
   slug: string;
   prompt: string;
-  name: string;
-  memoryPath: string;
 }
 
 export interface AgentPromptInput {
@@ -22,38 +22,37 @@ export interface AgentPromptInput {
   ownChat?: { chatsFolder: string };
 }
 
-// Codex lists MCP tools only on search, so an agent learns from its own prompt that it can ask the others; a chat it was asked into has no ask_agent. A rule the user gives the asked agent is saved by that agent, so the asking agent keeps it out of its own memory.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/944
+// Given only the word "teammate", weaker models took the user's teammates for people; one sentence saying what they are made the difference the word alone did not.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/999
+export const AI_TEAMMATE_DEFINITION =
+  "An AI teammate is an AI assistant the user made in Copilot, not a person.";
+
+// A Copilot chat reads no teammate prompt, so the first teammate tool in a listing that can reach one opens with the definition. OpenCode's shared folder listing reaches Copilot chats too, so a teammate's own chat there reads it twice; a listing written for one teammate's chat leaves it to the prompt.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/999
+export function mayReachCopilotChat({ agentSlug }: ToolListing): boolean {
+  return agentSlug === undefined;
+}
+
+// With ask_teammate's whole description in view, weaker models passed a request that points at another agent by its job far less often unless the ask rule sat beside the list of agents.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/986
+export const ASK_AGENT_PROMPT_HINT =
+  "When the user's message @-mentions one of the user's AI teammates by name or clearly points to one, ask that AI teammate with the ask_teammate tool from obsidian-copilot; never otherwise.";
+
+export const LIST_CHATS_PROMPT_HINT =
+  "When the user asks what you and they worked on, discussed or decided before, list your earlier chats with list_chats from obsidian-copilot and read a listed note when you need what was said.";
+
+// A rule the user gives the asked agent is saved by that agent, so the asking agent keeps it out of its own memory; no tool description says so.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/969
-const ASK_OTHER_AGENTS =
-  "When the user's message @-mentions one of them by name or clearly points to one, ask that agent with the ask_agent tool from obsidian-copilot; never otherwise. A rule the user gives that agent is not yours to save.";
-// Codex lists MCP tools only on search, so an agent learns from its own prompt that it drafts a new agent as a card for the user to create, never creating one itself.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/941
-const DRAFT_WITH_TOOL =
-  "draft it with the draft_agent tool from obsidian-copilot, which shows them a card to review and create it";
-const DRAFT_NEW_AGENTS = `When the user asks you to make a new agent, ${DRAFT_WITH_TOOL}. If you or another agent already handles that job, say so and ask before drafting. You can't create an agent yourself.`;
+const NOT_YOURS_TO_SAVE = "A rule the user gives another AI teammate is not yours to save.";
 
-// Codex finds MCP tools only through its tool search, so an agent's prompt also names the tools for an agent it asked.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/945
-const CONTROL_ASKED_AGENTS =
-  "When the user asks how an agent you asked is doing, check with check_agent; when the user answers its question, pass the answer with answer_agent; when the user gives it a new instruction while it works, send that with ask_agent; when the user tells you to stop it, use stop_agent. All are in obsidian-copilot.";
-
-// Codex lists MCP tools only on search, so the agent's own chat names list_chats; another agent's or a Copilot chat's note in the same folder would answer for the wrong chat.
+// Every coding agent gets the whole recall paragraph: list_chats' description carries neither reading a listed note nor the scope, and without the scope another agent's or a Copilot chat's note in the same folder answered for the wrong chat.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/959
 function recallEarlierChats(chatsFolder: string): string {
-  return `When the user asks what you and they worked on, discussed or decided before, list your earlier chats with list_chats from obsidian-copilot and read a listed note when you need what was said. For that answer use only those chats: never search ${chatsFolder} for it, even within a wider search, and never read a note there that list_chats didn't list, unless the user names it. If none of them covers it, say you haven't discussed it.`;
+  return `${LIST_CHATS_PROMPT_HINT} For that answer use only those chats: never search ${chatsFolder} for it, even within a wider search, and never read a note there that list_chats didn't list, unless the user names it. If none of them covers it, say you haven't discussed it.`;
 }
 
 export function describeAgent({ name, title }: Pick<CustomAgent, "name" | "title">): string {
   return title ? `${name} (${title})` : name;
-}
-
-// A Copilot chat asked about earlier work read every chat note, agents' included, so it lists its own with list_chats too; the shared prompt is the one prompt a Copilot chat has on every backend, and a line that limited the tool to Copilot chats stopped agents from using it. Codex learns of draft_agent only from the prompt, so a Copilot chat is told it drafts new agents too; that line names chats where it is Copilot because an agent's own prompt already says it and an asked agent's hidden chat has no draft_agent.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/959
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/941
-export function buildCopilotChatSteering(): string | null {
-  if (getCustomAgentsGate() !== "full") return null;
-  return `In a chat where you are Copilot, when the user asks what you and they worked on, discussed or decided before, list your earlier chats with list_chats from obsidian-copilot and read a listed note when you need what was said. In a chat where you are Copilot, when the user asks you to make a new agent, ${DRAFT_WITH_TOOL}; you can't create an agent yourself.`;
 }
 
 export function buildAgentPrompt({
@@ -67,13 +66,13 @@ export function buildAgentPrompt({
 }: AgentPromptInput): string {
   const roster = others.length > 0 ? others.map(describeAgent).join("; ") : "none";
   return [
-    `In this chat you are ${describeAgent(agent)}, an agent the user made in Copilot.`,
-    `Your folder is ${folder}. Keep your own files in it, and add nothing else to the vault unless the user asks. Do not read or change other agents' folders.`,
-    `Your instruction is the body of ${folder}/instructions.md, and only the user edits that file. Your memory is ${folder}/MEMORY.md. When your memory contradicts your instruction, follow your memory.`,
-    `Other agents: ${roster}.`,
-    ...(others.length > 0 && ownChat ? [ASK_OTHER_AGENTS, CONTROL_ASKED_AGENTS] : []),
-    ...(ownChat ? [DRAFT_NEW_AGENTS, recallEarlierChats(ownChat.chatsFolder)] : []),
-    buildMemorySaveRules(`${folder}/${MEMORY_FILE_NAME}`, instructionsPath),
+    `In this chat you are ${describeAgent(agent)}, an AI teammate. ${AI_TEAMMATE_DEFINITION}`,
+    `Your folder is ${folder}. Keep your own files in it, and add nothing else to the vault unless the user asks. Do not read or change other AI teammates' folders.`,
+    `Your instruction is the body of ${folder}/instructions.md, and only the user edits that file. Your memory is ${folder}/MEMORY.md. It is your only memory: never save to CLAUDE.md, AGENTS.md or any other memory. When your memory contradicts your instruction, follow your memory.`,
+    `Other AI teammates: ${roster}.`,
+    ...(ownChat && others.length > 0 ? [ASK_AGENT_PROMPT_HINT, NOT_YOURS_TO_SAVE] : []),
+    ...(ownChat ? [recallEarlierChats(ownChat.chatsFolder)] : []),
+    buildMemorySaveRules(instructionsPath),
     `<instruction>\n${instruction}\n</instruction>`,
     `<memory>\n${memory}\n</memory>`,
   ].join("\n\n");
@@ -102,18 +101,16 @@ export async function loadAgentSessionPrompt(
   const folder = `${vaultBase}/${agent.folderPath}`;
   return {
     slug,
-    name: agent.name,
     prompt: buildAgentPrompt({
       agent,
       folder,
       others: agents.filter((other) => other !== agent),
       instruction: files.instruction,
-      memory: files.memory,
+      memory: withoutEndedRules(files.memory, localDate(new Date())),
       instructionsPath: agent.instructionsPath,
       ...(asked
         ? {}
         : { ownChat: { chatsFolder: `${vaultBase}/${getEffectiveConversationsFolder()}` } }),
     }),
-    memoryPath: `${vaultBase}/${agent.memoryPath}`,
   };
 }

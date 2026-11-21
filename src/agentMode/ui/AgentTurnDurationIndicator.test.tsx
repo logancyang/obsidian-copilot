@@ -34,7 +34,7 @@ describe("AgentTurnDurationIndicator", () => {
         <AgentTurnDurationIndicator status="running" startedAtMs={62_000} />
       );
 
-      expect(screen.getByRole("status").textContent).toBe("Agent is working");
+      expect(screen.getByRole("status").textContent).toBe("Working");
       const duration = screen.getByText("2m 18s");
       expect(duration.closest('[aria-hidden="true"]')).toBeNull();
       expect(container.querySelector(".copilot-spinner")).toBeTruthy();

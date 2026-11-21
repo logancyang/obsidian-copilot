@@ -2,11 +2,11 @@
 
 Quick Chat is Copilot V4's lightweight conversation view. Use it for a short question, rewrite, or discussion that does not need agent tools or a project workspace.
 
-On desktop, start with **Agent Chat** for multi-step work, reusable Skills, permissioned file changes, or project context. Click **Open Copilot Agent Chat** in the ribbon or run **Open Copilot Agent Chat window** from the command palette. On mobile, where Agent Chat is unavailable, Quick Chat is the main conversation view. See [Agent Chat](agent-mode-and-tools.md).
+On desktop, start with **Copilot Chat** for multi-step work, reusable Skills, permissioned file changes, or project context. Click **Open Copilot Chat** in the ribbon or run **Open Copilot Chat window** from the command palette. On mobile, where Copilot Chat is unavailable, Quick Chat is the main conversation view. See [Copilot Chat](agent-mode-and-tools.md).
 
 ## Open Quick Chat
 
-Run **Open Copilot Quick Chat window** from the command palette. On mobile, the Copilot ribbon button opens Quick Chat because Agent Chat requires desktop Obsidian.
+Run **Open Copilot Quick Chat window** from the command palette. On mobile, the Copilot ribbon button opens Quick Chat because Copilot Chat requires desktop Obsidian.
 
 In a mobile workspace tab, the message box stays above the software keyboard and Obsidian's bottom navigation bar as you open and close the keyboard.
 
@@ -40,7 +40,7 @@ A text selection takes priority over the full active note. For all supported con
 
 ## Run a saved command
 
-Type `/` and choose a saved command. You can add an instruction after the command name before sending. When you send, Quick Chat replaces `/command-name` with the saved command prompt followed by your extra instruction, matching Agent Chat.
+Type `/` and choose a saved command. You can add an instruction after the command name before sending. When you send, Quick Chat replaces `/command-name` with the saved command prompt followed by your extra instruction, matching Copilot Chat.
 
 Manage saved commands under **Settings → Copilot → Command**. See [Copilot Commands and Quick Ask](custom-commands.md).
 
@@ -75,15 +75,15 @@ Uploaded images are embedded in saved conversation notes. Copilot stores the ima
 
 ## Chat settings
 
-Use **Chat settings** (gear) to choose a **System prompt** for the current chat or reset the session choice. These settings do not configure Agent Chat, which reads `AGENTS.md` instead. See [Instructions for Agent Chat and Quick Chat](system-prompts.md).
+Use **Chat settings** (gear) to choose a **System prompt** for the current chat or reset the session choice. These settings do not configure Copilot Chat, which reads `AGENTS.md` instead. See [Instructions for Copilot Chat and Quick Chat](system-prompts.md).
 
 ## Quick Ask
 
-For one question or rewrite without opening a chat pane, run **Quick Ask** from the command palette or the editor's **Copilot** menu. Quick Ask uses a Quick Chat model, not the model in your Agent Chat session. See [Copilot Commands and Quick Ask](custom-commands.md#quick-ask).
+For one question or rewrite without opening a chat pane, run **Quick Ask** from the command palette or the editor's **Copilot** menu. Quick Ask uses a Quick Chat model, not the model selected in Copilot Chat. See [Copilot Commands and Quick Ask](custom-commands.md#quick-ask).
 
 ## Related
 
 - [Getting Started](getting-started.md)
-- [Agent Chat](agent-mode-and-tools.md)
+- [Copilot Chat](agent-mode-and-tools.md)
 - [Copilot Commands and Quick Ask](custom-commands.md)
 - [Context and Mentions](context-and-mentions.md)

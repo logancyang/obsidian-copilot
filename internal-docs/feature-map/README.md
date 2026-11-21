@@ -1,13 +1,13 @@
 # Copilot feature map
 
-A behavior-level inventory of Agent Mode, one file per part of the screen a user can point at. Agents use it to decide what to drive and what evidence counts; humans use it as the regression checklist. To add or change an entry, follow [`FEATURE_MAP_GUIDE.md`](../FEATURE_MAP_GUIDE.md).
+A behavior-level inventory of Copilot Chat, one file per part of the screen a user can point at. Agents use it to decide what to drive and what evidence counts; humans use it as the regression checklist. To add or change an entry, follow [`FEATURE_MAP_GUIDE.md`](../FEATURE_MAP_GUIDE.md).
 
 The map holds what has been mapped so far, not everything the product does. An entry's sub-features can miss capabilities. When a change touches behavior the map does not describe, drive that behavior too, and add it to the entry.
 
 ## Baseline
 
 - This working tree's build is deployed into your own scratch vault, per [`TESTING_GUIDE.md`](../TESTING_GUIDE.md), "End-to-end testing". Never drive a vault you did not create for this run.
-- Agent Chat is open, its agent has finished starting, and Recent chats lists at least two past chats.
+- Copilot Chat is open, its agent has finished starting, and Recent chats lists at least two past chats.
 - Find controls by their visible name or tooltip, within the pane under test.
 - Replies stream. Wait for the reply to finish, not for a fixed time.
 - "Sent a message" means a message sent since Obsidian started.
@@ -23,14 +23,14 @@ The feature file a change touches defines its coverage set. Also drive every jou
 
 ## Start
 
-- [agent-home](agent-home.md): the start screen: a greeting, the chat input for the first message, and the Recent chats / Relevant Notes / Projects shelf.
-- [create-agent-dialog](create-agent-dialog.md): the `New agent` dialog that makes an agent.
+- [start-screen](start-screen.md): the start screen of a new chat: a greeting, the chat input for the first message, and the Recent chats / Relevant Notes / Projects shelf.
+- [new-teammate-dialog](new-teammate-dialog.md): the `New teammate` dialog that makes a teammate.
 
 ## Chats
 
-- [chat-tabs](chat-tabs.md): tabs across the top of Agent Chat, one per open chat.
-- [agent-identity-bar](agent-identity-bar.md): the face, name, and title of an agent the user made, at the top of its chat.
-- [agent-profile](agent-profile.md): an agent's page in the sidebar: its two files, a new chat with it.
+- [chat-tabs](chat-tabs.md): tabs across the top of the chat, one per open chat.
+- [teammate-identity-bar](teammate-identity-bar.md): the face, name, and title of a teammate, at the top of its chat.
+- [teammate-profile](teammate-profile.md): a teammate's page in the sidebar: its name, face and title, its two files, its model, a new chat with it, and Delete.
 - [copilot-navigator](copilot-navigator.md): the sidebar listing chats and projects.
 - [chat-rows](chat-rows.md): one chat in a list, wherever chats are listed.
 - [chat-controls](chat-controls.md): the bar above the chat input: New chat, Chat history, Usage, More actions.
@@ -39,10 +39,10 @@ The feature file a change touches defines its coverage set. Also drive every jou
 
 - [chat-input](chat-input.md): model, mode, and effort pickers, mentions, note context, images, send, stop.
 - [queued-messages](queued-messages.md): messages queued while the agent works.
-- [agent-replies](agent-replies.md): streaming text, reasoning, tool and activity cards, subagents, tasks.
-- [agent-mentions](agent-mentions.md): `@` another agent, the one line while it works, and its relayed reply.
+- [replies](replies.md): streaming text, reasoning, tool and activity cards, subagents, tasks.
+- [asking-a-teammate](asking-a-teammate.md): `@` a teammate, the one line while it works, and its reply coming back.
 - [permission-requests](permission-requests.md): `Permission required` cards that wait for the user to allow or deny a tool call.
-- [agent-questions](agent-questions.md): `Question from agent` cards that wait for the user's answer.
+- [agent-questions](agent-questions.md): `Question for you` cards that wait for the user's answer.
 - [plan-proposals](plan-proposals.md): Plan mode cards to approve, reject, or redirect a plan.
 - [status-and-error-cards](status-and-error-cards.md): agent status, settings changed, error, and feedback cards.
 - [turn-diffs](turn-diffs.md): file changes per turn, Revoke.

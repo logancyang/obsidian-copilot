@@ -1,16 +1,16 @@
 # Getting Started with Copilot V4
 
-Copilot V4 is built around **Agent Chat**, a desktop workspace where OpenCode, Claude Code, or Codex can read your vault, use tools, and complete multi-step work with the permissions you choose.
+Copilot V4 is built around **Copilot Chat**, a desktop workspace where OpenCode, Claude Code, or Codex can read your vault, use tools, and complete multi-step work with the permissions you choose.
 
-Agent Chat is available in Obsidian on desktop. Quick Chat, Copilot Commands, and Quick Ask remain available for shorter tasks and on mobile.
+Copilot Chat is available in Obsidian on desktop. Quick Chat, Copilot Commands, and Quick Ask remain available for shorter tasks and on mobile.
 
 ## Install Copilot
 
 1. Open **Obsidian Settings → Community plugins**.
 2. Select **Browse**, search for **Copilot**, and install it.
-3. Enable Copilot. The Agent Chat icon appears in the left ribbon on desktop.
+3. Enable Copilot. The Copilot Chat icon appears in the left ribbon on desktop.
 
-## Set Up Your First Agent Chat
+## Set Up Your First Agent
 
 Open **Settings → Copilot → Basic** and find **Agents**. For most people, the quickest path is the managed OpenCode setup.
 
@@ -43,33 +43,33 @@ Copilot connects to Codex through the `codex-acp` adapter, which includes a comp
 2. Click **Sign in**, complete authentication in your browser, and return to Obsidian. If the browser does not open, click **Open sign-in page**. You can cancel or retry sign-in.
 3. To use your own adapter instead, choose **My own installation**, then use **Auto-detect** or enter its path. Copilot never updates a custom binary.
 
-If your adapter is below the supported minimum, open **Configure** in Settings to manage the installation. Agent Chat also offers **Upgrade**, with shared progress and errors. You can also choose **Sign in to Codex** on the Agent Chat status card. For terminal login, run your configured adapter with `cli login` using the same `CODEX_HOME` as Copilot.
+If your adapter is below the supported minimum, open **Configure** in Settings to manage the installation. Copilot Chat also offers **Upgrade**, with shared progress and errors. You can also choose **Sign in to Codex** on the chat's status card. For terminal login, run your configured adapter with `cli login` using the same `CODEX_HOME` as Copilot.
 
 For manual installations, Copilot requires a supported `@agentclientprotocol/codex-acp` adapter and checks compatibility in **Configure**. See [Codex installation details](agent-mode-and-tools.md#codex). Codex uses the login stored by the bundled Codex CLI; there is no Codex key to paste into Copilot.
 
-## Start Your First Agent Chat
+## Start Your First Chat
 
-1. Click the **Agent Chat** ribbon icon, or run **Open Copilot Agent Chat window** from the command palette.
+1. Click the **Open Copilot Chat** ribbon icon, or run **Open Copilot Chat window** from the command palette.
 2. If **Select your agent** appears, choose an **Installed** agent and select **Start chat**. When the default backend is already ready, Copilot opens its chat automatically.
 3. Pick a model and permission setting beside the message box, then describe the outcome you want.
 
-Try a concrete first request such as: “Review the unfinished tasks in this vault and make a short plan.” With **Default** selected, Agent Chat shows its work and asks before actions that need your approval.
+Try a concrete first request such as: “Review the unfinished tasks in this vault and make a short plan.” With **Default** selected, the chat shows its work and asks before actions that need your approval.
 
 ## Projects, Skills, and Commands
 
 ### Keep Work Focused with Projects
 
-From Agent Chat Home, open **Projects** and select **New project**. A project keeps its own instructions, reusable context, and chat history, so work for one client or topic stays together. See [Projects](projects.md) for supported context sources and setup.
+From the Copilot Chat home screen, open **Projects** and select **New project**. A project keeps its own instructions, reusable context, and chat history, so work for one client or topic stays together. See [Projects](projects.md) for supported context sources and setup.
 
 ### Share Skills Across Agents
 
 Skills are reusable instruction packets for jobs such as reviewing a change or drafting a release note. Open **Settings → Copilot → Skills** to see skills from Copilot's shared skills folder and the native OpenCode, Claude, and Codex skill folders. Enable each skill for the agents that should use it; Copilot links shared skills into the right agent folders for you.
 
-Type `/` in Agent Chat to choose an available skill. Copilot also includes skills for Obsidian Markdown, Bases, and Canvas. Learn more in [Skills across agents](agent-mode-and-tools.md#skills-across-agents).
+Type `/` in Copilot Chat to choose an available skill. Copilot also includes skills for Obsidian Markdown, Bases, and Canvas. Learn more in [Skills across agents](agent-mode-and-tools.md#skills-across-agents).
 
 ### Reuse Copilot Commands
 
-Create preset prompts under **Settings → Copilot → Command**. Run them from the command palette, the editor's **Copilot** menu, or by typing `/` in Agent Chat. See [Copilot Commands and Quick Ask](custom-commands.md).
+Create preset prompts under **Settings → Copilot → Command**. Run them from the command palette, the editor's **Copilot** menu, or by typing `/` in Copilot Chat. See [Copilot Commands and Quick Ask](custom-commands.md).
 
 ### Ask Without Leaving the Editor
 
@@ -77,7 +77,7 @@ Run **Quick Ask** from the command palette, or assign it a hotkey under **Obsidi
 
 ## Next Steps
 
-- [Agent Chat](agent-mode-and-tools.md): agents, permissions, context, models, and skills
+- [Copilot Chat](agent-mode-and-tools.md): agents, permissions, context, models, and skills
 - [Projects](projects.md): focused agent workspaces
 - [Copilot Commands and Quick Ask](custom-commands.md): reusable prompts and in-editor help
 - [Model Sources and BYOK](llm-providers.md): BYOK setup for OpenCode and Quick Chat

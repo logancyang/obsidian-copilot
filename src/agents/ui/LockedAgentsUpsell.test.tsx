@@ -85,10 +85,10 @@ describe("LockedAgentsUpsell", () => {
     describe("constructor()", () => {
       it(`titles the dialog by how many custom agents the vault has (${ISSUE})`, () => {
         expect(new LockedAgentsUpsellModal(new App(), FOUR).titleEl.textContent).toBe(
-          "This vault has 4 agents"
+          "This vault has 4 teammates"
         );
         expect(new LockedAgentsUpsellModal(new App(), [MAYA]).titleEl.textContent).toBe(
-          "This vault has 1 agent"
+          "This vault has 1 teammate"
         );
       });
     });

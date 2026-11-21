@@ -1,35 +1,64 @@
-import { getCustomAgentsGate } from "@/agents/customAgentsGate";
-import { requireNodeModule } from "@/utils/desktopRuntime";
+import { readMemoryRules, sameRule } from "@/agents/memorySaves";
+import { TFile, type Vault } from "obsidian";
 
-function realPath(fs: typeof import("node:fs"), target: string): string | null {
-  try {
-    return fs.realpathSync.native(target);
-  } catch {
-    return null;
-  }
+export interface RuleToSave {
+  rule: string;
+  why: string;
+  replaces?: string;
+  contradicts?: string;
 }
 
-function writesOnlyItself(fs: typeof import("node:fs"), target: string): boolean {
-  try {
-    const entry = fs.lstatSync(target, { throwIfNoEntry: false });
-    return entry === undefined || (entry.isFile() && entry.nlink === 1);
-  } catch {
-    return false;
-  }
+export interface MemoryWrite {
+  text: string;
+  replaced?: string;
 }
 
-// A write skips the permission card only for the agent's own MEMORY.md while custom agents are available, so the path a model wrote is compared by where it really lands: through symlinked folders and "..", never through a link at the file itself.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/942
-export function isAgentMemoryFile(requestedPath: string, memoryPath: string): boolean {
-  if (getCustomAgentsGate() !== "full") return false;
-  const fs = requireNodeModule<typeof import("node:fs")>("fs");
-  const path = requireNodeModule<typeof import("node:path")>("path");
-  if (!path.isAbsolute(requestedPath) || !writesOnlyItself(fs, requestedPath)) return false;
-  const folder = realPath(fs, path.dirname(memoryPath));
-  const requestedFolder = realPath(fs, path.dirname(requestedPath));
-  if (!folder || !requestedFolder) return false;
-  return (
-    path.join(requestedFolder, path.basename(requestedPath)) ===
-    path.join(folder, path.basename(memoryPath))
-  );
+const CONTRADICTS_INSTRUCTION_MARKER = "Contradicts instruction:";
+const DATE = /^\d{4}-\d{2}-\d{2}/;
+
+export function localDate(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+// Copilot writes each rule in the format models wrote by hand, so files from either read the same, and a save touches only its own rule's lines, even in a file the user reshaped by hand.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/988
+export function writeMemoryRule(text: string, save: RuleToSave, date: string): MemoryWrite | null {
+  const eol = text.includes("\r\n") ? "\r\n" : "\n";
+  const lines = text.split(/\r?\n/);
+  const notes = [date, save.why];
+  if (save.contradicts) notes.push(`${CONTRADICTS_INSTRUCTION_MARKER} "${save.contradicts}"`);
+  if (save.replaces !== undefined) {
+    const wanted = sameRule(save.replaces);
+    const old = readMemoryRules(text).find(({ rule }) => sameRule(rule) === wanted);
+    if (!old) return null;
+    const oldDate = DATE.exec(old.context)?.[0];
+    notes.splice(1, 0, `Replaces "${old.rule}"${oldDate ? ` (${oldDate})` : ""}`);
+    lines.splice(old.line, old.context ? 2 : 1, save.rule, notes.join(" · "));
+    return { text: lines.join(eol), replaced: old.rule };
+  }
+  while (lines.length > 0 && !lines[lines.length - 1].trim()) lines.pop();
+  if (lines.length > 0) lines.push("");
+  lines.push(save.rule, notes.join(" · "), "");
+  return { text: lines.join(eol) };
+}
+
+export async function saveMemoryRule(
+  vault: Vault,
+  path: string,
+  save: RuleToSave,
+  date: string
+): Promise<MemoryWrite | null> {
+  const file = vault.getAbstractFileByPath(path);
+  if (!(file instanceof TFile)) {
+    const written = writeMemoryRule("", save, date);
+    if (written) await vault.create(path, written.text);
+    return written;
+  }
+  let written: MemoryWrite | null = null;
+  await vault.process(file, (text) => {
+    written = writeMemoryRule(text, save, date);
+    return written?.text ?? text;
+  });
+  return written;
 }

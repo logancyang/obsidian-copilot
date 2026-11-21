@@ -432,7 +432,7 @@ describe("AgentTrail", () => {
     expect(screen.getAllByTestId("agent-md")).toHaveLength(1);
   });
 
-  it("https://github.com/logancyang/obsidian-copilot/issues/4062 says the agent ended its turn after a declined permission, so a reply the agent cancelled does not look frozen", () => {
+  it("https://github.com/logancyang/obsidian-copilot/issues/4062 says the reply ended after a declined permission, so a reply the agent cancelled does not look frozen", () => {
     renderTrail({
       parts: [text("I'll ask before running it."), toolCall("x1", { status: "failed" })],
       turnStopReason: "cancelled",
@@ -441,15 +441,15 @@ describe("AgentTrail", () => {
 
     expect(screen.getAllByTestId("agent-md").map((el) => el.textContent)).toEqual([
       "I'll ask before running it.",
-      "**Stopped:** the agent ended its turn after you declined a permission. Send a message to tell it what to do next.",
+      "**Stopped:** the reply ended after you declined a permission. Send a message to say what to do next.",
     ]);
   });
 
-  it("https://github.com/logancyang/obsidian-copilot/issues/4062 says only that the agent ended its turn when no permission was declined, even before any text or tool activity", () => {
+  it("https://github.com/logancyang/obsidian-copilot/issues/4062 says only that the reply ended when no permission was declined, even before any text or tool activity", () => {
     renderTrail({ parts: [], turnStopReason: "cancelled", agentCancelCause: "unspecified" });
 
     expect(screen.getAllByTestId("agent-md").map((el) => el.textContent)).toEqual([
-      "**Stopped:** the agent ended its turn early. Send a message to continue.",
+      "**Stopped:** the reply ended early. Send a message to continue.",
     ]);
   });
 
@@ -783,29 +783,21 @@ describe("AgentTrail", () => {
     expect(screen.getByTestId("agent-md").getAttribute("data-miyo-paths")).toBe("v/a.md|v/b.md");
   });
 
-  it("shows a custom agent's saved rule in place of the edit that wrote it, in the turn's order (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", () => {
+  it("shows a custom agent's saved rule in place of the save_memory call that saved it, in the turn's order (https://github.com/Brevilabs/obsidian-copilot-private/issues/988)", () => {
+    const rule = "Launch videos lead with user value.";
     const save = toolCall("save", {
-      vendorToolName: "Edit",
-      toolKind: "edit",
-      title: "Edit MEMORY.md",
-      locations: [{ path: "copilot/agents/coco/MEMORY.md" }],
+      title: "save_memory",
+      mcpServer: "obsidian-copilot",
+      copilotTools: { calls: [{ name: "save_memory", args: { rule } }] },
     });
+    const saved = { agentName: "Coco", memoryPath: "copilot/teammates/coco/MEMORY.md", rule };
     const { container } = renderTrail({
       parts: [READ_A, save, text("Reworked the outline.")],
-      memorySaves: {
-        anchorId: "save",
-        saves: [
-          {
-            agentName: "Coco",
-            memoryPath: "copilot/agents/coco/MEMORY.md",
-            rule: "Launch videos lead with user value.",
-          },
-        ],
-      },
+      memorySaves: { saves: [saved], byCall: new Map([["save", [saved]]]), unplaced: [] },
     });
 
     const shown = container.textContent ?? "";
-    expect(shown).not.toContain("MEMORY.md");
+    expect(shown).not.toContain("Save memory");
     expect(shown.indexOf("Coco remembered")).toBeGreaterThan(-1);
     expect(shown.indexOf("Coco remembered")).toBeLessThan(shown.indexOf("Reworked the outline."));
   });
@@ -815,7 +807,7 @@ describe("AgentTrail", () => {
       vendorToolName: "Edit",
       toolKind: "edit",
       title: "Edit MEMORY.md",
-      locations: [{ path: "copilot/agents/coco/MEMORY.md" }],
+      locations: [{ path: "copilot/teammates/coco/MEMORY.md" }],
     });
     const { container } = renderTrail({
       parts: [save, text("Reworked the outline.")],

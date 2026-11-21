@@ -34,7 +34,7 @@ const mockChooseLockedAgents = jest.fn();
 const mockCloseMenu = jest.fn();
 const LOCKED_ROW: CategoryOption = {
   key: "agents",
-  title: "Agents",
+  title: "Teammates",
   category: "agents",
   icon: null,
   lockedNote: "Supporter preview",
@@ -110,13 +110,13 @@ describe("AtMentionCommandPlugin", () => {
   });
 
   describe("AtMentionCommandPlugin()", () => {
-    it(`lists an Agents row first, then the context categories, and no single agent at the first level (${MENTION_ISSUE})`, () => {
+    it(`lists a Teammates row first, then the context categories, and no single agent at the first level (${MENTION_ISSUE})`, () => {
       renderInChat(COCO.slug);
 
-      expect(menuTitles()).toEqual(["Agents", "Notes", "Web tabs", "Folders"]);
+      expect(menuTitles()).toEqual(["Teammates", "Notes", "Web tabs", "Folders"]);
     });
 
-    it(`leaves out the Agents row when the only agent is the one the chat is with (${MENTION_ISSUE})`, () => {
+    it(`leaves out the Teammates row when the only agent is the one the chat is with (${MENTION_ISSUE})`, () => {
       renderInChat(COCO.slug, false, [COCO]);
 
       expect(menuTitles()).toEqual(["Notes", "Web tabs", "Folders"]);
@@ -128,10 +128,10 @@ describe("AtMentionCommandPlugin", () => {
       expect(menuTitles()).toEqual(["Notes", "Web tabs", "Folders"]);
     });
 
-    it(`lists the other agents, without the chat's own, once Agents is chosen (${MENTION_ISSUE})`, () => {
+    it(`lists the other agents, without the chat's own, once Teammates is chosen (${MENTION_ISSUE})`, () => {
       renderInChat(COCO.slug);
 
-      choose("Agents");
+      choose("Teammates");
 
       expect(menuTitles()).toEqual([MAYA.name, LEO.name]);
     });
@@ -139,14 +139,14 @@ describe("AtMentionCommandPlugin", () => {
     it(`lists every agent under Agents in a Copilot chat (${MENTION_ISSUE})`, () => {
       renderInChat(null);
 
-      choose("Agents");
+      choose("Teammates");
 
       expect(menuTitles()).toEqual([COCO.name, MAYA.name, LEO.name]);
     });
 
-    it(`keeps only the agents whose name holds the typed text under Agents, and lists nothing when none does (${MENTION_ISSUE})`, () => {
+    it(`keeps only the agents whose name holds the typed text under Teammates, and lists nothing when none does (${MENTION_ISSUE})`, () => {
       renderInChat(COCO.slug);
-      choose("Agents");
+      choose("Teammates");
 
       type("le");
       expect(menuTitles()).toEqual([LEO.name]);
@@ -172,7 +172,7 @@ describe("AtMentionCommandPlugin", () => {
     });
 
     it.each([
-      { from: "the Agents list", open: () => choose("Agents") },
+      { from: "the Teammates list", open: () => choose("Teammates") },
       { from: "the first-level results", open: () => type("ma") },
     ])(
       `puts an agent picked from $from in the message as its mention pill (${MENTION_ISSUE})`,
@@ -199,7 +199,7 @@ describe("AtMentionCommandPlugin", () => {
           <AtMentionCommandPlugin />
         </ChatAgentsContext.Provider>
       );
-      choose("Agents");
+      choose("Teammates");
 
       expect(option(LEO.name).lockedNote).toBe("Needs setup");
       expect(option(MAYA.name).lockedNote).toBeUndefined();
@@ -210,11 +210,11 @@ describe("AtMentionCommandPlugin", () => {
       expect($replaceTriggeredTextWithPill).not.toHaveBeenCalled();
     });
 
-    it(`lists the locked Agents row first in an Agent Chat whose license doesn't include custom agents (${MENTION_ISSUE})`, () => {
+    it(`lists the locked Teammates row first in an Agent Chat whose license doesn't include custom agents (${MENTION_ISSUE})`, () => {
       render(<AtMentionCommandPlugin isAgentMode />);
 
-      expect(menuTitles()).toEqual(["Agents", "Notes", "Web tabs", "Folders"]);
-      expect(option("Agents").lockedNote).toBe("Supporter preview");
+      expect(menuTitles()).toEqual(["Teammates", "Notes", "Web tabs", "Folders"]);
+      expect(option("Teammates").lockedNote).toBe("Supporter preview");
     });
 
     it(`lists none of the chat's agents for a first-level query when the license doesn't include custom agents (${LOCKED_ISSUE})`, () => {
@@ -226,25 +226,25 @@ describe("AtMentionCommandPlugin", () => {
       expect(menuTitles()).toEqual([LEDGER_NOTE.title]);
     });
 
-    it(`opens the upsell from the locked Agents row, closes the menu so Enter sends the message when the license check grants custom agents, and puts nothing in the message (${LOCKED_ISSUE})`, () => {
+    it(`opens the upsell from the locked Teammates row, closes the menu so Enter sends the message when the license check grants custom agents, and puts nothing in the message (${LOCKED_ISSUE})`, () => {
       render(<AtMentionCommandPlugin isAgentMode />);
 
-      choose("Agents");
+      choose("Teammates");
 
       expect(mockChooseLockedAgents).toHaveBeenCalledTimes(1);
       expect(mockCloseMenu).toHaveBeenCalledTimes(1);
       expect(mockEditorUpdate).not.toHaveBeenCalled();
-      expect(menuTitles()).toEqual(["Agents", "Notes", "Web tabs", "Folders"]);
+      expect(menuTitles()).toEqual(["Teammates", "Notes", "Web tabs", "Folders"]);
     });
 
-    it(`keeps the one locked Agents row in a vault with agents, and lists them locked for a first-level query, each opening the locked dialog with nothing inserted (${LOCKED_AGENTS_ISSUE})`, () => {
+    it(`keeps the one locked Teammates row in a vault with agents, and lists them locked for a first-level query, each opening the locked dialog with nothing inserted (${LOCKED_AGENTS_ISSUE})`, () => {
       jest.mocked(useLockedAgentMention).mockReturnValue({
         option: LOCKED_ROW,
         agents: THREE_AGENTS,
         choose: mockChooseLockedAgents,
       });
       render(<AtMentionCommandPlugin isAgentMode />);
-      expect(menuTitles()).toEqual(["Agents", "Notes", "Web tabs", "Folders"]);
+      expect(menuTitles()).toEqual(["Teammates", "Notes", "Web tabs", "Folders"]);
 
       type("ma");
 

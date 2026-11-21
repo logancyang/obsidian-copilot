@@ -89,7 +89,7 @@ function renderForm(props: Partial<CreateAgentFormProps> = {}) {
       <CreateAgentForm
         agents={[LEO]}
         folderNames={["leo"]}
-        agentsFolder="copilot/agents"
+        agentsFolder="copilot/teammates"
         models={MODELS}
         presetFaces={{ status: "loading" }}
         closeGuard={closeGuard}
@@ -145,7 +145,7 @@ describe("CreateAgentForm", () => {
       );
       expect(screen.getByTitle("Model · effort").textContent).toContain("Opus 5.5");
       expect(screen.getByTitle("Model · effort").textContent).toContain("high");
-      expect(screen.getByText("Saved in copilot/agents/")).not.toBeNull();
+      expect(screen.getByText("Saved in copilot/teammates/")).not.toBeNull();
       expect(screen.queryByRole("alert")).toBeNull();
       expect(createButton().disabled).toBe(true);
     });
@@ -156,16 +156,16 @@ describe("CreateAgentForm", () => {
       type("Name", "Kai");
       expect(screen.getByLabelText("What it handles")).not.toBeNull();
       expect(screen.getByText(/It reads this at the start of every chat\./)).not.toBeNull();
-      expect(screen.getByText("Saved in copilot/agents/")).not.toBeNull();
+      expect(screen.getByText("Saved in copilot/teammates/")).not.toBeNull();
 
       fireEvent.blur(screen.getByLabelText("Name"));
       expect(screen.getByLabelText("What Kai handles")).not.toBeNull();
       expect(screen.getByText(/Kai reads this at the start of every chat\./)).not.toBeNull();
-      expect(screen.getByText("Saved in copilot/agents/kai/")).not.toBeNull();
+      expect(screen.getByText("Saved in copilot/teammates/kai/")).not.toBeNull();
 
       type("Name", "Kaia");
       expect(screen.getByLabelText("What Kai handles")).not.toBeNull();
-      expect(screen.getByText("Saved in copilot/agents/kai/")).not.toBeNull();
+      expect(screen.getByText("Saved in copilot/teammates/kai/")).not.toBeNull();
     });
 
     it(`says a taken name and updates Create on every key, before the name field is left (${ISSUE})`, async () => {
@@ -305,7 +305,7 @@ describe("CreateAgentForm", () => {
         "Leo is already on your team. Pick another name."
       );
       expect(screen.getByLabelText("Name").getAttribute("aria-invalid")).toBe("true");
-      expect(screen.getByText("Saved in copilot/agents/")).not.toBeNull();
+      expect(screen.getByText("Saved in copilot/teammates/")).not.toBeNull();
       expect(createButton().disabled).toBe(true);
     });
 
@@ -320,7 +320,7 @@ describe("CreateAgentForm", () => {
         case: "a folder holding no agent",
         props: { folderNames: ["leo", "Kai"] },
         name: "Kai",
-        message: "A folder named kai already exists in your agents folder. Pick another name.",
+        message: "A folder named kai already exists in your teammates folder. Pick another name.",
       },
     ])(
       `says when $case already has the name's folder, names no folder for it, and keeps Create unavailable (${NAMES_ISSUE})`,
@@ -331,7 +331,7 @@ describe("CreateAgentForm", () => {
         type(`What ${name} handles`, "You handle marketing.");
 
         expect(screen.getByRole("alert").textContent).toBe(message);
-        expect(screen.getByText("Saved in copilot/agents/")).not.toBeNull();
+        expect(screen.getByText("Saved in copilot/teammates/")).not.toBeNull();
         expect(createButton().disabled).toBe(true);
         expect(await createButtonHint()).toBe(message);
       }
@@ -457,7 +457,7 @@ describe("CreateAgentForm", () => {
         "You plan pickups."
       );
       expect(screen.getByText(/Nora reads this at the start of every chat\./)).not.toBeNull();
-      expect(screen.getByText("Saved in copilot/agents/nora/")).not.toBeNull();
+      expect(screen.getByText("Saved in copilot/teammates/nora/")).not.toBeNull();
       expect(createButton().disabled).toBe(false);
     });
 
@@ -466,12 +466,12 @@ describe("CreateAgentForm", () => {
       renderForm({ onAskCopilot });
 
       expect(document.querySelector("form")?.firstElementChild?.textContent).toBe(
-        "Tip: you can also just ask. Tell Copilot what you need and it drafts the agent for you.Ask Copilot"
+        "Tip: you can also just ask. Tell Copilot what you need and it drafts the teammate for you.Ask Copilot"
       );
       fireEvent.click(screen.getByRole("button", { name: "Ask Copilot" }));
 
       expect(onAskCopilot).toHaveBeenCalledWith(
-        "Create a new agent for me and suggest a name for it. Here's what it should do: "
+        "Create a new teammate for me and suggest a name for it. Here's what it should do: "
       );
     });
 
@@ -484,7 +484,7 @@ describe("CreateAgentForm", () => {
       fireEvent.click(screen.getByRole("button", { name: "Ask Copilot" }));
 
       expect(onAskCopilot).toHaveBeenCalledWith(
-        "Create a new agent named Kai for me. Here's what it should do: You handle marketing."
+        "Create a new teammate named Kai for me. Here's what it should do: You handle marketing."
       );
     });
 
@@ -496,7 +496,7 @@ describe("CreateAgentForm", () => {
       fireEvent.click(screen.getByRole("button", { name: "Ask Copilot" }));
 
       expect(onAskCopilot).toHaveBeenCalledWith(
-        "Create a new agent for me and suggest a name for it. Here's what it should do: You handle marketing."
+        "Create a new teammate for me and suggest a name for it. Here's what it should do: You handle marketing."
       );
     });
 
@@ -511,7 +511,7 @@ describe("CreateAgentForm", () => {
       fireEvent.click(screen.getByRole("button", { name: "Ask Copilot" }));
 
       expect(onAskCopilot).toHaveBeenCalledWith(
-        "Create a new agent for me and suggest a name for it. Here's what it should do: "
+        "Create a new teammate for me and suggest a name for it. Here's what it should do: "
       );
     });
 

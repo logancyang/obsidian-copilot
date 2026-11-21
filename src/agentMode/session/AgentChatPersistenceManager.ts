@@ -39,7 +39,7 @@ import {
 import { sanitizeModel } from "./AgentSessionIndex";
 import { NO_SAVED_CHAT_STATES, type SavedChatStates } from "./chatExtension";
 import type { MemorySave } from "@/agents/memorySaves";
-import { restoreAgentMentions, type AgentMention } from "@/agents/agentMentions";
+import { restoreAgentMentions } from "@/agents/agentMentions";
 import { GLOBAL_SCOPE } from "./scope";
 import type { AgentChatMessage, BackendId, ModelSelection, SessionUsage } from "./types";
 
@@ -60,16 +60,29 @@ interface SavedMessageData {
   notes?: string[];
   folders?: string[];
   webTabs?: { url: string; title?: string }[];
-  agents?: string[];
+  teammates?: string[];
   // A custom agent's save lines come back with the chat only from its note; a build without custom agents ignores the key and shows the reply as ordinary text.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/942
-  memorySaves?: readonly MemorySave[];
+  memorySaves?: unknown;
   // Each @-mentioned agent's run comes back with the chat only from its note; master and a build without custom agents ignore the key.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
-  agentMentions?: readonly AgentMention[];
+  teammateMentions?: unknown;
   // A card the user can still act on comes back with the chat only from its note, kept on the last message; master and a build without the card's feature ignore the key.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/941
   chatStates?: SavedChatStates;
+}
+
+// A note saves a run's teammate as teammate and a save's as teammateName, while the code still names them agent and agentName.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/1000
+function renameField(saved: unknown, from: string, to: string): unknown {
+  if (!Array.isArray(saved)) return saved;
+  return saved.map((entry: unknown) =>
+    isRecord(entry)
+      ? Object.fromEntries(
+          Object.entries(entry).map(([key, value]) => [key === from ? to : key, value])
+        )
+      : entry
+  );
 }
 
 function loadedMemorySaves(saved: unknown): MemorySave[] {
@@ -96,7 +109,7 @@ function savedContext(context: MessageContext | undefined): SavedMessageData {
   const saved: SavedMessageData = {};
   if (context?.notes?.length) saved.notes = context.notes.map((note) => note.path);
   if (context?.folders?.length) saved.folders = context.folders;
-  if (context?.agents?.length) saved.agents = context.agents;
+  if (context?.agents?.length) saved.teammates = context.agents;
   if (context?.webTabs?.length)
     saved.webTabs = context.webTabs.map(({ url, title }) => ({ url, title }));
   return saved;
@@ -113,7 +126,7 @@ function loadedContext(saved: SavedMessageData, app: App): MessageContext | unde
   const folders = (Array.isArray(saved.folders) ? saved.folders : []).filter(
     (path) => typeof path === "string"
   );
-  const agents = (Array.isArray(saved.agents) ? saved.agents : []).filter(
+  const agents = (Array.isArray(saved.teammates) ? saved.teammates : []).filter(
     (name) => typeof name === "string"
   );
   if (notes.length === 0 && webTabs.length === 0 && folders.length === 0 && agents.length === 0)
@@ -149,11 +162,11 @@ function parseContinuedFrom(raw: string | undefined): string[] | undefined {
   }
 }
 
-// A chat note is the user's file: a hand edit or the Properties panel can leave agent as a list, a number, null or broken YAML, and the chat still opens.
+// A chat note is the user's file: a hand edit or the Properties panel can leave teammate as a list, a number, null or broken YAML, and the chat still opens.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/937
 function parseAgentSlug(yaml: string): string | undefined {
   try {
-    const agent: unknown = (parseYaml(yaml) as { agent?: unknown } | null)?.agent;
+    const agent: unknown = (parseYaml(yaml) as { teammate?: unknown } | null)?.teammate;
     return typeof agent === "string" ? agent.trim() || undefined : undefined;
   } catch {
     return undefined;
@@ -449,8 +462,12 @@ export class AgentChatPersistenceManager {
         const data: SavedMessageData = {
           ...(tools.length > 0 ? { tools } : {}),
           ...savedContext(m.context),
-          ...(m.memorySaves?.length ? { memorySaves: m.memorySaves } : {}),
-          ...(m.agentMentions?.length ? { agentMentions: m.agentMentions } : {}),
+          ...(m.memorySaves?.length
+            ? { memorySaves: renameField(m.memorySaves, "agentName", "teammateName") }
+            : {}),
+          ...(m.agentMentions?.length
+            ? { teammateMentions: renameField(m.agentMentions, "agent", "teammate") }
+            : {}),
           ...(index === messages.length - 1 && Object.keys(chatStates).length > 0
             ? { chatStates }
             : {}),
@@ -499,8 +516,12 @@ export class AgentChatPersistenceManager {
         ? data.tools.filter((tool) => typeof tool === "string")
         : [];
       const context = loadedContext(data, this.app);
-      const memorySaves = loadedMemorySaves(data.memorySaves);
-      const agentMentions = restoreAgentMentions(data.agentMentions);
+      const memorySaves = loadedMemorySaves(
+        renameField(data.memorySaves, "teammateName", "agentName")
+      );
+      const agentMentions = restoreAgentMentions(
+        renameField(data.teammateMentions, "teammate", "agent")
+      );
       chatStates = isRecord(data.chatStates) ? data.chatStates : undefined;
 
       let timestamp: FormattedDateTime | null = null;
@@ -585,8 +606,8 @@ export class AgentChatPersistenceManager {
           .join(" ")
           // eslint-disable-next-line no-control-regex -- serialized frontmatter must reject embedded control bytes
           .replace(/[\\/:*?"<>|\x00-\x1F]/g, "")
-          .trim() || "Untitled Agent Chat"
-      : "Untitled Agent Chat";
+          .trim() || "Untitled Chat"
+      : "Untitled Chat";
 
     let customFileName = settings.defaultConversationNoteName || "{$date}_{$time}__{$topic}";
     const filePrefix = AGENT_FILENAME_PREFIX;
@@ -653,7 +674,7 @@ export class AgentChatPersistenceManager {
       ["projectId", projectId === GLOBAL_SCOPE ? null : quoted("projectId", projectId)],
       ["sessionId", quoted("sessionId", args.sessionId)],
       ["topic", quoted("topic", args.label)],
-      ["agent", quoted("agent", args.agent)],
+      ["teammate", quoted("teammate", args.agent)],
       ["model", args.model ? `model: '${JSON.stringify(args.model)}'` : undefined],
       ["usage", args.usage ? `usage: '${JSON.stringify(args.usage)}'` : undefined],
       [

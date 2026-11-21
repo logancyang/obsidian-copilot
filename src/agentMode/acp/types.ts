@@ -1,4 +1,5 @@
 import type {
+  AgentMcpServer,
   BackendConfigOption,
   BackendId,
   SessionAgent,
@@ -14,6 +15,11 @@ export interface AcpSpawnDescriptor {
   env: NodeJS.ProcessEnv;
 }
 
+export interface ChatPromptInput {
+  agentPrompt: string | null;
+  mcpServers: ReadonlyArray<AgentMcpServer>;
+}
+
 export interface AcpBackend {
   readonly id: BackendId;
   readonly displayName: string;
@@ -26,6 +32,7 @@ export interface AcpBackend {
     promptResultMeta: Readonly<Record<string, unknown>> | null | undefined
   ): TurnDiff | null;
   readCopilotTools?(rawInput: unknown, toolName?: string): CopilotToolUse | null;
+  extendChatPrompt?(chat: ChatPromptInput): string | null;
   selectAgentMode?(
     agent: SessionAgent | null,
     configOptions: readonly BackendConfigOption[] | null

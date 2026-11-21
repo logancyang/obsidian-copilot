@@ -1,12 +1,12 @@
 import type { AgentMention } from "@/agents/agentMentions";
 
-export const AGENT_REPLY_MARKER = "copilot-agent-reply";
+export const AGENT_REPLY_MARKER = "copilot-teammate-reply";
 const NO_REPLY = "(no reply)";
 
 // The design's relay principle, sent with every reply the current agent passes on.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
 export const RELAY_PRINCIPLE =
-  "When you pass on another agent's reply, keep its position as strong as it was. If it disagrees with you or the user, say so plainly. Then add your own view if you have one.";
+  "When you pass on another AI teammate's reply, keep its position as strong as it was. If it disagrees with you or the user, say so plainly. Then add your own view if you have one.";
 
 const STOPPED_HOW: Record<NonNullable<AgentReplyRelay["stopped"]>, (name: string) => string> = {
   stopped_by_user: () => ", as the user asked",
@@ -47,8 +47,8 @@ export function joinNames(names: readonly string[]): string {
 }
 
 const MARKER_LINE = new RegExp(`^<!-- ${AGENT_REPLY_MARKER} (\\{[^\\n]*\\}) -->\\n`);
-const REPLY_OPEN = /\n<agent-reply from="[^\n]*">\n/;
-const REPLY_CLOSE = "\n</agent-reply>";
+const REPLY_OPEN = /\n<teammate-reply from="[^\n]*">\n/;
+const REPLY_CLOSE = "\n</teammate-reply>";
 
 export function formatAgentReply({
   agent,
@@ -66,14 +66,17 @@ export function formatAgentReply({
 }: AgentReplyRelay): string {
   // A chat without a note keeps its runs only in its agent's history, so each relay carries how its run ended and the asked agent's chat for a reopened chat to rebuild the run from.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/976
-  const marker = JSON.stringify({ agent, name, mention, status, chat }).replace(/>/g, "\\u003e");
+  const marker = JSON.stringify({ teammate: agent, name, mention, status, chat }).replace(
+    />/g,
+    "\\u003e"
+  );
   // The reply can quote a note or page written to close the quote early and pass its own text off as Copilot's.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
-  const quoted = reply.replace(/<\/agent-reply/gi, "&lt;/agent-reply");
+  const quoted = reply.replace(/<\/teammate-reply/gi, "&lt;/teammate-reply");
   return [
     `<!-- ${AGENT_REPLY_MARKER} ${marker} -->`,
     question
-      ? `${name} has a question for the user, quoted below, and waits for the answer. Ask the user in your own words, then end your turn. When the user answers, pass the answer to ${name} with answer_agent.`
+      ? `${name} has a question for the user, quoted below, and waits for the answer. Ask the user in your own words, then end your turn. When the user answers, pass the answer to ${name} with answer_teammate.`
       : stopped
         ? `${name} stopped${STOPPED_HOW[stopped](name)}. ${name}'s changes stay. Tell the user how far ${name} got and what ${name} changed; when ${name}'s reply doesn't say, read the files ${name} changed to find out.`
         : error
@@ -93,7 +96,7 @@ export function formatAgentReply({
       ? [`${name} changed ${changed.join(", ")}. The user sees these files under the reply.`]
       : []),
     RELAY_PRINCIPLE,
-    `<agent-reply from="${name}">\n${quoted || NO_REPLY}\n</agent-reply>`,
+    `<teammate-reply from="${name}">\n${quoted || NO_REPLY}\n</teammate-reply>`,
   ].join("\n\n");
 }
 
@@ -104,13 +107,13 @@ export function readAgentReply(text: string): AgentReply | null {
   const open = REPLY_OPEN.exec(text);
   const close = text.lastIndexOf(REPLY_CLOSE);
   if (!markerLine || !open || close < open.index) return null;
-  let marker: Partial<AgentReplyMarker>;
+  let marker: Partial<Omit<AgentReplyMarker, "agent"> & { teammate: string }>;
   try {
-    marker = JSON.parse(markerLine[1]) as Partial<AgentReplyMarker>;
+    marker = JSON.parse(markerLine[1]) as typeof marker;
   } catch {
     return null;
   }
-  const { agent, name, mention, status, chat } = marker;
+  const { teammate: agent, name, mention, status, chat } = marker;
   if (typeof agent !== "string" || typeof name !== "string" || typeof mention !== "string") {
     return null;
   }
@@ -119,5 +122,5 @@ export function readAgentReply(text: string): AgentReply | null {
   if (reply === NO_REPLY) return { marker: read, reply: "" };
   // The chat shows the agent's words as it wrote them, so the closing tag escaped for the current agent is restored.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
-  return { marker: read, reply: reply.replace(/&lt;(\/agent-reply)/gi, "<$1") };
+  return { marker: read, reply: reply.replace(/&lt;(\/teammate-reply)/gi, "<$1") };
 }

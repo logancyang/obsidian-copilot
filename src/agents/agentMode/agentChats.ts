@@ -1,10 +1,12 @@
 import type { HiddenAgentChats } from "@/agents/agentMode/hiddenAgentChats";
 import { AgentUnavailableError } from "@/agents/agentUnavailableError";
 import type { CustomAgent, CustomAgentStore } from "@/agents/CustomAgentStore";
+import type { App } from "obsidian";
 import {
   backendRegistry,
   findBackendForModel,
   getActiveBackendDescriptor,
+  listBackendDescriptors,
 } from "@/agentMode/backends/registry";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
@@ -117,6 +119,7 @@ export async function listAgentChatsToArchive(
 }
 
 export interface DeleteAgentRequest {
+  app: App;
   manager: AgentSessionManager;
   store: CustomAgentStore;
   slug: string;
@@ -135,6 +138,7 @@ const NOTHING_DELETED: DeleteAgentResult = Object.freeze({
 });
 
 export async function deleteAgentAndArchiveChats({
+  app,
   manager,
   store,
   slug,
@@ -146,8 +150,8 @@ export async function deleteAgentAndArchiveChats({
   if (!store.getAgents().some((agent) => agent.slug === slug)) return NOTHING_DELETED;
   // New chats must not reopen on the agent being deleted, or the new chat below would start as it.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/940
-  if (getSettings().agentMode.lastCustomAgent === slug) {
-    setSettings((cur) => ({ agentMode: { ...cur.agentMode, lastCustomAgent: undefined } }));
+  if (getSettings().agentMode.lastTeammate === slug) {
+    setSettings((cur) => ({ agentMode: { ...cur.agentMode, lastTeammate: undefined } }));
   }
   // The tab the profile covers goes back to the agent home as a new chat instead of closing with the agent's chat.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/940
@@ -179,6 +183,13 @@ export async function deleteAgentAndArchiveChats({
     } catch (error) {
       logError(`[Custom agents] Archiving ${slug}'s chat ${chat.id} failed`, error);
     }
+  }
+  for (const descriptor of listBackendDescriptors()) {
+    // A coding agent's copy of the agent's instruction and memory outside the vault must not outlive the agent, yet the agent is deleted all the same when that copy can't be removed.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/991
+    await descriptor.forgetAgent?.(app, slug).catch((error: unknown) => {
+      logWarn(`[Custom agents] ${descriptor.displayName} couldn't forget ${slug}`, error);
+    });
   }
   return { archivedChats, agentDeleted: true };
 }

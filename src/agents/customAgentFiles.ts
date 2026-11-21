@@ -10,7 +10,7 @@ export const FACE_SIZE_PX = 256;
 const FACE_MIME = "image/webp";
 const FACE_QUALITY = 0.9;
 const MAX_SLUG_LENGTH = 48;
-const FALLBACK_SLUG = "agent";
+const FALLBACK_SLUG = "teammate";
 const WINDOWS_DEVICE_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/;
 
 const NEUTRAL_FACE_SVG =
@@ -68,7 +68,7 @@ export function findAgentNameConflict(
   const owner = agents.find((agent) => agent.slug.toLowerCase() === folder);
   return owner
     ? `${owner.name} already uses the folder ${folder}. Pick another name.`
-    : `A folder named ${folder} already exists in your agents folder. Pick another name.`;
+    : `A folder named ${folder} already exists in your teammates folder. Pick another name.`;
 }
 
 export function serializeInstructionsFile(

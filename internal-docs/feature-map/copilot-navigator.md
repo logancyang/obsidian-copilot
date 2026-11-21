@@ -7,7 +7,7 @@ A sidebar listing chats and projects, available only as a preview for Supporters
 - nav-toggle: open and close the Navigator. Opening it hides the [chat tabs](chat-tabs.md) and stops the agent of every chat left in a background tab untouched; closing it brings the tabs back, one per chat whose agent is running.
 - nav-search: `Search chats` filters the list.
 - nav-sections: chats grouped under Pinned, Projects, and Recents.
-- nav-open-chat: click a chat to show it in Agent Chat. The chat left behind stops its agent unless the user sent a message or left unsent text in it.
+- nav-open-chat: click a chat to show it in Copilot Chat. The chat left behind stops its agent unless the user sent a message or left unsent text in it.
 - nav-new-chat: `New chat` at the top starts a chat outside any project, under the same rule.
 - nav-project-folders: a project row opens its home; its `Show/Hide chats in <project>` chevron expands or collapses its chats without navigating. `New chat in <project>` starts a chat there, under the same rule. A project name is dimmed unless the current chat is in it or a chat folded inside it needs the user.
 - nav-new-project: `New project` creates a project and opens it, under the same rule.
@@ -15,7 +15,7 @@ A sidebar listing chats and projects, available only as a preview for Supporters
 - nav-archived: `Sidebar options` → View archived lists archived chats and projects to open or unarchive, under the same rule.
 - nav-upgrade: without a Supporter license, opening it shows `Copilot Navigator is a preview for Supporters` instead.
 
-Each chat in the list is a [chat row](chat-rows.md). A chat with one of the user's agents starts with the agent's face in place of the logo, under Pinned, Projects, and Recents alike.
+Each chat in the list is a [chat row](chat-rows.md). A chat with a teammate starts with the teammate's face in place of its agent's icon, under Pinned, Projects, and Recents alike.
 
 ## How to get to it
 
@@ -29,9 +29,9 @@ Run the `Open Copilot Navigator` command, or choose `Open Copilot Navigator` at 
 - Chat controls: open A without sending anything, then choose `New chat` in the [chat controls](chat-controls.md). A no longer shows `Running`.
 - Search: type part of a chat title into `Search chats`. Only matching chats remain.
 - Folder: click a project row or press Enter on it. Its home opens. Choose the row's `Show/Hide chats in <project>` chevron, or focus it and press Enter or Space: the chats expand or collapse and the shown chat does not change.
-- New chat in a project: hover a folder and choose `New chat in <project>`. Agent Chat shows a new chat inside that project.
+- New chat in a project: hover a folder and choose `New chat in <project>`. Copilot Chat shows a new chat inside that project.
 - Project name: open a chat outside every project. Each project name is dimmed; open a chat in one project and its name brightens.
-- Agent faces: open the Navigator with chats from agents the user made and from Copilot. Agent chats show their agent's face, Copilot chats their logo; the running spinner and the unread bell stay at the right end.
+- Teammate faces: open the Navigator with chats from teammates and from Copilot. Teammates' chats show their face, Copilot chats their agent's icon; the running spinner and the unread bell stay at the right end.
 - Archived: choose `Sidebar options` → View archived. Archived chats are listed; Unarchive returns one to Recents.
 - Close: close the Navigator. The chat tabs return, one per chat still showing `Running`.
 

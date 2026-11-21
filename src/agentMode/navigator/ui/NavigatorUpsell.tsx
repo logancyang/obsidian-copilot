@@ -28,7 +28,7 @@ export function NavigatorUpsellContent({
 }: NavigatorUpsellContentProps): React.ReactElement {
   return (
     <SupporterPreviewUpsell
-      description="Copilot Navigator keeps all your agent chats in one sidebar, so long-running work stays easy to find and manage."
+      description="Copilot Navigator keeps all your chats in one sidebar, so long-running work stays easy to find and manage."
       points={NAVIGATOR_POINTS}
       media={
         // Width cap keeps the 4:3 animation under 40vh tall so the footer buttons fit short windows: https://github.com/Brevilabs/obsidian-copilot-private/issues/819
@@ -68,7 +68,7 @@ export function NavigatorBlockedNotice({
       <p className="tw-m-0 tw-font-semibold">Your preview access ended</p>
       <p className="tw-m-0 tw-text-sm tw-text-muted">
         Copilot Navigator is a preview for Supporters. Your chats are still under Recent chats in
-        Agent Chat.
+        Copilot Chat.
       </p>
       <div className="tw-flex tw-flex-wrap tw-justify-center tw-gap-2">
         <Button onClick={() => navigateToPlusPage("navigator_blocked_view")}>

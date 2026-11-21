@@ -45,6 +45,7 @@ import type {
   WithdrawInput,
 } from "@/agentMode/session/types";
 import type { ProjectScopeId } from "@/agentMode/session/scope";
+import { COPILOT_CHAT_PROMPT } from "@/agentMode/session/copilotChatPrompt";
 import { AuthRequiredError, MethodUnsupportedError } from "@/agentMode/session/errors";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { agentShellPath } from "@/utils/loginShellPath";
@@ -79,7 +80,6 @@ interface SessionState {
   starting?: Promise<ClaudeLiveQuery>;
   systemPromptAppend: string;
   customAgent: boolean;
-  agentMemoryPath?: string;
 }
 
 // Subagents run in the background unless the model chooses: the chat lists them as tasks and their reports start replies, while a model that needs a result before going on can still wait on it. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
@@ -239,7 +239,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
 
   private resolveSystemPromptAppend(agent: SessionAgent | undefined): string {
     const shared = this.opts.getSystemPromptAppend?.() ?? "";
-    return agent ? [shared, agent.prompt].filter(Boolean).join("\n\n") : shared;
+    return [shared, agent ? agent.prompt : COPILOT_CHAT_PROMPT].filter(Boolean).join("\n\n");
   }
 
   registerSessionHandler(sessionId: SessionId, handler: SessionUpdateHandler): () => void {
@@ -293,7 +293,6 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       mcpServers: params.mcpServers,
       systemPromptAppend: this.resolveSystemPromptAppend(params.agent),
       customAgent: params.agent !== undefined,
-      agentMemoryPath: params.agent?.memoryPath,
       translator: createTranslatorState(),
     });
 
@@ -372,8 +371,6 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       getPrompter: () => this.permissionPrompter,
       getAskUserQuestionPrompter: () => this.askUserQuestionPrompter,
       isPlanModePlanFilePath: this.opts.isPlanModePlanFilePath,
-      agentMemoryPath: session.agentMemoryPath,
-      isPlanMode: () => session.permissionMode === "plan",
       getModeAfterPlanApproval: () => session.lastNonPlanPromptMode ?? this.autoPermissionMode(),
     });
 
@@ -664,7 +661,6 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       mcpServers: params.mcpServers,
       systemPromptAppend: this.resolveSystemPromptAppend(params.agent),
       customAgent: params.agent !== undefined,
-      agentMemoryPath: params.agent?.memoryPath,
       translator: createTranslatorState(claudeTaskPlan),
     });
 

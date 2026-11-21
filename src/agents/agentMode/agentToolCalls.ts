@@ -2,9 +2,9 @@ import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
 import { codeStringField, copilotToolCall } from "@/agentMode/ui/copilotToolCall";
 import { ASK_AGENT_TOOL_NAME } from "@/agents/agentMentionPrompt";
 
-export const CHECK_AGENT_TOOL_NAME = "check_agent";
-export const ANSWER_AGENT_TOOL_NAME = "answer_agent";
-export const STOP_AGENT_TOOL_NAME = "stop_agent";
+export const CHECK_AGENT_TOOL_NAME = "check_teammate";
+export const ANSWER_AGENT_TOOL_NAME = "answer_teammate";
+export const STOP_AGENT_TOOL_NAME = "stop_teammate";
 
 const TOOL_LINES: Readonly<Record<string, (name: string) => string>> = {
   [CHECK_AGENT_TOOL_NAME]: (name) => `Checked ${name}'s progress`,
@@ -22,8 +22,8 @@ export interface AgentToolCall {
 function agentField(part: ToolCallPart, tool: string): string | null {
   const call = copilotToolCall(part, tool);
   if (!call) return null;
-  if ("code" in call) return codeStringField(call.code, "agent");
-  const value = call.args.agent;
+  if ("code" in call) return codeStringField(call.code, "teammate");
+  const value = call.args.teammate;
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 

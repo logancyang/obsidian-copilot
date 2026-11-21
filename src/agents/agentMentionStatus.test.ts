@@ -24,7 +24,7 @@ describe("agentMentionStatus", () => {
     it.each([
       [["Maya", "Leo"], "Maya and Leo are working"],
       [["Maya", "Leo", "Nora"], "Maya, Leo and Nora are working"],
-      [["Maya", "Leo", "Nora", "Coco"], "4 agents are working"],
+      [["Maya", "Leo", "Nora", "Coco"], "4 teammates are working"],
     ])(`names several working agents, and counts four or more (${ISSUE_948})`, (names, text) => {
       expect(
         runningAgentsLine(

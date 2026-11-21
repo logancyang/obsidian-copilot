@@ -19,7 +19,7 @@ describe("useAllFolders", () => {
           [
             "notes",
             "copilot",
-            "copilot/agents/maya",
+            "copilot/teammates/maya",
             "copilot/projects",
             "copilot/projects/Trip",
           ].map(vaultFolder)

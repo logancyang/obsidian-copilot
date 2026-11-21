@@ -24,8 +24,8 @@ function agent(overrides: Partial<CustomAgent> = {}): CustomAgent {
     title: "Keeps the whole vault in view",
     instruction: "You keep the whole vault in view. Answer briefly.",
     faceSrc: "face:coco",
-    instructionsPath: "copilot/agents/coco/instructions.md",
-    memoryPath: "copilot/agents/coco/MEMORY.md",
+    instructionsPath: "copilot/teammates/coco/instructions.md",
+    memoryPath: "copilot/teammates/coco/MEMORY.md",
     ...overrides,
   } as CustomAgent;
 }
@@ -194,7 +194,7 @@ describe("AgentProfileView", () => {
       expect(row.textContent).toContain("Instruction · you write this · edited Nov 2");
       fireEvent.click(row);
 
-      expect(onOpenFile).toHaveBeenCalledWith("copilot/agents/coco/instructions.md");
+      expect(onOpenFile).toHaveBeenCalledWith("copilot/teammates/coco/instructions.md");
     });
 
     it("says an instruction not edited since the day it was made was written then", () => {
@@ -235,7 +235,7 @@ describe("AgentProfileView", () => {
       expect(row.textContent).toContain("Memory · Coco adds to this · 9 rules · today 14:31");
       fireEvent.click(row);
 
-      expect(onOpenFile).toHaveBeenCalledWith("copilot/agents/coco/MEMORY.md");
+      expect(onOpenFile).toHaveBeenCalledWith("copilot/teammates/coco/MEMORY.md");
     });
 
     it("dates a memory change from an earlier day by its day and counts one rule in the singular", () => {
@@ -511,7 +511,7 @@ describe("AgentProfileView", () => {
       fireEvent.click(screen.getByRole("button", { name: "Delete Coco…" }));
 
       expect(onUnlock).toHaveBeenCalledTimes(1);
-      expect(onOpenFile).toHaveBeenCalledWith("copilot/agents/coco/MEMORY.md");
+      expect(onOpenFile).toHaveBeenCalledWith("copilot/teammates/coco/MEMORY.md");
       expect(onDelete).toHaveBeenCalledTimes(1);
     });
 

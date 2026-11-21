@@ -19,7 +19,7 @@ import type {
 import type { AgentMention } from "@/agents/agentMentions";
 import { formatAgentReply } from "@/agents/agentReply";
 import { loadAgentSessionPrompt } from "@/agents/agentSessionPrompt";
-import { readTurnMemorySaves, type MemorySave } from "@/agents/memorySaves";
+import type { MemorySave } from "@/agents/memorySaves";
 import type { CustomAgent, CustomAgentStore } from "@/agents/CustomAgentStore";
 import { getCustomAgentsGate } from "@/agents/customAgentsGate";
 import { USER_SENDER } from "@/constants";
@@ -87,6 +87,7 @@ interface AskingChat {
 interface HiddenRunEnd {
   reply: string;
   files: readonly TurnFileChange[];
+  memorySaves?: readonly MemorySave[];
   error?: Error;
 }
 
@@ -134,8 +135,10 @@ const BUSY_STATUSES: ReadonlySet<AgentSessionStatus> = new Set([
   "awaiting_permission",
 ]);
 
-export const HIDDEN_CHAT_DENY_MESSAGE =
-  "Copilot turned this down: you're working in a chat another agent started, and the user can't approve changes from here. Don't try again. Say in your reply what you would have changed.";
+const PLAN_MODE_DENY_MESSAGE =
+  "Copilot turned this down: the chat that asked you is in Plan mode, so nothing can be changed. Don't try again. Say in your reply what you would have changed.";
+const RUN_ENDED_DENY_MESSAGE =
+  "Copilot turned this down: your work for the chat that asked you has ended. Don't try again.";
 
 export class HiddenAgentChats {
   private readonly chats = new Map<string, HiddenChat>();
@@ -184,8 +187,14 @@ export class HiddenAgentChats {
     const asking = this.resolve(chat, agentName);
     if ("kind" in asking) return asking;
     const hidden = this.chats.get(chatKey(asking.parent, asking.agent.slug));
-    if (!hidden) return { kind: "not_asked", agent: asking.agent };
-    return { kind: "progress", agent: asking.agent, progress: describeProgress(hidden) };
+    // An agent that finished has no progress to report, so the check answers as for one this chat never asked.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/991
+    if (!hidden?.run) return { kind: "not_asked", agent: asking.agent };
+    return {
+      kind: "progress",
+      agent: asking.agent,
+      progress: describeProgress(hidden, hidden.run),
+    };
   }
 
   // The asked agent asks the user through the agent that asked it, since the user never sees its chat.
@@ -198,6 +207,15 @@ export class HiddenAgentChats {
     if (!run) return "not_from_here";
     run.question = question;
     return "asked";
+  }
+
+  askedChatOf(
+    chat: ChatStateHost | null
+  ): { session: AgentSession; askedFrom: AgentSession } | null {
+    const hidden = Array.from(this.chats.values()).find(
+      (candidate) => chat !== null && candidate.started === chat
+    );
+    return hidden?.started ? { session: hidden.started, askedFrom: hidden.parent } : null;
   }
 
   answer(chat: ChatStateHost | null, agentName: string, answer: string): AnswerAgentResult {
@@ -277,13 +295,15 @@ export class HiddenAgentChats {
     const { parent, started, run } = hidden;
     // An asked agent changes nothing while the chat that asked is in Plan mode, and a request after its run ended has no card to answer it, so both are turned down and the agent says what it couldn't do.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/946
+    // Each refusal names its own reason, since the agent otherwise tells the user a reason that isn't true.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/991
     if (!run || [parent, started].some((chat) => chat?.getState()?.mode?.current === "plan")) {
       const reject = request.options.find((option) => option.kind === "reject_once");
       return Promise.resolve(
         reject
           ? {
               outcome: { outcome: "selected", optionId: reject.optionId },
-              denyMessage: HIDDEN_CHAT_DENY_MESSAGE,
+              denyMessage: run ? PLAN_MODE_DENY_MESSAGE : RUN_ENDED_DENY_MESSAGE,
             }
           : { outcome: { outcome: "cancelled" } }
       );
@@ -404,7 +424,7 @@ export class HiddenAgentChats {
     if (!prompt) throw new Error(`${agent.name} couldn't be loaded.`);
     return this.host.startChat({
       agent,
-      prompt,
+      prompt: { ...prompt, variant: "asked" },
       projectId: parent.projectId,
       mode: parent.getState()?.mode?.current ?? null,
       observeSessionEvent,
@@ -478,7 +498,9 @@ export class HiddenAgentChats {
       await replayPersistedMode(session, hidden.parent.getState()?.mode?.current ?? null);
       if (run.stopped) return { reply: "", files: [] };
       this.rememberAsk(hidden, session, message);
-      const { userMessageId, turn } = session.sendPrompt(hiddenJobText(hidden, message));
+      const { userMessageId, turn } = session.sendPrompt(
+        hiddenJobText(hidden, message, hidden.parent.getState()?.mode?.current === "plan")
+      );
       run.since = userMessageId;
       hidden.continuedAt.set(userMessageId, run.startedAt);
       turn.then(
@@ -519,6 +541,7 @@ export class HiddenAgentChats {
       return {
         reply: run.reply.trim(),
         files: buildChatFileChanges(messages.slice(asked + 1)),
+        memorySaves: messages.slice(asked + 1).flatMap((m) => m.memorySaves ?? []),
         ...(error ? { error } : {}),
       };
     } finally {
@@ -549,15 +572,6 @@ export class HiddenAgentChats {
           }
       );
     }
-    // The asking chat shows the asked agent's save as its own chat does, as a line in place of its MEMORY.md among the changed files, so the asking agent hears only the files the user sees.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/969
-    const memorySaves = readTurnMemorySaves(end.files, {
-      agentName: hidden.agent.name,
-      memoryPath: hidden.agent.memoryPath,
-    });
-    const shown = memorySaves.length
-      ? end.files.filter((change) => change.path !== hidden.agent.memoryPath)
-      : end.files;
     void relay(
       hidden.parent,
       formatAgentReply({
@@ -567,7 +581,7 @@ export class HiddenAgentChats {
         status,
         chat: chatOf(hidden.started),
         reply: end.reply,
-        changed: shown.map((change) => change.path),
+        changed: end.files.map((change) => change.path),
         error: end.error?.message,
         stopped: run.stopped ?? undefined,
         declined: run.declined,
@@ -579,7 +593,7 @@ export class HiddenAgentChats {
           .map((other) => other.agent.name),
       }),
       end.files,
-      memorySaves
+      end.memorySaves
     );
     if (run.stopped !== "agent_deleted") return;
     this.chats.delete(key);
@@ -673,8 +687,11 @@ function attachFiles(
   files: readonly TurnFileChange[],
   memorySaves: readonly MemorySave[]
 ): () => void {
+  // A reply whose agent only saved a rule changed no file but still carries the save's line.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/988
   const attach = () =>
-    files.length === 0 || parent.store.setFileChanges(messageId, [...files], memorySaves);
+    (files.length === 0 && memorySaves.length === 0) ||
+    parent.store.setFileChanges(messageId, [...files], memorySaves);
   if (attach()) return () => {};
   const unsubscribe = parent.subscribe({
     onMessagesChanged: () => {},
@@ -766,8 +783,7 @@ function untilFinished(run: HiddenRun): Promise<AnswerEnd> {
   });
 }
 
-function describeProgress({ agent: { name }, run, started }: HiddenChat): string {
-  if (!run) return `${name} isn't working on anything from this chat now.`;
+function describeProgress({ agent: { name }, started }: HiddenChat, run: HiddenRun): string {
   const minutes = Math.floor((Date.now() - run.startedAt) / 60_000);
   const messages = started?.store.getDisplayMessages() ?? [];
   const steps = messages
@@ -802,10 +818,16 @@ export function readAskedMessage(text: string): { answer: boolean; text: string 
   return match ? { answer: match[1] === "answer", text: match[2] } : null;
 }
 
-function hiddenJobText({ from }: HiddenChat, message: string): string {
+// A turned-down request's reason reaches only some coding agents, so an agent asked from a chat in Plan mode learns it with the ask.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/991
+const PLAN_MODE_JOB =
+  "The chat that asked you is in Plan mode, so Copilot turns down any change you try. Say in your reply what you would change.";
+
+function hiddenJobText({ from }: HiddenChat, message: string, planMode: boolean): string {
   return [
     `${from} asked you this for the user, from another chat. Your reply goes back to ${from}, who passes it on to the user.`,
     `If you can't go on without the user's answer to a question, ask it with the ask_user tool from obsidian-copilot, then end your turn; the answer comes back as your next message.`,
+    ...(planMode ? [PLAN_MODE_JOB] : []),
     `<message from="${from}">\n${message}\n</message>`,
   ].join("\n\n");
 }

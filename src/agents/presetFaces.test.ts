@@ -171,11 +171,11 @@ describe("presetFaces", () => {
   describe("readAgentFaces()", () => {
     it("reads the face file of every agent that has one", async () => {
       const vault = createFakeAgentVault();
-      vault.writeByHand("copilot/agents/kai/face.webp", bytes(7, 7));
+      vault.writeByHand("copilot/teammates/kai/face.webp", bytes(7, 7));
 
       const faces = await readAgentFaces(vault.app.vault, [
-        { facePath: "copilot/agents/kai/face.webp" },
-        { facePath: "copilot/agents/faceless/face.webp" },
+        { facePath: "copilot/teammates/kai/face.webp" },
+        { facePath: "copilot/teammates/faceless/face.webp" },
       ]);
 
       expect(faces).toEqual([bytes(7, 7)]);

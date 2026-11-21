@@ -16,7 +16,7 @@ The file changes an agent made in each turn, and Revoke.
 
 ## How to get to it
 
-- The list of changed files at the end of a turn in the [agent's reply](agent-replies.md); choose a file's row to open its diff, or its name to open the note.
+- The list of changed files at the end of a turn in the [agent's reply](replies.md); choose a file's row to open its diff, or its name to open the note.
 - In an open diff, the `Go to next change in file diff` and `Go to previous change in file diff` commands step between changes.
 
 ## Driving it

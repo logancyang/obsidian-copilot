@@ -8,8 +8,8 @@ export class AgentPickerModal extends FuzzySuggestModal<CustomAgent> {
     private readonly onChoose: (agent: CustomAgent) => void
   ) {
     super(app);
-    this.setPlaceholder("Choose an agent to chat with");
-    this.emptyStateText = "No agents yet.";
+    this.setPlaceholder("Choose a teammate to chat with");
+    this.emptyStateText = "No teammates yet.";
   }
 
   getItems(): CustomAgent[] {

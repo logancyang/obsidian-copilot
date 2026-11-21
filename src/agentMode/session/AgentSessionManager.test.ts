@@ -1190,13 +1190,34 @@ describe("AgentSessionManager", () => {
           session.internalId,
           session.backendId,
           expect.any(Function),
-          false
+          false,
+          undefined
         );
         expect(sessionCreateSpy).toHaveBeenLastCalledWith(
           expect.objectContaining({ mcpServers: [FEEDBACK_CHANNEL] })
         );
         const findChat = copilotMcpServer.connect.mock.calls[0][2] as FindCallingChat;
         expect(findChat(null)).toBe(session);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/987 names the agent an agent's own chat runs as when it attaches the Copilot MCP server, and none on a folder's shared connection, which serves every chat in the folder", async () => {
+        const copilotMcpServer = buildCopilotMcpServer();
+        await buildManager({ copilotMcpServer }).createSession(
+          undefined,
+          GLOBAL_SCOPE,
+          undefined,
+          undefined,
+          "coco"
+        );
+        await buildManager({
+          copilotMcpServer,
+          descriptor: buildDescriptor({ sharesMcpServersAcrossSessions: true }),
+        }).createSession(undefined, GLOBAL_SCOPE, undefined, undefined, "coco");
+
+        expect(copilotMcpServer.connect.mock.calls.map((call) => call.slice(3))).toEqual([
+          [false, "coco"],
+          [true, undefined],
+        ]);
       });
 
       it("hands every new chat the chat extensions it was given", async () => {
@@ -1710,7 +1731,8 @@ describe("AgentSessionManager", () => {
           session.internalId,
           "opencode",
           expect.any(Function),
-          false
+          false,
+          "maya"
         );
         const findChat = copilotMcpServer.connect.mock.calls[0][2] as FindCallingChat;
         expect(findChat(null)).toBe(session);
@@ -5795,7 +5817,11 @@ describe("AgentSessionManager", () => {
           {
             message: "Got it.",
             memorySaves: [
-              { agentName: "Coco", memoryPath: "copilot/agents/coco/MEMORY.md", rule: "Be brief." },
+              {
+                agentName: "Coco",
+                memoryPath: "copilot/teammates/coco/MEMORY.md",
+                rule: "Be brief.",
+              },
             ],
           },
         ];
@@ -5819,7 +5845,7 @@ describe("AgentSessionManager", () => {
           { message: "Draft one." },
           { message: "Here." },
         ]);
-        const shown = { "agent-draft": { draft: { name: "Nora" } } };
+        const shown = { "teammate-draft": { draft: { name: "Nora" } } };
         jest.mocked(session.getNoteChatStates).mockReturnValue(shown);
         await mgr.saveActiveSession();
         jest.mocked(session.getNoteChatStates).mockReturnValue(NO_SAVED_CHAT_STATES);
@@ -6121,7 +6147,7 @@ describe("AgentSessionManager", () => {
           title: "Launch plan",
           createdAtMs: 1_000,
           lastAccessedAtMs: 2_000,
-          agent: "coco",
+          teammate: "coco",
         });
         for (let i = 0; i < 100; i++) {
           await index.updateAskedConversation("claude", `maya-hidden-${i}`, () => ({
@@ -7070,8 +7096,8 @@ describe("AgentSessionManager", () => {
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/941 restores the card states its note keeps, so a card the user can still act on comes back with the chat", async () => {
         const replay = buildReplayingBackend();
-        const chatStates = { "agent-draft": { draft: { name: "Nora" } } };
-        const draftCard: ChatStateKey<unknown> = { id: "agent-draft", initial: null };
+        const chatStates = { "teammate-draft": { draft: { name: "Nora" } } };
+        const draftCard: ChatStateKey<unknown> = { id: "teammate-draft", initial: null };
         const session = await buildManager({
           chatExtensions: [defineChatExtension({ key: draftCard, readFromNote: (saved) => saved })],
           persistence: {

@@ -26,7 +26,7 @@ import {
   type TAbstractFile,
 } from "obsidian";
 
-const AGENTS_SUBFOLDER = "agents";
+const AGENTS_SUBFOLDER = "teammates";
 
 interface CustomAgentPaths {
   folderPath: string;

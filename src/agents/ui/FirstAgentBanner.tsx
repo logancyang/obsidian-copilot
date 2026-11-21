@@ -21,7 +21,7 @@ const BANNER_FACE_COUNT = 3;
 const NO_FACES: readonly string[] = Object.freeze([]);
 
 export function useFirstAgentBannerVisible(agentCount: number): boolean {
-  const dismissed = useSettingsValue().agentMode.firstAgentBannerDismissed === true;
+  const dismissed = useSettingsValue().agentMode.firstTeammateBannerDismissed === true;
   // Once the first agent exists, however it was made, deleting it later does not bring the banner back.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/939
   useEffect(() => {
@@ -31,7 +31,7 @@ export function useFirstAgentBannerVisible(agentCount: number): boolean {
 }
 
 export function dismissFirstAgentBanner(): void {
-  setSettings((cur) => ({ agentMode: { ...cur.agentMode, firstAgentBannerDismissed: true } }));
+  setSettings((cur) => ({ agentMode: { ...cur.agentMode, firstTeammateBannerDismissed: true } }));
 }
 
 function useBannerFaces(): readonly string[] {
@@ -84,13 +84,13 @@ export function FirstAgentBannerView({
       </div>
       <div className="tw-min-w-0 tw-flex-1">
         <div className="tw-text-ui-small tw-font-semibold tw-text-normal">
-          Give each job its own agent
+          Give each job its own teammate
         </div>
         <div className="tw-mb-2.5 tw-mt-1 tw-text-ui-smaller tw-text-muted">
-          An agent has its own instructions and remembers the rules you give it.
+          A teammate has its own instructions and remembers the rules you give it.
         </div>
         <Button size="sm" onClick={onCreate}>
-          Create your first agent
+          Create your first teammate
         </Button>
       </div>
       <button

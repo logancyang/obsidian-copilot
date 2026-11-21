@@ -47,7 +47,7 @@ const GAP_PX = 6;
 const ROW_GAP_CLASS = "tw-gap-1.5";
 
 const COPILOT_NAME = "Copilot";
-const COPILOT_TITLE = "Classic agent. Starts fresh every chat.";
+const COPILOT_TITLE = "Starts fresh every chat.";
 const ROSTER_QUESTION = "Who do you want to talk to?";
 
 const CIRCLE_CLASS =
@@ -363,7 +363,7 @@ function MoreAgentsMenu({ agents, lockOf, onSelect }: MoreAgentsMenuProps) {
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
-        <RosterCell label="More" aria-label={`Show ${agents.length} more agents`}>
+        <RosterCell label="More" aria-label={`Show ${agents.length} more teammates`}>
           <span className={cn(ROW_CIRCLE_CLASS, "tw-text-ui-small tw-font-semibold tw-text-muted")}>
             +{agents.length}
           </span>
@@ -408,7 +408,7 @@ export function NewAgentButton({
   return (
     <RosterCell
       label="New"
-      aria-label={locked ? "New agent · Supporter preview" : "New agent"}
+      aria-label={locked ? "New teammate · Supporter preview" : "New teammate"}
       onClick={onClick}
     >
       <span

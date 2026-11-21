@@ -21,9 +21,9 @@ const ASK_CALL: ToolCallPart = {
   status: "completed",
   mcpServer: "obsidian-copilot",
   vendorToolName: ASK_AGENT_TOOL_NAME,
-  input: { agent: "Maya", message: SENT },
+  input: { teammate: "Maya", message: SENT },
   copilotTools: directCopilotToolUse("obsidian-copilot", ASK_AGENT_TOOL_NAME, {
-    agent: "Maya",
+    teammate: "Maya",
     message: SENT,
   }),
 };
@@ -32,9 +32,9 @@ function askCall(id: string, agent: string): ToolCallPart {
   return {
     ...ASK_CALL,
     id,
-    input: { agent, message: SENT },
+    input: { teammate: agent, message: SENT },
     copilotTools: directCopilotToolUse("obsidian-copilot", ASK_AGENT_TOOL_NAME, {
-      agent,
+      teammate: agent,
       message: SENT,
     }),
   };
@@ -45,8 +45,10 @@ const CHECK_CALL: ToolCallPart = {
   id: "call-check",
   title: CHECK_AGENT_TOOL_NAME,
   vendorToolName: CHECK_AGENT_TOOL_NAME,
-  input: { agent: "Leo" },
-  copilotTools: directCopilotToolUse("obsidian-copilot", CHECK_AGENT_TOOL_NAME, { agent: "Leo" }),
+  input: { teammate: "Leo" },
+  copilotTools: directCopilotToolUse("obsidian-copilot", CHECK_AGENT_TOOL_NAME, {
+    teammate: "Leo",
+  }),
 };
 
 describe("agentToolLineKind", () => {

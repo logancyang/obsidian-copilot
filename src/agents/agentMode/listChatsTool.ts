@@ -1,6 +1,13 @@
 import type { AskedConversation } from "@/agentMode/session/AgentSessionIndex";
 import type { ChatStateHost } from "@/agentMode/session/chatExtension";
-import type { HostedTool, McpToolDefinition } from "@/agentMode/session/copilotMcpServer";
+import type {
+  HostedTool,
+  McpToolDefinition,
+  ToolListing,
+} from "@/agentMode/session/copilotMcpServer";
+import { localDate } from "@/agents/agentMemoryFile";
+import type { AskAgentToolHost } from "@/agents/agentMode/askAgentTool";
+import { LIST_CHATS_PROMPT_HINT } from "@/agents/agentSessionPrompt";
 import type { CustomAgent } from "@/agents/CustomAgentStore";
 import { getCustomAgentsGate } from "@/agents/customAgentsGate";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
@@ -13,9 +20,8 @@ const UNAVAILABLE_TEXT = "Copilot Teammates isn't available right now. Tell the 
 const MAX_LISTED_CHATS = 20;
 // Small models search the chat folder for a topic after listing and then answer from another agent's chat, so the result itself repeats the scope.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/959
-function otherChats(agent: string | null): string {
-  return `Every other chat note belongs to ${agent ? "another agent or to Copilot" : "one of the user's agents"}: unless the user names it, never search, read or cite it.`;
-}
+const OTHER_CHATS =
+  "Every other chat note belongs to another AI teammate or to Copilot: unless the user names it, never search, read or cite it.";
 
 // Codex's small model took "read a listed note" to need a chat-reading tool it doesn't have, so the result says how.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/959
@@ -25,7 +31,7 @@ const OPEN_A_NOTE = "Open a listed note with your file or shell tools to see wha
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/980
 const MAX_LISTED_ASKED_CONVERSATIONS = 10;
 const ASKED_CONVERSATIONS =
-  "Conversations another agent or Copilot asked you into on the user's behalf, newest first. Your answers went back to the chat that asked: you know only what each line says, and there's no note to open for them.";
+  "Conversations another AI teammate or Copilot asked you into on the user's behalf, newest first. Your answers went back to the chat that asked: you know only what each line says, and there's no note to open for them.";
 const ENDINGS: Record<NonNullable<AskedConversation["ending"]>, string> = {
   finished: "your latest answer",
   stopped: "the user stopped you before you finished; your answer so far",
@@ -39,7 +45,7 @@ export interface EarlierChats {
   agents: readonly Pick<CustomAgent, "slug" | "name">[];
 }
 
-export interface ListChatsToolHost {
+export interface ListChatsToolHost extends AskAgentToolHost {
   earlierChats: (chat: ChatStateHost | null) => Promise<EarlierChats | null>;
   vaultBase: () => string;
 }
@@ -52,11 +58,6 @@ const LIST_CHATS_TOOL: McpToolDefinition = Object.freeze({
   annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
   _meta: { "anthropic/alwaysLoad": true },
 });
-
-function localDate(date: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-}
 
 // A run that never ended, as when Obsidian closed mid-run, reads as not finished, and an asker deleted since shows by its folder name.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/980
@@ -83,24 +84,37 @@ export function createListChatsTool(host: ListChatsToolHost): HostedTool {
   return {
     definition: LIST_CHATS_TOOL,
     turnedOffText: UNAVAILABLE_TEXT,
-    // An asked agent's hidden chat reads the shared prompt that names list_chats too, and without the tool it reported a missing Copilot tool; it gets the tool and the call tells it that chat has no earlier chats.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/959
-    listedAs: () => (getCustomAgentsGate() === "full" ? LIST_CHATS_TOOL : null),
+    // Only an agent's own chat has earlier chats with the user to recall; OpenCode lists a folder's tools for every chat in it, so there it is listed while any agent exists and the call turns the other chats down.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/987
+    listedAs: ({ sessionKey, shared, agentSlug }: ToolListing) =>
+      getCustomAgentsGate() === "full" &&
+      (shared
+        ? host.agents().length > 0
+        : agentSlug !== undefined && !host.isUnlistedChat(sessionKey))
+        ? LIST_CHATS_TOOL
+        : null,
+    promptHint: LIST_CHATS_PROMPT_HINT,
     call: async (_args, chat) => {
       if (getCustomAgentsGate() !== "full") return { text: UNAVAILABLE_TEXT, isError: false };
       const caller = await host.earlierChats(chat);
-      if (!caller) {
+      if (!caller?.agent) {
         return {
-          text: `Another agent asked you into this chat, so it has no earlier chats with the user. Say so, and don't call ${LIST_CHATS_TOOL_NAME} again.`,
+          text: `This chat can't list earlier chats. Don't call ${LIST_CHATS_TOOL_NAME} again.`,
           isError: false,
         };
       }
       // Archiving a chat or its project means the user is done talking there, not that the agent should forget it, so archived chats are listed too.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/959
-      const chats = caller.chats
+      const allChats = caller.chats
         .filter((item) => (item.agent ?? null) === caller.agent)
-        .sort((a, b) => b.lastAccessedAt.getTime() - a.lastAccessedAt.getTime())
-        .slice(0, MAX_LISTED_CHATS);
+        .sort((a, b) => b.lastAccessedAt.getTime() - a.lastAccessedAt.getTime());
+      const chats = allChats.slice(0, MAX_LISTED_CHATS);
+      // Past the limit the teammate's own older chats are unlisted too, so the scope can't call them someone else's and a topic missing from the list isn't proof it was never discussed.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/990
+      const scope =
+        allChats.length > chats.length
+          ? `Older chats of yours left out of this list: ${allChats.length - chats.length}. Every other chat note is one of those or belongs to another AI teammate or to Copilot: unless the user names it, never search, read or cite it. If none listed covers the question, say it may be in an older chat you can read if the user names it, not that you haven't discussed it.`
+          : OTHER_CHATS;
       const lines = chats.map((item) => {
         const note = isNativeChatId(item.id)
           ? "not saved as a note, so only its title and date are known"
@@ -109,11 +123,8 @@ export function createListChatsTool(host: ListChatsToolHost): HostedTool {
       });
       const ownChats =
         chats.length === 0
-          ? [`You have no earlier chats with the user. ${otherChats(caller.agent)}`]
-          : [
-              `Your earlier chats with the user, newest first. ${OPEN_A_NOTE} ${otherChats(caller.agent)}`,
-              ...lines,
-            ];
+          ? [`You have no earlier chats with the user. ${OTHER_CHATS}`]
+          : [`Your earlier chats with the user, newest first. ${OPEN_A_NOTE} ${scope}`, ...lines];
       const asked = caller.askedConversations
         .filter((conversation) => conversation.agent === caller.agent)
         .sort((a, b) => b.lastAtMs - a.lastAtMs)

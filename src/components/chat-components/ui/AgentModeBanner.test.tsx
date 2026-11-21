@@ -12,7 +12,7 @@ jest.mock("@/utils/desktopRuntime", () => ({
   isDesktopRuntime: () => mockDesktopRuntime,
 }));
 
-const HEADLINE = /Open Copilot Agent Chat/;
+const HEADLINE = /Open Copilot Chat/;
 
 describe("AgentModeBanner", () => {
   describe("AgentModeBanner()", () => {
@@ -20,7 +20,7 @@ describe("AgentModeBanner", () => {
       mockDesktopRuntime = true;
     });
 
-    it("invites the user to Agent Chat with the brand mark instead of an alert icon and opens Agent when selected", () => {
+    it("invites the user to Copilot Chat with the brand mark instead of an alert icon and opens Agent when selected", () => {
       const onOpenAgent = jest.fn();
       const props: AgentModeBannerProps = { onOpenAgent };
 
@@ -29,7 +29,7 @@ describe("AgentModeBanner", () => {
       const paths = Array.from(container.querySelectorAll("path"));
       expect(paths.some((path) => path.getAttribute("d") === COPILOT_AGENT_ICON_PATH)).toBe(true);
       expect(container.querySelector(".lucide-circle-alert")).toBeNull();
-      expect(screen.queryByText("Open Copilot Agent Chat")).not.toBeNull();
+      expect(screen.queryByText("Open Copilot Chat")).not.toBeNull();
       expect(screen.queryByText("Find and edit notes with an agent.")).not.toBeNull();
       fireEvent.click(screen.getByRole("button", { name: HEADLINE }));
 

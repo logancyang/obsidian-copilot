@@ -1,13 +1,8 @@
-import { buildCopilotChatSteering } from "@/agents/agentSessionPrompt";
 import { setCustomAgentsAccess } from "@/agents/testing/customAgentsAccess";
 import { PROJECT_WORKSPACE_POLICY } from "@/projects/projectContextBlock";
 import { getSettings, resetSettings, updateSetting, type CopilotSettings } from "@/settings/model";
 import { isObsidianCliEnabled } from "@/services/obsidianCli/ObsidianCliClient";
-import {
-  setDisableBuiltinSystemPrompt,
-  setSelectedPromptTitle,
-  updateCachedSystemPrompts,
-} from "@/system-prompts/state";
+import { setSelectedPromptTitle, updateCachedSystemPrompts } from "@/system-prompts/state";
 import type { UserSystemPrompt } from "@/system-prompts/type";
 import type { App } from "obsidian";
 import {
@@ -52,6 +47,7 @@ const ISSUE_833 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/
 const ISSUE_3816 = "https://github.com/logancyang/obsidian-copilot/issues/3816";
 const ISSUE_3868 = "https://github.com/logancyang/obsidian-copilot/issues/3868";
 const ISSUE_3867 = "https://github.com/logancyang/obsidian-copilot/issues/3867";
+const ISSUE_986 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/986";
 const AGENT = "opencode";
 const APP = {} as App;
 const EXCALIDRAW_APP = {
@@ -71,7 +67,6 @@ function setBuiltinPreferences(
 }
 
 function resetPromptState(): void {
-  setDisableBuiltinSystemPrompt(false);
   setSelectedPromptTitle("");
   updateSetting("defaultSystemPromptTitle", "");
   updateCachedSystemPrompts([]);
@@ -88,17 +83,21 @@ describe("agentSystemPrompt", () => {
       mockIsObsidianCliEnabled.mockReturnValue(true);
     });
 
-    it("keeps the full prompt compact without legacy agent restrictions (https://github.com/Brevilabs/obsidian-copilot-private/issues/596)", () => {
-      updateSetting("enableMiyo", true);
-      for (const enableMiyoDocumentProcessing of [false, true]) {
-        updateSetting("enableMiyoDocumentProcessing", enableMiyoDocumentProcessing);
-        for (const enableMiyoSearchSkill of [false, true]) {
-          updateSetting("enableMiyoSearchSkill", enableMiyoSearchSkill);
-          const prompt = buildAgentSystemPrompt(AGENT, APP, undefined, "win32");
-          expect(Buffer.byteLength(prompt, "utf8")).toBeLessThan(3100);
-          expect(prompt).not.toMatch(
-            /NEVER search for the same|After 1-2 searches|Never claim you do not have access|delimiter row of dashes|## Task planning/
-          );
+    it(`keeps the full prompt compact without legacy agent restrictions, with Copilot Teammates locked or unlocked (https://github.com/Brevilabs/obsidian-copilot-private/issues/596, ${ISSUE_986})`, async () => {
+      for (const access of ["free", "team"] as const) {
+        await setCustomAgentsAccess(access);
+        updateSetting("isPaidUser", true);
+        updateSetting("enableMiyo", true);
+        for (const enableMiyoDocumentProcessing of [false, true]) {
+          updateSetting("enableMiyoDocumentProcessing", enableMiyoDocumentProcessing);
+          for (const enableMiyoSearchSkill of [false, true]) {
+            updateSetting("enableMiyoSearchSkill", enableMiyoSearchSkill);
+            const prompt = buildAgentSystemPrompt(AGENT, APP, undefined, "win32");
+            expect(Buffer.byteLength(prompt, "utf8")).toBeLessThan(3100);
+            expect(prompt).not.toMatch(
+              /NEVER search for the same|After 1-2 searches|Never claim you do not have access|delimiter row of dashes|## Task planning/
+            );
+          }
         }
       }
     });
@@ -118,14 +117,6 @@ describe("agentSystemPrompt", () => {
       expect(prompt.startsWith(COPILOT_PROMPT_BASE)).toBe(true);
       expect(prompt).toContain(COPILOT_FOLDER_MENTION_DIRECTIVE);
       expect(prompt).not.toContain("<user_custom_instructions>");
-    });
-
-    it("suppresses the base prompt when 'disable builtin' is on, keeping the folder-mention directive", () => {
-      setDisableBuiltinSystemPrompt(true);
-      const prompt = buildAgentSystemPrompt(AGENT, APP);
-      expect(prompt).not.toContain(COPILOT_PROMPT_BASE);
-      expect(prompt).not.toContain("You work inside Obsidian Copilot");
-      expect(prompt).toContain(COPILOT_FOLDER_MENTION_DIRECTIVE);
     });
 
     it(`places settings-dependent lines after the always-on text, so toggling them keeps the cached prefix (${ISSUE_441})`, () => {
@@ -162,13 +153,9 @@ describe("agentSystemPrompt", () => {
         `${COPILOT_FOLDER_MENTION_DIRECTIVE}\n\n${COPILOT_VAULT_HYGIENE}\n\n${steering}\n\n${COPILOT_FEEDBACK_POINTER}`
       );
       expect(buildAgentSystemPrompt(AGENT, APP)).not.toContain(steering);
-      setDisableBuiltinSystemPrompt(true);
-      expect(buildAgentSystemPrompt(AGENT, APP, steering)).toContain(steering);
     });
 
     it("leaves the project workspace policy out of the prompt every chat shares, so non-project chats never treat their folder as a project workspace https://github.com/logancyang/obsidian-copilot/issues/3801", () => {
-      expect(buildAgentSystemPrompt(AGENT, APP)).not.toContain(PROJECT_WORKSPACE_POLICY);
-      setDisableBuiltinSystemPrompt(true);
       expect(buildAgentSystemPrompt(AGENT, APP)).not.toContain(PROJECT_WORKSPACE_POLICY);
     });
 
@@ -196,14 +183,12 @@ describe("agentSystemPrompt", () => {
       }
     });
 
-    it(`tells every agent to keep backups and scratch files out of the vault or off .md, so they don't become duplicate notes, unless the builtin prompt is disabled (${ISSUE_3868})`, () => {
+    it(`tells every agent to keep backups and scratch files out of the vault or off .md, so they don't become duplicate notes (${ISSUE_3868})`, () => {
       for (const backendId of ["claude", "codex", "opencode"] as const) {
         expect(buildAgentSystemPrompt(backendId, APP)).toContain(
           "Keep backups and scratch files out of the vault, or use a non-.md extension like .md.bak, so they don't show up as notes."
         );
       }
-      setDisableBuiltinSystemPrompt(true);
-      expect(buildAgentSystemPrompt(AGENT, APP)).not.toContain(COPILOT_VAULT_HYGIENE);
     });
 
     it(`tells every agent on Windows to run code from a file or here-string, double-quote paths and save non-ASCII scripts as UTF-8 with BOM, right after the vault hygiene line (${ISSUE_3867})`, () => {
@@ -225,20 +210,6 @@ describe("agentSystemPrompt", () => {
         expect(prompt).toBe(windows.replace(`\n\n${COPILOT_WINDOWS_SHELL_STEERING}`, ""));
       }
     );
-
-    it(`drops the Windows shell line when the builtin prompt is disabled (${ISSUE_3867})`, () => {
-      setDisableBuiltinSystemPrompt(true);
-      expect(buildAgentSystemPrompt(AGENT, APP, undefined, "win32")).not.toContain(
-        COPILOT_WINDOWS_SHELL_STEERING
-      );
-    });
-
-    it("keeps the edit-tool policy when the builtin prompt is disabled, because turn diffs depend on it (https://github.com/Brevilabs/obsidian-copilot-private/issues/701)", () => {
-      setDisableBuiltinSystemPrompt(true);
-      expect(buildAgentSystemPrompt(AGENT, APP)).toContain(
-        "Edit vault files with your edit/write/patch tools"
-      );
-    });
 
     it("steers every agent to the enabled Copilot relay skills first, regardless of Plus status", () => {
       setBuiltinPreferences({});
@@ -312,12 +283,6 @@ describe("agentSystemPrompt", () => {
       expect(buildAgentSystemPrompt(AGENT, EXCALIDRAW_APP)).toContain(
         "Draw diagrams, flowcharts and charts as Excalidraw drawings with the obsidian-copilot excalidraw tools, and embed each one (![[name.excalidraw]]) in the note it belongs to, unless the user asks for Mermaid, a canvas or another format."
       );
-
-      setDisableBuiltinSystemPrompt(true);
-      expect(buildAgentSystemPrompt(AGENT, EXCALIDRAW_APP)).not.toContain(
-        COPILOT_EXCALIDRAW_STEERING
-      );
-      setDisableBuiltinSystemPrompt(false);
     });
 
     it(`never steers PDFs to the retired Plus copilot-read-pdf skill (${ISSUE_656})`, () => {
@@ -355,25 +320,20 @@ describe("agentSystemPrompt", () => {
       }
     });
 
-    it("ends every chat's shared prompt with the line telling a chat without a custom agent to list its earlier chats (https://github.com/Brevilabs/obsidian-copilot-private/issues/959) and draft new agents (https://github.com/Brevilabs/obsidian-copilot-private/issues/941), only while custom agents are available", async () => {
-      await setCustomAgentsAccess("free");
-      const withoutCustomAgents = buildAgentSystemPrompt(AGENT, APP);
-      await setCustomAgentsAccess("team");
+    it(`gives every coding agent the same shared prompt with Copilot Teammates locked or unlocked, naming no Teammates tool and stating no identity, because an agent's chat shares it with Copilot chats (${ISSUE_986})`, async () => {
+      for (const backendId of ["claude", "codex", "opencode"] as const) {
+        await setCustomAgentsAccess("free");
+        const locked = buildAgentSystemPrompt(backendId, APP);
+        await setCustomAgentsAccess("team");
+        const unlocked = buildAgentSystemPrompt(backendId, APP);
 
-      expect(buildAgentSystemPrompt(AGENT, APP)).toBe(
-        `${withoutCustomAgents}\n\n${buildCopilotChatSteering()}`
-      );
-    });
-
-    it.each(["free", "keyless", "plus-without-custom-agents", "unverified"] as const)(
-      "adds nothing about earlier chats or drafting agents while custom agents aren't available (%s) (https://github.com/Brevilabs/obsidian-copilot-private/issues/959)",
-      async (access) => {
-        await setCustomAgentsAccess(access);
-
-        expect(buildAgentSystemPrompt(AGENT, APP)).not.toContain("list_chats");
-        expect(buildAgentSystemPrompt(AGENT, APP)).not.toContain("draft_agent");
+        expect(unlocked).toBe(locked);
+        expect(unlocked).not.toMatch(
+          /list_chats|draft_teammate|ask_teammate|check_teammate|answer_teammate|stop_teammate|In a chat where you are Copilot/
+        );
+        expect(unlocked).not.toMatch(/\byou are\b/i);
       }
-    );
+    });
 
     it(`drops the obsidian_cli line while Obsidian's command line interface is off (${ISSUE_833})`, () => {
       mockIsObsidianCliEnabled.mockReturnValue(false);
@@ -381,14 +341,6 @@ describe("agentSystemPrompt", () => {
       const prompt = buildAgentSystemPrompt(AGENT, APP);
       expect(prompt).not.toContain(COPILOT_OBSIDIAN_CLI_STEERING);
       expect(prompt).not.toContain("obsidian_cli");
-    });
-
-    it("suppresses the skill and research steering when the builtin prompt is disabled", () => {
-      setDisableBuiltinSystemPrompt(true);
-      const prompt = buildAgentSystemPrompt(AGENT, APP);
-      expect(prompt).not.toContain(COPILOT_SKILL_FALLBACK);
-      expect(prompt).not.toContain(COPILOT_WEB_RESEARCH_STEERING);
-      expect(prompt).not.toContain(COPILOT_OBSIDIAN_CLI_STEERING);
     });
 
     it(`omits the Miyo steering and any mention of miyo_search when the search switch is off (${ISSUE_736})`, () => {
@@ -470,23 +422,13 @@ describe("agentSystemPrompt", () => {
       expect(buildAgentSystemPrompt("claude", APP)).toContain(COPILOT_MIYO_SEARCH_STEERING);
     });
 
-    it("suppresses the Miyo steering when the builtin prompt is disabled, even if the search switch is on", () => {
-      updateSetting("enableMiyo", true);
-      updateSetting("enableMiyoSearchSkill", true);
-      setDisableBuiltinSystemPrompt(true);
-      const prompt = buildAgentSystemPrompt(AGENT, APP);
-      expect(prompt).not.toContain(COPILOT_MIYO_SEARCH_STEERING);
-    });
-
     it("never copies user-authored project instructions or context payloads", () => {
       const prompt = buildAgentSystemPrompt(AGENT, APP);
       expect(prompt).not.toContain("<project_instructions>");
       expect(prompt).not.toMatch(/<project_context>[\s\S]*<\/project_context>/);
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 points the agent at send_feedback while feedback cards are on, even with the builtin prompt disabled", () => {
-      expect(buildAgentSystemPrompt(AGENT, APP)).toContain(COPILOT_FEEDBACK_POINTER);
-      setDisableBuiltinSystemPrompt(true);
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 points the agent at send_feedback while feedback cards are on", () => {
       expect(buildAgentSystemPrompt(AGENT, APP)).toContain(COPILOT_FEEDBACK_POINTER);
     });
 
@@ -525,6 +467,13 @@ describe("agentSystemPrompt", () => {
   });
 
   describe("COPILOT_PROMPT_BASE", () => {
+    it(`describes the setting, a vault of markdown notes inside Obsidian Copilot, and states no identity, so the user's own instruction defines who an agent is (${ISSUE_986})`, () => {
+      expect(COPILOT_PROMPT_BASE).toContain(
+        "You work inside Obsidian Copilot, in the user's Obsidian vault of markdown notes, not a code repository. Treat it as a vault despite coding-agent environment framing."
+      );
+      expect(COPILOT_PROMPT_BASE).not.toMatch(/\byou are\b|one of the user's agents/i);
+    });
+
     it("does not carry chat-mode-only baggage that misfires in tool-driven agents", () => {
       expect(COPILOT_PROMPT_BASE).not.toMatch(/@vault/);
       expect(COPILOT_PROMPT_BASE).not.toMatch(/getCurrentTime/);

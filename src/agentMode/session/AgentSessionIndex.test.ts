@@ -163,7 +163,8 @@ describe("AgentSessionIndex", () => {
       expect((await index.getEntries()).map((e) => e.sessionId)).toEqual(["s1"]);
       const written = JSON.parse(storage.files.get(INDEX_PATH)!);
       expect(written.entries).toHaveLength(1);
-      expect(written.askedConversations).toEqual([asked()]);
+      const { agent, ...savedFields } = asked();
+      expect(written.askedConversations).toEqual([{ ...savedFields, teammate: agent }]);
     });
 
     it(`hands the change the conversation already recorded, and records nothing when the change keeps none (${ISSUE_980})`, async () => {
@@ -182,7 +183,7 @@ describe("AgentSessionIndex", () => {
   describe("deleteAskedConversations()", () => {
     it(`removes only the asked conversations that match, and leaves the chats (${ISSUE_980})`, async () => {
       const index = new AgentSessionIndex(makeStorage(), INDEX_PATH);
-      await index.recordSession(entry({ agent: "maya" }));
+      await index.recordSession(entry({ teammate: "maya" }));
       await index.updateAskedConversation("claude", "maya-hidden-1", () => asked());
       await index.updateAskedConversation("claude", "leo-hidden-1", () =>
         asked({ sessionId: "leo-hidden-1", agent: "leo" })
@@ -339,16 +340,19 @@ describe("AgentSessionIndex", () => {
       expect((await second.getEntry("opencode", "bad-model"))?.model).toBeUndefined();
     });
 
-    it("restores the custom agent a chat runs as after reload, keeps it when a later record names none, and leaves other chats without one", async () => {
+    it("restores the teammate a chat runs as after reload, keeps it when a later record names none, and leaves other chats without one", async () => {
       const storage = makeStorage();
       const first = new AgentSessionIndex(storage, INDEX_PATH);
-      await first.recordSession(entry({ agent: "coco" }));
+      await first.recordSession(entry({ teammate: "coco" }));
       await first.recordSession(entry({ lastAccessedAtMs: 9_000 }));
       await first.recordSession(entry({ sessionId: "plain" }));
       await first.flush();
+      expect(JSON.parse(storage.files.get(INDEX_PATH)!).entries[0]).toMatchObject({
+        teammate: "coco",
+      });
       const second = new AgentSessionIndex(storage, INDEX_PATH);
-      expect((await second.getEntry("opencode", "s1"))?.agent).toBe("coco");
-      expect((await second.getEntry("opencode", "plain"))?.agent).toBeUndefined();
+      expect((await second.getEntry("opencode", "s1"))?.teammate).toBe("coco");
+      expect((await second.getEntry("opencode", "plain"))?.teammate).toBeUndefined();
     });
   });
 
@@ -450,7 +454,7 @@ describe("AgentSessionIndex", () => {
     });
 
     it(`lists the chats of an index file that holds a full section of asked conversations exactly as without it, and never one of the conversations (${ISSUE_980})`, async () => {
-      const chats = [entry(), entry({ backendId: "claude", sessionId: "s2", agent: "coco" })];
+      const chats = [entry(), entry({ backendId: "claude", sessionId: "s2", teammate: "coco" })];
       const conversations = Array.from({ length: 100 }, (_, i) => ({
         backendId: "claude",
         sessionId: `maya-hidden-${i}`,

@@ -120,7 +120,7 @@ export function LockedAgentChat({
 export function LockedHomeNote({ onUnlock }: LockedProfile): React.ReactElement {
   return (
     <>
-      Your agents need a valid Supporter license to chat.{" "}
+      Your teammates need a valid Supporter license to chat.{" "}
       <button
         type="button"
         onClick={(event) => onUnlock(event.currentTarget.win)}

@@ -129,7 +129,7 @@ describe("AgentDraftCard", () => {
     it(`shows the drafted name, title and instruction with Not now and Review and create…, and no Create (${ISSUE})`, () => {
       render(<AgentDraftCard draft={NORA} onDismiss={jest.fn()} onReview={jest.fn()} />);
 
-      expect(screen.getByText("New agent draft")).not.toBeNull();
+      expect(screen.getByText("New teammate draft")).not.toBeNull();
       expect(screen.getByText("Nora")).not.toBeNull();
       expect(screen.getByText("Family calendar and school logistics")).not.toBeNull();
       expect(screen.getByText(NORA.instruction)).not.toBeNull();
@@ -167,7 +167,7 @@ describe("AgentDraftCard", () => {
 
       expect(screen.queryByTestId("clamped-content")).toBeNull();
       expect(screen.getByTestId("agent-draft-card").textContent).toBe(
-        "New agent draftNoraNot nowReview and create…"
+        "New teammate draftNoraNot nowReview and create…"
       );
     });
   });

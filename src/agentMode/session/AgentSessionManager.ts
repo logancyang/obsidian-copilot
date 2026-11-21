@@ -806,7 +806,7 @@ export class AgentSessionManager {
     }
 
     const internalId = uuidv4();
-    const mcpServers = await this.connectCopilotMcpServer(internalId, descriptor, cwd);
+    const mcpServers = await this.connectCopilotMcpServer(internalId, descriptor, cwd, agentSlug);
 
     if (this.disposed) {
       this.finishPendingCreate();
@@ -922,7 +922,7 @@ export class AgentSessionManager {
     const backend = await this.ensureBackend(resolvedId, descriptor);
     const internalId = uuidv4();
     this.unlistedSessions.set(internalId, null);
-    const mcpServers = await this.connectCopilotMcpServer(internalId, descriptor, cwd);
+    const mcpServers = await this.connectCopilotMcpServer(internalId, descriptor, cwd, agent.slug);
     const options = {
       backend,
       cwd,
@@ -1017,7 +1017,7 @@ export class AgentSessionManager {
   private resolveSessionCwd(projectId: ProjectScopeId): string {
     const adapter = this.app.vault.adapter;
     if (!(adapter instanceof FileSystemAdapter)) {
-      throw new Error("Agent Chat requires Obsidian on desktop.");
+      throw new Error("Copilot Chat requires Obsidian on desktop.");
     }
     return resolveScopeCwd(adapter.getBasePath(), projectId);
   }
@@ -1925,7 +1925,8 @@ export class AgentSessionManager {
   private async connectCopilotMcpServer(
     internalId: string,
     descriptor: BackendDescriptor,
-    cwd: string
+    cwd: string,
+    agentSlug: string | undefined
   ): Promise<ReadonlyArray<AgentMcpServer>> {
     const server = this.opts.copilotMcpServer;
     if (!server) return EMPTY_MCP_SERVERS;
@@ -1945,7 +1946,10 @@ export class AgentSessionManager {
           shared ? `${descriptor.id}:${cwd}` : internalId,
           descriptor.id,
           findChat,
-          shared
+          shared,
+          // A folder's listing serves every chat in it, so only a chat's own listing names the agent it runs as.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/987
+          shared ? undefined : agentSlug
         ),
       ];
     } catch (err) {
@@ -2248,7 +2252,7 @@ export class AgentSessionManager {
       projectId,
       undefined,
       undefined,
-      entry?.agent
+      entry?.teammate
     );
     if (!session) {
       throw new Error(`Could not resume session ${sessionId} from the ${backendId} session store.`);
@@ -2375,7 +2379,7 @@ export class AgentSessionManager {
     }
 
     const internalId = uuidv4();
-    const mcpServers = await this.connectCopilotMcpServer(internalId, descriptor, cwd);
+    const mcpServers = await this.connectCopilotMcpServer(internalId, descriptor, cwd, agentSlug);
     if (this.disposed) {
       this.finishPendingCreate();
       return null;
@@ -2561,7 +2565,7 @@ export class AgentSessionManager {
       lastAccessedAtMs: now,
       projectId: session.projectId === GLOBAL_SCOPE ? undefined : session.projectId,
       model: session.getState()?.model?.current,
-      agent: session.agentSlug ?? undefined,
+      teammate: session.agentSlug ?? undefined,
     });
     // The note now points at the session that replaced its unresumable one, so the old entry would list the chat twice.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/902

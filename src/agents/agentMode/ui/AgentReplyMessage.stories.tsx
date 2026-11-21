@@ -61,7 +61,7 @@ function leoRun(change: Partial<AgentMention>): AgentMention {
 }
 
 const MAYA_MARKER = { agent: "maya", name: "Maya", mention: "m1" };
-const MAYA_MEMORY = "copilot/agents/maya/MEMORY.md";
+const MAYA_MEMORY = "copilot/teammates/maya/MEMORY.md";
 const LEO_MARKER = { agent: "leo", name: "Leo", mention: "m2" };
 
 const meta = {

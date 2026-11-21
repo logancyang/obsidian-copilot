@@ -32,8 +32,8 @@ function builtFromKey(agent: CustomAgent): string {
 }
 
 function rememberLastAgent(slug: string | null): void {
-  if ((getSettings().agentMode.lastCustomAgent ?? null) === slug) return;
-  setSettings((cur) => ({ agentMode: { ...cur.agentMode, lastCustomAgent: slug ?? undefined } }));
+  if ((getSettings().agentMode.lastTeammate ?? null) === slug) return;
+  setSettings((cur) => ({ agentMode: { ...cur.agentMode, lastTeammate: slug ?? undefined } }));
 }
 
 export function useAgentHomeSelection(
@@ -44,7 +44,7 @@ export function useAgentHomeSelection(
 ): AgentHomeSelection {
   const gate = useCustomAgentsGate();
   const agents = useCustomAgents(store);
-  const lastAgent = useSettingsValue().agentMode.lastCustomAgent ?? null;
+  const lastAgent = useSettingsValue().agentMode.lastTeammate ?? null;
   const [pending, setPending] = useState<{ chatInputId: string; slug: string | null } | null>(null);
   const chosenChatInputIds = useRef(new Set<string>());
   const droppedAgents = useRef(new Set<string>());

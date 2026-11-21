@@ -2,7 +2,7 @@ import { assertBinaryCompatible } from "@/agentMode/backends/shared/binaryCompat
 import type { App } from "obsidian";
 import { getSettings } from "@/settings/model";
 import { detectBinary } from "@/utils/detectBinary";
-import { AcpBackend, AcpSpawnDescriptor } from "@/agentMode/acp/types";
+import { AcpBackend, AcpSpawnDescriptor, type ChatPromptInput } from "@/agentMode/acp/types";
 import { buildSimpleSpawnDescriptor } from "@/agentMode/backends/shared/simpleBinaryBackend";
 import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
 import { pythonUtf8Env } from "@/agentMode/backends/shared/pythonUtf8Env";
@@ -38,6 +38,14 @@ export class CodexBackend implements AcpBackend {
     private readonly app: App,
     private readonly clientVersion = ""
   ) {}
+
+  // Codex finds MCP tools only through its tool search, so each chat is told the Copilot tools it is offered, per chat because the developer instructions are shared by every chat in the process.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/986
+  extendChatPrompt({ agentPrompt, mcpServers }: ChatPromptInput): string | null {
+    const hints = new Set(mcpServers.flatMap((server) => server.promptHints ?? []));
+    const unsaid = [...hints].filter((hint) => !agentPrompt?.includes(hint));
+    return unsaid.length > 0 ? unsaid.join(" ") : null;
+  }
 
   async buildSpawnDescriptor(ctx: { vaultBasePath: string }): Promise<AcpSpawnDescriptor> {
     const settings = getSettings();

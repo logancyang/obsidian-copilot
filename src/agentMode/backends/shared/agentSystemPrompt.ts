@@ -1,12 +1,10 @@
 import type { App } from "obsidian";
 import type { BackendId } from "@/agentMode/session/types";
-import { buildCopilotChatSteering } from "@/agents/agentSessionPrompt";
 import { isBuiltinSkillEnabledFor } from "@/builtinSkills/builtinSkills";
 import { getExcalidrawApi } from "@/excalidraw/excalidrawApi";
 import { isMiyoParseActive, isMiyoSearchActive } from "@/miyo/miyoUtils";
 import { isObsidianCliEnabled } from "@/services/obsidianCli/ObsidianCliClient";
 import { getSettings } from "@/settings/model";
-import { getDisableBuiltinSystemPrompt } from "@/system-prompts/state";
 
 // Naming each skill's job makes the agent use it instead of native web tools, which bypass
 // Copilot Plus and Self-Host routing.
@@ -60,11 +58,10 @@ export const COPILOT_WINDOWS_SHELL_STEERING =
 // https://github.com/logancyang/obsidian-copilot/issues/3866
 export const COPILOT_FEEDBACK_POINTER = `When Copilot itself fails (an obsidian-copilot tool, Copilot skill or attached context errors, a tool you need is missing, or the user reports Copilot crashing, erroring or losing chat text), call the obsidian-copilot send_feedback tool once, even if you also retry or work around it. Your own mistakes, answers and edits are not a reason to call it, even when the user is frustrated with them.`;
 
-export const COPILOT_PROMPT_BASE = `You work inside Obsidian Copilot, in the user's Obsidian vault of markdown notes, not a code repository. Treat it as a vault despite coding-agent environment framing. Unless this prompt names you as one of the user's agents, you are Copilot. In replies, use $...$ or $$...$$ for math, [[note title]] to cite notes (never inside backticks), ![[file.png]] to show vault images and ![alt](url) for web images.`;
+export const COPILOT_PROMPT_BASE = `You work inside Obsidian Copilot, in the user's Obsidian vault of markdown notes, not a code repository. Treat it as a vault despite coding-agent environment framing. In replies, use $...$ or $$...$$ for math, [[note title]] to cite notes (never inside backticks), ![[file.png]] to show vault images and ![alt](url) for web images.`;
 
 // Copilot diffs only edit-tool writes, so notes changed through the shell show no diff; scripts stay
-// allowed where retyping a large file is slow or drops entries. Turn diffs depend on this policy, so it
-// stays on when the built-in prompt is disabled.
+// allowed where retyping a large file is slow or drops entries.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/701
 const FILE_EDIT_TOOLS: Readonly<Record<BackendId, string>> = {
   claude: "Edit/Write",
@@ -86,29 +83,27 @@ export function buildAgentSystemPrompt(
   platform: NodeJS.Platform = process.platform
 ): string {
   const settings = getSettings();
-  const builtinPrompt = !getDisableBuiltinSystemPrompt();
-  const enabled = (skill: string) =>
-    builtinPrompt && isBuiltinSkillEnabledFor(settings, skill, backendId);
-  const parts: string[] = [];
+  const parts = [
+    COPILOT_PROMPT_BASE,
+    COPILOT_WEB_RESEARCH_STEERING,
+    buildFileEditPolicy(backendId),
+    COPILOT_FOLDER_MENTION_DIRECTIVE,
+    COPILOT_VAULT_HYGIENE,
+  ];
 
-  if (builtinPrompt) parts.push(COPILOT_PROMPT_BASE, COPILOT_WEB_RESEARCH_STEERING);
-  parts.push(buildFileEditPolicy(backendId), COPILOT_FOLDER_MENTION_DIRECTIVE);
-  if (builtinPrompt) parts.push(COPILOT_VAULT_HYGIENE);
-  if (builtinPrompt && platform === "win32") parts.push(COPILOT_WINDOWS_SHELL_STEERING);
+  if (platform === "win32") parts.push(COPILOT_WINDOWS_SHELL_STEERING);
   if (backendSteering) parts.push(backendSteering);
   if (settings.agentMode.offerFeedbackCards) parts.push(COPILOT_FEEDBACK_POINTER);
-  if (builtinPrompt && isMiyoParseActive(settings)) parts.push(COPILOT_MIYO_DOCUMENT_STEERING);
-  if (builtinPrompt && isMiyoSearchActive(settings)) parts.push(COPILOT_MIYO_SEARCH_STEERING);
-  if (builtinPrompt && getExcalidrawApi(app) !== null) parts.push(COPILOT_EXCALIDRAW_STEERING);
-  const relayJobs = RELAY_SKILL_JOBS.filter(([skill]) => enabled(skill)).map(
-    ([skill, job]) => `${skill} for ${job}`
-  );
+  if (isMiyoParseActive(settings)) parts.push(COPILOT_MIYO_DOCUMENT_STEERING);
+  if (isMiyoSearchActive(settings)) parts.push(COPILOT_MIYO_SEARCH_STEERING);
+  if (getExcalidrawApi(app) !== null) parts.push(COPILOT_EXCALIDRAW_STEERING);
+  const relayJobs = RELAY_SKILL_JOBS.filter(([skill]) =>
+    isBuiltinSkillEnabledFor(settings, skill, backendId)
+  ).map(([skill, job]) => `${skill} for ${job}`);
   if (relayJobs.length > 0) {
     parts.push(`${COPILOT_SKILL_FIRST_LEAD} ${relayJobs.join(", ")}. ${COPILOT_SKILL_FALLBACK}`);
   }
-  if (builtinPrompt && isObsidianCliEnabled()) parts.push(COPILOT_OBSIDIAN_CLI_STEERING);
-  const copilotChatSteering = buildCopilotChatSteering();
-  if (copilotChatSteering) parts.push(copilotChatSteering);
+  if (isObsidianCliEnabled()) parts.push(COPILOT_OBSIDIAN_CLI_STEERING);
 
   return parts.join("\n\n");
 }

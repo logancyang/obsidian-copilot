@@ -6,7 +6,7 @@ export interface RunningAgentsLine {
 }
 
 function agentsDoing(names: readonly string[], verb: string): string {
-  if (names.length >= 4) return `${names.length} agents are ${verb}`;
+  if (names.length >= 4) return `${names.length} teammates are ${verb}`;
   const listed =
     names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
   return `${listed} ${names.length === 1 ? "is" : "are"} ${verb}`;

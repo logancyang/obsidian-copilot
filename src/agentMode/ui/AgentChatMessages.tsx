@@ -39,7 +39,6 @@ import type {
 } from "@/agentMode/session/types";
 import type { ChatMessage } from "@/types/message";
 import { logError } from "@/logger";
-import { getVaultBase } from "@/utils/vaultPath";
 import { App } from "obsidian";
 import React, { memo, useCallback, useMemo, useRef } from "react";
 
@@ -143,12 +142,7 @@ const AgentMessageRow = memo(function AgentMessageRow({
       <AgentTurnDurationIndicator status="running" startedAtMs={runningTurnStartedAtMs} />
     ) : null;
   const isStreamingPlaceholder = isAssistant && isStreaming && !hasParts && !message.message;
-  const memorySaves = useMemo(() => memorySaveTrail(message, getVaultBase(app)), [message, app]);
-  // A save line has no Undo, so the turn's changed files leave out the MEMORY.md its lines show.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/942
-  const fileChanges = memorySaves
-    ? message.fileChanges?.filter((change) => change.path !== memorySaves.saves[0].memoryPath)
-    : message.fileChanges;
+  const memorySaves = useMemo(() => memorySaveTrail(message), [message]);
   const onContinue = endsResponse && onContinueFrom ? () => onContinueFrom(message.id) : undefined;
   const openFileChange = (change: TurnFileChange) =>
     void openTurnDiff(app, change, message.id).catch((error: unknown) =>
@@ -166,10 +160,10 @@ const AgentMessageRow = memo(function AgentMessageRow({
         isAssistant && "[contain-intrinsic-size:auto_500px] [content-visibility:auto]"
       )}
     >
-      {/* A reply opened from its note, or replayed without its tool calls, has no edit to put the save in place of. https://github.com/Brevilabs/obsidian-copilot-private/issues/942 */}
-      {memorySaves && memorySaves.anchorId === null && !agentReply ? (
+      {/* A reply opened from its note, or saved before the save_memory tool, has no call to put the save in place of. https://github.com/Brevilabs/obsidian-copilot-private/issues/988 */}
+      {memorySaves && memorySaves.unplaced.length > 0 && !agentReply ? (
         <div className="tw-px-3 tw-pt-2">
-          <MemorySaveLines saves={memorySaves.saves} app={app} />
+          <MemorySaveLines saves={memorySaves.unplaced} app={app} />
         </div>
       ) : null}
       {isStreamingPlaceholder ? (
@@ -188,7 +182,7 @@ const AgentMessageRow = memo(function AgentMessageRow({
             turnStopReason={message.turnStopReason}
             agentCancelCause={message.agentCancelCause}
             errorText={message.isErrorMessage ? message.message : undefined}
-            fileChanges={fileChanges}
+            fileChanges={message.fileChanges}
             memorySaves={memorySaves}
             onContinue={onContinue}
             onOpenFileChange={openFileChange}
@@ -199,7 +193,7 @@ const AgentMessageRow = memo(function AgentMessageRow({
           marker={agentReply.marker}
           reply={agentReply.reply}
           run={relayRun}
-          fileChanges={fileChanges}
+          fileChanges={message.fileChanges}
           onOpenFileChange={openFileChange}
         >
           {memorySaves ? <MemorySaveLines saves={memorySaves.saves} app={app} /> : null}
@@ -407,7 +401,7 @@ const AgentChatMessages = memo(
         {pendingActionId ? (
           <div
             role="region"
-            aria-label="Pending agent actions"
+            aria-label="Pending actions"
             data-testid="agent-action-rail"
             // max-h + overflow-y: a verbose question can exceed a short chat pane, and its
             // resolution controls must stay reachable.

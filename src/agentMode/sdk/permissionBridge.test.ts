@@ -4,9 +4,6 @@ import type {
   PermissionDecision,
   PermissionPrompt,
 } from "@/agentMode/session/types";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import { PermissionBridge, type AskUserQuestionPrompter } from "./permissionBridge";
 
 jest.mock("@/agents/customAgentsGate", () => ({ getCustomAgentsGate: () => "full" }));
@@ -318,88 +315,24 @@ describe("permissionBridge", () => {
         });
       });
 
-      describe("a custom agent's own MEMORY.md", () => {
-        let root: string;
-        let memoryPath: string;
-        let planMode: boolean;
-        let prompter: jest.Mock;
+      it("asks the user before a Write or Edit to an agent's MEMORY.md, as for any other file, since saving a rule is the save_memory tool's job (https://github.com/Brevilabs/obsidian-copilot-private/issues/988)", async () => {
+        const prompter = jest.fn(async (_prompt: PermissionPrompt) => ({
+          outcome: { outcome: "selected" as const, optionId: "allow_once" as const },
+        }));
+        const bridge = new PermissionBridge("session-1", { getPrompter: () => prompter });
+        const memoryPath = "/vault/copilot/teammates/coco/MEMORY.md";
 
-        beforeEach(() => {
-          root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "bridge-memory-")));
-          fs.mkdirSync(path.join(root, "agents", "coco"), { recursive: true });
-          fs.mkdirSync(path.join(root, "agents", "maya"), { recursive: true });
-          memoryPath = path.join(root, "agents", "coco", "MEMORY.md");
-          planMode = false;
-          prompter = jest.fn(async () => ({
-            outcome: { outcome: "selected" as const, optionId: "allow_once" as const },
-          }));
-        });
+        await bridge.canUseTool("Write", { file_path: memoryPath, content: "x" }, ctx);
+        await bridge.canUseTool(
+          "Edit",
+          { file_path: memoryPath, old_string: "a", new_string: "b" },
+          ctx
+        );
 
-        afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
-
-        function agentBridge(agentMemoryPath: string | null = memoryPath) {
-          return new PermissionBridge("session-1", {
-            getPrompter: () => prompter,
-            agentMemoryPath: agentMemoryPath ?? undefined,
-            isPlanMode: () => planMode,
-          });
-        }
-
-        it("allows a Write or Edit to the agent's own MEMORY.md without a permission card (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", async () => {
-          const write = { file_path: memoryPath, content: "## How to work\n" };
-          const edit = { file_path: memoryPath, old_string: "a", new_string: "b" };
-
-          await expect(agentBridge().canUseTool("Write", write, ctx)).resolves.toEqual({
-            behavior: "allow",
-            updatedInput: write,
-          });
-          await expect(agentBridge().canUseTool("Edit", edit, ctx)).resolves.toEqual({
-            behavior: "allow",
-            updatedInput: edit,
-          });
-          expect(prompter).not.toHaveBeenCalled();
-        });
-
-        it("asks as usual for another agent's MEMORY.md, the agent's own instructions.md, and any other file (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", async () => {
-          for (const file_path of [
-            path.join(root, "agents", "maya", "MEMORY.md"),
-            path.join(root, "agents", "coco", "instructions.md"),
-            path.join(root, "MEMORY.md"),
-          ]) {
-            await agentBridge().canUseTool("Write", { file_path, content: "x" }, ctx);
-          }
-
-          expect(prompter).toHaveBeenCalledTimes(3);
-        });
-
-        it("asks as usual for a shell command that names the agent's MEMORY.md", async () => {
-          await agentBridge().canUseTool("Bash", { command: `rm ${memoryPath}` }, ctx);
-
-          expect(prompter).toHaveBeenCalledTimes(1);
-        });
-
-        it("asks as usual in a chat with no custom agent", async () => {
-          await agentBridge(null).canUseTool("Write", { file_path: memoryPath, content: "x" }, ctx);
-
-          expect(prompter).toHaveBeenCalledTimes(1);
-        });
-
-        it("refuses a save in Plan mode without a card and tells the agent it can't save there (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", async () => {
-          planMode = true;
-
-          const result = await agentBridge().canUseTool(
-            "Write",
-            { file_path: memoryPath, content: "x" },
-            ctx
-          );
-
-          expect(result).toEqual({
-            behavior: "deny",
-            message:
-              "You can't save a rule in Plan mode. Tell the user you can't save a rule in this mode.",
-          });
-          expect(prompter).not.toHaveBeenCalled();
-        });
+        expect(prompter.mock.calls.map(([prompt]) => prompt.toolCall.kind)).toEqual([
+          "edit",
+          "edit",
+        ]);
       });
 
       describe("ExitPlanMode handling", () => {

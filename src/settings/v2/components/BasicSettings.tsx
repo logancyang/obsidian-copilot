@@ -302,7 +302,7 @@ export const BasicSettings: React.FC = () => {
         <SettingItem
           type="switch"
           title="Autosave chats as Markdown"
-          description="Writes each chat to a Markdown note in your vault after every user message and AI response. With this off, agent chats still appear in Recent chats; only the Markdown note is skipped."
+          description="Writes each chat to a Markdown note in your vault after every user message and AI response. With this off, chats still appear in Recent chats; only the Markdown note is skipped."
           checked={settings.autosaveChat}
           onCheckedChange={(checked) => updateSetting("autosaveChat", checked)}
         />

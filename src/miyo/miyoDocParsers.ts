@@ -7,7 +7,7 @@ import { saveConvertedDocOutput as saveConvertedDocOutputCore } from "@/utils/co
 import { TFile, Vault } from "obsidian";
 
 export const PDF_NEEDS_MIYO_MESSAGE =
-  "Quick Chat reads PDFs through Miyo document processing, which is off or not connected. Turn it on and connect Miyo, or ask in Agent Chat, where your agent can read the PDF directly.";
+  "Quick Chat reads PDFs through Miyo document processing, which is off or not connected. Turn it on and connect Miyo, or ask in Copilot Chat, where your agent can read the PDF directly.";
 
 export const PDF_NEEDS_MIYO_REPEAT = "Same reason as the other unreadable PDF in this message.";
 

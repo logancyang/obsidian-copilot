@@ -106,6 +106,11 @@ export interface HostedTool {
   // A tool offered only to some chats, or worded for the chat that lists it, answers each listing; null leaves it out.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
   listedAs?: (listing: ToolListing) => McpToolDefinition | null;
+  // The sentence a model that can't see this tool's description until it searches for it needs to find the tool; a chat gets it only while it is offered the tool.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/986
+  // A hint can be worded for the chat that lists it, as a description can.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/999
+  promptHint?: string | ((listing: ToolListing) => string);
   call: (args: unknown, chat: ChatStateHost | null) => Promise<HostedToolResult>;
 }
 
@@ -118,6 +123,7 @@ export interface ToolListing {
   sessionKey: string;
   backendId: BackendId;
   shared?: boolean;
+  agentSlug?: string;
 }
 
 export interface ToolProvider {
@@ -155,7 +161,8 @@ export interface CopilotMcpServer {
     sessionKey: string,
     backendId: BackendId,
     findChat: FindCallingChat,
-    shared?: boolean
+    shared?: boolean,
+    agentSlug?: string
   ): Promise<AgentMcpServer>;
   readOnlyToolNames(): Promise<ReadonlyArray<string>>;
   disconnect(sessionKey: string): void;
@@ -205,7 +212,8 @@ export function createCopilotMcpServer(
       sessionKey: string,
       backendId: BackendId,
       findChat: FindCallingChat,
-      shared = false
+      shared = false,
+      agentSlug?: string
     ): Promise<AgentMcpServer> {
       if (disposed) throw new Error("The Copilot MCP server is closed.");
       server ??= startLoopbackServer("Copilot MCP server", (request, response) =>
@@ -228,12 +236,14 @@ export function createCopilotMcpServer(
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
       const token = tokensBySession.get(sessionKey) ?? crypto.randomBytes(32).toString("hex");
       tokensBySession.set(sessionKey, token);
-      handlersByToken.set(token, { findChat, listing: { sessionKey, backendId, shared } });
+      const listing: ToolListing = { sessionKey, backendId, shared, agentSlug };
+      handlersByToken.set(token, { findChat, listing });
       return Object.freeze({
         name: COPILOT_MCP_SERVER_NAME,
         url,
         headers: Object.freeze({ Authorization: `Bearer ${token}` }),
         readOnlyToolNames: listReadOnlyToolNames(),
+        promptHints: promptHintsFor(hostedTools, isToolOn, listing),
       });
     },
     async readOnlyToolNames(): Promise<ReadonlyArray<string>> {
@@ -261,6 +271,29 @@ export function createCopilotMcpServer(
       void toolProvider?.dispose();
     },
   });
+}
+
+export function promptHintsFor(
+  tools: readonly HostedTool[],
+  isToolOn: ToolSwitch,
+  listing: ToolListing
+): ReadonlyArray<string> {
+  return Object.freeze(
+    tools.flatMap((tool) => {
+      const { promptHint } = tool;
+      if (!promptHint || !offeredDefinition(tool, isToolOn, listing)) return [];
+      return [typeof promptHint === "string" ? promptHint : promptHint(listing)];
+    })
+  );
+}
+
+function offeredDefinition(
+  tool: HostedTool,
+  isToolOn: ToolSwitch,
+  listing: ToolListing
+): McpToolDefinition | null {
+  if (!isToolOn(tool.definition.name)) return null;
+  return tool.listedAs ? tool.listedAs(listing) : tool.definition;
 }
 
 async function handleHttpRequest(
@@ -336,11 +369,9 @@ async function reply(
       return {
         result: {
           tools: [
-            ...hostedTools
-              .filter((tool) => isToolOn(tool.definition.name))
-              .flatMap(
-                (tool) => (tool.listedAs ? tool.listedAs(handlers.listing) : tool.definition) ?? []
-              ),
+            ...hostedTools.flatMap(
+              (tool) => offeredDefinition(tool, isToolOn, handlers.listing) ?? []
+            ),
             ...providedTools(hostedTools, toolProvider, handlers.listing),
           ],
         },

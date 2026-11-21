@@ -12,6 +12,7 @@ import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManage
 import type { BackendId } from "@/agentMode/session/types";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AgentDeleteModal } from "@/agents/ui/AgentDeleteModal";
+import { useHermeticHome } from "@/agentMode/backends/opencode/testing/hermeticHome";
 import { resetSettings } from "@/settings/model";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import * as obsidian from "obsidian";
@@ -31,7 +32,7 @@ const setRequestUrlImpl = (
   obsidian as unknown as { __setRequestUrlImpl: (impl: jest.Mock) => void }
 ).__setRequestUrlImpl;
 
-const FOLDER = "copilot/agents/coco";
+const FOLDER = "copilot/teammates/coco";
 const LEO_URL = "https://images.brevilabs.com/agent-faces/leo.webp";
 const KAI_URL = "https://images.brevilabs.com/agent-faces/kai.webp";
 
@@ -60,7 +61,7 @@ const MODELS: AgentModelChoices = {
 
 function seed(vault: FakeAgentVault, slug: string, name: string, title = "") {
   vault.writeByHand(
-    `copilot/agents/${slug}/instructions.md`,
+    `copilot/teammates/${slug}/instructions.md`,
     `---\nname: ${name}\ntitle: ${title}\nface: face.webp\nmodel: ''\n---\nYou keep the whole vault in view. Answer briefly.`
   );
 }
@@ -152,6 +153,8 @@ describe("AgentProfile", () => {
   beforeEach(() => resetSettings());
 
   describe("AgentProfile()", () => {
+    useHermeticHome();
+
     it("shows the agent's chats and its saved rules from the vault", async () => {
       await setup();
 

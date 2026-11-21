@@ -1,6 +1,5 @@
 import {
   getCustomAgentsGate,
-  subscribeToCustomAgentsGate,
   useCustomAgentsGate,
   type CustomAgentsGate,
 } from "@/agents/customAgentsGate";
@@ -20,30 +19,8 @@ import type { App } from "obsidian";
 import React, { useContext, useMemo } from "react";
 
 let runningCheck: Promise<void> | null = null;
-let stopWaitingForUnlock: (() => void) | null = null;
 
-function runWhenUnlocked(onUnlocked: () => void): void {
-  stopWaitingForUnlock?.();
-  const stop = (): void => {
-    unsubscribe();
-    stopWaitingForUnlock = null;
-  };
-  const unsubscribe = subscribeToCustomAgentsGate(() => {
-    if (getCustomAgentsGate() !== "full") return;
-    stop();
-    onUnlocked();
-  });
-  stopWaitingForUnlock = stop;
-}
-
-async function checkLicense(
-  app: App,
-  afterCheck: (unlocked: boolean) => void,
-  onUnlocked: (() => void) | undefined
-): Promise<void> {
-  // A user who upgrades after the upsell, or whose check on this click grants the feature, lands in what they clicked.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/582
-  if (onUnlocked) runWhenUnlocked(onUnlocked);
+async function checkLicense(app: App, afterCheck: (unlocked: boolean) => void): Promise<void> {
   const unlocked = await ensureEntitlement(
     app,
     "custom_agents",
@@ -52,12 +29,8 @@ async function checkLicense(
   afterCheck(unlocked);
 }
 
-function checkLicenseOnce(
-  app: App,
-  afterCheck: (unlocked: boolean) => void,
-  onUnlocked?: () => void
-): Promise<void> {
-  runningCheck ??= checkLicense(app, afterCheck, onUnlocked).finally(() => {
+function checkLicenseOnce(app: App, afterCheck: (unlocked: boolean) => void): Promise<void> {
+  runningCheck ??= checkLicense(app, afterCheck).finally(() => {
     runningCheck = null;
   });
   return runningCheck;
@@ -69,17 +42,15 @@ export function openLockedCustomAgents(
   agents: readonly CustomAgent[],
   onUnlocked?: () => void
 ): Promise<void> {
-  return checkLicenseOnce(
-    app,
-    (unlocked) => {
-      if (unlocked) return;
-      // A vault that already has agents shows them instead of the preview pitch.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/950
-      if (agents.length > 0) new LockedAgentsUpsellModal(app, agents).open();
-      else new CustomAgentsUpsellModal(app, medium).open();
-    },
-    onUnlocked
-  );
+  return checkLicenseOnce(app, (unlocked) => {
+    // Only this click's own check opens what was clicked; a key entered later must not pop a dialog over settings.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/1016
+    if (unlocked) onUnlocked?.();
+    // A vault that already has agents shows them instead of the preview pitch.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/950
+    else if (agents.length > 0) new LockedAgentsUpsellModal(app, agents).open();
+    else new CustomAgentsUpsellModal(app, medium).open();
+  });
 }
 
 export function openLockedAgentProfile(app: App, openProfile: () => void): Promise<void> {

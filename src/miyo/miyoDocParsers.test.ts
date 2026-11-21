@@ -244,7 +244,7 @@ describe("miyoDocParsers", () => {
         expect(mockRefresh).not.toHaveBeenCalled();
       });
 
-      it("returns the Miyo and Agent Chat message without probing Miyo or making a network request when Miyo document processing is off https://github.com/Brevilabs/obsidian-copilot-private/issues/653", async () => {
+      it("returns the Miyo and Copilot Chat message without probing Miyo or making a network request when Miyo document processing is off https://github.com/Brevilabs/obsidian-copilot-private/issues/653", async () => {
         mockGetSettings.mockReturnValue(settings({ enableMiyoDocumentProcessing: false }));
         mockSnapshot.mockReturnValue({ documentProcessor: "unknown" });
 

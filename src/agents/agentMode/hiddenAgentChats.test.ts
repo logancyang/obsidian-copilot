@@ -4,7 +4,6 @@ import { createMemorySessionIndex } from "@/agentMode/session/testing/memorySess
 import { writePermissionRequest } from "@/agentMode/session/testing/permissionPrompts";
 import type { BackendDescriptor, BackendState, PermissionPrompt } from "@/agentMode/session/types";
 import {
-  HIDDEN_CHAT_DENY_MESSAGE,
   HiddenAgentChats,
   readAskedMessage,
   type HiddenChatStart,
@@ -35,6 +34,7 @@ const ASKED_MEMORY = "https://github.com/Brevilabs/obsidian-copilot-private/issu
 const SETUP = "https://github.com/Brevilabs/obsidian-copilot-private/issues/962";
 const NO_NOTE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/976";
 const RECALL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/980";
+const ENTRIES = "https://github.com/Brevilabs/obsidian-copilot-private/issues/991";
 const AUTO_MODE: BackendState = { model: null, mode: { current: "auto", options: [], apply: {} } };
 const PLAN: BackendState = { model: null, mode: { current: "plan", options: [], apply: {} } };
 const PLAN_CHANGE = Object.freeze({
@@ -62,7 +62,7 @@ let nextChat = 1;
 
 function seedAgent(slug: string, name: string, instruction: string): void {
   vault.writeByHand(
-    `copilot/agents/${slug}/instructions.md`,
+    `copilot/teammates/${slug}/instructions.md`,
     serializeInstructionsFile({ name, title: `${name}'s title`, model: null }, instruction)
   );
 }
@@ -224,7 +224,7 @@ async function askBoth(descriptor?: BackendDescriptor): Promise<TwoAsked> {
 
 function markerOf(relay: string): Record<string, unknown> {
   const marker = relay.split("\n")[0];
-  return JSON.parse(marker.slice("<!-- copilot-agent-reply ".length, -" -->".length)) as Record<
+  return JSON.parse(marker.slice("<!-- copilot-teammate-reply ".length, -" -->".length)) as Record<
     string,
     unknown
   >;
@@ -233,10 +233,10 @@ function markerOf(relay: string): Record<string, unknown> {
 function relayedFrom(relay: string): string {
   const marker = relay.split("\n")[0];
   return (
-    JSON.parse(marker.slice("<!-- copilot-agent-reply ".length, -" -->".length)) as {
-      agent: string;
+    JSON.parse(marker.slice("<!-- copilot-teammate-reply ".length, -" -->".length)) as {
+      teammate: string;
     }
-  ).agent;
+  ).teammate;
 }
 
 beforeEach(async () => {
@@ -318,8 +318,8 @@ describe("hiddenAgentChats", () => {
         expect(startChat).not.toHaveBeenCalled();
       });
 
-      it(`starts the asked agent's chat with its own instruction, memory and save rules, and the path of its own MEMORY.md that it writes without a card (${ASKED_MEMORY})`, async () => {
-        vault.writeByHand("copilot/agents/maya/MEMORY.md", "Flag video length first.");
+      it(`starts the asked agent's chat with its own instruction, memory and save rules (${ASKED_MEMORY})`, async () => {
+        vault.writeByHand("copilot/teammates/maya/MEMORY.md", "Flag video length first.");
         const coco = await openChat({ agentSlug: "coco" });
 
         chats.ask(coco, "maya", "Review the plan.");
@@ -330,8 +330,18 @@ describe("hiddenAgentChats", () => {
         expect(prompt.prompt).toContain("Always name the biggest risk first.");
         expect(prompt.prompt).toContain("<memory>\nFlag video length first.\n</memory>");
         expect(prompt.prompt).toContain("Save a rule to your memory only when");
-        expect(prompt.prompt).not.toContain("ask_agent");
-        expect(prompt.memoryPath).toBe("/vault/copilot/agents/maya/MEMORY.md");
+        expect(prompt.prompt).not.toContain("ask_teammate");
+      });
+
+      it(`starts the asked agent's chat on its own prompt variant, so a coding agent that stores prompts by agent keeps it apart from the agent's own chat (${ENTRIES})`, async () => {
+        const coco = await openChat({ agentSlug: "coco" });
+
+        chats.ask(coco, "maya", "Review the plan.");
+        await untilAgentChatStarted();
+
+        expect(starts[0].prompt).toEqual(
+          expect.objectContaining({ slug: "maya", variant: "asked" })
+        );
       });
 
       it(`starts the asked agent's chat in the project and mode of the chat that asked (${ISSUE})`, async () => {
@@ -360,6 +370,22 @@ describe("hiddenAgentChats", () => {
         );
       });
 
+      it(`tells the asked agent that Copilot turns down any change while the chat that asked is in Plan mode, and says nothing of it otherwise (${ENTRIES})`, async () => {
+        const planning = await openChat({
+          agentSlug: "coco",
+          backend: createFakeAgentBackend(PLAN),
+        });
+        const plain = await openChat();
+
+        const [toPlanning] = fake.promptsTo(sessionIdOf(await askedAndPrompted(planning)));
+        const [toPlain] = fake.promptsTo(sessionIdOf(await askedAndPrompted(plain)));
+
+        expect(toPlanning).toContain(
+          "The chat that asked you is in Plan mode, so Copilot turns down any change you try. Say in your reply what you would change."
+        );
+        expect(toPlain).not.toContain("Plan mode");
+      });
+
       it(`names Copilot as the asker when a chat with no agent asks (${ISSUE})`, async () => {
         const copilot = await openChat();
 
@@ -376,14 +402,14 @@ describe("hiddenAgentChats", () => {
 
         const relayed = await fake.untilPrompt(sessionIdOf(coco));
         const [marker] = relayed.split("\n");
-        expect(marker).toMatch(/^<!-- copilot-agent-reply \{.*\} -->$/);
+        expect(marker).toMatch(/^<!-- copilot-teammate-reply \{.*\} -->$/);
         expect(
-          JSON.parse(marker.slice("<!-- copilot-agent-reply ".length, -" -->".length))
-        ).toMatchObject({ agent: "maya", name: "Maya" });
+          JSON.parse(marker.slice("<!-- copilot-teammate-reply ".length, -" -->".length))
+        ).toMatchObject({ teammate: "maya", name: "Maya" });
         expect(relayed).toContain("Maya replied. Pass the reply on to the user now.");
         expect(relayed).toContain(RELAY_PRINCIPLE);
         expect(relayed).toContain(
-          '<agent-reply from="Maya">\nI disagree. Six features is too many.\n</agent-reply>'
+          '<teammate-reply from="Maya">\nI disagree. Six features is too many.\n</teammate-reply>'
         );
       });
 
@@ -416,38 +442,46 @@ describe("hiddenAgentChats", () => {
         expect(relayMessage?.fileChanges).toEqual([PLAN_CHANGE]);
       });
 
-      it(`carries the rule the agent saved or replaced in its own MEMORY.md onto the relayed reply, as its own chat shows it, and names to the asking agent only the files the user sees under the reply (${ASKED_MEMORY})`, async () => {
+      it(`carries the rule the agent saved through save_memory onto the relayed reply, as its own chat shows it, even when the run changed no file (${ASKED_MEMORY}, https://github.com/Brevilabs/obsidian-copilot-private/issues/988)`, async () => {
         const coco = await openChat({ agentSlug: "coco" });
         const maya = await askedAndPrompted(coco, "From now on, flag the budget first.");
-        const memory = {
-          path: "copilot/agents/maya/MEMORY.md",
-          status: "modified" as const,
-          before: "## How to work\n\nFlag video length first.\n2026-11-16 · asked in Coco's chat\n",
-          after:
-            '## How to work\n\nFlag the budget first.\n2026-11-18 · Replaces "Flag video length first." (2026-11-16)\n',
-          additions: 2,
-          deletions: 2,
+        const save = {
+          rule: "Flag the budget first.",
+          replaced: "Flag video length first.",
+          agentName: "Maya",
+          memoryPath: "copilot/teammates/maya/MEMORY.md",
         };
-        maya.store.setFileChanges(maya.store.getDisplayMessages().at(-1)!.id, [
-          memory,
-          PLAN_CHANGE,
-        ]);
+        maya.store.setFileChanges(maya.store.getDisplayMessages().at(-1)!.id, [], [save]);
 
         answer(maya, "Noted.");
 
         const relayed = await fake.untilPrompt(sessionIdOf(coco));
         const relayMessage = coco.store.getDisplayMessages().find((m) => m.message === relayed);
-        expect(relayMessage?.memorySaves).toEqual([
-          {
-            agentName: "Maya",
-            memoryPath: "copilot/agents/maya/MEMORY.md",
-            rule: "Flag the budget first.",
-            replaced: "Flag video length first.",
-          },
-        ]);
-        expect(relayMessage?.fileChanges).toEqual([memory, PLAN_CHANGE]);
-        expect(relayed).toContain("Maya changed Plans/Launch plan.md.");
+        expect(relayMessage?.memorySaves).toEqual([save]);
+        expect(relayMessage?.fileChanges).toEqual([]);
         expect(relayed).not.toContain("MEMORY.md");
+      });
+
+      it(`names to the asking agent a direct edit of the asked agent's MEMORY.md like any other changed file (https://github.com/Brevilabs/obsidian-copilot-private/issues/988)`, async () => {
+        const coco = await openChat({ agentSlug: "coco" });
+        const maya = await askedAndPrompted(coco, "Tidy your memory file.");
+        const memory = {
+          path: "copilot/teammates/maya/MEMORY.md",
+          status: "modified" as const,
+          before: "## How to work\n\nFlag video length first.\n",
+          after: "## How to work\n",
+          additions: 0,
+          deletions: 2,
+        };
+        maya.store.setFileChanges(maya.store.getDisplayMessages().at(-1)!.id, [memory]);
+
+        answer(maya, "Done.");
+
+        const relayed = await fake.untilPrompt(sessionIdOf(coco));
+        const relayMessage = coco.store.getDisplayMessages().find((m) => m.message === relayed);
+        expect(relayed).toContain("Maya changed copilot/teammates/maya/MEMORY.md.");
+        expect(relayMessage?.fileChanges).toEqual([memory]);
+        expect(relayMessage?.memorySaves).toBeUndefined();
       });
 
       it(`carries no saves onto a relayed reply whose run left the agent's memory alone (${ASKED_MEMORY})`, async () => {
@@ -1334,26 +1368,29 @@ describe("hiddenAgentChats", () => {
         expect(relayed).toContain("The user turned down a request from Maya");
       });
 
-      it(`turns a request down with the reason and shows no card while the chat that asked is in Plan mode (${PERMISSION})`, async () => {
+      it(`turns a request down, saying the chat that asked is in Plan mode, and shows no card while it is (${PERMISSION}, ${ENTRIES})`, async () => {
         const coco = await openChat({ agentSlug: "coco", backend: createFakeAgentBackend(PLAN) });
         const maya = await askedAndPrompted(coco);
 
         await expect(chats.answerPermission(requestFrom(maya))).resolves.toEqual({
           outcome: { outcome: "selected", optionId: "reject_once" },
-          denyMessage: HIDDEN_CHAT_DENY_MESSAGE,
+          denyMessage:
+            "Copilot turned this down: the chat that asked you is in Plan mode, so nothing can be changed. Don't try again. Say in your reply what you would have changed.",
         });
         expect(coco.getPendingToolPermissions()).toHaveLength(0);
       });
 
-      it(`turns a request down without a card when it comes after the agent's run ended, as right after a stop (${PERMISSION})`, async () => {
+      it(`turns a request down without a card, saying the agent's work for the chat that asked has ended, when it comes after the agent's run ended, as right after a stop (${PERMISSION}, ${ENTRIES})`, async () => {
         const coco = await openChat({ agentSlug: "coco" });
         const maya = await askedAndPrompted(coco);
         answer(maya, "Done.");
         await fake.untilPrompt(sessionIdOf(coco));
 
-        await expect(chats.answerPermission(requestFrom(maya))).resolves.toEqual(
-          expect.objectContaining({ outcome: { outcome: "selected", optionId: "reject_once" } })
-        );
+        await expect(chats.answerPermission(requestFrom(maya))).resolves.toEqual({
+          outcome: { outcome: "selected", optionId: "reject_once" },
+          denyMessage:
+            "Copilot turned this down: your work for the chat that asked you has ended. Don't try again.",
+        });
         expect(coco.getPendingToolPermissions()).toHaveLength(0);
       });
 
@@ -1402,10 +1439,10 @@ describe("hiddenAgentChats", () => {
 
         const relayed = await fake.untilPrompt(sessionIdOf(coco), 2);
         expect(relayed).toContain(
-          "Maya has a question for the user, quoted below, and waits for the answer. Ask the user in your own words, then end your turn. When the user answers, pass the answer to Maya with answer_agent."
+          "Maya has a question for the user, quoted below, and waits for the answer. Ask the user in your own words, then end your turn. When the user answers, pass the answer to Maya with answer_teammate."
         );
         expect(relayed).toContain(
-          '<agent-reply from="Maya">\nOctober or November?\n</agent-reply>'
+          '<teammate-reply from="Maya">\nOctober or November?\n</teammate-reply>'
         );
         expect(mentionsOn(coco)?.[0]).toEqual(expect.objectContaining({ status: "question" }));
         expect(chats.workingIn("maya")).toBe("Coco");
@@ -1503,7 +1540,7 @@ describe("hiddenAgentChats", () => {
         answer(maya, "One more thing.");
 
         expect(await fake.untilPrompt(sessionIdOf(coco), 3)).toContain(
-          '<agent-reply from="Maya">\nWhich year?\n</agent-reply>'
+          '<teammate-reply from="Maya">\nWhich year?\n</teammate-reply>'
         );
         fake.endTurn(sessionIdOf(coco));
         expect(mentionsOn(coco)?.[0].status).toBe("question");
@@ -1645,7 +1682,7 @@ describe("hiddenAgentChats", () => {
         );
       });
 
-      it(`says the agent isn't working when it finished, and that the chat never asked it otherwise (${CONTROL})`, async () => {
+      it(`answers that the agent has no run from this chat, with no progress to report, once it finished, as when the chat never asked it (${CONTROL}, ${ENTRIES})`, async () => {
         const coco = await openChat({ agentSlug: "coco" });
         const other = await openChat();
         const maya = await askedAndPrompted(coco);
@@ -1653,9 +1690,8 @@ describe("hiddenAgentChats", () => {
         await fake.untilPrompt(sessionIdOf(coco));
 
         expect(chats.check(coco, "Maya")).toEqual({
-          kind: "progress",
+          kind: "not_asked",
           agent: agentNamed("Maya"),
-          progress: "Maya isn't working on anything from this chat now.",
         });
         expect(chats.check(other, "Maya")).toEqual({
           kind: "not_asked",
@@ -1686,7 +1722,7 @@ describe("hiddenAgentChats", () => {
         expect(relayed).toContain(
           "Maya stopped, as the user asked. Maya's changes stay. Tell the user how far Maya got and what Maya changed"
         );
-        expect(relayed).toContain('<agent-reply from="Maya">\nMatched 120 of 214 so far.\n');
+        expect(relayed).toContain('<teammate-reply from="Maya">\nMatched 120 of 214 so far.\n');
         expect(relayed).toContain("Maya changed Plans/Launch plan.md.");
         const relayMessage = coco.store.getDisplayMessages().find((m) => m.message === relayed);
         expect(relayMessage?.fileChanges).toEqual([PLAN_CHANGE]);
@@ -2072,6 +2108,17 @@ describe("hiddenAgentChats", () => {
         ).toBeNull();
         expect(chats.askedChat(coco, { ...run, chat: undefined })).toBeNull();
         expect(chats.askedChat(coco, { ...run, agent: "coco" })).toBeNull();
+      });
+    });
+
+    describe("askedChatOf()", () => {
+      it("gives an asked agent's chat with the chat that asked it, and nothing for a chat no agent was asked into", async () => {
+        const coco = await openChat({ agentSlug: "coco" });
+        const maya = await askedAndPrompted(coco);
+
+        expect(chats.askedChatOf(maya)).toEqual({ session: maya, askedFrom: coco });
+        expect(chats.askedChatOf(coco)).toBeNull();
+        expect(chats.askedChatOf(null)).toBeNull();
       });
     });
 

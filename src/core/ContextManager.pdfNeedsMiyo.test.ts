@@ -91,7 +91,7 @@ describe("ContextManager", () => {
         setRequestUrlImpl(requestUrl);
       });
 
-      it("explains the Miyo and Agent Chat route for an active-note PDF without a cloud request when Miyo document processing is off https://github.com/Brevilabs/obsidian-copilot-private/issues/653", async () => {
+      it("explains the Miyo and Copilot Chat route for an active-note PDF without a cloud request when Miyo document processing is off https://github.com/Brevilabs/obsidian-copilot-private/issues/653", async () => {
         const paper = addFile("paper.pdf");
 
         const content = await process({ notes: [] }, paper);
@@ -99,7 +99,7 @@ describe("ContextManager", () => {
         expect(content).toContain("<active_note>");
         expect(content).toContain(PDF_NEEDS_MIYO_MESSAGE);
         expect(content).toContain("Miyo");
-        expect(content).toContain("Agent Chat");
+        expect(content).toContain("Copilot Chat");
         expect(requestUrl).not.toHaveBeenCalled();
       });
 
