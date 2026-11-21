@@ -36,7 +36,7 @@ export function agentMentionsBlock(names: readonly string[] | undefined): string
   if (!names?.length) return null;
   return [
     "<copilot-teammates>",
-    `The user @-mentioned these agents in this message. Ask each of them with the ${ASK_AGENT_TOOL_NAME} tool:`,
+    `The user @-mentioned these AI teammates in this message. Ask each of them with the ${ASK_AGENT_TOOL_NAME} tool:`,
     ...names.map((name) => `- ${name}`),
     "</copilot-teammates>",
   ].join("\n");

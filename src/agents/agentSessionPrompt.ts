@@ -1,3 +1,4 @@
+import type { ToolListing } from "@/agentMode/session/copilotMcpServer";
 import type { CustomAgent, CustomAgentStore } from "@/agents/CustomAgentStore";
 import { getCustomAgentsGate } from "@/agents/customAgentsGate";
 import { localDate } from "@/agents/agentMemoryFile";
@@ -21,17 +22,28 @@ export interface AgentPromptInput {
   ownChat?: { chatsFolder: string };
 }
 
+// Given only the word "teammate", weaker models took the user's teammates for people; one sentence saying what they are made the difference the word alone did not.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/999
+export const AI_TEAMMATE_DEFINITION =
+  "An AI teammate is an AI assistant the user made in Copilot, not a person.";
+
+// A Copilot chat reads no teammate prompt, so the first teammate tool in a listing that can reach one opens with the definition. OpenCode's shared folder listing reaches Copilot chats too, so a teammate's own chat there reads it twice; a listing written for one teammate's chat leaves it to the prompt.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/999
+export function mayReachCopilotChat({ agentSlug }: ToolListing): boolean {
+  return agentSlug === undefined;
+}
+
 // With ask_teammate's whole description in view, weaker models passed a request that points at another agent by its job far less often unless the ask rule sat beside the list of agents.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/986
 export const ASK_AGENT_PROMPT_HINT =
-  "When the user's message @-mentions one of the user's agents by name or clearly points to one, ask that agent with the ask_teammate tool from obsidian-copilot; never otherwise.";
+  "When the user's message @-mentions one of the user's AI teammates by name or clearly points to one, ask that AI teammate with the ask_teammate tool from obsidian-copilot; never otherwise.";
 
 export const LIST_CHATS_PROMPT_HINT =
   "When the user asks what you and they worked on, discussed or decided before, list your earlier chats with list_chats from obsidian-copilot and read a listed note when you need what was said.";
 
 // A rule the user gives the asked agent is saved by that agent, so the asking agent keeps it out of its own memory; no tool description says so.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/969
-const NOT_YOURS_TO_SAVE = "A rule the user gives another agent is not yours to save.";
+const NOT_YOURS_TO_SAVE = "A rule the user gives another AI teammate is not yours to save.";
 
 // Every coding agent gets the whole recall paragraph: list_chats' description carries neither reading a listed note nor the scope, and without the scope another agent's or a Copilot chat's note in the same folder answered for the wrong chat.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/959
@@ -54,10 +66,10 @@ export function buildAgentPrompt({
 }: AgentPromptInput): string {
   const roster = others.length > 0 ? others.map(describeAgent).join("; ") : "none";
   return [
-    `In this chat you are ${describeAgent(agent)}, an agent the user made in Copilot.`,
-    `Your folder is ${folder}. Keep your own files in it, and add nothing else to the vault unless the user asks. Do not read or change other agents' folders.`,
+    `In this chat you are ${describeAgent(agent)}, an AI teammate. ${AI_TEAMMATE_DEFINITION}`,
+    `Your folder is ${folder}. Keep your own files in it, and add nothing else to the vault unless the user asks. Do not read or change other AI teammates' folders.`,
     `Your instruction is the body of ${folder}/instructions.md, and only the user edits that file. Your memory is ${folder}/MEMORY.md. It is your only memory: never save to CLAUDE.md, AGENTS.md or any other memory. When your memory contradicts your instruction, follow your memory.`,
-    `Other agents: ${roster}.`,
+    `Other AI teammates: ${roster}.`,
     ...(ownChat && others.length > 0 ? [ASK_AGENT_PROMPT_HINT, NOT_YOURS_TO_SAVE] : []),
     ...(ownChat ? [recallEarlierChats(ownChat.chatsFolder)] : []),
     buildMemorySaveRules(instructionsPath),

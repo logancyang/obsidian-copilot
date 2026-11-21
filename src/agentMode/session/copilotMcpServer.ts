@@ -108,7 +108,9 @@ export interface HostedTool {
   listedAs?: (listing: ToolListing) => McpToolDefinition | null;
   // The sentence a model that can't see this tool's description until it searches for it needs to find the tool; a chat gets it only while it is offered the tool.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/986
-  promptHint?: string;
+  // A hint can be worded for the chat that lists it, as a description can.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/999
+  promptHint?: string | ((listing: ToolListing) => string);
   call: (args: unknown, chat: ChatStateHost | null) => Promise<HostedToolResult>;
 }
 
@@ -277,9 +279,11 @@ export function promptHintsFor(
   listing: ToolListing
 ): ReadonlyArray<string> {
   return Object.freeze(
-    tools.flatMap((tool) =>
-      tool.promptHint && offeredDefinition(tool, isToolOn, listing) ? [tool.promptHint] : []
-    )
+    tools.flatMap((tool) => {
+      const { promptHint } = tool;
+      if (!promptHint || !offeredDefinition(tool, isToolOn, listing)) return [];
+      return [typeof promptHint === "string" ? promptHint : promptHint(listing)];
+    })
   );
 }
 

@@ -16,7 +16,10 @@ import {
 import { createDraftAgentTool } from "@/agents/agentMode/draftAgentTool";
 import type { HiddenAgentChats } from "@/agents/agentMode/hiddenAgentChats";
 import { createListChatsTool } from "@/agents/agentMode/listChatsTool";
+import { CHAT_LISTINGS } from "@/agents/agentMode/testing/toolListings";
 import { createSaveMemoryTool } from "@/agents/agentMode/saveMemoryTool";
+import { agentMentionsBlock } from "@/agents/agentMentionPrompt";
+import { formatAgentReply } from "@/agents/agentReply";
 import {
   buildAgentPrompt,
   describeAgent,
@@ -27,6 +30,7 @@ import { serializeInstructionsFile } from "@/agents/customAgentFiles";
 import { buildMemorySaveRules } from "@/agents/memorySaveRules";
 import { setCustomAgentsAccess } from "@/agents/testing/customAgentsAccess";
 import { createFakeAgentVault, type FakeAgentVault } from "@/agents/testing/fakeAgentVault";
+import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { setSettings } from "@/settings/model";
 import type { App } from "obsidian";
 
@@ -41,15 +45,16 @@ const ISSUE_986 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/
 const ISSUE_987 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/987";
 const OWN_CHAT = { chatsFolder: "/vault/copilot/copilot-conversations" };
 
-const IDENTITY = "In this chat you are Coco (Houseplant carer), an agent the user made in Copilot.";
+const DEFINITION = "An AI teammate is an AI assistant the user made in Copilot, not a person.";
+const IDENTITY = `In this chat you are Coco (Houseplant carer), an AI teammate. ${DEFINITION}`;
 const COPILOT_IDENTITY = "You are Obsidian Copilot.";
-const NOT_YOURS_TO_SAVE = "A rule the user gives another agent is not yours to save.";
+const NOT_YOURS_TO_SAVE = "A rule the user gives another AI teammate is not yours to save.";
 const ASK_AGENTS =
-  "When the user's message @-mentions one of the user's agents by name or clearly points to one, ask that agent with the ask_teammate tool from obsidian-copilot; never otherwise.";
+  "When the user's message @-mentions one of the user's AI teammates by name or clearly points to one, ask that AI teammate with the ask_teammate tool from obsidian-copilot; never otherwise.";
 const CONTROL_ASKED_AGENTS =
-  "When the user asks how an agent you asked is doing, check with check_teammate; when the user answers its question, pass the answer with answer_teammate; when the user gives it a new instruction while it works, send that with ask_teammate; when the user tells you to stop it, use stop_teammate. All are in obsidian-copilot.";
+  "When the user asks how an AI teammate you asked is doing, check with check_teammate; when the user answers its question, pass the answer with answer_teammate; when the user gives it a new instruction while it works, send that with ask_teammate; when the user tells you to stop it, use stop_teammate. All are in obsidian-copilot.";
 const DRAFT_NEW_AGENTS =
-  "When the user asks you to make a new agent, draft it with the draft_teammate tool from obsidian-copilot, which shows them a card to review and create it. If you or another agent already handles that job, say so and ask before drafting. You can't create an agent yourself.";
+  "When the user asks you to make a new AI teammate, draft it with the draft_teammate tool from obsidian-copilot, which shows them a card to review and create it. If you or an AI teammate already handles that job, say so and ask before drafting. You can't create an AI teammate yourself.";
 const LIST_CHATS =
   "When the user asks what you and they worked on, discussed or decided before, list your earlier chats with list_chats from obsidian-copilot and read a listed note when you need what was said.";
 const RECALL_SCOPE =
@@ -58,6 +63,7 @@ const RECALL_EARLIER_CHATS = `${LIST_CHATS} ${RECALL_SCOPE}`;
 const SAVE_MEMORY =
   "To save a rule to your memory, use the save_memory tool from obsidian-copilot.";
 const TEAMMATES_SENTENCES = {
+  "the definition of an AI teammate": DEFINITION,
   "the rule that another agent's rule is not its to save": NOT_YOURS_TO_SAVE,
   "the ask_teammate sentence": ASK_AGENTS,
   "the check_teammate, answer_teammate and stop_teammate sentence": CONTROL_ASKED_AGENTS,
@@ -67,6 +73,10 @@ const TEAMMATES_SENTENCES = {
   "the save_memory sentence": SAVE_MEMORY,
 };
 type TeammatesSentence = keyof typeof TEAMMATES_SENTENCES;
+
+const CODING_AGENT_PHRASES = /coding-agent environment framing|AGENTS\.md/g;
+const NAMES_WITH_THE_BARE_NOUN =
+  /Copilot Teammates|teammate and message must be non-empty strings|teammate must be a non-empty string/g;
 
 const APP = {} as App;
 const ASKED_CHAT = "asked-chat";
@@ -155,7 +165,7 @@ describe("agentSessionPrompt", () => {
       instructionsPath: "copilot/teammates/coco/instructions.md",
     });
 
-    it("names the agent with its title", () => {
+    it("names the agent with its title as an AI teammate, then says an AI teammate is an AI assistant the user made in Copilot, not a person (https://github.com/Brevilabs/obsidian-copilot-private/issues/999)", () => {
       expect(prompt).toContain(IDENTITY);
     });
 
@@ -184,7 +194,7 @@ describe("agentSessionPrompt", () => {
     });
 
     it("lists the other agents by name and title, and by name alone when one has no title", () => {
-      expect(prompt).toContain("Other agents: Maya (Product critic); Leo.");
+      expect(prompt).toContain("Other AI teammates: Maya (Product critic); Leo.");
     });
 
     it("says only the user edits instructions.md, that its MEMORY.md is its only memory, and that memory wins over the instruction", () => {
@@ -198,7 +208,7 @@ describe("agentSessionPrompt", () => {
 
     it("keeps the agent's files in its folder, adds nothing else to the vault unasked, and keeps it out of other agents' folders", () => {
       expect(prompt).toContain(
-        "Your folder is /vault/copilot/teammates/coco. Keep your own files in it, and add nothing else to the vault unless the user asks. Do not read or change other agents' folders."
+        "Your folder is /vault/copilot/teammates/coco. Keep your own files in it, and add nothing else to the vault unless the user asks. Do not read or change other AI teammates' folders."
       );
     });
 
@@ -213,7 +223,7 @@ describe("agentSessionPrompt", () => {
         ownChat: OWN_CHAT,
       });
 
-      expect(alone).toContain("Other agents: none.");
+      expect(alone).toContain("Other AI teammates: none.");
       expect(alone).not.toContain("ask_teammate");
       expect(alone).not.toContain(NOT_YOURS_TO_SAVE);
     });
@@ -230,7 +240,7 @@ describe("agentSessionPrompt", () => {
       });
 
       expect(ownChat).toContain(
-        `Other agents: Maya (Product critic); Leo.\n\n${ASK_AGENTS}\n\n${NOT_YOURS_TO_SAVE}\n\n`
+        `Other AI teammates: Maya (Product critic); Leo.\n\n${ASK_AGENTS}\n\n${NOT_YOURS_TO_SAVE}\n\n`
       );
       expect(countOf(ownChat, "ask_teammate")).toBe(1);
       for (const tool of ["check_teammate", "answer_teammate", "stop_teammate", "draft_teammate"]) {
@@ -262,7 +272,7 @@ describe("agentSessionPrompt", () => {
         instructionsPath: "copilot/teammates/coco/instructions.md",
       });
 
-      expect(asked).toContain("Other agents: Maya (Product critic); Leo.");
+      expect(asked).toContain("Other AI teammates: Maya (Product critic); Leo.");
       for (const tool of [
         "ask_teammate",
         "check_teammate",
@@ -440,6 +450,7 @@ describe("agentSessionPrompt", () => {
       await expect(loadAgentSessionPrompt(store, "coco", "/vault")).resolves.toBeNull();
     });
 
+    const DEFINE: TeammatesSentence = "the definition of an AI teammate";
     const SAVE_RULE: TeammatesSentence = "the rule that another agent's rule is not its to save";
     const ASK: TeammatesSentence = "the ask_teammate sentence";
     const CONTROL: TeammatesSentence =
@@ -456,53 +467,68 @@ describe("agentSessionPrompt", () => {
       { backendId: "codex", chat: "unlicensed", others: TWO_OTHERS, lines: [] },
       { backendId: "claude", chat: "copilot", others: [], lines: [] },
       { backendId: "opencode", chat: "copilot", others: [], lines: [] },
-      { backendId: "codex", chat: "copilot", others: [], lines: [DRAFT] },
+      { backendId: "codex", chat: "copilot", others: [], lines: [DEFINE, DRAFT] },
       { backendId: "claude", chat: "copilot", others: ONE_OTHER, lines: [] },
       { backendId: "opencode", chat: "copilot", others: ONE_OTHER, lines: [] },
-      { backendId: "codex", chat: "copilot", others: ONE_OTHER, lines: [ASK, CONTROL, DRAFT] },
+      {
+        backendId: "codex",
+        chat: "copilot",
+        others: ONE_OTHER,
+        lines: [DEFINE, ASK, CONTROL, DRAFT],
+      },
       { backendId: "claude", chat: "copilot", others: TWO_OTHERS, lines: [] },
       { backendId: "opencode", chat: "copilot", others: TWO_OTHERS, lines: [] },
-      { backendId: "codex", chat: "copilot", others: TWO_OTHERS, lines: [ASK, CONTROL, DRAFT] },
-      { backendId: "claude", chat: "own", others: [], lines: [LIST, SCOPE] },
-      { backendId: "opencode", chat: "own", others: [], lines: [LIST, SCOPE] },
-      { backendId: "codex", chat: "own", others: [], lines: [LIST, SCOPE, DRAFT, SAVE] },
-      { backendId: "claude", chat: "own", others: ONE_OTHER, lines: [ASK, SAVE_RULE, LIST, SCOPE] },
+      {
+        backendId: "codex",
+        chat: "copilot",
+        others: TWO_OTHERS,
+        lines: [DEFINE, ASK, CONTROL, DRAFT],
+      },
+      { backendId: "claude", chat: "own", others: [], lines: [DEFINE, LIST, SCOPE] },
+      { backendId: "opencode", chat: "own", others: [], lines: [DEFINE, LIST, SCOPE] },
+      { backendId: "codex", chat: "own", others: [], lines: [DEFINE, LIST, SCOPE, DRAFT, SAVE] },
+      {
+        backendId: "claude",
+        chat: "own",
+        others: ONE_OTHER,
+        lines: [DEFINE, ASK, SAVE_RULE, LIST, SCOPE],
+      },
       {
         backendId: "opencode",
         chat: "own",
         others: ONE_OTHER,
-        lines: [ASK, SAVE_RULE, LIST, SCOPE],
+        lines: [DEFINE, ASK, SAVE_RULE, LIST, SCOPE],
       },
       {
         backendId: "codex",
         chat: "own",
         others: ONE_OTHER,
-        lines: [ASK, SAVE_RULE, LIST, SCOPE, CONTROL, DRAFT, SAVE],
+        lines: [DEFINE, ASK, SAVE_RULE, LIST, SCOPE, CONTROL, DRAFT, SAVE],
       },
       {
         backendId: "claude",
         chat: "own",
         others: TWO_OTHERS,
-        lines: [ASK, SAVE_RULE, LIST, SCOPE],
+        lines: [DEFINE, ASK, SAVE_RULE, LIST, SCOPE],
       },
       {
         backendId: "opencode",
         chat: "own",
         others: TWO_OTHERS,
-        lines: [ASK, SAVE_RULE, LIST, SCOPE],
+        lines: [DEFINE, ASK, SAVE_RULE, LIST, SCOPE],
       },
       {
         backendId: "codex",
         chat: "own",
         others: TWO_OTHERS,
-        lines: [ASK, SAVE_RULE, LIST, SCOPE, CONTROL, DRAFT, SAVE],
+        lines: [DEFINE, ASK, SAVE_RULE, LIST, SCOPE, CONTROL, DRAFT, SAVE],
       },
-      { backendId: "claude", chat: "asked", others: [], lines: [] },
-      { backendId: "opencode", chat: "asked", others: [], lines: [] },
-      { backendId: "codex", chat: "asked", others: [], lines: [SAVE] },
-      { backendId: "claude", chat: "asked", others: TWO_OTHERS, lines: [] },
-      { backendId: "opencode", chat: "asked", others: TWO_OTHERS, lines: [] },
-      { backendId: "codex", chat: "asked", others: TWO_OTHERS, lines: [SAVE] },
+      { backendId: "claude", chat: "asked", others: [], lines: [DEFINE] },
+      { backendId: "opencode", chat: "asked", others: [], lines: [DEFINE] },
+      { backendId: "codex", chat: "asked", others: [], lines: [DEFINE, SAVE] },
+      { backendId: "claude", chat: "asked", others: TWO_OTHERS, lines: [DEFINE] },
+      { backendId: "opencode", chat: "asked", others: TWO_OTHERS, lines: [DEFINE] },
+      { backendId: "codex", chat: "asked", others: TWO_OTHERS, lines: [DEFINE, SAVE] },
     ] as const;
 
     it.each(
@@ -552,7 +578,7 @@ describe("agentSessionPrompt", () => {
         expect(positions).toEqual([...positions].sort((a, b) => a - b));
         if (chat === "own" && others.length > 0) {
           expect(prompt).toMatch(
-            new RegExp(`Other agents: [^\\n]*\\.\\n\\n${escapeRegExp(ASK_AGENTS)}\\n\\n`)
+            new RegExp(`Other AI teammates: [^\\n]*\\.\\n\\n${escapeRegExp(ASK_AGENTS)}\\n\\n`)
           );
         }
       }
@@ -568,6 +594,154 @@ describe("agentSessionPrompt", () => {
       expect(own?.prompt).toContain("never search /vault/copilot/copilot-conversations for it,");
       expect(hidden?.prompt).not.toContain("list_chats");
     });
+
+    async function modelFacingTexts(): Promise<string[]> {
+      seedAgent(vault, "coco", COCO, "You handle houseplant care only.");
+      seedAgent(vault, "maya", MAYA, "Another job.");
+      await store.start();
+      const own = await loadAgentSessionPrompt(store, "coco", "/vault");
+      const asked = await loadAgentSessionPrompt(store, "coco", "/vault", { asked: true });
+      const listings = [
+        ...Object.values(CHAT_LISTINGS),
+        { sessionKey: ASKED_CHAT, backendId: "claude", agentSlug: "coco" },
+      ] as const;
+      const refusals = [
+        { kind: "not_from_here" },
+        { kind: "unknown_agent", roster: [MAYA] },
+        { kind: "unknown_agent", roster: [] },
+      ];
+      let askedCount = 0;
+      const chats = {
+        ask: () => refusals[askedCount++],
+        askUser: () => "not_from_here",
+      } as unknown as HiddenAgentChats;
+      const host = { isUnlistedChat: () => false, agents: store.getAgents };
+      const earlierChats = Array.from(
+        { length: 21 },
+        (_, index) =>
+          ({
+            id: `copilot/copilot-conversations/chat-${index}.md`,
+            title: `Chat ${index}`,
+            agent: "coco",
+            backendId: "claude",
+            lastAccessedAt: new Date(2026, 10, 1 + index),
+          }) as unknown as ChatHistoryItem
+      );
+      const listChats = createListChatsTool({
+        ...host,
+        earlierChats: async () => ({
+          agent: "coco",
+          chats: earlierChats,
+          askedConversations: [
+            {
+              backendId: "claude",
+              sessionId: "asked-1",
+              agent: "coco",
+              askedIn: { backendId: "claude", sessionId: "chat-0" },
+              firstAtMs: 0,
+              lastAtMs: 0,
+              asks: 1,
+              firstAsk: "Hi?",
+            },
+          ],
+          agents: store.getAgents(),
+        }),
+        vaultBase: () => "/vault",
+      });
+      const answers = await Promise.all([
+        ...refusals.map(() =>
+          createAskAgentTool(chats, host).call({ teammate: "Zed", message: "Hi." }, null)
+        ),
+        createAskUserTool(chats, host).call({ question: "Hi?" }, null),
+        createDraftAgentTool({ ...host, callerOf: () => null }).call(
+          { name: "Nora", title: "Plans pickups.", instruction: "You plan pickups." },
+          null
+        ),
+        listChats.call({}, null),
+      ]);
+      return [
+        ...(["claude", "codex", "opencode"] as const).flatMap((backendId) => [
+          chatPrompt(store, backendId, "listed-chat", own),
+          chatPrompt(store, backendId, ASKED_CHAT, asked),
+          chatPrompt(store, backendId, "listed-chat", null),
+        ]),
+        ...listings.flatMap((listing) => [
+          ...teammatesTools(store).map((tool) => JSON.stringify(tool.listedAs?.(listing) ?? "")),
+          ...promptHintsFor(teammatesTools(store), () => true, listing),
+        ]),
+        ...teammatesTools(store).map((tool) => tool.turnedOffText),
+        ...answers.map((answer) => answer.text),
+        agentMentionsBlock(["Maya"]) ?? "",
+        formatAgentReply({
+          agent: "maya",
+          name: "Maya",
+          mention: "run-1",
+          reply: "Hi.",
+          changed: [],
+        }),
+      ].flatMap((text) => text.split("\n"));
+    }
+
+    it("calls the ones the user made teammates in every chat prompt, tool listing, hint, tool answer, mentions block and relayed reply a model reads, and says agent only for a coding agent (https://github.com/Brevilabs/obsidian-copilot-private/issues/999)", async () => {
+      const strays = (await modelFacingTexts()).filter((line) =>
+        /\bagents?\b/i.test(line.replace(CODING_AGENT_PHRASES, ""))
+      );
+
+      expect(strays).toEqual([]);
+    });
+
+    it("says AI teammate wherever a chat prompt, tool listing, hint, tool answer, mentions block or relayed reply names one the user made, leaving the bare word only in tool, argument and tag names and the Copilot Teammates name (https://github.com/Brevilabs/obsidian-copilot-private/issues/999)", async () => {
+      const strays = (await modelFacingTexts()).filter((line) =>
+        /(?<![\w/<"`-])(?<!AI )[Tt]eammates?(?![\w">`-])/.test(
+          line.replace(NAMES_WITH_THE_BARE_NOUN, "")
+        )
+      );
+
+      expect(strays).toEqual([]);
+    });
+
+    it.each(
+      (["claude", "codex", "opencode"] as const).flatMap((backendId) =>
+        (["own", "asked", "copilot", "copilot without teammates", "unlicensed"] as const).map(
+          (chat) => ({
+            backendId,
+            chat,
+            times:
+              chat === "unlicensed"
+                ? 0
+                : (backendId === "codex" && chat.startsWith("copilot")) ||
+                    (backendId === "opencode" && (chat === "own" || chat === "asked"))
+                  ? 2
+                  : 1,
+          })
+        )
+      )
+    )(
+      "on $backendId, $chat chat reads what an AI teammate is $times time(s) across its prompt and the tool descriptions it is offered: in a teammate's chat once, from its prompt; in a Copilot chat once, from the first teammate tool's description; twice on Codex in a Copilot chat, which also reads it in the hints that stand in for descriptions; and twice on OpenCode in a teammate's chat, which reads its prompt and the folder's one tool listing, written for the Copilot chats that share it (https://github.com/Brevilabs/obsidian-copilot-private/issues/999)",
+      async ({ backendId, chat, times }) => {
+        if (chat !== "copilot without teammates") {
+          seedAgent(vault, "coco", COCO, "You handle houseplant care only.");
+          seedAgent(vault, "maya", MAYA, "Another job.");
+        }
+        await store.start();
+        if (chat === "unlicensed") await setCustomAgentsAccess("free");
+        const loaded =
+          chat === "own" || chat === "asked"
+            ? await loadAgentSessionPrompt(store, "coco", "/vault", { asked: chat === "asked" })
+            : null;
+        const sessionKey = chat === "asked" ? ASKED_CHAT : "listed-chat";
+        const listing =
+          backendId === "opencode"
+            ? CHAT_LISTINGS["OpenCode's shared folder listing"]
+            : { sessionKey, backendId, agentSlug: loaded ? "coco" : undefined };
+        const descriptions = teammatesTools(store).map((tool) =>
+          JSON.stringify(tool.listedAs?.(listing) ?? "")
+        );
+        const read = [chatPrompt(store, backendId, sessionKey, loaded), ...descriptions].join("\n");
+
+        expect(countOf(read, DEFINITION)).toBe(times);
+      }
+    );
 
     it("reads nothing and returns null while custom agents are locked", async () => {
       seedAgent(vault, "coco", COCO, "You handle houseplant care only.");

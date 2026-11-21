@@ -66,7 +66,7 @@ export class VaultClient implements Client {
     const path = requireNodeModule<typeof import("node:path")>("path");
     const adapter = this.app.vault.adapter;
     if (!(adapter instanceof FileSystemAdapter)) {
-      throw RequestError.invalidParams(undefined, "Agent Chat requires Obsidian on desktop.");
+      throw RequestError.invalidParams(undefined, "Copilot Chat requires Obsidian on desktop.");
     }
     const vaultBase = path.resolve(adapter.getBasePath());
     const resolved = path.isAbsolute(p) ? path.resolve(p) : path.resolve(vaultBase, p);
@@ -74,7 +74,7 @@ export class VaultClient implements Client {
     if (rel.startsWith("..") || path.isAbsolute(rel)) {
       throw RequestError.invalidParams(
         { path: p },
-        `Path "${p}" is outside the vault and cannot be accessed by Agent Chat.`
+        `Path "${p}" is outside the vault and cannot be accessed by Copilot Chat.`
       );
     }
     const normalized = normalizePath(rel.split(path.sep).join("/"));
@@ -82,7 +82,7 @@ export class VaultClient implements Client {
     if (firstSegment.startsWith(".")) {
       throw RequestError.invalidParams(
         { path: p },
-        `Path "${p}" is in a hidden directory (${firstSegment}) and is not accessible to Agent Chat.`
+        `Path "${p}" is in a hidden directory (${firstSegment}) and is not accessible to Copilot Chat.`
       );
     }
     return normalized;

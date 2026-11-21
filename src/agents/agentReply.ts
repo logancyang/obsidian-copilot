@@ -6,7 +6,7 @@ const NO_REPLY = "(no reply)";
 // The design's relay principle, sent with every reply the current agent passes on.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
 export const RELAY_PRINCIPLE =
-  "When you pass on another agent's reply, keep its position as strong as it was. If it disagrees with you or the user, say so plainly. Then add your own view if you have one.";
+  "When you pass on another AI teammate's reply, keep its position as strong as it was. If it disagrees with you or the user, say so plainly. Then add your own view if you have one.";
 
 const STOPPED_HOW: Record<NonNullable<AgentReplyRelay["stopped"]>, (name: string) => string> = {
   stopped_by_user: () => ", as the user asked",

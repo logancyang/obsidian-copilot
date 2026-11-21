@@ -334,7 +334,7 @@ export function createAgentSessionManager(
       createAskUserTool(hiddenAgentChats, askingChatsHost),
       createStopAgentTool(hiddenAgentChats, askingChatsHost),
       createDraftAgentTool({
-        isUnlistedChat: (sessionKey) => managerRef?.isUnlistedSession(sessionKey) ?? false,
+        ...askingChatsHost,
         callerOf: (chat) => {
           const session = managerRef?.getSessions().find((candidate) => candidate === chat);
           return session ? { agent: session.agentSlug } : null;
