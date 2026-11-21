@@ -4,20 +4,24 @@
 
 [![Demo video: Copilot Teammates: The First AI Team Built Into Obsidian](https://images.brevilabs.com/newsletters/copilot-plugin/copilot-teammates/teammates-video-play-7008237f.webp)](https://www.youtube.com/watch?v=Ri4YB0qR-Go)
 
-Have you ever brainstormed with an AI and found yourselves going in circles? Sometimes what you need is a second opinion from someone who thinks differently.
+Personal assistant products like Claude Duets, Grok Bot, and OpenAI's Dots each ask you to move in, use their model, and build your instructions and memory inside their closed ecosystem. When you want to try the next one, you start over.
 
-Or maybe you keep personal and business notes in the same vault, and you want one AI for your family's schedule and another for your clients, each with its own memory.
+Those instructions, memories, and context take months to build. They're your core digital asset, and they should live in files you own, not locked inside a vendor's app.
 
-That's why we built Copilot Teammates. Each teammate has its own instructions and memory, and you can bring one into any conversation for a fresh pair of eyes. It's out today for Supporters, and for Black Friday, Supporter is 20% off before the price goes back up on December 6.
+That's why we built **Copilot Teammates**. Manage your own AI team locally, with every teammate's instructions and long-term memory stored as plain files in your vault. Swap models or agents anytime, and share the same team with any app that reads your files.
+
+Models and apps come and go. Your team stays yours.
+
+Copilot Teammates is out today for Supporters. For Black Friday, [Supporter and the first year of annual Plus are 20% off](https://www.obsidiancopilot.com/en/pricing) through December 6. [Learn more in the docs](https://docs.obsidiancopilot.com/copilot-teammates/).
 
 ## 🤝 Copilot Teammates
 
 ![Four tiles from Copilot Chat. Create a teammate: Coco's New teammate draft card for Maya, a writing editor. It remembers what you teach it: Maya's chat, where a Maya remembered card saves that the meal-planning app is for busy parents. Chat with any teammate: the row of teammate faces from Copilot to Socrates. Get a second opinion: in Maya's chat, the user tells @Socrates they keep going in circles on a newsletter, and Socrates sends back three questions about what readers would care about](https://images.brevilabs.com/newsletters/copilot-releases/4.1.0/teammates-bento-f8c0cf1b.png)
 
-- **Create one from the chat.** Describe the teammate you need, and Copilot creates it for you.
-- **Stop repeating yourself.** A teammate remembers what you teach it. Its instructions and memory are notes in your vault, so they stay yours.
-- **Get a second opinion.** Bring in a teammate who thinks differently, right in the chat you're in.
-- **Keep personal and business apart.** Point each teammate at the notes it needs, so family plans never mix with client work.
+- **Own your team as vault files.** Every teammate's instructions and long-term memory are Markdown files in your vault, portable across models, agents, and apps.
+- **Give each teammate a real role.** Set up teammates for distinct parts of your life, like finance, family, or learning, each with its own instructions, memory, and scope.
+- **Pull teammates in with `@`.** Planning a summer trip with your family teammate? `@` your finance teammate to check your cashflow before you book, or bring in another teammate for a second opinion.
+- **Create and teach from chat.** Describe the teammate you need and Copilot drafts it for you. As you work together, it remembers what you teach it so you stop repeating yourself.
 
 ## ✨ Enhancements
 
