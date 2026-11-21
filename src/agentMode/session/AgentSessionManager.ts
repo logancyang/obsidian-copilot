@@ -806,7 +806,7 @@ export class AgentSessionManager {
     }
 
     const internalId = uuidv4();
-    const mcpServers = await this.connectCopilotMcpServer(internalId, descriptor, cwd);
+    const mcpServers = await this.connectCopilotMcpServer(internalId, descriptor, cwd, agentSlug);
 
     if (this.disposed) {
       this.finishPendingCreate();
@@ -922,7 +922,7 @@ export class AgentSessionManager {
     const backend = await this.ensureBackend(resolvedId, descriptor);
     const internalId = uuidv4();
     this.unlistedSessions.set(internalId, null);
-    const mcpServers = await this.connectCopilotMcpServer(internalId, descriptor, cwd);
+    const mcpServers = await this.connectCopilotMcpServer(internalId, descriptor, cwd, agent.slug);
     const options = {
       backend,
       cwd,
@@ -1925,7 +1925,8 @@ export class AgentSessionManager {
   private async connectCopilotMcpServer(
     internalId: string,
     descriptor: BackendDescriptor,
-    cwd: string
+    cwd: string,
+    agentSlug: string | undefined
   ): Promise<ReadonlyArray<AgentMcpServer>> {
     const server = this.opts.copilotMcpServer;
     if (!server) return EMPTY_MCP_SERVERS;
@@ -1945,7 +1946,10 @@ export class AgentSessionManager {
           shared ? `${descriptor.id}:${cwd}` : internalId,
           descriptor.id,
           findChat,
-          shared
+          shared,
+          // A folder's listing serves every chat in it, so only a chat's own listing names the agent it runs as.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/987
+          shared ? undefined : agentSlug
         ),
       ];
     } catch (err) {
@@ -2375,7 +2379,7 @@ export class AgentSessionManager {
     }
 
     const internalId = uuidv4();
-    const mcpServers = await this.connectCopilotMcpServer(internalId, descriptor, cwd);
+    const mcpServers = await this.connectCopilotMcpServer(internalId, descriptor, cwd, agentSlug);
     if (this.disposed) {
       this.finishPendingCreate();
       return null;
