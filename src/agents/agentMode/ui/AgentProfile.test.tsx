@@ -12,6 +12,7 @@ import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManage
 import type { BackendId } from "@/agentMode/session/types";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AgentDeleteModal } from "@/agents/ui/AgentDeleteModal";
+import { useHermeticHome } from "@/agentMode/backends/opencode/testing/hermeticHome";
 import { resetSettings } from "@/settings/model";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import * as obsidian from "obsidian";
@@ -152,6 +153,8 @@ describe("AgentProfile", () => {
   beforeEach(() => resetSettings());
 
   describe("AgentProfile()", () => {
+    useHermeticHome();
+
     it("shows the agent's chats and its saved rules from the vault", async () => {
       await setup();
 

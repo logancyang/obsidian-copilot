@@ -85,6 +85,7 @@ export function AgentProfile({
   const deleteAgent = async () => {
     try {
       const result = await deleteAgentAndArchiveChats({
+        app,
         manager,
         store,
         slug,

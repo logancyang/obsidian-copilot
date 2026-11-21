@@ -32,8 +32,9 @@ import { COPILOT_MCP_SERVER_NAME } from "@/agentMode/session/copilotMcpServer";
 import {
   createAgentsFolder,
   customAgentModeId,
+  putAgentEntries,
   readCustomAgentModeId,
-  writeAgentsFile,
+  startAgentEntries,
 } from "./opencodeCustomAgents";
 
 export const OPENCODE_PROVIDER_MAP: Partial<Record<ChatModelProviders, string>> = {
@@ -70,13 +71,9 @@ export interface OpencodeModelDeps {
   customAgentsFile?: string;
 }
 
-type AgentConfig = NonNullable<OpencodeConfig["agents"]>[string];
-
 interface CustomAgentsTarget {
   file: string;
   configContent: string;
-  entries: Record<string, AgentConfig>;
-  written: Promise<void>;
 }
 
 export class OpencodeBackend implements AcpBackend {
@@ -178,14 +175,10 @@ export class OpencodeBackend implements AcpBackend {
       envOverrides.OPENCODE_CONFIG === undefined && process.env.OPENCODE_CONFIG === undefined;
     this.#customAgents =
       ownsConfigFile && this.#deps.customAgentsFile
-        ? {
-            file: this.#deps.customAgentsFile,
-            configContent,
-            entries: {},
-            written: Promise.resolve(),
-          }
+        ? { file: this.#deps.customAgentsFile, configContent }
         : null;
     if (this.#customAgents) {
+      startAgentEntries(this.#customAgents.file);
       // Custom agents must never stop OpenCode from starting for a chat that does not use them.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/937
       await createAgentsFolder(this.#customAgents.file).catch((e: unknown) =>
@@ -240,29 +233,32 @@ export class OpencodeBackend implements AcpBackend {
       throw new Error("Copilot Teammates can't run on OpenCode while OPENCODE_CONFIG is set.");
     }
     const spawnAgents = (JSON.parse(target.configContent) as OpencodeConfig).agents ?? {};
-    const define = (baseId: string, auto: boolean) => {
+    const define = (baseId: string, auto: boolean): [string, unknown] => {
       const base = spawnAgents[baseId] ?? {};
-      target.entries[customAgentModeId({ slug: agent.slug, auto })] = {
-        ...base,
-        mode: "primary",
-        // The base entry also tells a Copilot chat it is Copilot, so an agent's entry starts from the shared prompt instead of the base's text.
-        // https://github.com/Brevilabs/obsidian-copilot-private/issues/986
-        system: [buildAgentSystemPrompt(this.id, this.#deps.app), agent.prompt]
-          .filter(Boolean)
-          .join("\n\n"),
-      };
+      return [
+        customAgentModeId({ slug: agent.slug, variant: agent.variant, auto }),
+        {
+          ...base,
+          mode: "primary",
+          // The base entry also tells a Copilot chat it is Copilot, so an agent's entry starts from the shared prompt instead of the base's text.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/986
+          system: [buildAgentSystemPrompt(this.id, this.#deps.app), agent.prompt]
+            .filter(Boolean)
+            .join("\n\n"),
+        },
+      ];
     };
-    define(OPENCODE_COPILOT_BUILD_AGENT_ID, false);
-    define(OPENCODE_BUILTIN_BUILD_AGENT_ID, true);
-    const content = JSON.stringify({ agents: target.entries });
-    target.written = target.written
-      .catch(() => undefined)
-      .then(() => writeAgentsFile(target.file, content));
-    await target.written;
+    await putAgentEntries(
+      target.file,
+      Object.fromEntries([
+        define(OPENCODE_COPILOT_BUILD_AGENT_ID, false),
+        define(OPENCODE_BUILTIN_BUILD_AGENT_ID, true),
+      ])
+    );
     const auto = running?.auto ?? current === OPENCODE_BUILTIN_BUILD_AGENT_ID;
     return {
       configId: OPENCODE_MODE_CONFIG_OPTION_ID,
-      value: customAgentModeId({ slug: agent.slug, auto }),
+      value: customAgentModeId({ slug: agent.slug, variant: agent.variant, auto }),
     };
   }
 }

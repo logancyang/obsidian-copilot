@@ -4,7 +4,6 @@ import { createMemorySessionIndex } from "@/agentMode/session/testing/memorySess
 import { writePermissionRequest } from "@/agentMode/session/testing/permissionPrompts";
 import type { BackendDescriptor, BackendState, PermissionPrompt } from "@/agentMode/session/types";
 import {
-  HIDDEN_CHAT_DENY_MESSAGE,
   HiddenAgentChats,
   readAskedMessage,
   type HiddenChatStart,
@@ -35,6 +34,7 @@ const ASKED_MEMORY = "https://github.com/Brevilabs/obsidian-copilot-private/issu
 const SETUP = "https://github.com/Brevilabs/obsidian-copilot-private/issues/962";
 const NO_NOTE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/976";
 const RECALL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/980";
+const ENTRIES = "https://github.com/Brevilabs/obsidian-copilot-private/issues/991";
 const AUTO_MODE: BackendState = { model: null, mode: { current: "auto", options: [], apply: {} } };
 const PLAN: BackendState = { model: null, mode: { current: "plan", options: [], apply: {} } };
 const PLAN_CHANGE = Object.freeze({
@@ -334,6 +334,17 @@ describe("hiddenAgentChats", () => {
         expect(prompt.memoryPath).toBe("/vault/copilot/agents/maya/MEMORY.md");
       });
 
+      it(`starts the asked agent's chat on its own prompt variant, so a coding agent that stores prompts by agent keeps it apart from the agent's own chat (${ENTRIES})`, async () => {
+        const coco = await openChat({ agentSlug: "coco" });
+
+        chats.ask(coco, "maya", "Review the plan.");
+        await untilAgentChatStarted();
+
+        expect(starts[0].prompt).toEqual(
+          expect.objectContaining({ slug: "maya", variant: "asked" })
+        );
+      });
+
       it(`starts the asked agent's chat in the project and mode of the chat that asked (${ISSUE})`, async () => {
         const coco = await openChat({
           agentSlug: "coco",
@@ -358,6 +369,22 @@ describe("hiddenAgentChats", () => {
         expect(sent).toContain(
           '<message from="Coco">\nWhat do you think of this plan?\n</message>'
         );
+      });
+
+      it(`tells the asked agent that Copilot turns down any change while the chat that asked is in Plan mode, and says nothing of it otherwise (${ENTRIES})`, async () => {
+        const planning = await openChat({
+          agentSlug: "coco",
+          backend: createFakeAgentBackend(PLAN),
+        });
+        const plain = await openChat();
+
+        const [toPlanning] = fake.promptsTo(sessionIdOf(await askedAndPrompted(planning)));
+        const [toPlain] = fake.promptsTo(sessionIdOf(await askedAndPrompted(plain)));
+
+        expect(toPlanning).toContain(
+          "The chat that asked you is in Plan mode, so Copilot turns down any change you try. Say in your reply what you would change."
+        );
+        expect(toPlain).not.toContain("Plan mode");
       });
 
       it(`names Copilot as the asker when a chat with no agent asks (${ISSUE})`, async () => {
@@ -1334,26 +1361,29 @@ describe("hiddenAgentChats", () => {
         expect(relayed).toContain("The user turned down a request from Maya");
       });
 
-      it(`turns a request down with the reason and shows no card while the chat that asked is in Plan mode (${PERMISSION})`, async () => {
+      it(`turns a request down, saying the chat that asked is in Plan mode, and shows no card while it is (${PERMISSION}, ${ENTRIES})`, async () => {
         const coco = await openChat({ agentSlug: "coco", backend: createFakeAgentBackend(PLAN) });
         const maya = await askedAndPrompted(coco);
 
         await expect(chats.answerPermission(requestFrom(maya))).resolves.toEqual({
           outcome: { outcome: "selected", optionId: "reject_once" },
-          denyMessage: HIDDEN_CHAT_DENY_MESSAGE,
+          denyMessage:
+            "Copilot turned this down: the chat that asked you is in Plan mode, so nothing can be changed. Don't try again. Say in your reply what you would have changed.",
         });
         expect(coco.getPendingToolPermissions()).toHaveLength(0);
       });
 
-      it(`turns a request down without a card when it comes after the agent's run ended, as right after a stop (${PERMISSION})`, async () => {
+      it(`turns a request down without a card, saying the agent's work for the chat that asked has ended, when it comes after the agent's run ended, as right after a stop (${PERMISSION}, ${ENTRIES})`, async () => {
         const coco = await openChat({ agentSlug: "coco" });
         const maya = await askedAndPrompted(coco);
         answer(maya, "Done.");
         await fake.untilPrompt(sessionIdOf(coco));
 
-        await expect(chats.answerPermission(requestFrom(maya))).resolves.toEqual(
-          expect.objectContaining({ outcome: { outcome: "selected", optionId: "reject_once" } })
-        );
+        await expect(chats.answerPermission(requestFrom(maya))).resolves.toEqual({
+          outcome: { outcome: "selected", optionId: "reject_once" },
+          denyMessage:
+            "Copilot turned this down: your work for the chat that asked you has ended. Don't try again.",
+        });
         expect(coco.getPendingToolPermissions()).toHaveLength(0);
       });
 
@@ -1645,7 +1675,7 @@ describe("hiddenAgentChats", () => {
         );
       });
 
-      it(`says the agent isn't working when it finished, and that the chat never asked it otherwise (${CONTROL})`, async () => {
+      it(`answers that the agent has no run from this chat, with no progress to report, once it finished, as when the chat never asked it (${CONTROL}, ${ENTRIES})`, async () => {
         const coco = await openChat({ agentSlug: "coco" });
         const other = await openChat();
         const maya = await askedAndPrompted(coco);
@@ -1653,9 +1683,8 @@ describe("hiddenAgentChats", () => {
         await fake.untilPrompt(sessionIdOf(coco));
 
         expect(chats.check(coco, "Maya")).toEqual({
-          kind: "progress",
+          kind: "not_asked",
           agent: agentNamed("Maya"),
-          progress: "Maya isn't working on anything from this chat now.",
         });
         expect(chats.check(other, "Maya")).toEqual({
           kind: "not_asked",

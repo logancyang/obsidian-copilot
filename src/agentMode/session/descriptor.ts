@@ -157,6 +157,10 @@ export interface BackendDescriptor {
 
   onPluginLoad?(plugin: CopilotPlugin): Promise<void>;
 
+  // A backend that keeps an agent's prompt in a file outside the vault removes it when the agent is deleted.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/991
+  forgetAgent?(app: App, slug: string): Promise<void>;
+
   readonly wire: ModelWireCodec;
 
   normalizeModelName?(name: string): string;
