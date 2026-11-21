@@ -10,13 +10,12 @@ This is a big one. Copilot Teammates lets you build a small AI team inside Obsid
 
 One assistant for everything forgets what you told it, and the rules you give it for one kind of work leak into the rest. Copilot Teammates gives each kind of work its own teammate, with its own instructions and memory.
 
+![Four tiles from Copilot Chat: Coco's New teammate draft card for Maya, a writing editor; the start screen with Copilot, Coco, Leo, Maya and Nora; a Maya remembered card saving that the meal-planning app is for busy parents; and an @Maya message with Messaged Maya and Message from Maya rows](https://images.brevilabs.com/newsletters/copilot-releases/4.1.0/teammates-bento-7e033468.png)
+
 - **Make a teammate.** Ask Copilot or any teammate for one, like "I need a writing editor called Maya who cuts AI slop from my posts." It drafts the teammate for you to check, then you pick a face and a model and choose **Create**. You can also choose **+** on the start screen.
-  ![A chat with Coco, titled Chief of staff, where the user asks for a writing editor called Maya who cuts AI slop. Coco answers with a New teammate draft card for Maya, a writing editor, with her instructions and a Review and create button](https://images.brevilabs.com/newsletters/copilot-releases/4.1.0/draft-card-a16e2ada.png)
 - **Teach it once.** Correct a teammate or tell it to remember something, and it saves the rule and shows "Maya remembered" in the chat.
-  ![A chat with Maya where the user says: Remember: my meal-planning app is for busy parents, not chefs. A Maya remembered card quotes the saved rule, and Maya replies that she'll edit with busy parents in mind](https://images.brevilabs.com/newsletters/copilot-releases/4.1.0/remember-b8c25f26.png)
 - **Keep work separate.** Your editor's rules stay out of your CPA's work. Instructions and memory are notes in your vault that you can open and edit.
 - **Get a second opinion.** Type `@Maya` with a question and Maya works on it in the background while you keep chatting. The answer comes back unsoftened, because a teammate with a different job pushes back.
-  ![A chat with Coco where the user asks @Maya to fix Coco's launch post. Coco shows Messaged Maya and Message from Maya cards, then Maya's shorter version of the post for the Weeknight meal-planning app](https://images.brevilabs.com/newsletters/copilot-releases/4.1.0/second-opinion-126253a7.png)
 - **Bring it to every project.** A teammate isn't tied to a project, so the one that knows how you write comes with you.
 
 Copilot Teammates is a preview for Supporters.
