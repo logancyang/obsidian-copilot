@@ -14,10 +14,10 @@ That's why we built Copilot Teammates. Each teammate has its own instructions an
 
 ![Four tiles from Copilot Chat. Create a teammate: Coco's New teammate draft card for Maya, a writing editor. It remembers what you teach it: a Maya remembered card saving that the meal-planning app is for busy parents. Chat with any teammate: the row of teammate faces from Copilot to Socrates. Get a second opinion: in Maya's chat, the user tells @Socrates they keep going in circles on a newsletter, and Socrates sends back three questions about what readers would care about](https://images.brevilabs.com/newsletters/copilot-releases/4.1.0/teammates-bento-d97ad211.png)
 
-- **Create a teammate.** Ask Copilot or any teammate for one, like "I need a writing editor called Maya who cuts AI slop from my posts." It drafts the teammate for you to check, then you pick a face and a model and choose **Create**. You can also choose **+** on the start screen.
-- **It remembers.** Correct a teammate or tell it to remember something, and it saves the rule and shows "Maya remembered" in the chat. Instructions and memory are notes in your vault that you can open and edit.
-- **Get a second opinion.** `@` a teammate in any chat, like one that only asks questions. It works in the background while you keep chatting, and the teammate you're chatting with brings back its answer.
-- **Bring it to every project.** A teammate isn't tied to a project, so the one that knows how you write comes with you.
+- **Create one in a sentence.** Describe the teammate you need, and Copilot drafts it for you.
+- **Stop repeating yourself.** A teammate remembers what you teach it. Its instructions and memory are notes in your vault, so they stay yours.
+- **Get a second opinion.** Bring in a teammate who thinks differently, right in the chat you're in.
+- **Works in every project.** The teammate that knows how you write is there wherever you work.
 
 ## ✨ Enhancements
 
