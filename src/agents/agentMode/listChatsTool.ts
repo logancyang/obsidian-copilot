@@ -5,6 +5,7 @@ import type {
   McpToolDefinition,
   ToolListing,
 } from "@/agentMode/session/copilotMcpServer";
+import { localDate } from "@/agents/agentMemoryFile";
 import type { AskAgentToolHost } from "@/agents/agentMode/askAgentTool";
 import { LIST_CHATS_PROMPT_HINT } from "@/agents/agentSessionPrompt";
 import type { CustomAgent } from "@/agents/CustomAgentStore";
@@ -57,11 +58,6 @@ const LIST_CHATS_TOOL: McpToolDefinition = Object.freeze({
   annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
   _meta: { "anthropic/alwaysLoad": true },
 });
-
-function localDate(date: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-}
 
 // A run that never ended, as when Obsidian closed mid-run, reads as not finished, and an asker deleted since shows by its folder name.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/980

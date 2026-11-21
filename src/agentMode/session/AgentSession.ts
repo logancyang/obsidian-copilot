@@ -91,7 +91,6 @@ import {
 } from "@/agentMode/session/messageParts";
 import { SessionHistoryReplay } from "@/agentMode/session/SessionHistoryReplay";
 import type { AgentMention } from "@/agents/agentMentions";
-import { readTurnMemorySaves } from "@/agents/memorySaves";
 import { InteractiveRequests } from "@/agentMode/session/InteractiveRequests";
 import { UsageTracker } from "@/agentMode/session/UsageTracker";
 import { replayPersistedMode } from "@/agentMode/session/replayPersistedMode";
@@ -248,7 +247,6 @@ export class AgentSession implements ChatStateHost, ChatView {
   readonly planFeedbackDelivery: "permission" | "next_turn";
   readonly projectId: ProjectScopeId;
   readonly agentSlug: string | null;
-  private readonly agent: SessionAgent | null;
   private readonly observeSessionEvent: ((event: SessionEvent) => void) | null;
   readonly ready: Promise<void>;
   private backendSessionId: SessionId | null = null;
@@ -330,7 +328,6 @@ export class AgentSession implements ChatStateHost, ChatView {
     this.planFeedbackDelivery = opts.getDescriptor?.()?.planFeedbackDelivery ?? "permission";
     this.projectId = opts.projectId ?? GLOBAL_SCOPE;
     this.agentSlug = opts.agentSlug ?? null;
-    this.agent = opts.agent ?? null;
     this.observeSessionEvent =
       "observeSessionEvent" in opts ? (opts.observeSessionEvent ?? null) : null;
     this.cwd = opts.cwd ?? null;
@@ -1764,21 +1761,7 @@ export class AgentSession implements ChatStateHost, ChatView {
         })
       )
     ).filter((change): change is TurnFileChange => change !== null);
-    return (
-      changes.length > 0 && store.setFileChanges(messageId, changes, this.memorySavesIn(changes))
-    );
-  }
-
-  // A custom agent's save shows in the chat as the exact rule it wrote, read from the turn's change to its own MEMORY.md.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/942
-  private memorySavesIn(changes: readonly TurnFileChange[]) {
-    const { name, memoryPath } = this.agent ?? {};
-    const app = this.getApp?.();
-    if (!name || !memoryPath || !app) return [];
-    return readTurnMemorySaves(changes, {
-      agentName: name,
-      memoryPath: toVaultTargetPath(memoryPath, getVaultBase(app)),
-    });
+    return changes.length > 0 && store.setFileChanges(messageId, changes);
   }
 
   private findToolCallPart(messageId: string, toolCallId: string): AgentMessagePart | undefined {

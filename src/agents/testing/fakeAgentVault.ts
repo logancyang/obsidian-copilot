@@ -121,6 +121,11 @@ export function createFakeAgentVault(): FakeAgentVault {
       touch(file.path);
       writeFile(file.path, text);
     },
+    async process(file: TFile, change: (text: string) => string): Promise<string> {
+      const text = change(dataOf(file) as string);
+      writeFile(file.path, text);
+      return text;
+    },
     async modifyBinary(file: TFile, data: ArrayBuffer): Promise<void> {
       touch(file.path);
       writeFile(file.path, data);

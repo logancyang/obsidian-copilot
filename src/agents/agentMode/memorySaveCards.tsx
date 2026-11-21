@@ -1,9 +1,11 @@
-import { diffTargetPaths, editTargetPaths } from "@/agentMode/session/editTargets";
 import type { AgentChatMessage } from "@/agentMode/session/types";
 import type { ToolCardKind } from "@/agentMode/ui/activityGroups";
+import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
+import { codeStringField, copilotToolCall } from "@/agentMode/ui/copilotToolCall";
+import { SAVE_MEMORY_TOOL_NAME } from "@/agents/agentMode/saveMemoryTool";
 import { MemorySaveLine } from "@/agents/agentMode/ui/MemorySaveLine";
 import { INSTRUCTIONS_FILE_NAME } from "@/agents/customAgentFiles";
-import { readMemoryRules, type MemorySave } from "@/agents/memorySaves";
+import { readMemoryRules, sameRule, type MemorySave } from "@/agents/memorySaves";
 import { logError } from "@/logger";
 import { openVaultPath } from "@/utils/openVaultPath";
 import { TFile, type App } from "obsidian";
@@ -11,27 +13,33 @@ import React from "react";
 
 export interface MemorySaveTrail {
   saves: readonly MemorySave[];
-  anchorId: string | null;
+  byCall: ReadonlyMap<string, readonly MemorySave[]>;
+  unplaced: readonly MemorySave[];
 }
 
-export function memorySaveTrail(
-  message: AgentChatMessage,
-  vaultBase: string | null
-): MemorySaveTrail | null {
+function savedRule(part: ToolCallPart): string | null {
+  const call = copilotToolCall(part, SAVE_MEMORY_TOOL_NAME);
+  if (!call) return null;
+  const rule = "code" in call ? codeStringField(call.code, "rule") : call.args.rule;
+  return typeof rule === "string" ? sameRule(rule) : null;
+}
+
+export function memorySaveTrail(message: AgentChatMessage): MemorySaveTrail | null {
   const saves = message.memorySaves;
   if (!saves?.length) return null;
-  const memoryPath = saves[0].memoryPath;
-  // One Codex or OpenCode patch can edit MEMORY.md and a note together; that edit keeps its card so the note's edit stays in view.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/942
-  const anchor = message.parts?.find((part) => {
-    if (part.kind !== "tool_call" || part.toolKind !== "edit") return false;
-    const targets = editTargetPaths(
-      { locations: part.locations, input: part.input, diffPaths: diffTargetPaths(part.output) },
-      vaultBase
-    );
-    return targets.length > 0 && targets.every((target) => target === memoryPath);
-  });
-  return { saves, anchorId: anchor?.kind === "tool_call" ? anchor.id : null };
+  const calls = (message.parts ?? []).filter(
+    (part): part is ToolCallPart => part.kind === "tool_call"
+  );
+  const byCall = new Map<string, MemorySave[]>();
+  const unplaced: MemorySave[] = [];
+  for (const save of saves) {
+    // A save takes the place of the save_memory call that made it, the last one with its rule after a turned-down try.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/988
+    const call = calls.filter((part) => savedRule(part) === sameRule(save.rule)).pop();
+    if (call) byCall.set(call.id, [...(byCall.get(call.id) ?? []), save]);
+    else unplaced.push(save);
+  }
+  return { saves, byCall, unplaced };
 }
 
 export async function openAgentFile(
@@ -87,10 +95,12 @@ export const MemorySaveLines: React.FC<{ saves: readonly MemorySave[]; app: App 
   </>
 );
 
-// A save replaces the generic edit card where the agent wrote its memory, so it reads in the turn's order.
+// A save replaces the generic card of the call that made it, so it reads in the turn's order.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/942
 export const memorySaveCardKind: ToolCardKind = {
-  place: (part, { memorySaves }) => (memorySaves?.anchorId === part.id ? { joinKey: null } : null),
-  render: (_members, { app, memorySaves }) =>
-    memorySaves ? <MemorySaveLines saves={memorySaves.saves} app={app} /> : null,
+  place: (part, { memorySaves }) => (memorySaves?.byCall.has(part.id) ? { joinKey: null } : null),
+  render: ([part], { app, memorySaves }) => {
+    const saves = memorySaves?.byCall.get(part.id);
+    return saves ? <MemorySaveLines saves={saves} app={app} /> : null;
+  },
 };

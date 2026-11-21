@@ -1,13 +1,10 @@
 {
   "counts": {
-    "imports": 741,
+    "imports": 739,
     "clientAccess": 151
   },
   "imports": {
-    "src/agentMode/acp/AcpBackendProcess.ts": [
-      "@/agents/agentMemoryFile",
-      "@/commands/compactCommand"
-    ],
+    "src/agentMode/acp/AcpBackendProcess.ts": ["@/commands/compactCommand"],
     "src/agentMode/backends/claude/ClaudeSettingsPanel.tsx": ["@/main"],
     "src/agentMode/backends/claude/descriptor.ts": ["@/main"],
     "src/agentMode/backends/codex/CodexSettingsPanel.tsx": ["@/main"],
@@ -73,7 +70,6 @@
     "src/agentMode/navigator/ui/sessionsSidebarGroups.ts": ["@/aiParams"],
     "src/agentMode/navigator/ui/testing/sessionsSidebarFixtures.ts": ["@/aiParams"],
     "src/agentMode/sdk/ClaudeSdkBackendProcess.ts": ["@/commands/compactCommand"],
-    "src/agentMode/sdk/permissionBridge.ts": ["@/agents/agentMemoryFile"],
     "src/agentMode/session/AgentChatPersistenceManager.ts": [
       "@/agents/agentMentions",
       "@/agents/memorySaves"
@@ -86,7 +82,6 @@
     "src/agentMode/session/AgentModelPreloader.ts": ["@/main"],
     "src/agentMode/session/AgentSession.ts": [
       "@/agents/agentMentions",
-      "@/agents/memorySaves",
       "@/commands/compactCommand"
     ],
     "src/agentMode/session/AgentSessionManager.ts": [
@@ -468,7 +463,7 @@
     "src/agents/agentMode/hiddenAgentChats.ts": ["@/context/compactionUtils"],
     "src/agents/agentMode/listChatsTool.ts": ["@/components/chat-components/ChatHistoryPopover"],
     "src/agents/agentMode/memorySaveCards.tsx": [
-      "@/agentMode/session/editTargets",
+      "@/agents/agentMode/saveMemoryTool",
       "@/agents/customAgentFiles",
       "@/agents/memorySaves"
     ],
@@ -515,6 +510,7 @@
       "@/agents/agentMode/agentRelays",
       "@/agents/agentMode/hiddenAgentChats"
     ],
+    "src/agents/agentMode/ui/MemorySaveTrail.stories.tsx": ["@/agents/memorySaves"],
     "src/agents/agentMode/ui/RunningAgents.stories.tsx": [
       "@/agents/CustomAgentStore",
       "@/agents/agentMentions"

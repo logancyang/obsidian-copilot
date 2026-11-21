@@ -16,6 +16,7 @@ import {
 import { createDraftAgentTool } from "@/agents/agentMode/draftAgentTool";
 import type { HiddenAgentChats } from "@/agents/agentMode/hiddenAgentChats";
 import { createListChatsTool } from "@/agents/agentMode/listChatsTool";
+import { createSaveMemoryTool } from "@/agents/agentMode/saveMemoryTool";
 import {
   buildAgentPrompt,
   describeAgent,
@@ -54,6 +55,8 @@ const LIST_CHATS =
 const RECALL_SCOPE =
   "For that answer use only those chats: never search /vault/copilot/copilot-conversations for it, even within a wider search, and never read a note there that list_chats didn't list, unless the user names it. If none of them covers it, say you haven't discussed it.";
 const RECALL_EARLIER_CHATS = `${LIST_CHATS} ${RECALL_SCOPE}`;
+const SAVE_MEMORY =
+  "To save a rule to your memory, use the save_memory tool from obsidian-copilot.";
 const TEAMMATES_SENTENCES = {
   "the rule that another agent's rule is not its to save": NOT_YOURS_TO_SAVE,
   "the ask_agent sentence": ASK_AGENTS,
@@ -61,6 +64,7 @@ const TEAMMATES_SENTENCES = {
   "the draft_agent sentences": DRAFT_NEW_AGENTS,
   "the list_chats sentence": LIST_CHATS,
   "the earlier-chats scope": RECALL_SCOPE,
+  "the save_memory sentence": SAVE_MEMORY,
 };
 type TeammatesSentence = keyof typeof TEAMMATES_SENTENCES;
 
@@ -94,6 +98,7 @@ function teammatesTools(store: CustomAgentStore): HostedTool[] {
     createStopAgentTool(chats, host),
     createDraftAgentTool({ ...host, callerOf: () => null }),
     createListChatsTool({ ...host, earlierChats: async () => null, vaultBase: () => "/vault" }),
+    createSaveMemoryTool({ agents: store.getAgents, callerOf: () => null, vault: APP.vault }),
   ];
 }
 
@@ -182,12 +187,12 @@ describe("agentSessionPrompt", () => {
       expect(prompt).toContain("Other agents: Maya (Product critic); Leo.");
     });
 
-    it("says only the user edits instructions.md and that memory wins over the instruction", () => {
+    it("says only the user edits instructions.md, that its MEMORY.md is its only memory, and that memory wins over the instruction", () => {
       expect(prompt).toContain(
         "Your instruction is the body of /vault/copilot/agents/coco/instructions.md, and only the user edits that file."
       );
       expect(prompt).toContain(
-        "Your memory is /vault/copilot/agents/coco/MEMORY.md. When your memory contradicts your instruction, follow your memory."
+        "Your memory is /vault/copilot/agents/coco/MEMORY.md. It is your only memory: never save to CLAUDE.md, AGENTS.md or any other memory. When your memory contradicts your instruction, follow your memory."
       );
     });
 
@@ -302,13 +307,13 @@ describe("agentSessionPrompt", () => {
       });
 
       expect(ownChat).toContain(
-        `${buildMemorySaveRules("/vault/copilot/agents/coco/MEMORY.md", "copilot/agents/coco/instructions.md")}\n\n<instruction>`
+        `${buildMemorySaveRules("copilot/agents/coco/instructions.md")}\n\n<instruction>`
       );
     });
 
     it("carries the same memory save rules in a chat the agent was asked into, so a rule given through an @ is saved as in its own chat (https://github.com/Brevilabs/obsidian-copilot-private/issues/969)", () => {
       expect(prompt).toContain(
-        `${buildMemorySaveRules("/vault/copilot/agents/coco/MEMORY.md", "copilot/agents/coco/instructions.md")}\n\n<instruction>`
+        `${buildMemorySaveRules("copilot/agents/coco/instructions.md")}\n\n<instruction>`
       );
     });
   });
@@ -344,7 +349,6 @@ describe("agentSessionPrompt", () => {
 
       expect(loaded).toEqual({
         slug: "coco",
-        name: "Coco",
         prompt: buildAgentPrompt({
           agent: COCO,
           folder: "/vault/copilot/agents/coco",
@@ -354,12 +358,11 @@ describe("agentSessionPrompt", () => {
           instructionsPath: "copilot/agents/coco/instructions.md",
           ownChat: { chatsFolder: "/vault/copilot/copilot-conversations" },
         }),
-        memoryPath: "/vault/copilot/agents/coco/MEMORY.md",
       });
       expect(loaded?.prompt).not.toContain("name: Coco");
     });
 
-    it("keeps the save rules and the memory path for a chat the agent was asked into, and leaves out what only its own chat does (https://github.com/Brevilabs/obsidian-copilot-private/issues/969)", async () => {
+    it("keeps the save rules for a chat the agent was asked into, and leaves out what only its own chat does (https://github.com/Brevilabs/obsidian-copilot-private/issues/969)", async () => {
       seedAgent(vault, "coco", COCO, "You handle houseplant care only.", "End with ACORN.");
       seedAgent(vault, "maya", MAYA, "You handle tax receipts only.");
       await store.start();
@@ -368,7 +371,6 @@ describe("agentSessionPrompt", () => {
 
       expect(loaded).toEqual({
         slug: "coco",
-        name: "Coco",
         prompt: buildAgentPrompt({
           agent: COCO,
           folder: "/vault/copilot/agents/coco",
@@ -377,12 +379,25 @@ describe("agentSessionPrompt", () => {
           memory: "End with ACORN.",
           instructionsPath: "copilot/agents/coco/instructions.md",
         }),
-        memoryPath: "/vault/copilot/agents/coco/MEMORY.md",
       });
       expect(loaded?.prompt).toContain("Save a rule to your memory only when");
       for (const ownChatOnly of ["ask_agent", "check_agent", "draft_agent", "list_chats"]) {
         expect(loaded?.prompt).not.toContain(ownChatOnly);
       }
+    });
+
+    it("leaves a rule whose Until date has passed out of the memory in the prompt, and keeps the file as it was (https://github.com/Brevilabs/obsidian-copilot-private/issues/988)", async () => {
+      const memory =
+        "## How to work\n\nUntil 2020-01-31: Flag January invoices.\n2020-01-02 · Asked\n\nUntil 2999-12-31: Answer in French.\n2026-11-01 · Asked\n";
+      seedAgent(vault, "coco", COCO, "You handle houseplant care only.", memory);
+      await store.start();
+
+      const loaded = await loadAgentSessionPrompt(store, "coco", "/vault");
+
+      expect(loaded?.prompt).toContain(
+        "<memory>\n## How to work\n\n\nUntil 2999-12-31: Answer in French.\n2026-11-01 · Asked\n\n</memory>"
+      );
+      expect(vault.readText("copilot/agents/coco/MEMORY.md")).toBe(memory);
     });
 
     it("loads a missing MEMORY.md as an empty memory", async () => {
@@ -426,6 +441,7 @@ describe("agentSessionPrompt", () => {
     const DRAFT: TeammatesSentence = "the draft_agent sentences";
     const LIST: TeammatesSentence = "the list_chats sentence";
     const SCOPE: TeammatesSentence = "the earlier-chats scope";
+    const SAVE: TeammatesSentence = "the save_memory sentence";
     const ONE_OTHER = ["Maya"];
     const TWO_OTHERS = ["Maya", "Leo"];
     const MATRIX = [
@@ -443,7 +459,7 @@ describe("agentSessionPrompt", () => {
       { backendId: "codex", chat: "copilot", others: TWO_OTHERS, lines: [ASK, CONTROL, DRAFT] },
       { backendId: "claude", chat: "own", others: [], lines: [LIST, SCOPE] },
       { backendId: "opencode", chat: "own", others: [], lines: [LIST, SCOPE] },
-      { backendId: "codex", chat: "own", others: [], lines: [LIST, SCOPE, DRAFT] },
+      { backendId: "codex", chat: "own", others: [], lines: [LIST, SCOPE, DRAFT, SAVE] },
       { backendId: "claude", chat: "own", others: ONE_OTHER, lines: [ASK, SAVE_RULE, LIST, SCOPE] },
       {
         backendId: "opencode",
@@ -455,7 +471,7 @@ describe("agentSessionPrompt", () => {
         backendId: "codex",
         chat: "own",
         others: ONE_OTHER,
-        lines: [ASK, SAVE_RULE, LIST, SCOPE, CONTROL, DRAFT],
+        lines: [ASK, SAVE_RULE, LIST, SCOPE, CONTROL, DRAFT, SAVE],
       },
       {
         backendId: "claude",
@@ -473,14 +489,14 @@ describe("agentSessionPrompt", () => {
         backendId: "codex",
         chat: "own",
         others: TWO_OTHERS,
-        lines: [ASK, SAVE_RULE, LIST, SCOPE, CONTROL, DRAFT],
+        lines: [ASK, SAVE_RULE, LIST, SCOPE, CONTROL, DRAFT, SAVE],
       },
       { backendId: "claude", chat: "asked", others: [], lines: [] },
       { backendId: "opencode", chat: "asked", others: [], lines: [] },
-      { backendId: "codex", chat: "asked", others: [], lines: [] },
+      { backendId: "codex", chat: "asked", others: [], lines: [SAVE] },
       { backendId: "claude", chat: "asked", others: TWO_OTHERS, lines: [] },
       { backendId: "opencode", chat: "asked", others: TWO_OTHERS, lines: [] },
-      { backendId: "codex", chat: "asked", others: TWO_OTHERS, lines: [] },
+      { backendId: "codex", chat: "asked", others: TWO_OTHERS, lines: [SAVE] },
     ] as const;
 
     it.each(

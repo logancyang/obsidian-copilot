@@ -3023,20 +3023,15 @@ describe("AgentSession", () => {
           __resetVaultBaseCache();
         });
 
-        describe("in a custom agent chat that saves rules", () => {
+        describe("in a custom agent's chat", () => {
           const MEMORY = "copilot/agents/coco/MEMORY.md";
-          const RULE = "Launch videos lead with user value, not the feature list.";
-          const saved = (rules: string[]) =>
-            `## How to work\n\n${rules.map((rule) => `${rule}\n2026-11-16 · Asked`).join("\n\n")}\n\n## Where to find things\n`;
+          const SAVE = {
+            rule: "Launch videos lead with user value.",
+            agentName: "Coco",
+            memoryPath: MEMORY,
+          };
 
-          function agentSession(
-            mock: ReturnType<typeof makeMockBackend>,
-            app: App,
-            agent: { name?: string; memoryPath?: string } = {
-              name: "Coco",
-              memoryPath: `/vault/${MEMORY}`,
-            }
-          ) {
+          function agentSession(mock: ReturnType<typeof makeMockBackend>, app: App) {
             const session = new AgentSession({
               backend: mock.asBackend,
               backendSessionId: "acp-1",
@@ -3044,67 +3039,51 @@ describe("AgentSession", () => {
               backendId: "claude",
               getApp: () => app,
               agentSlug: "coco",
-              agent: { slug: "coco", prompt: "You are Coco.", ...agent },
+              agent: { slug: "coco", prompt: "You are Coco." },
             });
             session.completeResume(null);
             return session;
           }
 
-          function memorySavesOf(session: AgentSession) {
-            const replies = session.store
+          function lastReply(session: AgentSession) {
+            return session.store
               .getDisplayMessages()
-              .filter((m) => m.sender === AI_SENDER);
-            return replies[replies.length - 1]?.memorySaves;
+              .filter((m) => m.sender === AI_SENDER)
+              .at(-1);
           }
 
-          it("records the rule the agent's turn saved to its own MEMORY.md on the reply (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", async () => {
+          it("records the agent's own edit of its MEMORY.md as an ordinary changed file, with no saved rule (https://github.com/Brevilabs/obsidian-copilot-private/issues/988)", async () => {
             const vault = makeVault({});
             const mock = makeMockBackend();
             mock.prompt.mockImplementation(async () => {
               mock.emit(editCall("t1", `/vault/${MEMORY}`));
-              vault.files.set(MEMORY, saved([RULE]));
+              vault.files.set(MEMORY, "## How to work\n\nA rule.\n");
               return { stopReason: "end_turn" as const };
             });
             const session = agentSession(mock, vault.app);
 
-            await session.sendPrompt("Remember this: launch videos lead with user value.").turn;
-
-            expect(memorySavesOf(session)).toEqual([
-              { agentName: "Coco", memoryPath: MEMORY, rule: RULE },
-            ]);
-          });
-
-          it("leaves out a rule the user typed into MEMORY.md by hand before the agent's save", async () => {
-            const vault = makeVault({ [MEMORY]: saved(["Write dates as Nov 16."]) });
-            const mock = makeMockBackend();
-            mock.prompt.mockImplementation(async () => {
-              mock.emit(editCall("t1", `/vault/${MEMORY}`));
-              vault.files.set(MEMORY, saved(["Write dates as Nov 16.", RULE]));
-              return { stopReason: "end_turn" as const };
-            });
-            const session = agentSession(mock, vault.app);
-
-            await session.sendPrompt("Remember this: launch videos lead with user value.").turn;
-
-            expect(memorySavesOf(session)).toEqual([
-              { agentName: "Coco", memoryPath: MEMORY, rule: RULE },
-            ]);
-          });
-
-          it("records no saved rule for an edit of MEMORY.md in a chat whose agent saves none, such as a Copilot chat", async () => {
-            const vault = makeVault({});
-            const mock = makeMockBackend();
-            mock.prompt.mockImplementation(async () => {
-              mock.emit(editCall("t1", `/vault/${MEMORY}`));
-              vault.files.set(MEMORY, saved([RULE]));
-              return { stopReason: "end_turn" as const };
-            });
-            const session = agentSession(mock, vault.app, {});
-
-            await session.sendPrompt("Write this rule into Coco's memory.").turn;
+            await session.sendPrompt("Write this rule into your memory file.").turn;
 
             expect(fileChangesOf(session)?.map((change) => change.path)).toEqual([MEMORY]);
-            expect(memorySavesOf(session)).toBeUndefined();
+            expect(lastReply(session)?.memorySaves).toBeUndefined();
+          });
+
+          it("keeps a save recorded on the reply during the turn when the turn's changed files land (https://github.com/Brevilabs/obsidian-copilot-private/issues/988)", async () => {
+            const vault = makeVault({ "notes/a.md": "one\n" });
+            const mock = makeMockBackend();
+            const session = agentSession(mock, vault.app);
+            mock.prompt.mockImplementation(async () => {
+              const reply = lastReply(session)!;
+              session.store.setFileChanges(reply.id, [], [SAVE]);
+              mock.emit(editCall("t1", "/vault/notes/a.md"));
+              vault.files.set("notes/a.md", "one\ntwo\n");
+              return { stopReason: "end_turn" as const };
+            });
+
+            await session.sendPrompt("Remember this, and add a line.").turn;
+
+            expect(lastReply(session)?.memorySaves).toEqual([SAVE]);
+            expect(fileChangesOf(session)?.map((change) => change.path)).toEqual(["notes/a.md"]);
           });
         });
 

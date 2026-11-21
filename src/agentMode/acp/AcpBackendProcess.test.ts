@@ -1,7 +1,4 @@
 import { FileSystemAdapter, App } from "obsidian";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import type {
   BackendDescriptor,
   PermissionOption,
@@ -12,7 +9,6 @@ import { AcpBackendProcess } from "./AcpBackendProcess";
 import { AcpProcessManager } from "./AcpProcessManager";
 import type { AcpBackend } from "./types";
 import type { VaultClient } from "./VaultClient";
-import { buildCodexModeState } from "@/agentMode/backends/codex/codexModeMapping";
 import { AgentReportedError, MethodUnsupportedError } from "@/agentMode/session/errors";
 import { RequestError, type SessionConfigOption } from "@agentclientprotocol/sdk";
 
@@ -1120,183 +1116,43 @@ describe("AcpBackendProcess", () => {
         expect(response).toEqual({ outcome: { outcome: "cancelled" } });
       });
 
-      describe("in a custom agent chat that saves rules", () => {
-        let folder: string;
-        let memoryPath: string;
-
-        beforeEach(() => {
-          folder = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "acp-agent-memory-")));
-          memoryPath = path.join(folder, "MEMORY.md");
-          mockInitializeResult = {
-            protocolVersion: 1,
-            agentCapabilities: { sessionCapabilities: { systemPrompt: {}, resume: {} } },
-          };
+      it("asks the user before an edit of the agent's MEMORY.md in an agent chat, as for any other file, since saving a rule is the save_memory tool's job (https://github.com/Brevilabs/obsidian-copilot-private/issues/988)", async () => {
+        mockInitializeResult = {
+          protocolVersion: 1,
+          agentCapabilities: { sessionCapabilities: { systemPrompt: {} } },
+        };
+        const backend = new AcpBackendProcess(
+          buildApp(),
+          buildStubBackend(),
+          "1.0.0",
+          buildStubDescriptor()
+        );
+        await backend.start();
+        const prompter = jest.fn().mockResolvedValue({
+          outcome: { outcome: "selected", optionId: "abort" },
+        });
+        backend.setPermissionPrompter(prompter);
+        const { sessionId } = await backend.newSession({
+          cwd: "/vault",
+          agent: { slug: "coco", prompt: "You are Coco." },
         });
 
-        afterEach(() => fs.rmSync(folder, { recursive: true, force: true }));
-
-        const OPTIONS = [
-          { optionId: "approved", name: "Allow once", kind: "allow_once" },
-          { optionId: "approved-for-session", name: "Allow always", kind: "allow_always" },
-          { optionId: "abort", name: "Reject", kind: "reject_once" },
-        ];
-
-        async function agentChat(descriptor = buildStubDescriptor()) {
-          const backend = new AcpBackendProcess(
-            buildApp(),
-            buildStubBackend(),
-            "1.0.0",
-            descriptor
-          );
-          await backend.start();
-          const prompter = jest.fn().mockResolvedValue({
-            outcome: { outcome: "selected", optionId: "abort" },
-          });
-          backend.setPermissionPrompter(prompter);
-          const { sessionId } = await backend.newSession({
-            cwd: "/vault",
-            agent: { slug: "coco", prompt: "You are Coco.", memoryPath },
-          });
-          const ask = (toolCall: Record<string, unknown>, onSession = sessionId) =>
-            getVaultClient(backend).requestPermission({
-              sessionId: onSession,
-              toolCall: { toolCallId: "tc1", title: "Edit", ...toolCall },
-              options: OPTIONS,
-            } as unknown as Parameters<VaultClient["requestPermission"]>[0]);
-          return { backend, prompter, sessionId, ask };
-        }
-
-        it("allows an edit of the agent's own MEMORY.md once, without a permission card (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", async () => {
-          const { prompter, ask } = await agentChat();
-
-          const response = await ask({ kind: "edit", locations: [{ path: memoryPath }] });
-
-          expect(response).toEqual({ outcome: { outcome: "selected", optionId: "approved" } });
-          expect(prompter).not.toHaveBeenCalled();
-        });
-
-        it("allows the save named only by the edit's diff or input path (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", async () => {
-          const { prompter, ask } = await agentChat();
-
-          await ask({
+        const response = await getVaultClient(backend).requestPermission({
+          sessionId,
+          toolCall: {
+            toolCallId: "tc1",
+            title: "Edit",
             kind: "edit",
-            content: [{ type: "diff", path: memoryPath, oldText: null, newText: "x" }],
-          });
-          await ask({ kind: "edit", rawInput: { filePath: memoryPath } });
+            locations: [{ path: "/vault/copilot/agents/coco/MEMORY.md" }],
+          },
+          options: [
+            { optionId: "approved", name: "Allow once", kind: "allow_once" },
+            { optionId: "abort", name: "Reject", kind: "reject_once" },
+          ],
+        } as unknown as Parameters<VaultClient["requestPermission"]>[0]);
 
-          expect(prompter).not.toHaveBeenCalled();
-        });
-
-        it("asks with a card for the agent's own MEMORY.md in Plan mode, as Codex does in a project chat whose agent folder is outside the writable project folder (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", async () => {
-          mockNewSession.mockResolvedValue({
-            sessionId: "codex-plan",
-            modes: {
-              currentModeId: "agent",
-              availableModes: [
-                { id: "read-only", name: "Read Only" },
-                { id: "agent", name: "Agent" },
-              ],
-            },
-            configOptions: [
-              {
-                id: "collaboration_mode",
-                type: "select",
-                name: "Collaboration mode",
-                currentValue: "plan",
-                options: [
-                  { value: "default", name: "Default" },
-                  { value: "plan", name: "Plan" },
-                ],
-              },
-            ],
-          } as { sessionId: string });
-          const { prompter, ask } = await agentChat(
-            buildStubDescriptor({ getModeState: buildCodexModeState })
-          );
-
-          const response = await ask({ kind: "edit", locations: [{ path: memoryPath }] });
-
-          expect(prompter).toHaveBeenCalledTimes(1);
-          expect(response).toEqual({ outcome: { outcome: "selected", optionId: "abort" } });
-        });
-
-        it("asks as usual for another file, an edit that also touches another file, an edit naming no file, and a command (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", async () => {
-          const { prompter, ask } = await agentChat();
-          const instructions = path.join(folder, "instructions.md");
-
-          await ask({ kind: "edit", locations: [{ path: instructions }] });
-          await ask({ kind: "edit", locations: [{ path: memoryPath }, { path: instructions }] });
-          await ask({ kind: "edit" });
-          await ask({ kind: "execute", locations: [{ path: memoryPath }] });
-
-          expect(prompter).toHaveBeenCalledTimes(4);
-        });
-
-        it("asks for an edit whose request names only MEMORY.md while the tool call it started with moves the file elsewhere, as Codex reports a patch with a Move to (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", async () => {
-          const { backend, prompter, sessionId, ask } = await agentChat();
-          await getVaultClient(backend).sessionUpdate({
-            sessionId,
-            update: {
-              sessionUpdate: "tool_call",
-              toolCallId: "tc1",
-              title: "Editing files",
-              kind: "edit",
-              status: "pending",
-              content: [
-                { type: "diff", path: path.join(folder, "moved.md"), oldText: "", newText: "" },
-              ],
-            },
-          } as unknown as Parameters<VaultClient["sessionUpdate"]>[0]);
-
-          await ask({ kind: "edit", locations: [{ path: memoryPath }] });
-
-          expect(prompter).toHaveBeenCalledTimes(1);
-        });
-
-        it("asks for an input that names the agent's MEMORY.md and another file (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", async () => {
-          const { prompter, ask } = await agentChat();
-
-          await ask({
-            kind: "edit",
-            rawInput: { filePath: memoryPath, path: path.join(folder, "notes.md") },
-          });
-
-          expect(prompter).toHaveBeenCalledTimes(1);
-        });
-
-        it("reads a backslashed path as the platform writes it: asks where a backslash is part of a file name, and allows it on Windows, where it names the agent's own MEMORY.md (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", async () => {
-          const { prompter, ask } = await agentChat();
-          const backslashed = `${path.dirname(folder)}\\${path.basename(folder)}\\MEMORY.md`;
-
-          const response = await ask({ kind: "edit", locations: [{ path: backslashed }] });
-
-          const separates = path.sep === "\\";
-          expect(response).toEqual({
-            outcome: { outcome: "selected", optionId: separates ? "approved" : "abort" },
-          });
-          expect(prompter).toHaveBeenCalledTimes(separates ? 0 : 1);
-        });
-
-        it("asks as usual in another chat on the same agent process", async () => {
-          const { prompter, ask } = await agentChat();
-
-          await ask({ kind: "edit", locations: [{ path: memoryPath }] }, "plain-chat");
-
-          expect(prompter).toHaveBeenCalledTimes(1);
-        });
-
-        it("allows the save again after the agent chat is resumed", async () => {
-          const { backend, prompter, ask } = await agentChat();
-          await backend.resumeSession({
-            sessionId: "resumed",
-            cwd: "/vault",
-            agent: { slug: "coco", prompt: "You are Coco.", memoryPath },
-          });
-
-          await ask({ kind: "edit", locations: [{ path: memoryPath }] }, "resumed");
-
-          expect(prompter).not.toHaveBeenCalled();
-        });
+        expect(prompter).toHaveBeenCalledTimes(1);
+        expect(response).toEqual({ outcome: { outcome: "selected", optionId: "abort" } });
       });
     });
 

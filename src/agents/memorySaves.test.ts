@@ -1,4 +1,4 @@
-import { readMemoryRules, readMemorySaves, readTurnMemorySaves } from "@/agents/memorySaves";
+import { readMemoryRules, sameRule, withoutEndedRules } from "@/agents/memorySaves";
 
 const LAUNCH = "Launch videos lead with user value, not the feature list.";
 const LAUNCH_CONTEXT = "2026-11-16 · Asked to remember while planning the launch video";
@@ -39,182 +39,36 @@ describe("memorySaves", () => {
     });
   });
 
-  describe("readMemorySaves()", () => {
-    it("reads the first save, which creates the file, as one remembered rule", () => {
-      expect(readMemorySaves(null, memory([`${LAUNCH}\n${LAUNCH_CONTEXT}`]))).toEqual([
-        { rule: LAUNCH },
-      ]);
-    });
-
-    it("reads a rule added under either heading as remembered, leaving the rules already there out", () => {
-      const before = memory([`${LAUNCH}\n${LAUNCH_CONTEXT}`]);
-
-      expect(
-        readMemorySaves(
-          before,
-          memory([`${LAUNCH}\n${LAUNCH_CONTEXT}`, `${LINKS}\n${LINKS_CONTEXT}`])
-        )
-      ).toEqual([{ rule: LINKS }]);
-      expect(
-        readMemorySaves(
-          before,
-          memory([`${LAUNCH}\n${LAUNCH_CONTEXT}`], [`${MEETINGS}\n${MEETINGS_CONTEXT}`])
-        )
-      ).toEqual([{ rule: MEETINGS }]);
-    });
-
-    it("reads a replacement as the new rule with the old rule it quotes in its context line (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", () => {
-      const before = memory([
-        `${LAUNCH}\n${LAUNCH_CONTEXT}`,
-        "Summarize as bullet points.\n2026-11-03 · Asked for bullets",
-      ]);
-      const after = memory([
-        `${LAUNCH}\n${LAUNCH_CONTEXT}`,
-        'Write summaries as short paragraphs, no bullet points.\n2026-11-16 · Replaces "Summarize as bullet points." (2026-11-03)',
-      ]);
-
-      expect(readMemorySaves(before, after)).toEqual([
-        {
-          rule: "Write summaries as short paragraphs, no bullet points.",
-          replaced: "Summarize as bullet points.",
-        },
-      ]);
-    });
-
-    it("pairs a replacement whose context line names the old rule loosely with the one rule it removed (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", () => {
-      const before = memory(["Summarize as bullet points.\n2026-11-03 · Asked for bullets"]);
-      const after = memory([
-        "Write summaries as short paragraphs.\n2026-11-16 · Replaces the bullet-point rule (2026-11-03)",
-      ]);
-
-      expect(readMemorySaves(before, after)).toEqual([
-        { rule: "Write summaries as short paragraphs.", replaced: "Summarize as bullet points." },
-      ]);
-    });
-
-    it("reads a rule written in place of a removed one as a replacement when its context line has no Replaces marker (https://github.com/Brevilabs/obsidian-copilot-private/issues/767)", () => {
-      const before = memory([
-        `${LAUNCH}\n${LAUNCH_CONTEXT}`,
-        "Summarize as bullet points.\n2026-11-03 · Asked for bullets",
-      ]);
-      const after = memory([
-        `${LAUNCH}\n${LAUNCH_CONTEXT}`,
-        "Write summaries as short paragraphs.\n2026-11-17 · User asked to stop using bullets and use short paragraphs instead.",
-      ]);
-
-      expect(readMemorySaves(before, after)).toEqual([
-        { rule: "Write summaries as short paragraphs.", replaced: "Summarize as bullet points." },
-      ]);
-    });
-
-    it("pairs a replacement without the marker with the removed rule its context line quotes when the turn removed two rules (https://github.com/Brevilabs/obsidian-copilot-private/issues/767)", () => {
-      const before = memory([
-        `${LAUNCH}\n${LAUNCH_CONTEXT}`,
-        "Summarize as bullet points.\n2026-11-03 · Asked for bullets",
-      ]);
-      const after = memory([
-        'Write summaries as short paragraphs.\n2026-11-17 · Asked to stop using bullets; replaces "Summarize as bullet points." (2026-11-03).',
-      ]);
-
-      expect(readMemorySaves(before, after)).toEqual([
-        { rule: "Write summaries as short paragraphs.", replaced: "Summarize as bullet points." },
-      ]);
-    });
-
-    it("pairs a replacement with the rule it quotes and reads a rule added above it in the same turn as remembered (https://github.com/Brevilabs/obsidian-copilot-private/issues/767)", () => {
-      const before = memory([`${LAUNCH}\n${LAUNCH_CONTEXT}`], [`${MEETINGS}\n${MEETINGS_CONTEXT}`]);
-      const after = memory(
-        [`${LAUNCH}\n${LAUNCH_CONTEXT}`, `${LINKS}\n${LINKS_CONTEXT}`],
-        [`Meeting notes are in meetings/.\n2026-11-17 · Replaces "${MEETINGS}" (2026-10-21)`]
-      );
-
-      expect(readMemorySaves(before, after)).toEqual([
-        { rule: LINKS },
-        { rule: "Meeting notes are in meetings/.", replaced: MEETINGS },
-      ]);
-    });
-
-    it("reads each rule of several edits in one turn, pairing only the replacement with the rule it removed", () => {
-      const before = memory(["Summarize as bullet points.\n2026-11-03 · Asked for bullets"]);
-      const after = memory(
-        [
-          'Write summaries as short paragraphs.\n2026-11-16 · Replaces "Summarize as bullet points." (2026-11-03)',
-          `${LINKS}\n${LINKS_CONTEXT}`,
-        ],
-        [`${MEETINGS}\n${MEETINGS_CONTEXT}`]
-      );
-
-      expect(readMemorySaves(before, after)).toEqual([
-        { rule: "Write summaries as short paragraphs.", replaced: "Summarize as bullet points." },
-        { rule: LINKS },
-        { rule: MEETINGS },
-      ]);
-    });
-
-    it("reads the instruction sentence a rule goes against from its context line's marker (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", () => {
-      const after = memory([
-        'Taxes are Leo\'s job now. Point tax questions to Leo.\n2026-11-16 · Said while planning Q4 · Contradicts instruction: "File quarterly estimated taxes."',
-      ]);
-
-      expect(readMemorySaves(null, after)).toEqual([
-        {
-          rule: "Taxes are Leo's job now. Point tax questions to Leo.",
-          contradicts: "File quarterly estimated taxes.",
-        },
-      ]);
-    });
-
-    it("reads a contradiction marker written with curly quotes, none, or the prompt's closing period after the quote", () => {
-      const rule = (context: string) => memory([`Taxes go to Leo.\n2026-11-16 · ${context}`]);
-
-      expect(
-        readMemorySaves(null, rule("Contradicts instruction: “File quarterly taxes.”"))
-      ).toEqual([{ rule: "Taxes go to Leo.", contradicts: "File quarterly taxes." }]);
-      expect(readMemorySaves(null, rule("Contradicts instruction: File quarterly taxes."))).toEqual(
-        [{ rule: "Taxes go to Leo.", contradicts: "File quarterly taxes." }]
-      );
-      expect(
-        readMemorySaves(null, rule('Contradicts instruction: "File quarterly taxes.".'))
-      ).toEqual([{ rule: "Taxes go to Leo.", contradicts: "File quarterly taxes." }]);
-    });
-
-    it("reads no save from an edit that only reformats: spacing, line endings, moved rules or a changed context line", () => {
-      const before = memory([`${LAUNCH}\n${LAUNCH_CONTEXT}`, `${LINKS}\n${LINKS_CONTEXT}`]);
-      const reformatted = `## How to work\r\n\r\n${LINKS.replace(" a ", "  a ")}  \r\n2026-11-17 · Reworded\r\n\r\n\r\n## Where to find things\r\n\r\n${LAUNCH}\r\n${LAUNCH_CONTEXT}\r\n`;
-
-      expect(readMemorySaves(before, reformatted)).toEqual([]);
-    });
-
-    it("reads no save when the turn only removed a rule, as when the user deleted one by hand", () => {
-      const before = memory([`${LAUNCH}\n${LAUNCH_CONTEXT}`, `${LINKS}\n${LINKS_CONTEXT}`]);
-
-      expect(readMemorySaves(before, memory([`${LAUNCH}\n${LAUNCH_CONTEXT}`]))).toEqual([]);
-      expect(readMemorySaves(before, null)).toEqual([]);
+  describe("sameRule()", () => {
+    it("reads two spellings of a rule that differ only in spacing or line breaks as the same rule", () => {
+      expect(sameRule(" Answer in  French.\n")).toBe(sameRule("Answer in French."));
+      expect(sameRule("Answer in French.")).not.toBe(sameRule("Answer in English."));
     });
   });
 
-  describe("readTurnMemorySaves()", () => {
-    const COCO = { agentName: "Coco", memoryPath: "copilot/agents/coco/MEMORY.md" };
+  describe("withoutEndedRules()", () => {
+    it("leaves out a rule whose Until date has passed, with its context line, and keeps every other line (https://github.com/Brevilabs/obsidian-copilot-private/issues/988)", () => {
+      const ended = "Until 2026-11-18: Flag the budget first.";
+      const text = memory([`${ended}\n2026-11-01 · Budget week`, `${LAUNCH}\n${LAUNCH_CONTEXT}`]);
 
-    it("names the agent and its MEMORY.md on each rule its turn saved", () => {
-      const changes = [
-        { path: "notes/plan.md", before: "a", after: "b" },
-        { path: COCO.memoryPath, before: null, after: memory([`${LAUNCH}\n${LAUNCH_CONTEXT}`]) },
-      ];
-
-      expect(readTurnMemorySaves(changes, COCO)).toEqual([{ ...COCO, rule: LAUNCH }]);
+      expect(withoutEndedRules(text, "2026-11-19")).toBe(
+        `## How to work\n\n\n${LAUNCH}\n${LAUNCH_CONTEXT}\n\n## Where to find things\n\n\n`
+      );
     });
 
-    it("reads no save from a turn that changed another agent's MEMORY.md and not its own", () => {
-      const changes = [
-        {
-          path: "copilot/agents/maya/MEMORY.md",
-          before: null,
-          after: memory([`${LAUNCH}\n${LAUNCH_CONTEXT}`]),
-        },
-      ];
+    it("keeps a rule until the end of its Until date, a rule with no date, and returns the text unchanged when nothing ended", () => {
+      const text = memory([
+        `Until 2026-11-19: Flag the budget first.\n2026-11-01 · Budget week`,
+        `${LAUNCH}\n${LAUNCH_CONTEXT}`,
+      ]);
 
-      expect(readTurnMemorySaves(changes, COCO)).toEqual([]);
+      expect(withoutEndedRules(text, "2026-11-19")).toBe(text);
+    });
+
+    it("leaves out an ended rule the user wrote by hand without a context line", () => {
+      expect(withoutEndedRules(`Until 2020-01-01: Old rule.\n${LAUNCH}\n`, "2026-11-19")).toBe(
+        `${LAUNCH}\n`
+      );
     });
   });
 });

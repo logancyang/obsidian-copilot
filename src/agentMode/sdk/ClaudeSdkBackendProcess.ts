@@ -80,7 +80,6 @@ interface SessionState {
   starting?: Promise<ClaudeLiveQuery>;
   systemPromptAppend: string;
   customAgent: boolean;
-  agentMemoryPath?: string;
 }
 
 // Subagents run in the background unless the model chooses: the chat lists them as tasks and their reports start replies, while a model that needs a result before going on can still wait on it. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
@@ -294,7 +293,6 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       mcpServers: params.mcpServers,
       systemPromptAppend: this.resolveSystemPromptAppend(params.agent),
       customAgent: params.agent !== undefined,
-      agentMemoryPath: params.agent?.memoryPath,
       translator: createTranslatorState(),
     });
 
@@ -373,8 +371,6 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       getPrompter: () => this.permissionPrompter,
       getAskUserQuestionPrompter: () => this.askUserQuestionPrompter,
       isPlanModePlanFilePath: this.opts.isPlanModePlanFilePath,
-      agentMemoryPath: session.agentMemoryPath,
-      isPlanMode: () => session.permissionMode === "plan",
       getModeAfterPlanApproval: () => session.lastNonPlanPromptMode ?? this.autoPermissionMode(),
     });
 
@@ -665,7 +661,6 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       mcpServers: params.mcpServers,
       systemPromptAppend: this.resolveSystemPromptAppend(params.agent),
       customAgent: params.agent !== undefined,
-      agentMemoryPath: params.agent?.memoryPath,
       translator: createTranslatorState(claudeTaskPlan),
     });
 
