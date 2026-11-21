@@ -259,7 +259,7 @@ describe("agentMode", () => {
         slug: "coco",
         name: "Coco",
         prompt: "In this chat you are Coco.",
-        memoryPath: "/vault/copilot/agents/coco/MEMORY.md",
+        memoryPath: "/vault/copilot/teammates/coco/MEMORY.md",
       };
       jest.mocked(loadAgentSessionPrompt).mockResolvedValueOnce(agent);
       const store = { ...customAgents } as CustomAgentStore;
@@ -751,11 +751,11 @@ describe("agentMode", () => {
       expect(connectorCardsExtension()).toBeUndefined();
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/944 offers ask_agent among Copilot's tools and stops the agents it asked when the plugin unloads", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/944 offers ask_teammate among Copilot's tools and stops the agents it asked when the plugin unloads", () => {
       createAgentSessionManager({} as App, plugin, customAgents);
 
       const hosted = jest.mocked(createCopilotMcpServer).mock.calls[0][1];
-      expect(hosted.map(({ definition }) => definition.name)).toContain("ask_agent");
+      expect(hosted.map(({ definition }) => definition.name)).toContain("ask_teammate");
       expect(plugin.register).toHaveBeenCalledWith(expect.any(Function));
     });
 
@@ -799,7 +799,7 @@ describe("agentMode", () => {
       createAgentSessionManager({} as App, plugin, store);
       const askAgent = jest
         .mocked(createCopilotMcpServer)
-        .mock.calls[0][1].find(({ definition }) => definition.name === "ask_agent")!;
+        .mock.calls[0][1].find(({ definition }) => definition.name === "ask_teammate")!;
       const copilotChat = { sessionKey: "copilot-chat", backendId: "claude" as const };
 
       expect(askAgent.listedAs?.(copilotChat)).toBeNull();
@@ -810,19 +810,19 @@ describe("agentMode", () => {
       expect(askAgent.listedAs?.(copilotChat)).toBe(askAgent.definition);
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/945 offers check_agent, answer_agent, stop_agent and ask_user and hands the profile's delete the asked agents' chats to stop", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/945 offers check_teammate, answer_teammate, stop_teammate and ask_user and hands the profile's delete the asked agents' chats to stop", () => {
       const { hiddenAgentChats } = createAgentSessionManager({} as App, plugin, customAgents);
 
       const hosted = jest.mocked(createCopilotMcpServer).mock.calls[0][1];
       expect(hosted.map(({ definition }) => definition.name)).toEqual(
-        expect.arrayContaining(["check_agent", "answer_agent", "stop_agent", "ask_user"])
+        expect.arrayContaining(["check_teammate", "answer_teammate", "stop_teammate", "ask_user"])
       );
       expect(hiddenAgentChats).toEqual(
         expect.objectContaining({ stopAgent: expect.any(Function) })
       );
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/941 offers draft_agent to every chat the user sees, with or without a custom agent, refuses a hidden chat's call, and keeps the draft card with the chat", async () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/941 offers draft_teammate to every chat the user sees, with or without a custom agent, refuses a hidden chat's call, and keeps the draft card with the chat", async () => {
       const coco = Object.assign(fakeChat(), { agentSlug: "coco" });
       const copilot = Object.assign(fakeChat(), { agentSlug: null });
       Object.assign(mockManager, {
@@ -833,7 +833,7 @@ describe("agentMode", () => {
       createAgentSessionManager({} as App, plugin, customAgents);
       const draftAgent = jest
         .mocked(createCopilotMcpServer)
-        .mock.calls[0][1].find(({ definition }) => definition.name === "draft_agent")!;
+        .mock.calls[0][1].find(({ definition }) => definition.name === "draft_teammate")!;
       const listedFor = (sessionKey: string) =>
         draftAgent.listedAs?.({ sessionKey, backendId: "claude" }) ?? null;
       const nora = { name: "Nora", title: "", instruction: "You plan pickups." };

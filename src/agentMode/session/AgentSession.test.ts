@@ -3024,7 +3024,7 @@ describe("AgentSession", () => {
         });
 
         describe("in a custom agent's chat", () => {
-          const MEMORY = "copilot/agents/coco/MEMORY.md";
+          const MEMORY = "copilot/teammates/coco/MEMORY.md";
           const SAVE = {
             rule: "Launch videos lead with user value.",
             agentName: "Coco",

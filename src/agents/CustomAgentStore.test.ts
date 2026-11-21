@@ -23,7 +23,7 @@ function seedAgent(
   vault: FakeAgentVault,
   slug: string,
   name: string,
-  { instruction = `${name} handles things.`, withFace = true, folder = "copilot/agents" } = {}
+  { instruction = `${name} handles things.`, withFace = true, folder = "copilot/teammates" } = {}
 ): void {
   vault.writeByHand(
     `${folder}/${slug}/instructions.md`,
@@ -82,11 +82,11 @@ describe("CustomAgentStore", () => {
             title: "Coco's title",
             model: SONNET,
             instruction: "Keep the vault in view.",
-            folderPath: "copilot/agents/coco",
-            instructionsPath: "copilot/agents/coco/instructions.md",
-            memoryPath: "copilot/agents/coco/MEMORY.md",
-            facePath: "copilot/agents/coco/face.webp",
-            faceSrc: "app://vault/copilot/agents/coco/face.webp?4",
+            folderPath: "copilot/teammates/coco",
+            instructionsPath: "copilot/teammates/coco/instructions.md",
+            memoryPath: "copilot/teammates/coco/MEMORY.md",
+            facePath: "copilot/teammates/coco/face.webp",
+            faceSrc: "app://vault/copilot/teammates/coco/face.webp?4",
           },
           expect.objectContaining({ slug: "maya", name: "Maya" }),
         ]);
@@ -102,7 +102,7 @@ describe("CustomAgentStore", () => {
 
       it("skips a folder without instructions.md, such as one Sync has not finished", async () => {
         seedAgent(vault, "coco", "Coco");
-        vault.writeByHand("copilot/agents/half-synced/face.webp", bytes(9));
+        vault.writeByHand("copilot/teammates/half-synced/face.webp", bytes(9));
 
         await store.start();
 
@@ -138,22 +138,22 @@ describe("CustomAgentStore", () => {
       });
 
       it("names an agent after its folder when instructions.md has no name (https://github.com/Brevilabs/obsidian-copilot-private/issues/936)", async () => {
-        vault.writeByHand("copilot/agents/leo/instructions.md", "Keep the books.");
+        vault.writeByHand("copilot/teammates/leo/instructions.md", "Keep the books.");
 
         await store.start();
 
         expect(store.getAgents()[0]).toMatchObject({ name: "leo", instruction: "Keep the books." });
       });
 
-      it("reads the agents folder under the Copilot folder from settings", async () => {
+      it("reads the teammates folder under the Copilot folder from settings", async () => {
         setSettings({ copilotFolder: "ai/assistant" });
-        seedAgent(vault, "coco", "Coco", { folder: "ai/assistant/agents" });
-        seedAgent(vault, "maya", "Maya", { folder: "copilot/agents" });
+        seedAgent(vault, "coco", "Coco", { folder: "ai/assistant/teammates" });
+        seedAgent(vault, "maya", "Maya", { folder: "copilot/teammates" });
 
         await store.start();
 
         expect(store.getAgents().map((agent) => agent.folderPath)).toEqual([
-          "ai/assistant/agents/coco",
+          "ai/assistant/teammates/coco",
         ]);
       });
 
@@ -163,7 +163,7 @@ describe("CustomAgentStore", () => {
 
         const changed = nextChange(store);
         vault.writeByHand(
-          "copilot/agents/coco/instructions.md",
+          "copilot/teammates/coco/instructions.md",
           "---\nname: Coco Bean\n---\nNew instruction."
         );
         await changed;
@@ -185,14 +185,14 @@ describe("CustomAgentStore", () => {
         expect(store.getAgents().map((agent) => agent.slug)).toEqual(["coco", "maya"]);
 
         const deleted = nextChange(store);
-        vault.deleteByHand("copilot/agents/coco");
+        vault.deleteByHand("copilot/teammates/coco");
         await deleted;
         expect(store.getAgents().map((agent) => agent.slug)).toEqual(["maya"]);
       });
     });
 
     describe("stop()", () => {
-      it("empties the list and stops following edits in the agents folder", async () => {
+      it("empties the list and stops following edits in the teammates folder", async () => {
         seedAgent(vault, "coco", "Coco");
         await store.start();
         const listener = jest.fn();
@@ -236,7 +236,7 @@ describe("CustomAgentStore", () => {
         await store.start();
         const listed = store.getAgents();
 
-        vault.writeByHand("copilot/agents/coco/MEMORY.md", "## How to work\n");
+        vault.writeByHand("copilot/teammates/coco/MEMORY.md", "## How to work\n");
         await store.start();
 
         expect(store.getAgents()).toBe(listed);
@@ -256,10 +256,10 @@ describe("CustomAgentStore", () => {
         });
 
         expect(vault.listPaths()).toEqual([
-          "copilot/agents/kai/face.webp",
-          "copilot/agents/kai/instructions.md",
+          "copilot/teammates/kai/face.webp",
+          "copilot/teammates/kai/instructions.md",
         ]);
-        expect(vault.readText("copilot/agents/kai/instructions.md")).toBe(
+        expect(vault.readText("copilot/teammates/kai/instructions.md")).toBe(
           serializeInstructionsFile(
             { name: "Kai", title: "Writes launch posts", model: SONNET },
             "You handle marketing."
@@ -279,8 +279,8 @@ describe("CustomAgentStore", () => {
           store.createAgent({ name: " KAI ", title: "", model: null, instruction: "Second Kai." })
         ).rejects.toThrow("Kai is already on your team. Pick another name.");
         expect(vault.listPaths()).toEqual([
-          "copilot/agents/kai/face.webp",
-          "copilot/agents/kai/instructions.md",
+          "copilot/teammates/kai/face.webp",
+          "copilot/teammates/kai/instructions.md",
         ]);
       });
 
@@ -291,7 +291,7 @@ describe("CustomAgentStore", () => {
         await expect(
           store.createAgent({ name: "Coco", title: "", model: null, instruction: "New Coco." })
         ).rejects.toThrow("Chief already uses the folder coco. Pick another name.");
-        expect(vault.readText("copilot/agents/coco/instructions.md")).toContain("name: Chief");
+        expect(vault.readText("copilot/teammates/coco/instructions.md")).toContain("name: Chief");
       });
 
       it("writes nothing when an uploaded face cannot be encoded, so no half-made agent appears", async () => {
@@ -351,21 +351,21 @@ describe("CustomAgentStore", () => {
           instruction: "Plans trips.",
         });
 
-        expect(vault.listPaths()).toEqual(["copilot/agents/nora/instructions.md"]);
+        expect(vault.listPaths()).toEqual(["copilot/teammates/nora/instructions.md"]);
         expect(store.getAgents()[0].faceSrc).toBe(NEUTRAL_FACE_SRC);
       });
     });
 
     describe("folderNames()", () => {
-      it("lists every name in the agents folder, including one that holds no agent", async () => {
+      it("lists every name in the teammates folder, including one that holds no agent", async () => {
         seedAgent(vault, "coco", "Coco");
-        vault.writeByHand("copilot/agents/half-synced/face.webp", bytes(9));
+        vault.writeByHand("copilot/teammates/half-synced/face.webp", bytes(9));
         await store.start();
 
         expect(store.folderNames().sort()).toEqual(["coco", "half-synced"]);
       });
 
-      it("lists nothing before the first agent makes the agents folder", async () => {
+      it("lists nothing before the first agent makes the teammates folder", async () => {
         await store.start();
 
         expect(store.folderNames()).toEqual([]);
@@ -380,8 +380,8 @@ describe("CustomAgentStore", () => {
         await store.updateAgent("coco", { name: "Bean" });
 
         expect(vault.listPaths()).toEqual([
-          "copilot/agents/coco/face.webp",
-          "copilot/agents/coco/instructions.md",
+          "copilot/teammates/coco/face.webp",
+          "copilot/teammates/coco/instructions.md",
         ]);
         expect(store.getAgents()[0]).toMatchObject({
           slug: "coco",
@@ -393,7 +393,7 @@ describe("CustomAgentStore", () => {
 
       it("changes the title and model and keeps properties the user added by hand", async () => {
         vault.writeByHand(
-          "copilot/agents/coco/instructions.md",
+          "copilot/teammates/coco/instructions.md",
           "---\nname: Coco\ntags: [team]\n---\nBody"
         );
         await store.start();
@@ -403,7 +403,7 @@ describe("CustomAgentStore", () => {
           model: { baseModelId: "gpt-5.5", effort: "high" },
         });
 
-        const written = vault.readText("copilot/agents/coco/instructions.md")!;
+        const written = vault.readText("copilot/teammates/coco/instructions.md")!;
         const info = getFrontMatterInfo(written);
         expect(parseYaml(info.frontmatter)).toEqual({
           name: "Coco",
@@ -425,7 +425,7 @@ describe("CustomAgentStore", () => {
 
       it(`refuses while custom agents are locked and leaves instructions.md as written (${LOCKED_ISSUE})`, async () => {
         seedAgent(vault, "coco", "Coco");
-        const written = vault.readText("copilot/agents/coco/instructions.md");
+        const written = vault.readText("copilot/teammates/coco/instructions.md");
         await setCustomAgentsAccess("free");
         await store.start();
 
@@ -433,7 +433,7 @@ describe("CustomAgentStore", () => {
           "Copilot Teammates is locked."
         );
 
-        expect(vault.readText("copilot/agents/coco/instructions.md")).toBe(written);
+        expect(vault.readText("copilot/teammates/coco/instructions.md")).toBe(written);
       });
     });
 
@@ -445,7 +445,7 @@ describe("CustomAgentStore", () => {
 
         await store.saveFace("coco", { kind: "preset", bytes: bytes(82, 73, 70, 70) });
 
-        expect([...new Uint8Array(vault.readBytes("copilot/agents/coco/face.webp")!)]).toEqual([
+        expect([...new Uint8Array(vault.readBytes("copilot/teammates/coco/face.webp")!)]).toEqual([
           82, 73, 70, 70,
         ]);
         expect(store.getAgents()[0].faceSrc).not.toBe(before);
@@ -467,7 +467,7 @@ describe("CustomAgentStore", () => {
           256,
           "image/webp",
         ]);
-        expect([...new Uint8Array(vault.readBytes("copilot/agents/coco/face.webp")!)]).toEqual([
+        expect([...new Uint8Array(vault.readBytes("copilot/teammates/coco/face.webp")!)]).toEqual([
           87, 69, 66, 80,
         ]);
       });
@@ -482,7 +482,7 @@ describe("CustomAgentStore", () => {
         release();
 
         await expect(saved).rejects.toThrow("Copilot Teammates is not available.");
-        expect([...new Uint8Array(vault.readBytes("copilot/agents/coco/face.webp")!)]).toEqual([
+        expect([...new Uint8Array(vault.readBytes("copilot/teammates/coco/face.webp")!)]).toEqual([
           1, 2, 3,
         ]);
       });
@@ -496,7 +496,7 @@ describe("CustomAgentStore", () => {
           store.saveFace("coco", { kind: "preset", bytes: bytes(82, 73, 70, 70) })
         ).rejects.toThrow("Copilot Teammates is locked.");
 
-        expect([...new Uint8Array(vault.readBytes("copilot/agents/coco/face.webp")!)]).toEqual([
+        expect([...new Uint8Array(vault.readBytes("copilot/teammates/coco/face.webp")!)]).toEqual([
           1, 2, 3,
         ]);
       });
@@ -507,7 +507,9 @@ describe("CustomAgentStore", () => {
 
         await store.saveFace("kai", { kind: "preset", bytes: bytes(5) });
 
-        expect([...new Uint8Array(vault.readBytes("copilot/agents/kai/face.webp")!)]).toEqual([5]);
+        expect([...new Uint8Array(vault.readBytes("copilot/teammates/kai/face.webp")!)]).toEqual([
+          5,
+        ]);
         expect(store.getAgents()[0].faceSrc).not.toBe(NEUTRAL_FACE_SRC);
       });
     });
@@ -520,10 +522,10 @@ describe("CustomAgentStore", () => {
 
         await store.deleteAgent("coco");
 
-        expect(vault.trashedPaths).toEqual(["copilot/agents/coco"]);
+        expect(vault.trashedPaths).toEqual(["copilot/teammates/coco"]);
         expect(vault.listPaths()).toEqual([
-          "copilot/agents/maya/face.webp",
-          "copilot/agents/maya/instructions.md",
+          "copilot/teammates/maya/face.webp",
+          "copilot/teammates/maya/instructions.md",
         ]);
         expect(store.getAgents().map((agent) => agent.slug)).toEqual(["maya"]);
       });
@@ -536,7 +538,7 @@ describe("CustomAgentStore", () => {
 
         await store.deleteAgent("maya");
 
-        expect(vault.trashedPaths).toEqual(["copilot/agents/maya"]);
+        expect(vault.trashedPaths).toEqual(["copilot/teammates/maya"]);
         expect(store.getAgents().map((agent) => agent.slug)).toEqual(["coco"]);
       });
 
@@ -563,7 +565,7 @@ describe("CustomAgentStore", () => {
       it("returns the instruction without its frontmatter and MEMORY.md exactly as written", async () => {
         seedAgent(vault, "coco", "Coco", { instruction: "Keep the vault in view.\n" });
         const memory = "# Rules Coco remembers\n\n## How to work\n\n- Short paragraphs.\n";
-        vault.writeByHand("copilot/agents/coco/MEMORY.md", memory);
+        vault.writeByHand("copilot/teammates/coco/MEMORY.md", memory);
         await store.start();
 
         expect(await store.loadForSession("coco")).toEqual({
@@ -591,10 +593,10 @@ describe("CustomAgentStore", () => {
   });
 
   describe("customAgentsFolderPath()", () => {
-    it("is the agents folder inside the Copilot folder the user configured", () => {
+    it("is the teammates folder inside the Copilot folder the user configured", () => {
       setSettings({ copilotFolder: "Tools/My Copilot" });
 
-      expect(customAgentsFolderPath()).toBe("Tools/My Copilot/agents");
+      expect(customAgentsFolderPath()).toBe("Tools/My Copilot/teammates");
     });
   });
 

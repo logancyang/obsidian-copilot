@@ -5,7 +5,7 @@ import { AgentPickerModal } from "@/agents/ui/AgentPickerModal";
 import { logError } from "@/logger";
 import { Notice, type Plugin } from "obsidian";
 
-export const START_AGENT_CHAT_COMMAND_ID = "start-chat-with-agent";
+export const START_AGENT_CHAT_COMMAND_ID = "start-chat-with-teammate";
 
 type RemovableCommands = Plugin & { removeCommand(id: string): void };
 

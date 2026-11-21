@@ -21,7 +21,7 @@ const BANNER_FACE_COUNT = 3;
 const NO_FACES: readonly string[] = Object.freeze([]);
 
 export function useFirstAgentBannerVisible(agentCount: number): boolean {
-  const dismissed = useSettingsValue().agentMode.firstAgentBannerDismissed === true;
+  const dismissed = useSettingsValue().agentMode.firstTeammateBannerDismissed === true;
   // Once the first agent exists, however it was made, deleting it later does not bring the banner back.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/939
   useEffect(() => {
@@ -31,7 +31,7 @@ export function useFirstAgentBannerVisible(agentCount: number): boolean {
 }
 
 export function dismissFirstAgentBanner(): void {
-  setSettings((cur) => ({ agentMode: { ...cur.agentMode, firstAgentBannerDismissed: true } }));
+  setSettings((cur) => ({ agentMode: { ...cur.agentMode, firstTeammateBannerDismissed: true } }));
 }
 
 function useBannerFaces(): readonly string[] {

@@ -32,7 +32,7 @@ const setRequestUrlImpl = (
   obsidian as unknown as { __setRequestUrlImpl: (impl: jest.Mock) => void }
 ).__setRequestUrlImpl;
 
-const FOLDER = "copilot/agents/coco";
+const FOLDER = "copilot/teammates/coco";
 const LEO_URL = "https://images.brevilabs.com/agent-faces/leo.webp";
 const KAI_URL = "https://images.brevilabs.com/agent-faces/kai.webp";
 
@@ -61,7 +61,7 @@ const MODELS: AgentModelChoices = {
 
 function seed(vault: FakeAgentVault, slug: string, name: string, title = "") {
   vault.writeByHand(
-    `copilot/agents/${slug}/instructions.md`,
+    `copilot/teammates/${slug}/instructions.md`,
     `---\nname: ${name}\ntitle: ${title}\nface: face.webp\nmodel: ''\n---\nYou keep the whole vault in view. Answer briefly.`
   );
 }

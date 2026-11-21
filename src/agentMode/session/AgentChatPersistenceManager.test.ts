@@ -458,7 +458,7 @@ describe("AgentChatPersistenceManager", () => {
       expect(ordinary.continuedFrom).toBeUndefined();
     });
 
-    it("round-trips the custom agent a chat runs as, keeps it through saves that omit it, and leaves a plain chat without one", async () => {
+    it("round-trips the teammate a chat runs as in the teammate property, keeps it through saves that omit it, and leaves a plain chat without one", async () => {
       const messages = [makeMessage(USER_SENDER, "what do you handle?")];
       const first = await manager.saveSession(messages, "claude", { agent: "coco" });
       Object.setPrototypeOf(app.files.get(first!.path)!, TFile.prototype);
@@ -470,7 +470,8 @@ describe("AgentChatPersistenceManager", () => {
       Object.setPrototypeOf(app.files.get(plain!.path)!, TFile.prototype);
       const ordinary = await manager.loadFile(app.files.get(plain!.path) as unknown as TFile);
 
-      expect(app.files.get(first!.path)!.contents).toContain('agent: "coco"');
+      expect(app.files.get(first!.path)!.contents).toContain('teammate: "coco"');
+      expect(app.files.get(first!.path)!.contents).not.toMatch(/^agent:/m);
       expect([saved.agent, kept.agent]).toEqual(["coco", "coco"]);
       expect(ordinary.agent).toBeUndefined();
     });
@@ -783,7 +784,7 @@ describe("AgentChatPersistenceManager", () => {
       const memorySaves = [
         {
           agentName: "Coco",
-          memoryPath: "copilot/agents/coco/MEMORY.md",
+          memoryPath: "copilot/teammates/coco/MEMORY.md",
           rule: "Write summaries as short paragraphs, no bullet points.",
           replaced: "Summarize as bullet points.",
           contradicts: "Use bullets --> always.",
@@ -799,7 +800,7 @@ describe("AgentChatPersistenceManager", () => {
       const file = app.files.get(saved!.path)!;
 
       expect(file.contents).toContain(
-        '**ai**: Got it.\n<!-- copilot-message {"memorySaves":[{"agentName":"Coco","memoryPath":"copilot/agents/coco/MEMORY.md","rule":"Write summaries as short paragraphs, no bullet points.","replaced":"Summarize as bullet points.","contradicts":"Use bullets --\\u003e always."}]} -->\n'
+        '**ai**: Got it.\n<!-- copilot-message {"memorySaves":[{"teammateName":"Coco","memoryPath":"copilot/teammates/coco/MEMORY.md","rule":"Write summaries as short paragraphs, no bullet points.","replaced":"Summarize as bullet points.","contradicts":"Use bullets --\\u003e always."}]} -->\n'
       );
       const loaded = await manager.loadFile(file as unknown as TFile);
       expect(loaded.messages[1].message).toBe("Got it.");
@@ -814,7 +815,7 @@ describe("AgentChatPersistenceManager", () => {
       const memorySaves = [
         {
           agentName: "Maya",
-          memoryPath: "copilot/agents/maya/MEMORY.md",
+          memoryPath: "copilot/teammates/maya/MEMORY.md",
           rule: "Flag video length first.",
         },
       ];
@@ -823,7 +824,7 @@ describe("AgentChatPersistenceManager", () => {
         name: "Maya",
         mention: "mention-1",
         reply: "Noted.",
-        changed: ["copilot/agents/maya/MEMORY.md"],
+        changed: ["copilot/teammates/maya/MEMORY.md"],
       });
       const saved = await manager.saveSession(
         [
@@ -841,7 +842,7 @@ describe("AgentChatPersistenceManager", () => {
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/941 keeps a chat's card states on its last message only and reads them back, leaving each message's text as written", async () => {
       const chatStates = {
-        "agent-draft": {
+        "teammate-draft": {
           draft: { name: "Nora", title: "Family", instruction: "You plan pickups.\nBe brief -->" },
           draftedBy: "coco",
           afterUserTurn: 1,
@@ -858,7 +859,7 @@ describe("AgentChatPersistenceManager", () => {
       const file = app.files.get(saved!.path)!;
 
       expect(file.contents).toContain(
-        '**ai**: Here\'s a draft.\n<!-- copilot-message {"chatStates":{"agent-draft":{"draft":{"name":"Nora","title":"Family","instruction":"You plan pickups.\\nBe brief --\\u003e"},"draftedBy":"coco","afterUserTurn":1}}} -->\n'
+        '**ai**: Here\'s a draft.\n<!-- copilot-message {"chatStates":{"teammate-draft":{"draft":{"name":"Nora","title":"Family","instruction":"You plan pickups.\\nBe brief --\\u003e"},"draftedBy":"coco","afterUserTurn":1}}} -->\n'
       );
       expect(file.contents?.match(/copilot-message/g)).toHaveLength(1);
       const loaded = await manager.loadFile(file as unknown as TFile);
@@ -877,7 +878,7 @@ describe("AgentChatPersistenceManager", () => {
     });
 
     it("keeps a message's mentioned agents, their runs and the chat's card states together on one data line and reads all three back (https://github.com/Brevilabs/obsidian-copilot-private/issues/947)", async () => {
-      const chatStates = { "agent-draft": { draftedBy: "coco", afterUserTurn: 1 } };
+      const chatStates = { "teammate-draft": { draftedBy: "coco", afterUserTurn: 1 } };
       const agentMentions = [
         {
           id: "run-1",
@@ -923,7 +924,7 @@ describe("AgentChatPersistenceManager", () => {
           "---",
           "",
           "**user**: Hi",
-          '<!-- copilot-message {"chatStates":{"agent-draft":{"draftedBy":"coco"}}} -->',
+          '<!-- copilot-message {"chatStates":{"teammate-draft":{"draftedBy":"coco"}}} -->',
           "[Timestamp: 2026/01/01 12:00:00]",
           "",
           "**ai**: Hello.",
@@ -957,7 +958,9 @@ describe("AgentChatPersistenceManager", () => {
       );
       const file = app.files.get(saved!.path)!;
 
-      expect(file.contents).toContain('<!-- copilot-message {"agentMentions":[{"id":"mention-1"');
+      expect(file.contents).toContain(
+        '<!-- copilot-message {"teammateMentions":[{"id":"mention-1","teammate":"maya","name":"Maya"'
+      );
       const loaded = await manager.loadFile(file as unknown as TFile);
       expect(loaded.messages[0].message).toBe("@Maya add one line.");
       expect(loaded.messages[0].agentMentions).toEqual(agentMentions);
@@ -976,7 +979,7 @@ describe("AgentChatPersistenceManager", () => {
           "---",
           "",
           "**user**: @Maya review the plan",
-          '<!-- copilot-message {"agentMentions":[{"id":"m1","agent":"maya","name":"Maya","status":"working","startedAt":5,"chat":{"backendId":"claude","sessionId":"h1"}},{"id":"m2","agent":"leo","name":"Leo","status":"dancing","startedAt":5},"x"]} -->',
+          '<!-- copilot-message {"teammateMentions":[{"id":"m1","teammate":"maya","name":"Maya","status":"working","startedAt":5,"chat":{"backendId":"claude","sessionId":"h1"}},{"id":"m2","teammate":"leo","name":"Leo","status":"dancing","startedAt":5},"x"]} -->',
           "[Timestamp: 2026/01/01 12:00:00]",
         ].join("\n"),
       });
@@ -1005,7 +1008,7 @@ describe("AgentChatPersistenceManager", () => {
           "---",
           "",
           "**ai**: Got it.",
-          '<!-- copilot-message {"memorySaves":[{"rule":42},"x",{"agentName":"Coco","memoryPath":"copilot/agents/coco/MEMORY.md","rule":"Keep it short."}]} -->',
+          '<!-- copilot-message {"memorySaves":[{"rule":42},"x",{"teammateName":"Coco","memoryPath":"copilot/teammates/coco/MEMORY.md","rule":"Keep it short."}]} -->',
           "[Timestamp: 2026/01/01 12:00:00]",
         ].join("\n"),
       });
@@ -1016,7 +1019,7 @@ describe("AgentChatPersistenceManager", () => {
       expect(loaded.messages[0].memorySaves).toEqual([
         {
           agentName: "Coco",
-          memoryPath: "copilot/agents/coco/MEMORY.md",
+          memoryPath: "copilot/teammates/coco/MEMORY.md",
           rule: "Keep it short.",
         },
       ]);
@@ -1301,7 +1304,7 @@ describe("AgentChatPersistenceManager", () => {
         "claude"
       );
       const file = app.files.get(saved!.path)!;
-      expect(file.contents).toContain('<!-- copilot-message {"agents":["Maya"]} -->');
+      expect(file.contents).toContain('<!-- copilot-message {"teammates":["Maya"]} -->');
 
       const loaded = await manager.loadFile(file as unknown as TFile);
 
@@ -1488,16 +1491,16 @@ describe("AgentChatPersistenceManager", () => {
       expect(loaded.agent).toBeUndefined();
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/937 opens a chat note whose agent property is a list, a number, null, blank or broken YAML as a Copilot chat, keeps that property through a save, and trims an agent written as text", async () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/937 opens a chat note whose teammate property is a list, a number, null, blank or broken YAML as a Copilot chat, keeps that property through a save, and trims a teammate written as text", async () => {
       const agentLines = {
-        list: "agent: [coco]",
-        number: "agent: 5",
-        null: "agent: null",
-        empty: 'agent: ""',
-        whitespace: 'agent: "   "',
-        plainText: "agent:  coco  ",
-        quotedText: 'agent: " coco "',
-        brokenYaml: 'agent: "coco',
+        list: "teammate: [coco]",
+        number: "teammate: 5",
+        null: "teammate: null",
+        empty: 'teammate: ""',
+        whitespace: 'teammate: "   "',
+        plainText: "teammate:  coco  ",
+        quotedText: 'teammate: " coco "',
+        brokenYaml: 'teammate: "coco',
       };
       const read: Record<string, string | undefined> = {};
       for (const [name, line] of Object.entries(agentLines)) {
@@ -1531,7 +1534,7 @@ describe("AgentChatPersistenceManager", () => {
         quotedText: "coco",
         brokenYaml: undefined,
       });
-      expect(app.files.get("test-folder/agent__list.md")!.contents).toContain("agent: [coco]");
+      expect(app.files.get("test-folder/agent__list.md")!.contents).toContain("teammate: [coco]");
     });
 
     it("maps a legacy agent__ chat with no projectId frontmatter to GLOBAL_SCOPE", async () => {

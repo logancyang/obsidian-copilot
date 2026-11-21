@@ -11,7 +11,7 @@ import { TFile, type App } from "obsidian";
 import React from "react";
 
 const ISSUE_988 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/988";
-const MEMORY = "copilot/agents/coco/MEMORY.md";
+const MEMORY = "copilot/teammates/coco/MEMORY.md";
 const RULE = "Launch videos lead with user value, not the feature list.";
 const SAVE = { agentName: "Coco", memoryPath: MEMORY, rule: RULE };
 const MEMORY_TEXT = `## How to work\n\nWrite dates as Nov 16.\n2026-10-30 · Asked\n\n${RULE}\n2026-11-16 · Asked\n`;
@@ -155,7 +155,7 @@ describe("memorySaveCards", () => {
     it("does nothing for a file that is gone", async () => {
       const { app, newLeaf } = fakeApp();
 
-      await openAgentFile(app, "copilot/agents/gone/instructions.md");
+      await openAgentFile(app, "copilot/teammates/gone/instructions.md");
 
       expect(newLeaf.openFile).not.toHaveBeenCalled();
     });
@@ -196,7 +196,7 @@ describe("memorySaveCards", () => {
     it("does nothing once MEMORY.md is gone", async () => {
       const { app, newLeaf } = fakeApp();
 
-      await openMemoryRule(app, "copilot/agents/gone/MEMORY.md", RULE);
+      await openMemoryRule(app, "copilot/teammates/gone/MEMORY.md", RULE);
 
       expect(newLeaf.openFile).not.toHaveBeenCalled();
     });
@@ -216,7 +216,7 @@ describe("memorySaveCards", () => {
       fireEvent.click(screen.getByText("Open instruction"));
 
       expect(raw.workspace.openLinkText).toHaveBeenCalledWith(
-        "copilot/agents/coco/instructions.md",
+        "copilot/teammates/coco/instructions.md",
         "",
         "tab"
       );

@@ -62,7 +62,7 @@ let nextChat = 1;
 
 function seedAgent(slug: string, name: string, instruction: string): void {
   vault.writeByHand(
-    `copilot/agents/${slug}/instructions.md`,
+    `copilot/teammates/${slug}/instructions.md`,
     serializeInstructionsFile({ name, title: `${name}'s title`, model: null }, instruction)
   );
 }
@@ -224,7 +224,7 @@ async function askBoth(descriptor?: BackendDescriptor): Promise<TwoAsked> {
 
 function markerOf(relay: string): Record<string, unknown> {
   const marker = relay.split("\n")[0];
-  return JSON.parse(marker.slice("<!-- copilot-agent-reply ".length, -" -->".length)) as Record<
+  return JSON.parse(marker.slice("<!-- copilot-teammate-reply ".length, -" -->".length)) as Record<
     string,
     unknown
   >;
@@ -233,10 +233,10 @@ function markerOf(relay: string): Record<string, unknown> {
 function relayedFrom(relay: string): string {
   const marker = relay.split("\n")[0];
   return (
-    JSON.parse(marker.slice("<!-- copilot-agent-reply ".length, -" -->".length)) as {
-      agent: string;
+    JSON.parse(marker.slice("<!-- copilot-teammate-reply ".length, -" -->".length)) as {
+      teammate: string;
     }
-  ).agent;
+  ).teammate;
 }
 
 beforeEach(async () => {
@@ -319,7 +319,7 @@ describe("hiddenAgentChats", () => {
       });
 
       it(`starts the asked agent's chat with its own instruction, memory and save rules (${ASKED_MEMORY})`, async () => {
-        vault.writeByHand("copilot/agents/maya/MEMORY.md", "Flag video length first.");
+        vault.writeByHand("copilot/teammates/maya/MEMORY.md", "Flag video length first.");
         const coco = await openChat({ agentSlug: "coco" });
 
         chats.ask(coco, "maya", "Review the plan.");
@@ -330,7 +330,7 @@ describe("hiddenAgentChats", () => {
         expect(prompt.prompt).toContain("Always name the biggest risk first.");
         expect(prompt.prompt).toContain("<memory>\nFlag video length first.\n</memory>");
         expect(prompt.prompt).toContain("Save a rule to your memory only when");
-        expect(prompt.prompt).not.toContain("ask_agent");
+        expect(prompt.prompt).not.toContain("ask_teammate");
       });
 
       it(`starts the asked agent's chat on its own prompt variant, so a coding agent that stores prompts by agent keeps it apart from the agent's own chat (${ENTRIES})`, async () => {
@@ -402,14 +402,14 @@ describe("hiddenAgentChats", () => {
 
         const relayed = await fake.untilPrompt(sessionIdOf(coco));
         const [marker] = relayed.split("\n");
-        expect(marker).toMatch(/^<!-- copilot-agent-reply \{.*\} -->$/);
+        expect(marker).toMatch(/^<!-- copilot-teammate-reply \{.*\} -->$/);
         expect(
-          JSON.parse(marker.slice("<!-- copilot-agent-reply ".length, -" -->".length))
-        ).toMatchObject({ agent: "maya", name: "Maya" });
+          JSON.parse(marker.slice("<!-- copilot-teammate-reply ".length, -" -->".length))
+        ).toMatchObject({ teammate: "maya", name: "Maya" });
         expect(relayed).toContain("Maya replied. Pass the reply on to the user now.");
         expect(relayed).toContain(RELAY_PRINCIPLE);
         expect(relayed).toContain(
-          '<agent-reply from="Maya">\nI disagree. Six features is too many.\n</agent-reply>'
+          '<teammate-reply from="Maya">\nI disagree. Six features is too many.\n</teammate-reply>'
         );
       });
 
@@ -449,7 +449,7 @@ describe("hiddenAgentChats", () => {
           rule: "Flag the budget first.",
           replaced: "Flag video length first.",
           agentName: "Maya",
-          memoryPath: "copilot/agents/maya/MEMORY.md",
+          memoryPath: "copilot/teammates/maya/MEMORY.md",
         };
         maya.store.setFileChanges(maya.store.getDisplayMessages().at(-1)!.id, [], [save]);
 
@@ -466,7 +466,7 @@ describe("hiddenAgentChats", () => {
         const coco = await openChat({ agentSlug: "coco" });
         const maya = await askedAndPrompted(coco, "Tidy your memory file.");
         const memory = {
-          path: "copilot/agents/maya/MEMORY.md",
+          path: "copilot/teammates/maya/MEMORY.md",
           status: "modified" as const,
           before: "## How to work\n\nFlag video length first.\n",
           after: "## How to work\n",
@@ -479,7 +479,7 @@ describe("hiddenAgentChats", () => {
 
         const relayed = await fake.untilPrompt(sessionIdOf(coco));
         const relayMessage = coco.store.getDisplayMessages().find((m) => m.message === relayed);
-        expect(relayed).toContain("Maya changed copilot/agents/maya/MEMORY.md.");
+        expect(relayed).toContain("Maya changed copilot/teammates/maya/MEMORY.md.");
         expect(relayMessage?.fileChanges).toEqual([memory]);
         expect(relayMessage?.memorySaves).toBeUndefined();
       });
@@ -1439,10 +1439,10 @@ describe("hiddenAgentChats", () => {
 
         const relayed = await fake.untilPrompt(sessionIdOf(coco), 2);
         expect(relayed).toContain(
-          "Maya has a question for the user, quoted below, and waits for the answer. Ask the user in your own words, then end your turn. When the user answers, pass the answer to Maya with answer_agent."
+          "Maya has a question for the user, quoted below, and waits for the answer. Ask the user in your own words, then end your turn. When the user answers, pass the answer to Maya with answer_teammate."
         );
         expect(relayed).toContain(
-          '<agent-reply from="Maya">\nOctober or November?\n</agent-reply>'
+          '<teammate-reply from="Maya">\nOctober or November?\n</teammate-reply>'
         );
         expect(mentionsOn(coco)?.[0]).toEqual(expect.objectContaining({ status: "question" }));
         expect(chats.workingIn("maya")).toBe("Coco");
@@ -1540,7 +1540,7 @@ describe("hiddenAgentChats", () => {
         answer(maya, "One more thing.");
 
         expect(await fake.untilPrompt(sessionIdOf(coco), 3)).toContain(
-          '<agent-reply from="Maya">\nWhich year?\n</agent-reply>'
+          '<teammate-reply from="Maya">\nWhich year?\n</teammate-reply>'
         );
         fake.endTurn(sessionIdOf(coco));
         expect(mentionsOn(coco)?.[0].status).toBe("question");
@@ -1722,7 +1722,7 @@ describe("hiddenAgentChats", () => {
         expect(relayed).toContain(
           "Maya stopped, as the user asked. Maya's changes stay. Tell the user how far Maya got and what Maya changed"
         );
-        expect(relayed).toContain('<agent-reply from="Maya">\nMatched 120 of 214 so far.\n');
+        expect(relayed).toContain('<teammate-reply from="Maya">\nMatched 120 of 214 so far.\n');
         expect(relayed).toContain("Maya changed Plans/Launch plan.md.");
         const relayMessage = coco.store.getDisplayMessages().find((m) => m.message === relayed);
         expect(relayMessage?.fileChanges).toEqual([PLAN_CHANGE]);

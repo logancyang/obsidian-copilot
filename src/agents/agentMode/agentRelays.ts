@@ -35,7 +35,7 @@ export function relayRuns(messages: readonly AgentChatMessage[]): ReadonlyMap<st
   return relays;
 }
 
-// A saved ask_agent call doesn't name the run it started, so its card finds the run its agent has on the nearest message at or before the call: an ask saves its run on the last message before it, and a message to an agent already working goes to that run.
+// A saved ask_teammate call doesn't name the run it started, so its card finds the run its agent has on the nearest message at or before the call: an ask saves its run on the last message before it, and a message to an agent already working goes to that run.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/967
 export function findRun(
   messages: readonly AgentChatMessage[],

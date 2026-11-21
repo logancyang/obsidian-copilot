@@ -1366,7 +1366,7 @@ describe("OpencodeBackend", () => {
           }).buildSpawnDescriptor({ vaultBasePath: "/vault" });
 
           expect(desc.env.OPENCODE_CONFIG).toBe(file);
-          expect(desc.env.OPENCODE_CONFIG_CONTENT).not.toContain("copilot-agent-");
+          expect(desc.env.OPENCODE_CONFIG_CONTENT).not.toContain("copilot-teammate-");
           expect(fs.statSync(path.dirname(file)).isDirectory()).toBe(true);
           expect(fs.existsSync(file)).toBe(false);
         } finally {
@@ -1478,18 +1478,18 @@ describe("OpencodeBackend", () => {
 
         const mode = await backend.selectAgentMode(COCO, modeOption("copilot-build"));
 
-        expect(mode).toEqual({ configId: "mode", value: "copilot-agent-coco/default" });
+        expect(mode).toEqual({ configId: "mode", value: "copilot-teammate-coco/default" });
         const agents = readAgents();
         expect(Object.keys(agents)).toEqual([
-          "copilot-agent-coco/default",
-          "copilot-agent-coco/auto",
+          "copilot-teammate-coco/default",
+          "copilot-teammate-coco/auto",
         ]);
-        expect(agents["copilot-agent-coco/default"]).toEqual({
+        expect(agents["copilot-teammate-coco/default"]).toEqual({
           ...shared["copilot-build"],
           mode: "primary",
           system: `${sharedPrompt}\n\nIn this chat you are Coco.`,
         });
-        expect(agents["copilot-agent-coco/auto"]).toEqual({
+        expect(agents["copilot-teammate-coco/auto"]).toEqual({
           mode: "primary",
           system: `${sharedPrompt}\n\nIn this chat you are Coco.`,
         });
@@ -1500,36 +1500,38 @@ describe("OpencodeBackend", () => {
         const backend = await spawnedBackend();
         const sharedPrompt = buildAgentSystemPrompt("opencode", APP);
         await backend.selectAgentMode(COCO, modeOption("copilot-build"));
-        const ownBefore = readAgents()["copilot-agent-coco/default"];
+        const ownBefore = readAgents()["copilot-teammate-coco/default"];
 
         const alt = await backend.selectAgentMode(COCO_ALT, modeOption("copilot-build"));
         const ownAgain = await backend.selectAgentMode(
           COCO,
-          modeOption("copilot-agent-coco/default")
+          modeOption("copilot-teammate-coco/default")
         );
 
-        expect(alt).toEqual({ configId: "mode", value: "copilot-agent-coco/alt/default" });
-        expect(ownAgain).toEqual({ configId: "mode", value: "copilot-agent-coco/default" });
+        expect(alt).toEqual({ configId: "mode", value: "copilot-teammate-coco/alt/default" });
+        expect(ownAgain).toEqual({ configId: "mode", value: "copilot-teammate-coco/default" });
         const agents = readAgents();
         expect(Object.keys(agents)).toEqual([
-          "copilot-agent-coco/default",
-          "copilot-agent-coco/auto",
-          "copilot-agent-coco/alt/default",
-          "copilot-agent-coco/alt/auto",
+          "copilot-teammate-coco/default",
+          "copilot-teammate-coco/auto",
+          "copilot-teammate-coco/alt/default",
+          "copilot-teammate-coco/alt/auto",
         ]);
-        expect(agents["copilot-agent-coco/default"]).toEqual(ownBefore);
-        expect(agents["copilot-agent-coco/default"].system).toBe(
+        expect(agents["copilot-teammate-coco/default"]).toEqual(ownBefore);
+        expect(agents["copilot-teammate-coco/default"].system).toBe(
           `${sharedPrompt}\n\nIn this chat you are Coco.`
         );
-        expect(agents["copilot-agent-coco/alt/default"].system).toBe(
+        expect(agents["copilot-teammate-coco/alt/default"].system).toBe(
           `${sharedPrompt}\n\nCoco, alt.`
         );
-        expect(agents["copilot-agent-coco/alt/auto"].system).toBe(`${sharedPrompt}\n\nCoco, alt.`);
+        expect(agents["copilot-teammate-coco/alt/auto"].system).toBe(
+          `${sharedPrompt}\n\nCoco, alt.`
+        );
       });
 
       it.each([
-        ["copilot-agent-coco/default", "copilot-agent-coco/alt/default"],
-        ["copilot-agent-coco/auto", "copilot-agent-coco/alt/auto"],
+        ["copilot-teammate-coco/default", "copilot-teammate-coco/alt/default"],
+        ["copilot-teammate-coco/auto", "copilot-teammate-coco/alt/auto"],
       ])(
         "https://github.com/Brevilabs/obsidian-copilot-private/issues/991 moves a prompt variant's chat saved on %s, the entry it shared with the agent's own chat, to its own %s",
         async (current, moved) => {
@@ -1547,8 +1549,8 @@ describe("OpencodeBackend", () => {
         const backend = await spawnedBackend();
 
         await expect(
-          backend.selectAgentMode(COCO, modeOption("copilot-agent-coco/auto"))
-        ).resolves.toEqual({ configId: "mode", value: "copilot-agent-coco/auto" });
+          backend.selectAgentMode(COCO, modeOption("copilot-teammate-coco/auto"))
+        ).resolves.toEqual({ configId: "mode", value: "copilot-teammate-coco/auto" });
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/937 keeps an agent another chat started while OpenCode runs, so that chat's next turn still finds its agent after the folder is removed", async () => {
@@ -1558,16 +1560,16 @@ describe("OpencodeBackend", () => {
         await backend.selectAgentMode({ slug: "maya", prompt: "You are Maya." }, null);
 
         expect(Object.keys(readAgents())).toEqual([
-          "copilot-agent-coco/default",
-          "copilot-agent-coco/auto",
-          "copilot-agent-maya/default",
-          "copilot-agent-maya/auto",
+          "copilot-teammate-coco/default",
+          "copilot-teammate-coco/auto",
+          "copilot-teammate-maya/default",
+          "copilot-teammate-maya/auto",
         ]);
       });
 
       it.each([
-        ["copilot-agent-coco/default", "copilot-build"],
-        ["copilot-agent-coco/auto", "build"],
+        ["copilot-teammate-coco/default", "copilot-build"],
+        ["copilot-teammate-coco/auto", "build"],
       ])(
         "https://github.com/Brevilabs/obsidian-copilot-private/issues/937 moves a chat reopened without its agent from %s to Copilot's %s, writing nothing",
         async (current, copilotMode) => {

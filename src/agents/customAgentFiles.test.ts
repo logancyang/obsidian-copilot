@@ -38,15 +38,15 @@ describe("customAgentFiles", () => {
       expect(deriveAgentSlug(name)).toBe(slug);
     });
 
-    it("falls back to agent for a name with no letters or digits, so the folder still has a name (https://github.com/Brevilabs/obsidian-copilot-private/issues/936)", () => {
-      expect(deriveAgentSlug("!!!")).toBe("agent");
+    it("falls back to teammate for a name with no letters or digits, so the folder still has a name (https://github.com/Brevilabs/obsidian-copilot-private/issues/936)", () => {
+      expect(deriveAgentSlug("!!!")).toBe("teammate");
     });
 
     it.each([
-      { name: "Aux", slug: "aux-agent" },
-      { name: "CON", slug: "con-agent" },
-      { name: "Com1", slug: "com1-agent" },
-      { name: "lpt9", slug: "lpt9-agent" },
+      { name: "Aux", slug: "aux-teammate" },
+      { name: "CON", slug: "con-teammate" },
+      { name: "Com1", slug: "com1-teammate" },
+      { name: "lpt9", slug: "lpt9-teammate" },
     ])(
       "derives $slug from the name $name, because Windows cannot create a folder named after a device (https://github.com/Brevilabs/obsidian-copilot-private/issues/936)",
       ({ name, slug }) => {
@@ -101,7 +101,7 @@ describe("customAgentFiles", () => {
     it.each([
       { agent: { slug: "coco", name: "Chief" }, name: "Coco" },
       { agent: { slug: "maya-chen", name: "Maya Chen" }, name: "maya-chen" },
-      { agent: { slug: "agent", name: "!!!" }, name: "???" },
+      { agent: { slug: "teammate", name: "!!!" }, name: "???" },
     ])(
       "says $agent.name already uses the folder $agent.slug for the name $name (https://github.com/Brevilabs/obsidian-copilot-private/issues/936)",
       ({ agent, name }) => {

@@ -2,7 +2,7 @@ import type { App } from "obsidian";
 import { copilotAppDataDir, getVaultId } from "@/utils/appPaths";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 
-const AGENT_MODE_PREFIX = "copilot-agent-";
+const AGENT_MODE_PREFIX = "copilot-teammate-";
 
 export interface CustomAgentMode {
   slug: string;

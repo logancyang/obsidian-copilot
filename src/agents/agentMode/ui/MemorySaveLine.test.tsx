@@ -2,7 +2,7 @@ import { MemorySaveLine, type MemorySaveLineProps } from "@/agents/agentMode/ui/
 import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 
-const MEMORY_PATH = "copilot/agents/coco/MEMORY.md";
+const MEMORY_PATH = "copilot/teammates/coco/MEMORY.md";
 
 function renderLine(props: Partial<MemorySaveLineProps> = {}) {
   const onOpen = jest.fn();

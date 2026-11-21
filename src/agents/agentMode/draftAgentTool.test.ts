@@ -43,9 +43,9 @@ describe("draftAgentTool", () => {
 
   describe("createDraftAgentTool()", () => {
     describe("promptHint", () => {
-      it("gives a model that can't see tool descriptions the sentences naming draft_agent, when to call it and that it can't create an agent (https://github.com/Brevilabs/obsidian-copilot-private/issues/986)", () => {
+      it("gives a model that can't see tool descriptions the sentences naming draft_teammate, when to call it and that it can't create an agent (https://github.com/Brevilabs/obsidian-copilot-private/issues/986)", () => {
         expect(buildTool().promptHint).toBe(
-          "When the user asks you to make a new agent, draft it with the draft_agent tool from obsidian-copilot, which shows them a card to review and create it. If you or another agent already handles that job, say so and ask before drafting. You can't create an agent yourself."
+          "When the user asks you to make a new agent, draft it with the draft_teammate tool from obsidian-copilot, which shows them a card to review and create it. If you or another agent already handles that job, say so and ask before drafting. You can't create an agent yourself."
         );
       });
     });
@@ -161,7 +161,7 @@ describe("draftAgentTool", () => {
       it(`writes nothing to the agents folder, even when the agent was asked to just create it (${ISSUE})`, async () => {
         const vault = createFakeAgentVault();
         vault.writeByHand(
-          "copilot/agents/coco/instructions.md",
+          "copilot/teammates/coco/instructions.md",
           "---\nname: Coco\n---\nKeep the vault."
         );
         const store = new CustomAgentStore(vault.app);

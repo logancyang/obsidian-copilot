@@ -10,7 +10,7 @@ export interface AgentSessionIndexEntry {
   lastAccessedAtMs: number;
   projectId?: string;
   model?: ModelSelection;
-  agent?: string;
+  teammate?: string;
 }
 
 export interface AskedConversation {
@@ -31,7 +31,7 @@ export interface AskedConversation {
 interface AgentSessionIndexFile {
   version: 1;
   entries: AgentSessionIndexEntry[];
-  askedConversations: AskedConversation[];
+  askedConversations: unknown[];
 }
 
 export interface AgentSessionIndexStorage {
@@ -71,7 +71,7 @@ function sanitizeEntry(raw: unknown): AgentSessionIndexEntry | null {
     lastAccessedAtMs: lastAccessedAtMs ?? createdAtMs!,
     projectId: typeof r.projectId === "string" && r.projectId.trim() ? r.projectId : undefined,
     model: sanitizeModel(r.model),
-    agent: typeof r.agent === "string" && r.agent ? r.agent : undefined,
+    teammate: typeof r.teammate === "string" && r.teammate ? r.teammate : undefined,
   };
 }
 
@@ -79,7 +79,7 @@ function sanitizeAskedConversation(raw: unknown): AskedConversation | null {
   if (typeof raw !== "object" || raw === null) return null;
   const r = raw as Record<string, unknown>;
   const askedIn = r.askedIn as Record<string, unknown> | null | undefined;
-  const strings = [r.backendId, r.sessionId, r.agent, askedIn?.backendId, askedIn?.sessionId];
+  const strings = [r.backendId, r.sessionId, r.teammate, askedIn?.backendId, askedIn?.sessionId];
   if (strings.some((value) => typeof value !== "string" || !value)) return null;
   const numbers = [r.firstAtMs, r.lastAtMs, r.asks];
   if (numbers.some((value) => typeof value !== "number") || typeof r.firstAsk !== "string") {
@@ -89,7 +89,7 @@ function sanitizeAskedConversation(raw: unknown): AskedConversation | null {
     backendId: r.backendId as BackendId,
     sessionId: r.sessionId as string,
     model: sanitizeModel(r.model),
-    agent: r.agent as string,
+    agent: r.teammate as string,
     askedBy: typeof r.askedBy === "string" && r.askedBy ? r.askedBy : undefined,
     askedIn: {
       backendId: askedIn!.backendId as BackendId,
@@ -163,7 +163,7 @@ export class AgentSessionIndex {
       ),
       projectId: entry.projectId ?? existing?.projectId,
       model: entry.model ?? existing?.model,
-      agent: entry.agent ?? existing?.agent,
+      teammate: entry.teammate ?? existing?.teammate,
     });
     this.scheduleSave();
   }
@@ -311,7 +311,12 @@ export class AgentSessionIndex {
     const file: AgentSessionIndexFile = {
       version: 1,
       entries: Array.from(this.entries.values()),
-      askedConversations: Array.from(this.askedConversations.values()),
+      // The file names the asked teammate teammate, while the code still calls it agent.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/1000
+      askedConversations: Array.from(this.askedConversations.values(), ({ agent, ...rest }) => ({
+        ...rest,
+        teammate: agent,
+      })),
     };
     return JSON.stringify(file, null, 2);
   }

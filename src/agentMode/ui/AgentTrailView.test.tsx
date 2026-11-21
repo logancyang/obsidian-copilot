@@ -790,7 +790,7 @@ describe("AgentTrail", () => {
       mcpServer: "obsidian-copilot",
       copilotTools: { calls: [{ name: "save_memory", args: { rule } }] },
     });
-    const saved = { agentName: "Coco", memoryPath: "copilot/agents/coco/MEMORY.md", rule };
+    const saved = { agentName: "Coco", memoryPath: "copilot/teammates/coco/MEMORY.md", rule };
     const { container } = renderTrail({
       parts: [READ_A, save, text("Reworked the outline.")],
       memorySaves: { saves: [saved], byCall: new Map([["save", [saved]]]), unplaced: [] },
@@ -807,7 +807,7 @@ describe("AgentTrail", () => {
       vendorToolName: "Edit",
       toolKind: "edit",
       title: "Edit MEMORY.md",
-      locations: [{ path: "copilot/agents/coco/MEMORY.md" }],
+      locations: [{ path: "copilot/teammates/coco/MEMORY.md" }],
     });
     const { container } = renderTrail({
       parts: [save, text("Reworked the outline.")],

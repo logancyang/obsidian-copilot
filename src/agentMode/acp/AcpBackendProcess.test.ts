@@ -1143,7 +1143,7 @@ describe("AcpBackendProcess", () => {
             toolCallId: "tc1",
             title: "Edit",
             kind: "edit",
-            locations: [{ path: "/vault/copilot/agents/coco/MEMORY.md" }],
+            locations: [{ path: "/vault/copilot/teammates/coco/MEMORY.md" }],
           },
           options: [
             { optionId: "approved", name: "Allow once", kind: "allow_once" },
@@ -1418,7 +1418,7 @@ describe("AcpBackendProcess", () => {
           buildStubBackend({
             id: "codex",
             displayName: "Codex",
-            extendChatPrompt: () => "Ask agents with ask_agent.",
+            extendChatPrompt: () => "Ask agents with ask_teammate.",
           }),
           "1.0.0",
           buildStubDescriptor({ id: "codex", displayName: "Codex" })
@@ -1747,7 +1747,7 @@ describe("AcpBackendProcess", () => {
         };
         const backend = new AcpBackendProcess(
           buildApp(),
-          buildStubBackend({ extendChatPrompt: () => "Ask agents with ask_agent." }),
+          buildStubBackend({ extendChatPrompt: () => "Ask agents with ask_teammate." }),
           "1.0.0",
           buildStubDescriptor()
         );
@@ -1759,7 +1759,7 @@ describe("AcpBackendProcess", () => {
           systemPrompt: {
             mode: "append",
             content: [
-              { type: "text", text: "You are Obsidian Copilot.\n\nAsk agents with ask_agent." },
+              { type: "text", text: "You are Obsidian Copilot.\n\nAsk agents with ask_teammate." },
             ],
           },
         });

@@ -76,7 +76,7 @@ function FormStory({ setup, ...props }: StoryProps) {
         <CreateAgentForm
           agents={TEAM}
           folderNames={(props.agents ?? TEAM).map((agent) => agent.slug)}
-          agentsFolder="copilot/agents"
+          agentsFolder="copilot/teammates"
           models={MODELS}
           presetFaces={PRESET_FACES}
           closeGuard={new CreateAgentCloseGuard()}

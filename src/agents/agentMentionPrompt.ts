@@ -1,6 +1,6 @@
 import type { CustomAgent } from "@/agents/CustomAgentStore";
 
-export const ASK_AGENT_TOOL_NAME = "ask_agent";
+export const ASK_AGENT_TOOL_NAME = "ask_teammate";
 
 const WORD_CHARACTER = /[\p{L}\p{N}_]/u;
 
@@ -35,9 +35,9 @@ export function mentionedAgentNames(text: string, agents: readonly CustomAgent[]
 export function agentMentionsBlock(names: readonly string[] | undefined): string | null {
   if (!names?.length) return null;
   return [
-    "<copilot-agents>",
+    "<copilot-teammates>",
     `The user @-mentioned these agents in this message. Ask each of them with the ${ASK_AGENT_TOOL_NAME} tool:`,
     ...names.map((name) => `- ${name}`),
-    "</copilot-agents>",
+    "</copilot-teammates>",
   ].join("\n");
 }

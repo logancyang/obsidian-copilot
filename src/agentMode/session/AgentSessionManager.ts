@@ -2252,7 +2252,7 @@ export class AgentSessionManager {
       projectId,
       undefined,
       undefined,
-      entry?.agent
+      entry?.teammate
     );
     if (!session) {
       throw new Error(`Could not resume session ${sessionId} from the ${backendId} session store.`);
@@ -2565,7 +2565,7 @@ export class AgentSessionManager {
       lastAccessedAtMs: now,
       projectId: session.projectId === GLOBAL_SCOPE ? undefined : session.projectId,
       model: session.getState()?.model?.current,
-      agent: session.agentSlug ?? undefined,
+      teammate: session.agentSlug ?? undefined,
     });
     // The note now points at the session that replaced its unresumable one, so the old entry would list the chat twice.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/902
