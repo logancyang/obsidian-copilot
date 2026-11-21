@@ -11,9 +11,12 @@ This is a big one. Copilot Teammates lets you build a small AI team inside Obsid
 One assistant for everything forgets what you told it, and the rules you give it for one kind of work leak into the rest. Copilot Teammates gives each kind of work its own teammate, with its own instructions and memory.
 
 - **Make a teammate.** Choose **+** on the start screen, give it a name, a face and a model, and say in your own words what it handles. Or ask Copilot to draft one for you.
+  ![The Copilot Chat start screen with Maya, titled Edits my drafts, selected in a row of teammate faces next to Copilot, Coco, Leo, Nora and New, above a chat box that reads Ask Maya anything](https://images.brevilabs.com/newsletters/copilot-releases/4.1.0/start-screen-db91c545.png)
 - **Teach it once.** Correct a teammate or tell it to remember something, and it saves the rule and shows "Maya remembered" in the chat.
+  ![A chat with Maya where the user asks Maya to tighten a launch post and to never open posts with filler, followed by a Maya remembered card quoting the saved rule and Maya's edit to the post](https://images.brevilabs.com/newsletters/copilot-releases/4.1.0/remembered-43e97ad5.png)
 - **Keep work separate.** Your editor's rules stay out of your planner's work. Instructions and memory are notes in your vault that you can open and edit.
 - **Get a second opinion.** Type `@Maya` with a question and Maya works on it in the background while you keep chatting. The answer comes back unsoftened, because a teammate with a different job pushes back.
+  ![A chat with Coco where the user asks @Maya whether the launch post is ready for Friday, with Messaged Maya and Message from Maya cards and Coco passing on Maya's answer that it is not ready, with three problems](https://images.brevilabs.com/newsletters/copilot-releases/4.1.0/ask-teammate-3c5fc309.png)
 - **Bring it to every project.** A teammate isn't tied to a project, so the one that knows how you write comes with you.
 
 Copilot Teammates is a preview for Supporters.
