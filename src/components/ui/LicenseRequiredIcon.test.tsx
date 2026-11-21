@@ -17,7 +17,7 @@ describe("LicenseRequiredIcon", () => {
     it("states the reason in text, since the tooltip only answers a hover", () => {
       render(<LicenseRequiredIcon />);
 
-      expect(screen.getByText("Copilot license required")).toBeTruthy();
+      expect(screen.getByText("License needed for this option, not the plugin.")).toBeTruthy();
     });
   });
 });
