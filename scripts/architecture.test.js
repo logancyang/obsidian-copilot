@@ -15,6 +15,7 @@ const {
   noHostAccessInClient,
   readDebtAt,
 } = require("./architecture");
+const { lintWithRepoConfig } = require("./testing/lintWithRepoConfig");
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/993";
 const SLOW_TEST_MS = 120000;
@@ -55,25 +56,6 @@ function trackedSourceFiles(folder) {
     if (entry.isDirectory()) return trackedSourceFiles(relative);
     return /\.(ts|tsx)$/.test(entry.name) ? [relative] : [];
   });
-}
-
-function lintWithRepoConfig(probes) {
-  const script = `
-    const { ESLint } = require("eslint");
-    const eslint = new ESLint();
-    (async () => {
-      const reports = [];
-      for (const [filePath, source] of JSON.parse(process.argv[1])) {
-        const [result] = await eslint.lintText(source, { filePath });
-        reports.push(result.messages.map((message) => message.ruleId + ": " + message.message));
-      }
-      process.stdout.write(JSON.stringify(reports));
-    })();
-  `;
-  const output = execFileSync(process.execPath, ["-e", script, JSON.stringify(probes)], {
-    cwd: root,
-  });
-  return JSON.parse(output.toString());
 }
 
 function debtWith(imports, clientAccess) {
@@ -404,7 +386,7 @@ describe("architecture", () => {
     it(
       "still lets a described disable comment silence a rule outside the boundary",
       () => {
-        const [report] = lintWithRepoConfig([
+        const [report] = lintWithRepoConfig(root, [
           [
             CLIENT_FILE,
             "// eslint-disable-next-line no-control-regex -- matches a NUL byte\nexport const nul = /\\x00/;",
@@ -422,7 +404,7 @@ describe("architecture", () => {
         const probes = PROBES.flatMap(([rule, file, line]) =>
           disableForms(rule, line).map((source) => [file, source])
         );
-        const reports = lintWithRepoConfig(probes).map(restrictedDisables);
+        const reports = lintWithRepoConfig(root, probes).map(restrictedDisables);
 
         expect(reports).toEqual(
           PROBES.flatMap(([rule]) => [
@@ -443,7 +425,7 @@ describe("architecture", () => {
     it(
       `rejects an inline config comment, which could turn a boundary rule off without a disable comment (${ISSUE})`,
       () => {
-        const [report] = lintWithRepoConfig([
+        const [report] = lintWithRepoConfig(root, [
           [
             CLIENT_FILE,
             '/* eslint boundaries/dependencies: "off" -- probe */\nexport const a = 1;',

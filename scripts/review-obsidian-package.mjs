@@ -119,7 +119,9 @@ async function main() {
     return;
   }
 
-  await printLintResult(await lintRuntimeDependencies(packageJson));
+  await printLintResult(
+    await lintRuntimeDependencies(readJson(resolve(repositoryRoot, "apps/obsidian/package.json")))
+  );
   console.info("Obsidian package metadata, dependency, and license validation passed.");
 }
 
