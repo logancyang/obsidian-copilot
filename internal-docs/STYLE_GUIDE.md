@@ -64,6 +64,8 @@ silently redefines what the boundary means, invites the next one, and
 leaves the file somewhere its folder no longer describes. The same holds
 for `architecture.debt.json`: it lists the violations that existed when the
 rules landed and only shrinks; never add an entry to make a new import pass.
+CI fails a pull request whose totals in that file grow against its base branch;
+`npm run lint:debt` runs the same check against `origin/master`.
 If none of the
 three options above works, the boundary itself is wrong — change the
 boundary deliberately, in its own reviewed change, with the layer rules

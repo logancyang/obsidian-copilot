@@ -1,3 +1,4 @@
+const { execFileSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const { isBuiltin } = require("module");
@@ -18,11 +19,41 @@ function readJson(root, name) {
   return JSON.parse(fs.readFileSync(path.join(root, name), "utf8"));
 }
 
+const DEBT_FILE = "architecture.debt.json";
+
+function readDebtAt(ref, root = process.cwd()) {
+  const git = (...args) =>
+    execFileSync("git", args, { cwd: root, encoding: "utf8", stdio: "pipe" });
+  try {
+    git("rev-parse", "--verify", "--quiet", `${ref}^{commit}`);
+  } catch {
+    throw new Error(`Cannot find ${ref} to compare ${DEBT_FILE} against. Fetch it first.`);
+  }
+  if (!git("ls-tree", "--name-only", ref, "--", DEBT_FILE).trim()) return null;
+  return JSON.parse(git("show", `${ref}:${DEBT_FILE}`));
+}
+
+// Totals, not entry paths, so moving a file renames its entries without failing: https://github.com/Brevilabs/obsidian-copilot-private/issues/993
+function compareDebt(base, head) {
+  if (!head) return { ok: true, message: `${DEBT_FILE} is gone.` };
+  const before = base?.counts ?? { imports: 0, clientAccess: 0 };
+  const after = head.counts;
+  const totals = `imports ${before.imports} -> ${after.imports}, client access ${before.clientAccess} -> ${after.clientAccess}`;
+  const ok =
+    base !== null && after.imports <= before.imports && after.clientAccess <= before.clientAccess;
+  return {
+    ok,
+    message: ok
+      ? `${DEBT_FILE} did not grow (${totals}).`
+      : `${DEBT_FILE} grew against the base branch (${totals}). The list only shrinks: fix the import instead of listing it.`,
+  };
+}
+
 function loadArchitecture(root = process.cwd()) {
   return {
     root,
     graph: readJson(root, "architecture.json"),
-    debt: readJson(root, "architecture.debt.json"),
+    debt: readJson(root, DEBT_FILE),
   };
 }
 
@@ -185,9 +216,19 @@ const noHostAccessInClient = {
 
 module.exports = {
   clientBoxes,
+  compareDebt,
   createBoxOf,
   globToRegExp,
   importRows,
   loadArchitecture,
   noHostAccessInClient,
+  readDebtAt,
 };
+
+if (require.main === module) {
+  const headPath = path.join(process.cwd(), DEBT_FILE);
+  const head = fs.existsSync(headPath) ? readJson(process.cwd(), DEBT_FILE) : null;
+  const { ok, message } = compareDebt(readDebtAt(process.argv[2] ?? "origin/master"), head);
+  (ok ? process.stdout : process.stderr).write(`${message}\n`);
+  if (!ok) process.exitCode = 1;
+}

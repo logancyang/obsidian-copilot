@@ -1,15 +1,19 @@
 /** @jest-environment node */
+const { execFileSync } = require("child_process");
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
 const { Linter } = require("eslint");
 const tsParser = require("@typescript-eslint/parser");
 const {
   clientBoxes,
+  compareDebt,
   createBoxOf,
   globToRegExp,
   importRows,
   loadArchitecture,
   noHostAccessInClient,
+  readDebtAt,
 } = require("./architecture");
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/993";
@@ -51,6 +55,31 @@ function trackedSourceFiles(folder) {
     if (entry.isDirectory()) return trackedSourceFiles(relative);
     return /\.(ts|tsx)$/.test(entry.name) ? [relative] : [];
   });
+}
+
+function debtWith(imports, clientAccess) {
+  return { counts: { imports, clientAccess }, imports: {}, clientAccess: [] };
+}
+
+function commitDebt(repo, debtFile) {
+  const git = (...args) => execFileSync("git", args, { cwd: repo, stdio: "pipe" });
+  if (debtFile) {
+    fs.writeFileSync(path.join(repo, "architecture.debt.json"), JSON.stringify(debtFile));
+  } else {
+    fs.rmSync(path.join(repo, "architecture.debt.json"), { force: true });
+  }
+  git("add", "--all");
+  git(
+    "-c",
+    "user.name=test",
+    "-c",
+    "user.email=test@example.com",
+    "commit",
+    "--allow-empty",
+    "-qm",
+    "commit"
+  );
+  return git("rev-parse", "HEAD").toString().trim();
 }
 
 describe("architecture", () => {
@@ -160,6 +189,67 @@ describe("architecture", () => {
         .filter((box) => !boxes.has(box));
 
       expect(unknown).toEqual([]);
+    });
+  });
+
+  describe("compareDebt()", () => {
+    it("passes when both debt totals stay the same or shrink", () => {
+      expect(compareDebt(debtWith(739, 151), debtWith(739, 151)).ok).toBe(true);
+      expect(compareDebt(debtWith(739, 151), debtWith(700, 150)).ok).toBe(true);
+    });
+
+    it(`fails when either total grows, naming both totals and telling the author to fix the import (${ISSUE})`, () => {
+      const result = compareDebt(debtWith(739, 151), debtWith(740, 150));
+
+      expect(result.ok).toBe(false);
+      expect(result.message).toContain("imports 739 -> 740");
+      expect(result.message).toContain("client access 151 -> 150");
+      expect(result.message).toContain("fix the import instead of listing it");
+      expect(compareDebt(debtWith(739, 151), debtWith(739, 152)).ok).toBe(false);
+    });
+
+    it(`fails any debt file when the base branch has none, so a deleted list cannot come back (${ISSUE})`, () => {
+      const result = compareDebt(null, debtWith(0, 0));
+
+      expect(result.ok).toBe(false);
+      expect(result.message).toContain("imports 0 -> 0");
+    });
+
+    it(`passes when the change deletes the debt file (${ISSUE})`, () => {
+      expect(compareDebt(debtWith(739, 151), null).ok).toBe(true);
+      expect(compareDebt(null, null).ok).toBe(true);
+    });
+  });
+
+  describe("readDebtAt()", () => {
+    let repo;
+
+    beforeEach(() => {
+      repo = fs.mkdtempSync(path.join(os.tmpdir(), "architecture-debt-"));
+      execFileSync("git", ["init", "-q"], { cwd: repo });
+    });
+
+    afterEach(() => {
+      fs.rmSync(repo, { recursive: true, force: true });
+    });
+
+    it("returns the debt file as it was committed at the given ref", () => {
+      const base = commitDebt(repo, debtWith(3, 2));
+      commitDebt(repo, debtWith(4, 2));
+
+      expect(readDebtAt(base, repo).counts).toEqual({ imports: 3, clientAccess: 2 });
+    });
+
+    it("returns null when the ref has no debt file", () => {
+      const base = commitDebt(repo, null);
+
+      expect(readDebtAt(base, repo)).toBe(null);
+    });
+
+    it(`throws when the ref is missing, so an unfetched base branch cannot pass the check (${ISSUE})`, () => {
+      commitDebt(repo, debtWith(3, 2));
+
+      expect(() => readDebtAt("origin/no-such-branch", repo)).toThrow("origin/no-such-branch");
     });
   });
 
