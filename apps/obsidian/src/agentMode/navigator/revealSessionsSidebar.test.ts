@@ -1,6 +1,8 @@
-import { revealSessionsSidebar } from "@/agentMode/navigator/revealSessionsSidebar";
+import {
+  revealSessionsSidebar,
+  type SessionsSidebarHost,
+} from "@/agentMode/navigator/revealSessionsSidebar";
 import { SESSIONS_SIDEBAR_VIEWTYPE } from "@/constants";
-import type CopilotPlugin from "@/main";
 import { Notice } from "obsidian";
 
 jest.mock("obsidian", () => ({ Notice: jest.fn() }));
@@ -18,7 +20,7 @@ function makePlugin(options: { existing?: FakeLeaf; leftLeaf?: FakeLeaf | null; 
   const plugin = {
     app: { workspace },
     agentSessionManager: options.ready === false ? undefined : {},
-  } as unknown as CopilotPlugin;
+  } as unknown as SessionsSidebarHost;
   return { plugin, workspace };
 }
 

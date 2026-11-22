@@ -1,10 +1,9 @@
 import { RelevantNotes } from "@/components/chat-components/RelevantNotes";
 import { RELEVANT_NOTES_VIEWTYPE } from "@/constants";
 import { EventTargetContext } from "@/context";
-import CopilotPlugin from "@/main";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
 import { registerActiveLeafChangeBridge } from "@/utils/registerActiveLeafChangeBridge";
-import { ItemView, WorkspaceLeaf } from "obsidian";
+import { ItemView, type TFile, WorkspaceLeaf } from "obsidian";
 import * as React from "react";
 import { Root } from "react-dom/client";
 
@@ -14,10 +13,9 @@ export default class RelevantNotesView extends ItemView {
 
   constructor(
     leaf: WorkspaceLeaf,
-    private plugin: CopilotPlugin
+    private readonly onAddToChat: (note: TFile) => void
   ) {
     super(leaf);
-    this.app = plugin.app;
     this.eventTarget = new EventTarget();
   }
 
@@ -50,7 +48,7 @@ export default class RelevantNotesView extends ItemView {
     this.root.render(
       <EventTargetContext.Provider value={this.eventTarget}>
         <div className="tw-flex tw-size-full tw-flex-col tw-overflow-hidden">
-          <RelevantNotes onAddToChat={(note) => void this.plugin.addNoteToActiveChat(note)} />
+          <RelevantNotes onAddToChat={this.onAddToChat} />
         </div>
       </EventTargetContext.Provider>
     );

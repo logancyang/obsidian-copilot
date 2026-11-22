@@ -11,7 +11,7 @@ Don't use the global `app`. It's a footgun in popout windows and hides dependenc
 - **React components** → `useApp()` from `@/context`. Don't add `app` as a new prop just to thread it down — call `useApp()` at the leaf.
 - **Non-React modules** → take `app` (or just the slice you need, e.g. `app.vault`) as a parameter.
 - **Plugin entry points** → `this.app` on the `Plugin` instance.
-- **Host code** (backends, chat, Quick Chat, host features) → take a `Pick<CopilotHost, …>` from `@/host/platform/copilotHost` naming only the members you use (`app`, `manifest`, `register`, `registerEvent`); never import the plugin class. The plugin implements `CopilotHost`. A chat service the plugin owns (chat history, the Quick Chat UI state) is not a host member: take it as its own narrow parameter or interface.
+- **Host code** (backends, chat, Quick Chat, host features) → take a `Pick<CopilotHost, …>` from `@/host/platform/copilotHost` naming only the members you use (`app`, `manifest`, `register` for cleanup, `registerEvent`); never import the plugin class. The plugin implements `CopilotHost`. A chat service the plugin owns (chat history, the session manager, the Quick Chat UI state) is not a host member: the composition (`main.ts`, `agentMode/index.ts`) passes it in as its own narrow parameter, option or callback.
 
 Never write `declare const app: App;` in new code. A few legacy files do — don't follow them.
 

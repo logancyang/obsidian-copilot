@@ -522,7 +522,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup, Cop
     this.startedViewCreators.set(APPLY_VIEW_TYPE, (leaf) => new ApplyView(leaf));
     this.startedViewCreators.set(
       RELEVANT_NOTES_VIEWTYPE,
-      (leaf) => new RelevantNotesView(leaf, this)
+      (leaf) => new RelevantNotesView(leaf, (note) => void this.addNoteToActiveChat(note))
     );
     if (
       this.CopilotAgentView &&
