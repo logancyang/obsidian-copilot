@@ -6,7 +6,7 @@ This file provides guidance to any coding agent when working with code in this r
 
 Copilot for Obsidian is an AI-powered assistant plugin that integrates various LLM providers (OpenAI, Anthropic, Google, etc.) and coding agents (claude code, codex, opencode) with Obsidian. It provides chat interfaces, semantic search, and various AI-powered commands for note-taking and knowledge management.
 
-The plugin lives in `apps/obsidian` (`src/`, its build config); `@/` imports resolve to `apps/obsidian/src`. Run every command from the repo root; `manifest.json`, `versions.json` and the built `main.js` / `styles.css` stay there.
+The repo is an npm workspaces monorepo. The plugin lives in `apps/obsidian` (`src/`, its build config); `@/` imports resolve to `apps/obsidian/src`. `packages/core`, `packages/protocol` and `packages/client` are the shared packages, imported by package name (`@copilot/core/...`); they have no `obsidian` dependency and no Node types, and `npm run lint` rejects any Node, Electron or Obsidian access in them. Run every command from the repo root; `manifest.json`, `versions.json` and the built `main.js` / `styles.css` stay there.
 
 ## Commands
 

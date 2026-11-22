@@ -458,7 +458,10 @@ describe("architecture", () => {
 
   describe("architecture.json", () => {
     it("names only patterns that still match a source file, so a moved or deleted file leaves no dead entry", () => {
-      const sources = trackedSourceFiles("apps/obsidian/src");
+      const sources = [
+        ...trackedSourceFiles("apps/obsidian/src"),
+        ...trackedSourceFiles("packages"),
+      ];
       const dead = graph.boxes.flatMap(({ box, files }) =>
         files
           .filter((glob) => !sources.some((file) => globToRegExp(glob).test(file)))

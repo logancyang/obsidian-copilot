@@ -1,0 +1,7 @@
+{
+  "name": "@copilot/core",
+  "private": true,
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

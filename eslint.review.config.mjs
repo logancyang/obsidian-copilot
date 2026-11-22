@@ -5,6 +5,7 @@ import { PlainTextParser } from "eslint-plugin-obsidianmd/dist/lib/plainTextPars
 
 const sourceFiles = [
   "apps/obsidian/src/**/*.{ts,tsx}",
+  "packages/*/src/**/*.{ts,tsx}",
   "dev/gallery/**/*.{ts,tsx}",
 ];
 

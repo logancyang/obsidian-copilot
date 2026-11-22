@@ -74,9 +74,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .jest-cache
-          key: ${{ runner.os }}-jest-${{ matrix.shard }}-${{ hashFiles('package-lock.json', 'jest.config.js', 'jest.setup.js', 'tsconfig.json', 'apps/obsidian/tsconfig.json') }}-${{ hashFiles('apps/**', 'dev/**', 'scripts/**') }}
+          key: ${{ runner.os }}-jest-${{ matrix.shard }}-${{ hashFiles('package-lock.json', 'jest.config.js', 'jest.setup.js', 'tsconfig.json', 'tsconfig.base.json', 'apps/obsidian/tsconfig.json') }}-${{ hashFiles('apps/**', 'packages/**', 'dev/**', 'scripts/**') }}
           restore-keys: |
-            ${{ runner.os }}-jest-${{ matrix.shard }}-${{ hashFiles('package-lock.json', 'jest.config.js', 'jest.setup.js', 'tsconfig.json', 'apps/obsidian/tsconfig.json') }}-
+            ${{ runner.os }}-jest-${{ matrix.shard }}-${{ hashFiles('package-lock.json', 'jest.config.js', 'jest.setup.js', 'tsconfig.json', 'tsconfig.base.json', 'apps/obsidian/tsconfig.json') }}-
       - if: steps.node-modules-cache.outputs.cache-hit != 'true'
         run: npm ci
       # The PowerShell wrapper suite runs in publish-windows. Running it again

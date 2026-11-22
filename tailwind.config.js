@@ -5,7 +5,11 @@ import containerQueries from "@tailwindcss/container-queries";
 /** @type {import("tailwindcss").Config} */
 module.exports = {
   prefix: "tw-",
-  content: ["./apps/obsidian/src/**/*.{js,ts,jsx,tsx}", "./apps/obsidian/src/styles/tailwind.css"],
+  content: [
+    "./apps/obsidian/src/**/*.{js,ts,jsx,tsx}",
+    "./apps/obsidian/src/styles/tailwind.css",
+    "./packages/*/src/**/*.{js,ts,jsx,tsx}",
+  ],
   darkMode: ["class"],
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   plugins: [require("tailwindcss-animate"), colorOpacityPlugin, containerQueries],

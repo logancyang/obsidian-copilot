@@ -7,7 +7,7 @@ language, comment, styling, and code-structure rules.
 
 ## TypeScript
 
-- Use absolute imports with `@/` prefix: `import { ChainType } from "@/chainFactory"`
+- Use absolute imports with `@/` prefix: `import { ChainType } from "@/chainFactory"`. Import a workspace package by its name: `@copilot/core/...`
 - Prefer const assertions and type inference where appropriate
 - Use interface for object shapes, type for unions/aliases
 
@@ -19,7 +19,7 @@ ESLint enforces module boundaries in two forms: layer rules
 allowlists, e.g. the gallery/story fence and the `apps/obsidian/src/components/ui`
 purity fence).
 
-`architecture.json` splits `apps/obsidian/src/` by where code runs, and each box is named
+`architecture.json` splits `apps/obsidian/src/` and `packages/` by where code runs, and each box is named
 after the monorepo module its code belongs in. Three boxes, listed under
 `runsAnywhere`, must run in any shell, the phone app included: `core` (the
 basics everything shares, package `packages/core`), `protocol` (the session
@@ -66,7 +66,7 @@ for `architecture.debt.json`: it lists the violations that existed when the
 rules landed and only shrinks; never add an entry to make a new import pass.
 CI fails a pull request whose totals in that file grow against its base branch;
 `npm run lint:debt` runs the same check against `origin/master`.
-A comment cannot silence `boundaries/*` or `copilot/no-host-access-in-client` either: lint rejects an `eslint-disable` comment that names them or names no rule, and rejects `/* eslint ... */` config comments in `apps/obsidian/src/`.
+A comment cannot silence `boundaries/*` or `copilot/no-host-access-in-client` either: lint rejects an `eslint-disable` comment that names them or names no rule, and rejects `/* eslint ... */` config comments in `apps/obsidian/src/` and `packages/*/src/`.
 If none of the
 three options above works, the boundary itself is wrong — change the
 boundary deliberately, in its own reviewed change, with the layer rules

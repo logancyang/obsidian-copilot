@@ -493,7 +493,7 @@ Use the component gallery whenever a feature adds or changes a user-visible Reac
 
 ### Authoring stories
 
-1. Add or update a `*.stories.tsx` file beside the component. The generated gallery index discovers `apps/obsidian/src/**/*.stories.tsx`; do not edit `dev/gallery/stories.generated.ts`.
+1. Add or update a `*.stories.tsx` file beside the component. The generated gallery index discovers `apps/obsidian/src/**/*.stories.tsx` and `packages/*/src/**/*.stories.tsx`; do not edit `dev/gallery/stories.generated.ts`.
 2. Import `Meta` and `StoryObj` from `@/lib/story`, declare component metadata with `satisfies Meta<Props>`, and type every named story as `StoryObj<Props>`.
 3. Cover the load-bearing states a user can actually see: default, empty, loading, success, error, disabled, overflow-prone content, or other states introduced by the feature. Use realistic copy and fixture props rather than production stores or runtime singletons.
 4. Prefer `args` for ordinary prop states and `render` for compositions. Hook-backed render functions are supported. Keep fixtures deterministic and actions inert unless interaction is the behavior under test.
