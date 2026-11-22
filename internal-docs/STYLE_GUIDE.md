@@ -7,7 +7,7 @@ language, comment, styling, and code-structure rules.
 
 ## TypeScript
 
-- Use absolute imports with `@/` prefix: `import { ChainType } from "@/chainFactory"`
+- Use absolute imports with `@/` prefix: `import { ChainType } from "@/chainFactory"`. Import a workspace package by its name: `@copilot/core/...`
 - Prefer const assertions and type inference where appropriate
 - Use interface for object shapes, type for unions/aliases
 
@@ -19,7 +19,7 @@ ESLint enforces module boundaries in two forms: layer rules
 allowlists, e.g. the gallery/story fence and the `apps/obsidian/src/components/ui`
 purity fence).
 
-`architecture.json` splits `apps/obsidian/src/` by where code runs, and each box is named
+`architecture.json` splits `apps/obsidian/src/` and `packages/` by where code runs, and each box is named
 after the monorepo module its code belongs in. Three boxes, listed under
 `runsAnywhere`, must run in any shell, the phone app included: `core` (the
 basics everything shares, package `packages/core`), `protocol` (the session
