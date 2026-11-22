@@ -1,0 +1,5 @@
+{
+  "extends": "./apps/obsidian/tsconfig.json",
+  "include": ["**/*.ts", "apps/obsidian/src", "dev/gallery", "apps/obsidian/typings/**/*.ts"],
+  "exclude": ["node_modules", "docs"]
+}

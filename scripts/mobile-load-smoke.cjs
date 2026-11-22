@@ -8,19 +8,19 @@ const repoRoot = path.resolve(__dirname, "..");
 const failures = [];
 
 const loadCriticalFiles = [
-  "src/main.ts",
-  "src/commands/index.ts",
-  "src/settings/SettingsPage.tsx",
-  "src/settings/v2/SettingsMainV2.tsx",
-  "src/settings/v2/components/AdvancedSettings.tsx",
+  "apps/obsidian/src/main.ts",
+  "apps/obsidian/src/commands/index.ts",
+  "apps/obsidian/src/settings/SettingsPage.tsx",
+  "apps/obsidian/src/settings/v2/SettingsMainV2.tsx",
+  "apps/obsidian/src/settings/v2/components/AdvancedSettings.tsx",
   // Quick Chat settings must not load desktop agents on mobile.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/373
-  "src/settings/v2/components/BasicSettings.tsx",
-  "src/settings/v2/components/QuickChatPanel.tsx",
-  "src/settings/v2/components/ChatModelEnableList.tsx",
-  "src/settings/v2/components/configuredModelGrouping.ts",
-  "src/components/chat-components/plugins/SlashCommandPlugin.tsx",
-  "src/components/chat-components/plugins/slashMenuItems.ts",
+  "apps/obsidian/src/settings/v2/components/BasicSettings.tsx",
+  "apps/obsidian/src/settings/v2/components/QuickChatPanel.tsx",
+  "apps/obsidian/src/settings/v2/components/ChatModelEnableList.tsx",
+  "apps/obsidian/src/settings/v2/components/configuredModelGrouping.ts",
+  "apps/obsidian/src/components/chat-components/plugins/SlashCommandPlugin.tsx",
+  "apps/obsidian/src/components/chat-components/plugins/slashMenuItems.ts",
 ];
 
 const nodeModuleIds = new Set([

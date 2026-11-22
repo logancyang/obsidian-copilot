@@ -37,7 +37,7 @@ const timedFetch = (url, init = {}) =>
 
 async function loadCatalog() {
   const { outputFiles } = await build({
-    entryPoints: [path.join(ROOT, "src/connectors/catalog.ts")],
+    entryPoints: [path.join(ROOT, "apps/obsidian/src/connectors/catalog.ts")],
     bundle: true,
     write: false,
     format: "esm",

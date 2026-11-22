@@ -4,10 +4,10 @@ const { clientBoxes, importRows, loadArchitecture, noHostAccessInClient } = arch
 const { graph, debt } = loadArchitecture(import.meta.dirname);
 
 const BACKEND_LAYERS = [
-  { type: "registry", pattern: "src/agentMode/backends/registry.ts" },
-  { type: "acp", pattern: "src/agentMode/acp/**" },
-  { type: "sdk", pattern: "src/agentMode/sdk/**" },
-  { type: "backend", pattern: "src/agentMode/backends/*/**", capture: ["name"] },
+  { type: "registry", pattern: "apps/obsidian/src/agentMode/backends/registry.ts" },
+  { type: "acp", pattern: "apps/obsidian/src/agentMode/acp/**" },
+  { type: "sdk", pattern: "apps/obsidian/src/agentMode/sdk/**" },
+  { type: "backend", pattern: "apps/obsidian/src/agentMode/backends/*/**", capture: ["name"] },
 ];
 
 const elements = graph.boxes.flatMap(({ box, files }) =>
