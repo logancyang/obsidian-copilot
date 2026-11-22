@@ -234,7 +234,6 @@ export default [
       "scripts/check-connector-login.mjs",
       "scripts/pr-size.test.mjs",
       "apps/obsidian/esbuild.config.mjs",
-      "apps/obsidian/src/lib/plugins/colorOpacityPlugin.ts",
     ],
     rules: {
       "import/no-extraneous-dependencies": [

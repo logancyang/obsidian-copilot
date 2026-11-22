@@ -10,11 +10,7 @@
       "project": ["dev/gallery/**/*.{ts,tsx}", "scripts/**/*.{ts,js,mjs}"]
     },
     "apps/obsidian": {
-      "entry": [
-        "src/main.ts",
-        "src/**/*.stories.{ts,tsx}",
-        "src/lib/plugins/colorOpacityPlugin.ts"
-      ],
+      "entry": ["src/main.ts", "src/**/*.stories.{ts,tsx}"],
       "project": ["src/**/*.{ts,tsx,js,jsx}"],
       "ignore": ["src/styles/tailwind.css"]
     },

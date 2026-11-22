@@ -1,4 +1,4 @@
-import { colorOpacityPlugin } from "./apps/obsidian/src/lib/plugins/colorOpacityPlugin";
+import { colorOpacityPlugin } from "./tailwind.colorOpacityPlugin";
 import colors from "tailwindcss/colors";
 import containerQueries from "@tailwindcss/container-queries";
 
