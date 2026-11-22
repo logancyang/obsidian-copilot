@@ -35,17 +35,17 @@ import { ChatMessage } from "@/types/message";
 import { err2String, isPlusChain, modelSupportsVision } from "@/utils";
 import { arrayBufferToBase64 } from "@/utils/base64";
 import { appendUniqueFiles } from "@/utils/fileListUtils";
-import { Notice, TFile } from "obsidian";
+import { Notice, TFile, type App } from "obsidian";
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { useActiveWebTabState } from "@/components/chat-components/hooks/useActiveWebTabState";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 import type { ChatSelectionHighlightController } from "@/editor/chatSelectionHighlightController";
-import type { CopilotHost } from "@/host/platform/copilotHost";
 import type { UserMemoryManager } from "@/memory/UserMemoryManager";
 
-export interface QuickChatServices extends Pick<CopilotHost, "app"> {
+export interface QuickChatServices {
+  readonly app: App;
   readonly chatSelectionHighlightController: Pick<
     ChatSelectionHighlightController,
     "persistFromPointerDown"

@@ -67,7 +67,7 @@ describe("chatSelectionHighlightController", () => {
   beforeEach(() => {
     activeNote = null;
     const app = { workspace: { getActiveViewOfType: () => activeNote } } as unknown as App;
-    controller = new ChatSelectionHighlightController({ app });
+    controller = new ChatSelectionHighlightController(app);
   });
 
   afterEach(() => {

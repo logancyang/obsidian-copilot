@@ -191,7 +191,7 @@ export const CodexBackendDescriptor: BackendDescriptor = {
     });
   },
 
-  openInstallUI({ app }): void {
+  openInstallUI(app): void {
     new CodexInstallModal(app).open();
   },
 
@@ -204,7 +204,7 @@ export const CodexBackendDescriptor: BackendDescriptor = {
 
   managedInstall: {
     getState: () => codexBinaryManager.getActionState(),
-    subscribe: (_host, onChange) => codexBinaryManager.subscribeRuntimeState(onChange),
+    subscribe: (_app, _manifest, onChange) => codexBinaryManager.subscribeRuntimeState(onChange),
     run: async () => {
       await codexBinaryManager.install();
     },

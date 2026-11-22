@@ -1,12 +1,12 @@
 import { COPILOT_AGENT_ICON_ID } from "@/constants";
-import type { CopilotHost } from "@/host/platform/copilotHost";
-import { MarkdownView, type TFile } from "obsidian";
+import { MarkdownView, type App, type Component, type TFile } from "obsidian";
 
 export function registerNoteHeaderAction(
-  host: Pick<CopilotHost, "app" | "register" | "registerEvent">,
+  app: App,
+  component: Component,
   addNoteToAgentChat: (note: TFile, openInRightSidebar: boolean) => Promise<void>
 ): void {
-  const { workspace } = host.app;
+  const { workspace } = app;
   const actions = new WeakMap<MarkdownView, HTMLElement>();
   const openViews = (): MarkdownView[] =>
     workspace
@@ -31,8 +31,8 @@ export function registerNoteHeaderAction(
   };
 
   workspace.onLayoutReady(sync);
-  host.registerEvent(workspace.on("layout-change", sync));
-  host.register(() => {
+  component.registerEvent(workspace.on("layout-change", sync));
+  component.register(() => {
     for (const view of openViews()) actions.get(view)?.remove();
   });
 }

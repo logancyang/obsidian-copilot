@@ -7,8 +7,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
-import type { CopilotHost } from "@/host/platform/copilotHost";
-import { fakeCopilotHost } from "@/host/platform/testing/fakeCopilotHost";
+import { FileSystemAdapter, type App, type PluginManifest } from "obsidian";
 import type { BackendState, ModelEntry } from "@/agentMode/session/types";
 import { getSettings, setSettings, type CopilotSettings } from "@/settings/model";
 
@@ -41,14 +40,14 @@ describe("descriptor", () => {
 
     describe("managedInstall.getState()", () => {
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/578 reports the shared manager's install progress", () => {
-        const host = vaultHost(os.tmpdir());
-        const manager = getOpencodeBinaryManager(host);
+        const app = vaultApp(os.tmpdir());
+        const manager = getOpencodeBinaryManager(app, MANIFEST);
         const getState = jest.spyOn(manager, "getRuntimeState").mockReturnValue({
           kind: "installing",
           progress: { label: "Downloading opencode — 1.0 KB / 2.0 KB", percent: 42 },
         });
 
-        expect(OpencodeBackendDescriptor.managedInstall?.getState(host)).toEqual({
+        expect(OpencodeBackendDescriptor.managedInstall?.getState(app, MANIFEST)).toEqual({
           kind: "running",
           label: "Downloading opencode — 1.0 KB / 2.0 KB",
           percent: 42,
@@ -59,12 +58,14 @@ describe("descriptor", () => {
 
     describe("managedInstall.subscribe()", () => {
       it("forwards the listener to the shared manager and returns its unsubscribe function", () => {
-        const host = vaultHost(os.tmpdir());
-        const manager = getOpencodeBinaryManager(host);
+        const app = vaultApp(os.tmpdir());
+        const manager = getOpencodeBinaryManager(app, MANIFEST);
         const cleanup = jest.fn();
         const subscribe = jest.spyOn(manager, "subscribeRuntimeState").mockReturnValue(cleanup);
         const listener = jest.fn();
-        expect(OpencodeBackendDescriptor.managedInstall?.subscribe(host, listener)).toBe(cleanup);
+        expect(OpencodeBackendDescriptor.managedInstall?.subscribe(app, MANIFEST, listener)).toBe(
+          cleanup
+        );
         expect(subscribe).toHaveBeenCalledWith(listener);
         subscribe.mockRestore();
       });
@@ -72,7 +73,7 @@ describe("descriptor", () => {
 
     describe("managedInstall.run()", () => {
       it("upgrades a custom binary through upgradeCustomBinary and a managed one through upgradeManaged", async () => {
-        const manager = getOpencodeBinaryManager(vaultHost(os.tmpdir()));
+        const manager = getOpencodeBinaryManager(vaultApp(os.tmpdir()), MANIFEST);
         const upgradeCustom = jest.spyOn(manager, "upgradeCustomBinary").mockResolvedValue({
           version: "1.0.0",
           path: process.execPath,
@@ -99,7 +100,7 @@ describe("descriptor", () => {
                 },
               },
             }));
-            await OpencodeBackendDescriptor.managedInstall?.run(vaultHost(os.tmpdir()));
+            await OpencodeBackendDescriptor.managedInstall?.run(vaultApp(os.tmpdir()), MANIFEST);
           }
 
           expect(upgradeCustom).toHaveBeenCalledTimes(1);
@@ -364,12 +365,12 @@ describe("descriptor", () => {
 
     describe("onPluginLoad()", () => {
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/530 reconciles disk state then checks the pin before allowing startup", async () => {
-        const host = vaultHost(os.tmpdir());
-        const manager = getOpencodeBinaryManager(host);
+        const app = vaultApp(os.tmpdir());
+        const manager = getOpencodeBinaryManager(app, MANIFEST);
         const refresh = jest.spyOn(manager, "refreshInstallState").mockResolvedValue();
         const automatic = jest.spyOn(manager, "autoUpgrade").mockResolvedValue();
         try {
-          await OpencodeBackendDescriptor.onPluginLoad?.(host);
+          await OpencodeBackendDescriptor.onPluginLoad?.(app, MANIFEST);
           expect(refresh).toHaveBeenCalledTimes(1);
           expect(automatic).toHaveBeenCalledWith(
             OPENCODE_PINNED_VERSION,
@@ -385,11 +386,11 @@ describe("descriptor", () => {
         const emptyVault = await fs.promises.mkdtemp(path.join(os.tmpdir(), "opencode-load-a-"));
         const legacyVault = await vaultWithLegacyInstall("opencode-load-b-", 12);
         try {
-          await OpencodeBackendDescriptor.onPluginLoad?.(vaultHost(emptyVault));
-          const manager = getOpencodeBinaryManager(vaultHost(emptyVault));
+          await OpencodeBackendDescriptor.onPluginLoad?.(vaultApp(emptyVault), MANIFEST);
+          const manager = getOpencodeBinaryManager(vaultApp(emptyVault), MANIFEST);
           const before = await manager.downloadsSize();
 
-          await OpencodeBackendDescriptor.onPluginLoad?.(vaultHost(legacyVault));
+          await OpencodeBackendDescriptor.onPluginLoad?.(vaultApp(legacyVault), MANIFEST);
 
           expect((await manager.downloadsSize()) - before).toBe(12);
         } finally {
@@ -406,7 +407,7 @@ describe("descriptor", () => {
           .mockImplementation(() => ({}) as never);
         try {
           const services = fakeBackendStartServices({ clientVersion: "4.1.0" });
-          const { app } = vaultHost(os.tmpdir());
+          const app = vaultApp(os.tmpdir());
 
           OpencodeBackendDescriptor.createBackendProcess({
             ...services,
@@ -512,8 +513,12 @@ describe("descriptor", () => {
 
   const CONFIG_DIR = "my-config";
 
-  function vaultHost(vaultBase: string): CopilotHost {
-    return fakeCopilotHost({ vaultBase, configDir: CONFIG_DIR, pluginId: "copilot-test" });
+  const MANIFEST = { id: "copilot-test", version: "1.0.0" } as PluginManifest;
+
+  function vaultApp(vaultBase: string): App {
+    const adapter = new FileSystemAdapter();
+    adapter.getBasePath = () => vaultBase;
+    return { vault: { adapter, configDir: CONFIG_DIR } } as unknown as App;
   }
 
   async function vaultWithLegacyInstall(prefix: string, bytes: number): Promise<string> {
@@ -534,9 +539,9 @@ describe("descriptor", () => {
       const emptyVault = await fs.promises.mkdtemp(path.join(os.tmpdir(), "opencode-desc-a-"));
       const legacyVault = await vaultWithLegacyInstall("opencode-desc-b-", 12);
       try {
-        const first = getOpencodeBinaryManager(vaultHost(emptyVault));
+        const first = getOpencodeBinaryManager(vaultApp(emptyVault), MANIFEST);
         const before = await first.downloadsSize();
-        const second = getOpencodeBinaryManager(vaultHost(legacyVault));
+        const second = getOpencodeBinaryManager(vaultApp(legacyVault), MANIFEST);
 
         expect(second).toBe(first);
         expect((await second.downloadsSize()) - before).toBe(0);

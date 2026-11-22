@@ -1,7 +1,6 @@
 import { EditorView } from "@codemirror/view";
-import { MarkdownView, type WorkspaceLeaf } from "obsidian";
+import { MarkdownView, type App, type WorkspaceLeaf } from "obsidian";
 
-import type { CopilotHost } from "@/host/platform/copilotHost";
 import { CHAT_AGENT_VIEWTYPE, CHAT_VIEWTYPE } from "@/constants";
 import type { SelectedTextContext } from "@/types/message";
 import { logError, logWarn } from "@/logger";
@@ -34,10 +33,10 @@ export class ChatSelectionHighlightController {
   private lastActiveLeafWasMarkdown = false;
   private snapshot: Snapshot | null = null;
 
-  constructor(private readonly host: Pick<CopilotHost, "app">) {}
+  constructor(private readonly app: App) {}
 
   initialize(): void {
-    const markdownView = this.host.app.workspace.getActiveViewOfType(MarkdownView);
+    const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
     const leaf = markdownView?.leaf ?? null;
     this.lastActiveLeafWasMarkdown = !!markdownView;
     if (this.lastActiveLeafWasMarkdown && leaf) {
@@ -72,7 +71,7 @@ export class ChatSelectionHighlightController {
   }
 
   persistFromPointerDown(): void {
-    if (!this.host.app.workspace.getActiveViewOfType(MarkdownView)) {
+    if (!this.app.workspace.getActiveViewOfType(MarkdownView)) {
       return;
     }
 
@@ -125,7 +124,7 @@ export class ChatSelectionHighlightController {
   }
 
   private getEditorView(allowFallback: boolean): EditorView | null {
-    const active = this.host.app.workspace.getActiveViewOfType(MarkdownView);
+    const active = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (active?.editor?.cm) {
       return active.editor.cm;
     }

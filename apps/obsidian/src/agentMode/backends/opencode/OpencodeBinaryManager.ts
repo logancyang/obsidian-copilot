@@ -12,9 +12,8 @@ import {
 } from "@/agentMode/backends/shared/ManagedBinaryManager";
 import { OPENCODE_MIN_VERSION, OPENCODE_PINNED_VERSION } from "./ui/opencodeVersion";
 import { logError, logInfo, logWarn } from "@/logger";
-import type { CopilotHost } from "@/host/platform/copilotHost";
 import { getSettings, setSettings, type OpencodeBackendSettings } from "@/settings/model";
-import { FileSystemAdapter } from "obsidian";
+import { FileSystemAdapter, type App, type PluginManifest } from "obsidian";
 import { copilotAppDataDir } from "@/utils/appPaths";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { expectedBinaryName, resolveOpencodeTarget } from "./platformResolver";
@@ -147,7 +146,10 @@ export function legacyVaultDataDir(
 }
 
 export class OpencodeBinaryManager extends ManagedBinaryManager<InstallOptions> {
-  constructor(private host: Pick<CopilotHost, "app" | "manifest">) {
+  constructor(
+    private app: App,
+    private manifest: PluginManifest
+  ) {
     super("opencode");
   }
 
@@ -160,8 +162,9 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<InstallOptions> 
     updateOpencodeFields(settings);
   }
 
-  adoptHost(host: Pick<CopilotHost, "app" | "manifest">): void {
-    this.host = host;
+  adopt(app: App, manifest: PluginManifest): void {
+    this.app = app;
+    this.manifest = manifest;
   }
 
   protected async runExclusive<T>(
@@ -187,7 +190,7 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<InstallOptions> 
   }
 
   getDataDir(): string {
-    const adapter = this.host.app.vault.adapter;
+    const adapter = this.app.vault.adapter;
     if (!(adapter instanceof FileSystemAdapter)) {
       throw new Error("Copilot Chat requires Obsidian on desktop.");
     }
@@ -383,14 +386,10 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<InstallOptions> 
     } catch (error) {
       logInfo("[opencode] No managed data directory to reclaim", error);
     }
-    const adapter = this.host.app.vault.adapter;
+    const adapter = this.app.vault.adapter;
     if (adapter instanceof FileSystemAdapter) {
       dirs.push(
-        legacyVaultDataDir(
-          adapter.getBasePath(),
-          this.host.app.vault.configDir,
-          this.host.manifest.id
-        )
+        legacyVaultDataDir(adapter.getBasePath(), this.app.vault.configDir, this.manifest.id)
       );
     }
     return dirs;

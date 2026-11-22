@@ -141,7 +141,7 @@ describe("ChatManager", () => {
         repo,
         mockChainManager as unknown as ChainManager,
         mockFileParserManager as FileParserManager,
-        { app: app as unknown as App }
+        app as unknown as App
       );
     });
 

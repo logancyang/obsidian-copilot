@@ -119,7 +119,7 @@ describe("AgentModeStatus", () => {
         isBackendRestartPending: jest.fn(() => false),
         getOrCreateActiveSession: jest.fn(),
       } as unknown as AgentSessionManager;
-      const plugin = { app: {} } as unknown as CopilotPlugin;
+      const plugin = { app: {}, manifest: { id: "copilot" } } as unknown as CopilotPlugin;
 
       render(<AgentModeStatus manager={manager} plugin={plugin} onInstallClick={jest.fn()} />);
 
@@ -127,7 +127,7 @@ describe("AgentModeStatus", () => {
       expect(screen.getByText(message)).toBeTruthy();
       expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
       fireEvent.click(screen.getByRole("button", { name: "Configure Claude" }));
-      expect(descriptor.openInstallUI).toHaveBeenCalledWith(plugin);
+      expect(descriptor.openInstallUI).toHaveBeenCalledWith(plugin.app, plugin.manifest);
     });
 
     it("runs an available upgrade once and disables the action while it is busy (https://github.com/Brevilabs/obsidian-copilot-private/issues/410)", () => {
@@ -147,12 +147,12 @@ describe("AgentModeStatus", () => {
           run,
         },
       };
-      const plugin = { app: {} } as unknown as CopilotPlugin;
+      const plugin = { app: {}, manifest: { id: "copilot" } } as unknown as CopilotPlugin;
 
       const { rerender } = render(<AgentModeStatus plugin={plugin} onInstallClick={jest.fn()} />);
 
       fireEvent.click(screen.getByRole("button", { name: "Update" }));
-      expect(run).toHaveBeenCalledWith(plugin);
+      expect(run).toHaveBeenCalledWith(plugin.app, plugin.manifest);
       managedInstallState = { kind: "running", label: "Downloading… 50%" };
       rerender(<AgentModeStatus plugin={plugin} onInstallClick={jest.fn()} />);
       expect(screen.getByRole("button", { name: "Updating…" }).hasAttribute("disabled")).toBe(true);
@@ -171,12 +171,12 @@ describe("AgentModeStatus", () => {
       const message =
         "Could not read /opt/local/custom-agent-runtime/bin/claude. Check the configured path.";
       installState = { kind: "error", message };
-      const plugin = { app: {} } as unknown as CopilotPlugin;
+      const plugin = { app: {}, manifest: { id: "copilot" } } as unknown as CopilotPlugin;
       render(<AgentModeStatus plugin={plugin} onInstallClick={jest.fn()} />);
       expect(screen.getByText("Claude setup error")).toBeTruthy();
       expect(screen.getByText(message).closest("details")).toBeNull();
       fireEvent.click(screen.getByRole("button", { name: "Configure Claude" }));
-      expect(descriptor.openInstallUI).toHaveBeenCalledWith(plugin);
+      expect(descriptor.openInstallUI).toHaveBeenCalledWith(plugin.app, plugin.manifest);
     });
 
     it("preserves the sign-in action and linked browser fallback", () => {
