@@ -5,7 +5,7 @@ import { quickAskWidgetEffect, quickAskOverlayPlugin } from "./quickAskExtension
 import { QuickAskOverlay } from "@/components/quick-ask/QuickAskOverlay";
 import { createMapPosReplaceGuard } from "./replaceGuard";
 import { SelectionHighlight } from "./selectionHighlight";
-import type CopilotPlugin from "@/main";
+import type { QuickAskHost } from "@/components/quick-ask/types";
 import { logWarn } from "@/logger";
 import { computeSelectionAnchors } from "@/utils/selectionAnchors";
 
@@ -15,12 +15,9 @@ interface QuickAskWidgetState {
 }
 
 export class QuickAskController {
-  private plugin: CopilotPlugin;
   private quickAskWidgetState: QuickAskWidgetState | null = null;
 
-  constructor(plugin: CopilotPlugin) {
-    this.plugin = plugin;
-  }
+  constructor(private readonly host: QuickAskHost) {}
 
   close(restoreFocus = true): void {
     const state = this.quickAskWidgetState;
@@ -124,7 +121,7 @@ export class QuickAskController {
             topAnchorPos: anchors.topPos,
             focusAnchorPos: anchors.focusPos,
             options: {
-              plugin: this.plugin,
+              host: this.host,
               editor,
               view,
               selectedText: selectedTextSnapshot,

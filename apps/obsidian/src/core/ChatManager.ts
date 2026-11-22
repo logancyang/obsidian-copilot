@@ -14,7 +14,7 @@ import { getCachedCustomCommands } from "@/commands/state";
 import { FileParserManager } from "@/tools/FileParserManager";
 import ChainManager from "@/LLMProviders/chainManager";
 import { updateChatMemory } from "@/chatUtils";
-import CopilotPlugin from "@/main";
+import type { CopilotHost } from "@/host/platform/copilotHost";
 import { ContextManager } from "./ContextManager";
 import { MessageRepository } from "./MessageRepository";
 import { ChatPersistenceManager } from "./ChatPersistenceManager";
@@ -34,10 +34,10 @@ export class ChatManager {
     private messageRepo: MessageRepository,
     private chainManager: ChainManager,
     private fileParserManager: FileParserManager,
-    private plugin: CopilotPlugin
+    private host: Pick<CopilotHost, "app">
   ) {
     this.contextManager = ContextManager.getInstance();
-    this.persistenceManager = new ChatPersistenceManager(plugin.app, messageRepo, chainManager);
+    this.persistenceManager = new ChatPersistenceManager(host.app, messageRepo, chainManager);
   }
 
   setOnMessageCreatedCallback(callback: (messageId: string) => void): void {
@@ -59,7 +59,7 @@ export class ChatManager {
     }
 
     try {
-      const result = await processPrompt(this.plugin.app, prompt, "", vault, activeNote, true);
+      const result = await processPrompt(this.host.app, prompt, "", vault, activeNote, true);
 
       return {
         processedPrompt: result.processedPrompt.trimEnd(),
@@ -127,7 +127,7 @@ export class ChatManager {
   ): Promise<ProcessedPromptResult> {
     // Keep one instruction snapshot across memory composition and template expansion.
     // https://github.com/logancyang/obsidian-copilot/issues/3210
-    const userCustomPrompt = await getEffectiveUserPrompt(this.plugin.app);
+    const userCustomPrompt = await getEffectiveUserPrompt(this.host.app);
     const allIncludedFiles: TFile[] = [];
 
     const basePromptWithMemory = await getSystemPromptWithMemory(
@@ -183,7 +183,7 @@ export class ChatManager {
     try {
       logInfo(`[ChatManager] Sending message: "${displayText}"`);
 
-      const activeNote = this.plugin.app.workspace.getActiveFile();
+      const activeNote = this.host.app.workspace.getActiveFile();
 
       // The slash menu leaves an alias in the composer; expand it so Quick Chat sends the same full prompt as Agent Chat.
       // https://github.com/logancyang/obsidian-copilot/issues/2960#issuecomment-5445353610
@@ -202,7 +202,7 @@ export class ChatManager {
       const shouldIncludeActiveWebTab =
         includeActiveWebTab || messageText.includes(ACTIVE_WEB_TAB_MARKER);
       updatedContext.webTabs = buildWebTabsWithActiveSnapshot(
-        this.plugin.app,
+        this.host.app,
         updatedContext.webTabs || [],
         shouldIncludeActiveWebTab
       );
@@ -225,13 +225,13 @@ export class ChatManager {
       }
 
       const { processedPrompt: systemPrompt, includedFiles: systemPromptIncludedFiles } =
-        await this.getSystemPromptForMessage(this.plugin.app.vault, activeNote);
+        await this.getSystemPromptForMessage(this.host.app.vault, activeNote);
 
       const { processedContent, contextEnvelope } = await this.contextManager.processMessageContext(
-        this.plugin.app,
+        this.host.app,
         message,
         this.fileParserManager,
-        this.plugin.app.vault,
+        this.host.app.vault,
         chainType,
         sendsActiveNote,
         activeNote,
@@ -265,15 +265,15 @@ export class ChatManager {
         return false;
       }
 
-      const activeNote = this.plugin.app.workspace.getActiveFile();
+      const activeNote = this.host.app.workspace.getActiveFile();
       const { processedPrompt: systemPrompt, includedFiles: systemPromptIncludedFiles } =
-        await this.getSystemPromptForMessage(this.plugin.app.vault, activeNote);
+        await this.getSystemPromptForMessage(this.host.app.vault, activeNote);
       await this.contextManager.reprocessMessageContext(
-        this.plugin.app,
+        this.host.app,
         messageId,
         this.messageRepo,
         this.fileParserManager,
-        this.plugin.app.vault,
+        this.host.app.vault,
         chainType,
         includeActiveNote || ACTIVE_NOTE_MENTION.test(newText),
         activeNote,
@@ -342,15 +342,15 @@ export class ChatManager {
       // Fresh instructions can change template-note dedup, so retries rebuild context even when an envelope exists.
       // https://github.com/logancyang/obsidian-copilot/issues/3210
       const chainType = getChainType();
-      const activeNote = this.plugin.app.workspace.getActiveFile();
+      const activeNote = this.host.app.workspace.getActiveFile();
       const { processedPrompt: systemPrompt, includedFiles: systemPromptIncludedFiles } =
-        await this.getSystemPromptForMessage(this.plugin.app.vault, activeNote);
+        await this.getSystemPromptForMessage(this.host.app.vault, activeNote);
       await this.contextManager.reprocessMessageContext(
-        this.plugin.app,
+        this.host.app,
         userMessage.id,
         this.messageRepo,
         this.fileParserManager,
-        this.plugin.app.vault,
+        this.host.app.vault,
         chainType,
         false,
         activeNote,

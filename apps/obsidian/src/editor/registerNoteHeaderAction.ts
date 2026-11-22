@@ -1,9 +1,12 @@
 import { COPILOT_AGENT_ICON_ID } from "@/constants";
-import type CopilotPlugin from "@/main";
-import { MarkdownView } from "obsidian";
+import type { CopilotHost } from "@/host/platform/copilotHost";
+import { MarkdownView, type TFile } from "obsidian";
 
-export function registerNoteHeaderAction(plugin: CopilotPlugin): void {
-  const { workspace } = plugin.app;
+export function registerNoteHeaderAction(
+  host: Pick<CopilotHost, "app" | "register" | "registerEvent">,
+  addNoteToAgentChat: (note: TFile, openInRightSidebar: boolean) => Promise<void>
+): void {
+  const { workspace } = host.app;
   const actions = new WeakMap<MarkdownView, HTMLElement>();
   const openViews = (): MarkdownView[] =>
     workspace
@@ -20,7 +23,7 @@ export function registerNoteHeaderAction(plugin: CopilotPlugin): void {
           // Revealing Agent Chat can move focus, so use the note under this button.
           // https://github.com/Brevilabs/obsidian-copilot-private/issues/579
           const file = view.file;
-          if (file) void plugin.addNoteToAgentChat(file, true);
+          if (file) void addNoteToAgentChat(file, true);
         }
       );
       actions.set(view, action);
@@ -28,8 +31,8 @@ export function registerNoteHeaderAction(plugin: CopilotPlugin): void {
   };
 
   workspace.onLayoutReady(sync);
-  plugin.registerEvent(workspace.on("layout-change", sync));
-  plugin.register(() => {
+  host.registerEvent(workspace.on("layout-change", sync));
+  host.register(() => {
     for (const view of openViews()) actions.get(view)?.remove();
   });
 }

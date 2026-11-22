@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
 export function QuickAskPanel({
-  plugin,
+  host,
   view,
   selectedText,
   replaceGuard,
@@ -30,7 +30,7 @@ export function QuickAskPanel({
   const containerRef = useRef<HTMLDivElement>(null);
   const isChatPinnedToBottomRef = useRef(true);
 
-  const currentActiveFile = plugin.app.workspace.getActiveFile();
+  const currentActiveFile = host.app.workspace.getActiveFile();
   const filePathSnapshotRef = useRef<string | null>(currentActiveFile?.path ?? null);
   const filePathSnapshot = filePathSnapshotRef.current;
 
@@ -269,7 +269,7 @@ export function QuickAskPanel({
               replaceInvalidReason={replaceInvalidReason}
               isDisabledDueToStreaming={isDisabledDueToStreaming}
               filePathSnapshot={filePathSnapshot}
-              plugin={plugin}
+              component={host}
             />
           ))}
         </div>

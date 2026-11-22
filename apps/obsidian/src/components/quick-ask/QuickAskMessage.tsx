@@ -1,10 +1,9 @@
 import React, { useEffect, useRef } from "react";
-import { MarkdownRenderer } from "obsidian";
+import { MarkdownRenderer, type Component } from "obsidian";
 import { Copy, ClipboardPaste, Replace } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getErrorMessage, type ReplaceInvalidReason } from "@/editor/replaceGuard";
 import { logError } from "@/logger";
-import type CopilotPlugin from "@/main";
 import { preprocessAIResponse } from "@/utils/markdownPreprocess";
 import { withoutDataview } from "@/utils/renderMarkdown";
 import type { QuickAskMessage } from "./types";
@@ -21,7 +20,7 @@ interface QuickAskMessageProps {
   replaceInvalidReason: ReplaceInvalidReason | null;
   isDisabledDueToStreaming?: boolean;
   filePathSnapshot: string | null;
-  plugin: CopilotPlugin;
+  component: Component;
 }
 
 export const QuickAskMessageComponent = React.memo(function QuickAskMessageComponent({
@@ -36,7 +35,7 @@ export const QuickAskMessageComponent = React.memo(function QuickAskMessageCompo
   replaceInvalidReason,
   isDisabledDueToStreaming,
   filePathSnapshot,
-  plugin,
+  component,
 }: QuickAskMessageProps) {
   const contentRef = useRef<HTMLDivElement>(null);
 
@@ -58,7 +57,7 @@ export const QuickAskMessageComponent = React.memo(function QuickAskMessageCompo
           preprocessed,
           targetEl,
           withoutDataview(sourcePath),
-          plugin
+          component
         );
       } catch (error) {
         logError("Failed to render markdown:", error);
@@ -79,7 +78,7 @@ export const QuickAskMessageComponent = React.memo(function QuickAskMessageCompo
     return () => {
       cancelled = true;
     };
-  }, [message.content, message.role, isStreaming, filePathSnapshot, plugin]);
+  }, [message.content, message.role, isStreaming, filePathSnapshot, component]);
 
   if (message.role === "user") {
     return (

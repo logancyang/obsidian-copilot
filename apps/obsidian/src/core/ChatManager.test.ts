@@ -37,9 +37,9 @@ import { ChatPersistenceManager } from "./ChatPersistenceManager";
 import { ChatManager } from "./ChatManager";
 import { MessageRepository } from "./MessageRepository";
 import { ContextManager } from "./ContextManager";
+import type { App } from "obsidian";
 import type ChainManager from "@/LLMProviders/chainManager";
 import type { FileParserManager } from "@/tools/FileParserManager";
-import type CopilotPlugin from "@/main";
 import { ChainType } from "@/chainType";
 import { AI_SENDER, DEFAULT_SYSTEM_PROMPT, USER_SENDER } from "@/constants";
 import { getWebViewerService } from "@/services/webViewerService/webViewerServiceSingleton";
@@ -141,7 +141,7 @@ describe("ChatManager", () => {
         repo,
         mockChainManager as unknown as ChainManager,
         mockFileParserManager as FileParserManager,
-        { app } as unknown as CopilotPlugin
+        { app: app as unknown as App }
       );
     });
 

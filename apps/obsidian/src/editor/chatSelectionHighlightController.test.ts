@@ -5,14 +5,13 @@ jest.mock("obsidian", () => ({
 
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
-import { MarkdownView, type WorkspaceLeaf } from "obsidian";
+import { MarkdownView, type App, type WorkspaceLeaf } from "obsidian";
 
 import { CHAT_AGENT_VIEWTYPE, CHAT_VIEWTYPE } from "@/constants";
 import {
   ChatSelectionHighlightController,
   hideChatSelectionHighlight,
 } from "@/editor/chatSelectionHighlightController";
-import type CopilotPlugin from "@/main";
 import type { SelectedTextContext } from "@/types/message";
 
 const NOTE_TEXT = "Alpha beta gamma";
@@ -67,10 +66,8 @@ describe("chatSelectionHighlightController", () => {
 
   beforeEach(() => {
     activeNote = null;
-    const plugin = {
-      app: { workspace: { getActiveViewOfType: () => activeNote } },
-    } as unknown as CopilotPlugin;
-    controller = new ChatSelectionHighlightController(plugin);
+    const app = { workspace: { getActiveViewOfType: () => activeNote } } as unknown as App;
+    controller = new ChatSelectionHighlightController({ app });
   });
 
   afterEach(() => {
