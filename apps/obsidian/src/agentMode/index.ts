@@ -600,7 +600,7 @@ export function createAgentSessionManager(
   });
   for (const descriptor of listBackendDescriptors()) {
     const ready = Promise.resolve()
-      .then(() => descriptor.onPluginLoad?.(plugin))
+      .then(() => descriptor.onPluginLoad?.(plugin.app, plugin.manifest))
       .catch((e) => logError(`[AgentMode] backend ${descriptor.id} onPluginLoad failed`, e))
       .then(() => initialSkillsReady)
       .then(() => startupSkillLinks.get(descriptor.id))

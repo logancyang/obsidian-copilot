@@ -50,8 +50,7 @@ jest.mock("./opencodeCliDetector", () => ({
 }));
 
 import { OPENCODE_MIN_VERSION, OPENCODE_PINNED_VERSION } from "./ui/opencodeVersion";
-import type { CopilotHost } from "@/host/platform/copilotHost";
-import { fakeCopilotHost } from "@/host/platform/testing/fakeCopilotHost";
+import { FileSystemAdapter, type App, type PluginManifest } from "obsidian";
 import * as fs from "node:fs";
 import * as os from "os";
 import * as path from "node:path";
@@ -70,15 +69,15 @@ import {
 describe("OpencodeBinaryManager", () => {
   const settingsMock = jest.requireMock("@/settings/model");
 
-  const fakeHost = {
-    app: { vault: { adapter: {} } },
-    manifest: { id: "copilot-test" },
-  } as never;
+  const fakeApp = { vault: { adapter: {} } } as unknown as App;
+  const MANIFEST = { id: "copilot-test", version: "1.0.0" } as PluginManifest;
 
   const CONFIG_DIR = "my-config";
 
-  function vaultHost(vaultBase = "/vault", pluginId = "copilot-test"): CopilotHost {
-    return fakeCopilotHost({ vaultBase, configDir: CONFIG_DIR, pluginId });
+  function vaultApp(vaultBase = "/vault"): App {
+    const adapter = new FileSystemAdapter();
+    adapter.getBasePath = () => vaultBase;
+    return { vault: { adapter, configDir: CONFIG_DIR } } as unknown as App;
   }
 
   describe("isOpencodeVersionOutdated()", () => {
@@ -239,7 +238,7 @@ describe("OpencodeBinaryManager", () => {
   });
 
   describe("OpencodeBinaryManager", () => {
-    describe("adoptHost()", () => {
+    describe("adopt()", () => {
       let home: string;
 
       beforeEach(async () => {
@@ -266,8 +265,8 @@ describe("OpencodeBinaryManager", () => {
           const firstLegacy = await seedLegacy(firstVault, 40);
           const secondLegacy = await seedLegacy(secondVault, 10);
 
-          const mgr = new OpencodeBinaryManager(vaultHost(firstVault));
-          mgr.adoptHost(vaultHost(secondVault));
+          const mgr = new OpencodeBinaryManager(vaultApp(firstVault), MANIFEST);
+          mgr.adopt(vaultApp(secondVault), MANIFEST);
 
           expect(await mgr.downloadsSize()).toBe(10);
 
@@ -295,7 +294,7 @@ describe("OpencodeBinaryManager", () => {
 
       it("leaves settings empty when no binary is configured", async () => {
         settingsMock.__reset({});
-        const mgr = new OpencodeBinaryManager(fakeHost);
+        const mgr = new OpencodeBinaryManager(fakeApp, MANIFEST);
         await mgr.refreshInstallState();
         expect(settingsMock.__get()).toEqual({});
       });
@@ -307,7 +306,7 @@ describe("OpencodeBinaryManager", () => {
           binaryVersion: OPENCODE_PINNED_VERSION,
           binarySource: "custom",
         });
-        const mgr = new OpencodeBinaryManager(fakeHost);
+        const mgr = new OpencodeBinaryManager(fakeApp, MANIFEST);
         await mgr.refreshInstallState();
         expect(settingsMock.__get()).toEqual({
           binaryPath: ghost,
@@ -323,7 +322,7 @@ describe("OpencodeBinaryManager", () => {
           binaryVersion: OPENCODE_PINNED_VERSION,
           binarySource: "managed",
         });
-        const mgr = new OpencodeBinaryManager(fakeHost);
+        const mgr = new OpencodeBinaryManager(fakeApp, MANIFEST);
         await mgr.refreshInstallState();
         expect(settingsMock.__get()).toEqual({
           binaryPath: undefined,
@@ -340,7 +339,7 @@ describe("OpencodeBinaryManager", () => {
           binaryVersion: OPENCODE_PINNED_VERSION,
           binarySource: "managed",
         });
-        const mgr = new OpencodeBinaryManager(fakeHost);
+        const mgr = new OpencodeBinaryManager(fakeApp, MANIFEST);
         await mgr.refreshInstallState();
         expect(settingsMock.__get()).toEqual({
           binaryPath: realFile,
@@ -366,7 +365,7 @@ describe("OpencodeBinaryManager", () => {
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 selects a custom executable and removes managed and legacy downloads", async () => {
         const vaultBase = path.join(tmpDir, "vault");
-        const mgr = new OpencodeBinaryManager(vaultHost(vaultBase));
+        const mgr = new OpencodeBinaryManager(vaultApp(vaultBase), MANIFEST);
         const legacy = legacyVaultDataDir(vaultBase, CONFIG_DIR, "copilot-test");
         fs.mkdirSync(mgr.getDataDir(), { recursive: true });
         fs.mkdirSync(legacy, { recursive: true });
@@ -378,7 +377,7 @@ describe("OpencodeBinaryManager", () => {
       });
 
       it("records the --version output and custom source when a real binary is accepted", async () => {
-        const mgr = new OpencodeBinaryManager(fakeHost);
+        const mgr = new OpencodeBinaryManager(fakeApp, MANIFEST);
         await mgr.setCustomBinaryPath(process.execPath);
         const stored = settingsMock.__get();
         expect(stored.binaryPath).toBe(process.execPath);
@@ -387,7 +386,7 @@ describe("OpencodeBinaryManager", () => {
       });
 
       it("clears a previous error once the next operation succeeds", async () => {
-        const mgr = new OpencodeBinaryManager(fakeHost);
+        const mgr = new OpencodeBinaryManager(fakeApp, MANIFEST);
         await expect(mgr.setCustomBinaryPath("/definitely/not/here")).rejects.toThrow();
 
         await mgr.setCustomBinaryPath(process.execPath);
@@ -396,7 +395,7 @@ describe("OpencodeBinaryManager", () => {
       });
 
       it("refuses a second operation while one holds the binary-path lock", async () => {
-        const mgr = new OpencodeBinaryManager(fakeHost);
+        const mgr = new OpencodeBinaryManager(fakeApp, MANIFEST);
         const first = mgr.setCustomBinaryPath(process.execPath);
         expect(mgr.isBusy()).toBe(true);
 
@@ -409,7 +408,7 @@ describe("OpencodeBinaryManager", () => {
       });
 
       it("frees the lock once the operation settles, including on failure", async () => {
-        const mgr = new OpencodeBinaryManager(fakeHost);
+        const mgr = new OpencodeBinaryManager(fakeApp, MANIFEST);
         await expect(mgr.setCustomBinaryPath("/definitely/not/here")).rejects.toThrow();
 
         expect(mgr.isBusy()).toBe(false);
@@ -450,7 +449,7 @@ if (process.argv[2] === ${JSON.stringify(phase)}) {
             binarySource: "custom" as const,
           };
           settingsMock.__reset(initial);
-          const manager = new OpencodeBinaryManager(fakeHost);
+          const manager = new OpencodeBinaryManager(fakeApp, MANIFEST);
           const operation = manager.upgradeCustomBinary();
           const rejected = expect(operation).rejects.toMatchObject({ name: "AbortError" });
           try {
@@ -491,7 +490,7 @@ fi
           binarySource: "custom",
         });
 
-        const mgr = new OpencodeBinaryManager(fakeHost);
+        const mgr = new OpencodeBinaryManager(fakeApp, MANIFEST);
         await expect(mgr.upgradeCustomBinary()).rejects.toThrow(OPENCODE_MIN_VERSION);
         expect(settingsMock.__get()).toEqual({
           binaryPath: file,
@@ -506,7 +505,7 @@ fi
 
       it("resolves to the managed data dir under the home dir", () => {
         jest.mocked(os.homedir).mockReturnValue("/Users/me");
-        const mgr = new OpencodeBinaryManager(vaultHost());
+        const mgr = new OpencodeBinaryManager(vaultApp(), MANIFEST);
         expect(mgr.getDataDir()).toBe(opencodeManagedDataDir("/Users/me"));
       });
 
@@ -515,7 +514,7 @@ fi
         ["filesystem root", path.parse(process.cwd()).root],
       ])("throws an actionable error when the home dir is unusable (%s)", (_label, badHome) => {
         jest.mocked(os.homedir).mockReturnValue(badHome);
-        const mgr = new OpencodeBinaryManager(vaultHost());
+        const mgr = new OpencodeBinaryManager(vaultApp(), MANIFEST);
         expect(() => mgr.getDataDir()).toThrow(/home directory/i);
       });
     });
@@ -536,7 +535,7 @@ fi
       it("counts and removes the pre-migration in-vault copy", async () => {
         const vaultBase = await fs.promises.mkdtemp(path.join(os.tmpdir(), "opencode-vault-"));
         try {
-          const mgr = new OpencodeBinaryManager(vaultHost(vaultBase));
+          const mgr = new OpencodeBinaryManager(vaultApp(vaultBase), MANIFEST);
           const legacy = legacyVaultDataDir(vaultBase, CONFIG_DIR, "copilot-test");
           const legacyBin = path.join(legacy, "1.14.0", "bin", "opencode");
           await fs.promises.mkdir(path.dirname(legacyBin), { recursive: true });

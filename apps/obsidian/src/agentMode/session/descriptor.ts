@@ -1,6 +1,5 @@
-import type { App } from "obsidian";
+import type { App, PluginManifest } from "obsidian";
 import type React from "react";
-import type { CopilotHost } from "@/host/platform/copilotHost";
 import type { ModelManagementApi } from "@/modelManagement";
 import type { CopilotSettings } from "@/settings/model";
 import type { Destination } from "@/types/destination";
@@ -48,12 +47,10 @@ export type ManagedInstallActionState =
   | { kind: "running"; label: string; percent?: number }
   | { kind: "error"; message: string };
 
-type BackendHost = Pick<CopilotHost, "app" | "manifest">;
-
 export interface ManagedInstallAction {
-  getState(host: BackendHost): ManagedInstallActionState;
-  subscribe(host: BackendHost, onChange: () => void): () => void;
-  run(host: BackendHost): Promise<void>;
+  getState(app: App, manifest: PluginManifest): ManagedInstallActionState;
+  subscribe(app: App, manifest: PluginManifest, onChange: () => void): () => void;
+  run(app: App, manifest: PluginManifest): Promise<void>;
 }
 
 export type ApprovedRuleScope = { kind: "folder"; path: string } | { kind: "file"; path: string };
@@ -65,11 +62,8 @@ export interface ApprovedRule {
 }
 
 export interface ApprovedRuleStore {
-  list(host: Pick<CopilotHost, "app">): Promise<ReadonlyArray<ApprovedRule>>;
-  remove(
-    host: Pick<CopilotHost, "app">,
-    rule: ApprovedRule
-  ): Promise<void | { undo(): Promise<void> }>;
+  list(app: App): Promise<ReadonlyArray<ApprovedRule>>;
+  remove(app: App, rule: ApprovedRule): Promise<void | { undo(): Promise<void> }>;
 }
 
 export interface BackendAuthStatus {
@@ -155,7 +149,7 @@ export interface BackendDescriptor {
 
   subscribeInstallState(cb: () => void): () => void;
 
-  openInstallUI(host: BackendHost): void;
+  openInstallUI(app: App, manifest: PluginManifest): void;
 
   managedInstall?: ManagedInstallAction;
 
@@ -165,9 +159,9 @@ export interface BackendDescriptor {
 
   createBackendProcess(args: BackendStartArgs): BackendProcess;
 
-  SettingsPanel?: React.FC<{ host: BackendHost }>;
+  SettingsPanel?: React.FC<{ app: App; manifest: PluginManifest }>;
 
-  onPluginLoad?(host: BackendHost): Promise<void>;
+  onPluginLoad?(app: App, manifest: PluginManifest): Promise<void>;
 
   // A backend that keeps an agent's prompt in a file outside the vault removes it when the agent is deleted.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/991

@@ -70,7 +70,7 @@ export const AgentModeChat: React.FC<Props> = ({
   ]);
 
   const handleInstall = React.useCallback(() => {
-    descriptor.openInstallUI(plugin);
+    descriptor.openInstallUI(plugin.app, plugin.manifest);
   }, [descriptor, plugin]);
 
   if (!manager) return null;

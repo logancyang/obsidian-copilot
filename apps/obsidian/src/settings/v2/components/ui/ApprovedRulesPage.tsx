@@ -3,14 +3,14 @@ import { Button } from "@/components/ui/button";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { err2String } from "@/errorFormat";
 import { cn } from "@/lib/utils";
-import type { CopilotHost } from "@/host/platform/copilotHost";
 import React from "react";
+import type { App } from "obsidian";
 import { SettingsSubPageLayout } from "./SettingsSubPageLayout";
 
 export interface ApprovedRulesPageProps {
   agentName: string;
   store: ApprovedRuleStore;
-  host: Pick<CopilotHost, "app">;
+  app: App;
   onBack: () => void;
 }
 
@@ -39,7 +39,7 @@ function describeScope(rule: ApprovedRule): string {
 export const ApprovedRulesPage: React.FC<ApprovedRulesPageProps> = ({
   agentName,
   store,
-  host,
+  app,
   onBack,
 }) => {
   const [state, setState] = React.useState<LoadState>({ kind: "loading" });
@@ -51,17 +51,17 @@ export const ApprovedRulesPage: React.FC<ApprovedRulesPageProps> = ({
   const [undos, setUndos] = React.useState(NO_UNDOS);
 
   React.useEffect(() => {
-    store.list(host).then(
+    store.list(app).then(
       (rules) => setState({ kind: "ready", rules }),
       (error: unknown) => setState({ kind: "error", message: err2String(error) })
     );
-  }, [store, host]);
+  }, [store, app]);
 
   const handleRemove = async (rule: ApprovedRule) => {
     setRemoving(true);
     setRowError(null);
     try {
-      const removal = await store.remove(host, rule);
+      const removal = await store.remove(app, rule);
       // A removed rule stays in its row with Undo, so the list never shifts under the pointer.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/865
       if (removal) {

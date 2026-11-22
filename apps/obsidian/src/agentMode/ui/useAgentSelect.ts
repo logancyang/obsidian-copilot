@@ -85,7 +85,7 @@ export function useAgentSelect(
     const id = selectedRow.id;
     if (cta.action === "wait") return;
     if (cta.action === "configure") {
-      backendRegistry[id].openInstallUI(plugin);
+      backendRegistry[id].openInstallUI(plugin.app, plugin.manifest);
       return;
     }
     if (!manager || manager.getIsStarting()) return;

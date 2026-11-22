@@ -75,20 +75,21 @@ export function useManagedInstallActionState(
 ): ManagedInstallActionState {
   const action = descriptor.managedInstall;
   const subscribe = React.useCallback(
-    (listener: () => void) => action?.subscribe(plugin, listener) ?? (() => {}),
+    (listener: () => void) =>
+      action?.subscribe(plugin.app, plugin.manifest, listener) ?? (() => {}),
     [action, plugin]
   );
   const getSnapshot = React.useCallback(
     () =>
       managedInstallActionStateSignature(
-        action?.getState(plugin) ?? IDLE_MANAGED_INSTALL_ACTION_STATE
+        action?.getState(plugin.app, plugin.manifest) ?? IDLE_MANAGED_INSTALL_ACTION_STATE
       ),
     [action, plugin]
   );
   const signature = React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
   return React.useMemo(() => {
     void signature;
-    return action?.getState(plugin) ?? IDLE_MANAGED_INSTALL_ACTION_STATE;
+    return action?.getState(plugin.app, plugin.manifest) ?? IDLE_MANAGED_INSTALL_ACTION_STATE;
   }, [action, plugin, signature]);
 }
 
