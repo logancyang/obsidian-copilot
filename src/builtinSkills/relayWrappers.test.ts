@@ -56,21 +56,30 @@ describe("relayWrappers", () => {
   function run(
     skillName: string,
     env: Record<string, string>,
-    arg = "https://youtu.be/q7mD8NFYd7s"
+    arg = "https://youtu.be/q7mD8NFYd7s",
+    mockTransportFailure = false
   ): Promise<{ status: number | null; stdout: string; stderr: string }> {
     const skill = BUILTIN_SKILLS.find((item) => item.name === skillName)!;
     for (const file of skill.files) writeFileSync(path.join(root, file.path), file.content);
     const script = skill.files.find((file) => file.path.endsWith(windows ? ".ps1" : ".sh"))!;
-    return new Promise((resolve, reject) => {
-      const child = spawn(
-        windows ? "powershell.exe" : "sh",
-        [
+    const args = mockTransportFailure
+      ? [
+          "-NoProfile",
+          "-ExecutionPolicy",
+          "Bypass",
+          "-Command",
+          `function Invoke-WebRequest { throw [System.Net.WebException]::new('Diagnostic transport failure') }; & '${path.join(root, script.path).replace(/'/g, "''")}' 'test query'`,
+        ]
+      : [
           ...(windows ? ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"] : []),
           path.join(root, script.path),
           arg,
-        ],
-        { timeout: WRAPPER_TIMEOUT_MS, env: { ...process.env, ...env } }
-      );
+        ];
+    return new Promise((resolve, reject) => {
+      const child = spawn(windows ? "powershell.exe" : "sh", args, {
+        timeout: WRAPPER_TIMEOUT_MS,
+        env: { ...process.env, ...env },
+      });
       let stdout = "";
       let stderr = "";
       child.stdout.setEncoding("utf8");
@@ -109,5 +118,49 @@ describe("relayWrappers", () => {
     expect(result.stderr).toBe("");
     expect(result.status).toBe(0);
     expect(result.stdout.trim()).toBe(canned.body);
+  });
+  describe("Windows request diagnostics", () => {
+    const windowsIt = windows ? it : it.skip;
+
+    windowsIt.each([
+      ["copilot-web-search", false],
+      ["copilot-web-fetch", false],
+      ["copilot-youtube-transcript", false],
+      ["copilot-fetch-x", false],
+      ["copilot-web-search", true],
+    ])(
+      "https://github.com/logancyang/obsidian-copilot/issues/4177 preserves the transport exception from %s with Self-Host routing %s",
+      async (skillName, selfHost) => {
+        const result = await run(
+          skillName,
+          {
+            ...relayEnv(),
+            [SELF_HOST_WEB_SEARCH_ENV]: selfHost ? "1" : "",
+            [SELF_HOST_WEB_SEARCH_URL_ENV]: origin,
+            [SELF_HOST_WEB_SEARCH_TOKEN_ENV]: "test-token",
+          },
+          "test query",
+          true
+        );
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain("System.Net.WebException: Diagnostic transport failure");
+        expect(result.stderr).not.toContain("test-token");
+        expect(result.stderr).not.toContain("test-license");
+      }
+    );
+  });
+
+  it("https://github.com/logancyang/obsidian-copilot/issues/4177 preserves the Self-Host provider error body", async () => {
+    canned = {
+      status: 500,
+      body: JSON.stringify({ error: `Provider rejected the search: ${TEXT}` }),
+    };
+    const result = await run("copilot-web-search", {
+      [SELF_HOST_WEB_SEARCH_ENV]: "1",
+      [SELF_HOST_WEB_SEARCH_URL_ENV]: origin,
+      [SELF_HOST_WEB_SEARCH_TOKEN_ENV]: "test-token",
+    });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(canned.body);
   });
 });
