@@ -57,6 +57,25 @@ function trackedSourceFiles(folder) {
   });
 }
 
+function lintWithRepoConfig(probes) {
+  const script = `
+    const { ESLint } = require("eslint");
+    const eslint = new ESLint();
+    (async () => {
+      const reports = [];
+      for (const [filePath, source] of JSON.parse(process.argv[1])) {
+        const [result] = await eslint.lintText(source, { filePath });
+        reports.push(result.messages.map((message) => message.ruleId + ": " + message.message));
+      }
+      process.stdout.write(JSON.stringify(reports));
+    })();
+  `;
+  const output = execFileSync(process.execPath, ["-e", script, JSON.stringify(probes)], {
+    cwd: root,
+  });
+  return JSON.parse(output.toString());
+}
+
 function debtWith(imports, clientAccess) {
   return { counts: { imports, clientAccess }, imports: {}, clientAccess: [] };
 }
@@ -354,6 +373,77 @@ describe("architecture", () => {
         hostAccessInCode("function run(process: { id: number }) { return process.id; }")
       ).toEqual([]);
     });
+  });
+
+  describe("eslint.config.mjs", () => {
+    const CLIENT_FILE = "src/agentMode/ui/DirectiveProbe.js";
+    const PROBES = [
+      ["boundaries/dependencies", CLIENT_FILE, 'import { getSettings } from "@/settings/model";'],
+      ["copilot/no-host-access-in-client", CLIENT_FILE, 'import { Notice } from "obsidian";'],
+      ["boundaries/no-unknown-files", "src/notInAnyBox/DirectiveProbe.js", "export const a = 1;"],
+    ];
+    const disableForms = (rule, line) => [
+      `// eslint-disable-next-line ${rule} -- probe\n${line}`,
+      `${line} // eslint-disable-line ${rule} -- probe`,
+      `/* eslint-disable ${rule} -- probe */\n${line}\n/* eslint-enable ${rule} -- probe */`,
+      `/* eslint-disable -- probe */\n${line}\n/* eslint-enable -- probe */`,
+    ];
+    const restrictedDisables = (report) =>
+      report.filter((line) => line.startsWith("eslint-comments/no-restricted-disable: "));
+
+    it(
+      "still lets a described disable comment silence a rule outside the boundary",
+      () => {
+        const [report] = lintWithRepoConfig([
+          [
+            CLIENT_FILE,
+            "// eslint-disable-next-line no-control-regex -- matches a NUL byte\nexport const nul = /\\x00/;",
+          ],
+        ]);
+
+        expect(report).toEqual([]);
+      },
+      SLOW_TEST_MS
+    );
+
+    it(
+      `rejects a next-line, line, block or bare disable comment for each boundary rule, so an import cannot skip architecture.debt.json (${ISSUE})`,
+      () => {
+        const probes = PROBES.flatMap(([rule, file, line]) =>
+          disableForms(rule, line).map((source) => [file, source])
+        );
+        const reports = lintWithRepoConfig(probes).map(restrictedDisables);
+
+        expect(reports).toEqual(
+          PROBES.flatMap(([rule]) => [
+            ...Array(3).fill([
+              `eslint-comments/no-restricted-disable: Disabling '${rule}' is not allowed.`,
+            ]),
+            [
+              expect.stringContaining(
+                "boundaries/*,copilot/no-host-access-in-client' is not allowed."
+              ),
+            ],
+          ])
+        );
+      },
+      SLOW_TEST_MS
+    );
+
+    it(
+      `rejects an inline config comment, which could turn a boundary rule off without a disable comment (${ISSUE})`,
+      () => {
+        const [report] = lintWithRepoConfig([
+          [
+            CLIENT_FILE,
+            '/* eslint boundaries/dependencies: "off" -- probe */\nexport const a = 1;',
+          ],
+        ]);
+
+        expect(report).toEqual(["eslint-comments/no-use: Unexpected ESLint directive comment."]);
+      },
+      SLOW_TEST_MS
+    );
   });
 
   describe("architecture.json", () => {

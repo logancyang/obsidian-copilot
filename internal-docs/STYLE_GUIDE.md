@@ -66,6 +66,7 @@ for `architecture.debt.json`: it lists the violations that existed when the
 rules landed and only shrinks; never add an entry to make a new import pass.
 CI fails a pull request whose totals in that file grow against its base branch;
 `npm run lint:debt` runs the same check against `origin/master`.
+A comment cannot silence `boundaries/*` or `copilot/no-host-access-in-client` either: lint rejects an `eslint-disable` comment that names them or names no rule, and rejects `/* eslint ... */` config comments in `src/`.
 If none of the
 three options above works, the boundary itself is wrong — change the
 boundary deliberately, in its own reviewed change, with the layer rules
