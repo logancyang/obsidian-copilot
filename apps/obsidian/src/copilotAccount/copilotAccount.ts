@@ -23,6 +23,8 @@ import type { App } from "obsidian";
 export const COPILOT_WEBSITE_ORIGIN =
   process.env.COPILOT_WEBSITE_ORIGIN || COPILOT_OAUTH_CLIENT_URI;
 const LOGIN_ID = "copilot-account";
+export const SIGN_IN_RETURN_ACTION = "copilot-auth";
+export const SIGN_IN_RETURN_LINK = `obsidian://${SIGN_IN_RETURN_ACTION}`;
 const ACCOUNT_PATH = "/api/plugin/account";
 const FREE_PLAN = "free";
 const PURCHASE_RECHECK_INTERVAL_MS = 10_000;
@@ -154,6 +156,10 @@ export class CopilotAccount {
   openSignInPage(): void {
     const url = this.login?.loginUrl();
     if (url) this.deps.openUrl(url);
+  }
+
+  receiveReturnLink(params: Readonly<Record<string, string>>): void {
+    this.deps.auth.receiveReturnLink(params);
   }
 
   cancelSignIn(): void {

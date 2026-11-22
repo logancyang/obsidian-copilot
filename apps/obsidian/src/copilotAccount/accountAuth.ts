@@ -37,4 +37,5 @@ export interface AccountAuth {
     options: { forceRefresh?: boolean }
   ): Promise<AccountAccessToken>;
   disconnect(connectionId: string): Promise<void>;
+  receiveReturnLink(params: Readonly<Record<string, string>>): void;
 }

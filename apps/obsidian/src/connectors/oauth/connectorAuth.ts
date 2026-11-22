@@ -75,6 +75,7 @@ type ConnectorKeychain = Pick<
 export interface ConnectorAuthDeps {
   keychain: ConnectorKeychain;
   openUrl: (url: string) => void;
+  returnLink?: string;
 }
 
 interface StoredLogin {
@@ -101,8 +102,13 @@ export function loginFailureMessage(reason: LoginFailureReason, serviceName: str
   }
 }
 
+interface ActiveLogin {
+  readonly login: ConnectorLogin;
+  receiveReturnLink(params: Readonly<Record<string, string>>): void;
+}
+
 export class ConnectorAuth {
-  private active: ConnectorLogin | null = null;
+  private active: ActiveLogin | null = null;
   private readonly refreshes = new Map<string, Promise<AccessTokenResult>>();
 
   constructor(private readonly deps: ConnectorAuthDeps) {}
@@ -113,9 +119,9 @@ export class ConnectorAuth {
 
   login(target: ConnectorLoginTarget): ConnectorLogin {
     if (this.active) {
-      throw new Error(`Finish or cancel the ${this.active.serviceName} login first.`);
+      throw new Error(`Finish or cancel the ${this.active.login.serviceName} login first.`);
     }
-    const login = startLogin(target, this.deps.openUrl, async (stored) => {
+    const active = startLogin(target, this.deps, async (stored) => {
       // Logging in again replaces the stored login; revoke it (after any refresh in flight, as Disconnect
       // does) so the service keeps only the new login's tokens.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/23
@@ -128,11 +134,15 @@ export class ConnectorAuth {
         );
       }
     });
-    this.active = login;
-    void login.outcome.then(() => {
-      if (this.active === login) this.active = null;
+    this.active = active;
+    void active.login.outcome.then(() => {
+      if (this.active === active) this.active = null;
     });
-    return login;
+    return active.login;
+  }
+
+  receiveReturnLink(params: Readonly<Record<string, string>>): void {
+    this.active?.receiveReturnLink(params);
   }
 
   accessToken(
@@ -228,15 +238,16 @@ export class ConnectorAuth {
 
 function startLogin(
   target: ConnectorLoginTarget,
-  openUrl: (url: string) => void,
+  { openUrl, returnLink }: ConnectorAuthDeps,
   save: (stored: StoredLogin) => Promise<void>
-): ConnectorLogin {
+): ActiveLogin {
   const state = crypto.randomUUID();
   let redirectUrl = "";
   let authorizationUrl: URL | null = null;
   let client: OAuthClientInformationMixed | undefined;
   let codeVerifier = "";
   let settled = false;
+  let returned = false;
   let settle: (outcome: LoginOutcome) => void = () => {};
   const outcome = new Promise<LoginOutcome>((resolve) => (settle = resolve));
 
@@ -299,26 +310,23 @@ function startLogin(
     codeVerifier: () => codeVerifier,
   };
 
-  const server = startLoopbackServer("Connector login", async (request, response) => {
-    const url = new URL(request.url ?? "/", redirectUrl);
-    if (url.pathname !== CALLBACK_PATH || url.searchParams.get("state") !== state) {
-      // Only the service's redirect for this login carries its state; anything else is not an answer.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/23
-      response.writeHead(404).end();
-      return;
-    }
-    const code = url.searchParams.get("code");
-    let result: LoginOutcome;
-    if (!code) {
-      const denied = url.searchParams.get("error") === "access_denied";
-      result = { status: "failed", reason: denied ? "cancelled-on-service" : "rejected" };
-    } else {
-      result = await exchange(code);
-    }
-    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8", Connection: "close" });
-    response.end(resultPage(target, result));
-    finish(result);
-  });
+  const server = returnLink
+    ? null
+    : startLoopbackServer("Connector login", async (request, response) => {
+        const url = new URL(request.url ?? "/", redirectUrl);
+        const answering = url.pathname === CALLBACK_PATH ? answer(url.searchParams) : null;
+        if (!answering) {
+          response.writeHead(404).end();
+          return;
+        }
+        const result = await answering;
+        response.writeHead(200, {
+          "Content-Type": "text/html; charset=utf-8",
+          Connection: "close",
+        });
+        response.end(resultPage(target, result));
+        finish(result);
+      });
   const timeout = window.setTimeout(
     () => finish({ status: "failed", reason: "timed-out" }),
     LOGIN_TIMEOUT_MS
@@ -328,8 +336,32 @@ function startLogin(
     if (settled) return;
     settled = true;
     window.clearTimeout(timeout);
-    server.close();
+    server?.close();
     settle(result);
+  }
+
+  function answer(callback: URLSearchParams): Promise<LoginOutcome> | null {
+    // Only the service's redirect for this login carries its state; anything else is not an answer.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/23
+    if (callback.get("state") !== state) return null;
+    const code = callback.get("code");
+    if (code) return exchange(code);
+    const denied = callback.get("error") === "access_denied";
+    return Promise.resolve({
+      status: "failed",
+      reason: denied ? "cancelled-on-service" : "rejected",
+    });
+  }
+
+  function receiveReturnLink(params: Readonly<Record<string, string>>): void {
+    // Any web page can send a signed-in visitor through the website to the return link, so a link that is not
+    // this login's first answer changes nothing and contacts no one.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/926
+    if (!returnLink || returned) return;
+    const answering = answer(new URLSearchParams(params));
+    if (!answering) return;
+    returned = true;
+    void answering.then(finish);
   }
 
   async function exchange(code: string): Promise<LoginOutcome> {
@@ -347,20 +379,21 @@ function startLogin(
 
   void (async () => {
     try {
-      redirectUrl = `${await server.origin}${CALLBACK_PATH}`;
+      redirectUrl = server ? `${await server.origin}${CALLBACK_PATH}` : (returnLink ?? "");
       await auth(provider, { serverUrl: target.serverUrl, fetchFn: requestUrlFetch });
     } catch (error) {
       finish(loginFailure(error));
     }
   })();
 
-  return Object.freeze({
+  const login: ConnectorLogin = Object.freeze({
     connectionId: target.connectionId,
     serviceName: target.serviceName,
     outcome,
     loginUrl: () => authorizationUrl?.href ?? null,
     cancel: () => finish({ status: "cancelled" }),
   });
+  return { login, receiveReturnLink };
 }
 
 function loginFailure(error: unknown): LoginOutcome {

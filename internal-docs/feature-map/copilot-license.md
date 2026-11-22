@@ -5,7 +5,8 @@ The `Copilot license` section at the top of Copilot settings' Basic tab: what th
 ## Sub-features
 
 - license-description: the title carries the Copilot icon, and the description links `Copilot paid plans`, `OpenArtifacts` and `Miyo`.
-- account-sign-in: on desktop, everyone signed out sees `Sign in` at the right of the title, next to the plan badge when a license key is applied. It opens the Copilot website in the browser.
+- account-sign-in: everyone signed out sees `Sign in` at the right of the title, next to the plan badge when a license key is applied. It opens the Copilot website in the browser, on desktop and on phones and tablets.
+- account-sign-in-mobile: on a phone or tablet, finishing on the website brings the user back to Obsidian signed in, with the same pill, license and Discord invite as on desktop.
 - account-signing-in: while the browser is open, that spot reads `Finish signing in in your browser` with `Open page` and `Cancel`.
 - account-sign-in-failure: a cancelled, failed or timed-out sign-in says what happened under the title and leaves any applied license as it was.
 - account-pill: once signed in, that spot is one pill with the account's initial and its plan: `Free`, `Lite`, `Plus` or `Lifetime`. The plan badge is gone.
@@ -29,6 +30,7 @@ The `Copilot license` section at the top of Copilot settings' Basic tab: what th
 ## Driving it
 
 - Sign in: choose `Sign in`, then sign in or sign up on the website. The browser page reads `You're signed in to Copilot`, and the section shows the pill with the account's plan.
+- Sign in on mobile: on a phone or tablet, choose `Sign in`, then sign in on the website. The browser hands back to Obsidian, and the section shows the pill with the account's plan.
 - Signing in: choose `Sign in` and leave the browser page open. The section reads `Finish signing in in your browser`; `Open page` opens the same page again and `Cancel` brings back `Sign in` with `Sign-in cancelled.`
 - Account menu: choose the pill. The menu shows the account's email, `Dashboard`, `Refresh plan`, `Join the Copilot Discord` and `Sign out`.
 - Discord invite: sign in for the first time. The invite shows at the bottom of the section. Choose the close button: it goes away and stays away after `Sign out` and `Sign in`. `Join the Copilot Discord` in the menu still opens the invite.
@@ -48,6 +50,6 @@ The `Copilot license` section at the top of Copilot settings' Basic tab: what th
 - The sign-in stays across restarts. The account is read when Obsidian starts, each time the settings open, on `Refresh plan`, with the daily license check, and for one minute after `See plans` once the user is back in Obsidian. A purchase that lands later shows at the next of these. A sign-in the website has ended shows as signed out at the next read, and its license goes with it.
 - A pasted key wins over the account: with one active, the pill shows the account's plan while the usage line and `Remove license` belong to the pasted key, whatever the account's plan.
 - When the website can't be reached, the license and the pill stay as they were.
-- Mobile shows no `Sign in`.
+- On a phone or tablet, the website returns to Obsidian through an `obsidian://copilot-auth` link. A link that does not belong to the sign-in in progress, or arrives again after it finished, does nothing and shows nothing; on desktop such a link always does nothing.
 - Usage is read each time the settings open; it does not update while they stay open.
 - Once applied, a key cannot be shown again in settings. Users who need it copy it from their Copilot dashboard.
