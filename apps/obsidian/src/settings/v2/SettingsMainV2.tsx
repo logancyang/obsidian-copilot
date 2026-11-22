@@ -25,8 +25,10 @@ import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { AdvancedSettings } from "./components/AdvancedSettings";
 import { BasicSettings } from "./components/BasicSettings";
 import { DesktopOnlySettingsPanel } from "./components/DesktopOnlySettingsPanel";
+import { PlusSettings } from "./components/PlusSettings";
 import { MiyoSettings } from "@/miyo/settings/MiyoSettings";
 import { SelfHostSettings } from "./components/SelfHostSettings";
+import type { LicenseUsageWindow } from "./components/ui/CopilotLicenseSection";
 import { SettingsSubPageHost } from "./SettingsSubPage";
 
 const LazySkillsSettings = React.lazy(() =>
@@ -44,6 +46,22 @@ const SkillsSettingsPanel: React.FC = () => {
   );
 };
 
+async function readLicenseUsage(): Promise<readonly LicenseUsageWindow[] | null> {
+  // The usage reader ships with Agent Mode, whose code cannot load on mobile.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/923
+  if (!isDesktopRuntime()) return null;
+  const { CopilotPlusUsageReader } = await import("@/agentMode");
+  const reading = await new CopilotPlusUsageReader().readPlanUsage();
+  return reading.kind === "usage" ? reading.planUsage.windows : null;
+}
+
+const BasicSettingsTab: React.FC = () => (
+  <div className="tw-space-y-4">
+    <PlusSettings readLicenseUsage={readLicenseUsage} />
+    <BasicSettings />
+  </div>
+);
+
 const icons: Record<CopilotSettingsTabId, JSX.Element> = {
   basic: <Cog className="tw-size-5" />,
   byok: <Cpu className="tw-size-5" />,
@@ -56,7 +74,7 @@ const icons: Record<CopilotSettingsTabId, JSX.Element> = {
 };
 
 const components: Record<CopilotSettingsTabId, React.FC> = {
-  basic: () => <BasicSettings />,
+  basic: BasicSettingsTab,
   byok: () => <ByokPanel />,
   miyo: () => <MiyoSettings />,
   selfhost: () => <SelfHostSettings />,

@@ -1,8 +1,17 @@
+import type { PlanUsageReading } from "@/agentMode/session/planUsage";
 import type CopilotPlugin from "@/main";
+import type { PlusSettingsProps } from "@/settings/v2/components/PlusSettings";
 import SettingsMainV2 from "@/settings/v2/SettingsMainV2";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
 
+let mockPlusSettings: PlusSettingsProps | null = null;
+jest.mock("@/settings/v2/components/PlusSettings", () => ({
+  PlusSettings: (props: PlusSettingsProps) => {
+    mockPlusSettings = props;
+    return null;
+  },
+}));
 jest.mock("@/settings/v2/components/BasicSettings", () => {
   const { useState } = jest.requireActual<typeof import("react")>("react");
   const { useSettingsSubPage } = jest.requireActual<typeof import("@/settings/v2/SettingsSubPage")>(
@@ -43,8 +52,14 @@ jest.mock("@/settings/v2/components/DesktopOnlySettingsPanel", () => ({
   DesktopOnlySettingsPanel: () => null,
 }));
 const mockSkillManagerRefresh = jest.fn().mockResolvedValue(undefined);
+const mockReadPlanUsage = jest.fn<Promise<PlanUsageReading>, []>();
 jest.mock("@/agentMode", () => ({
   SkillsSettings: () => null,
+  CopilotPlusUsageReader: class {
+    readPlanUsage() {
+      return mockReadPlanUsage();
+    }
+  },
 }));
 jest.mock("@/modelManagement", () => ({
   ByokPanel: () => null,
@@ -62,7 +77,8 @@ jest.mock("@/hooks/useLatestVersion", () => ({
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; the name must match the export
   useLatestVersion: () => ({ latestVersion: mockLatestVersion, hasUpdate: mockHasUpdate }),
 }));
-jest.mock("@/utils/desktopRuntime", () => ({ isDesktopRuntime: () => true }));
+let mockIsDesktop = true;
+jest.mock("@/utils/desktopRuntime", () => ({ isDesktopRuntime: () => mockIsDesktop }));
 jest.mock("@/settings/v2/components/ConnectorsSettings", () => ({
   ConnectorsSettings: () => null,
 }));
@@ -94,6 +110,9 @@ describe("SettingsMainV2", () => {
       mockHasUpdate = false;
       mockConnectorsEnabled = true;
       mockSkillManagerRefresh.mockClear();
+      mockIsDesktop = true;
+      mockPlusSettings = null;
+      mockReadPlanUsage.mockReset();
     });
 
     it("shows the installed version and latest version from the shared update hook", () => {
@@ -186,6 +205,29 @@ describe("SettingsMainV2", () => {
       expect(screen.getByRole("heading", { name: /Copilot settings/ })).not.toBeNull();
       expect(screen.getByRole("tab", { name: "Basic" }).getAttribute("aria-selected")).toBe("true");
       expect(screen.getByRole("button", { name: "Agent tab: Claude" })).not.toBeNull();
+    });
+
+    it("gives the license section the Copilot Plus usage windows read through Agent Mode", async () => {
+      const windows = [{ id: "five_hour", label: "5h", percent: 12 }];
+      mockReadPlanUsage.mockResolvedValue({ kind: "usage", planUsage: { windows, updatedAt: 1 } });
+      render(<SettingsMainV2 plugin={plugin} />);
+
+      await expect(mockPlusSettings?.readLicenseUsage()).resolves.toEqual(windows);
+    });
+
+    it("gives the license section no usage when the reading has no allowance windows", async () => {
+      mockReadPlanUsage.mockResolvedValue({ kind: "unavailable" });
+      render(<SettingsMainV2 plugin={plugin} />);
+
+      await expect(mockPlusSettings?.readLicenseUsage()).resolves.toBeNull();
+    });
+
+    it("reads no license usage on mobile, where the usage reader cannot load — https://github.com/Brevilabs/obsidian-copilot-private/issues/923", async () => {
+      mockIsDesktop = false;
+      render(<SettingsMainV2 plugin={plugin} />);
+
+      await expect(mockPlusSettings?.readLicenseUsage()).resolves.toBeNull();
+      expect(mockReadPlanUsage).not.toHaveBeenCalled();
     });
 
     it("opens on a requested tab (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", () => {

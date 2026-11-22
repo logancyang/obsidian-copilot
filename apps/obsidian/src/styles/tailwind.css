@@ -1070,3 +1070,28 @@ If your plugin does not need CSS, delete this file.
 .copilot-fade-mask-bottom {
   background: linear-gradient(to top, var(--background-primary), transparent);
 }
+
+/* The license section's gradient border is a border-box layer under padding-box glow and surface layers; Tailwind's bg-clip utilities set one clip for every layer. https://github.com/Brevilabs/obsidian-copilot-private/issues/923 */
+.copilot-license-surface {
+  --copilot-license-surface: color-mix(
+    in srgb,
+    var(--interactive-accent) 8%,
+    var(--background-primary)
+  );
+
+  background:
+    radial-gradient(
+        460px 150px at 0% 0%,
+        color-mix(in srgb, var(--interactive-accent) 24%, transparent),
+        transparent 70%
+      )
+      padding-box,
+    linear-gradient(var(--copilot-license-surface), var(--copilot-license-surface)) padding-box,
+    linear-gradient(
+        120deg,
+        var(--interactive-accent),
+        color-mix(in srgb, var(--interactive-accent) 30%, var(--background-modifier-border)) 38%,
+        color-mix(in srgb, var(--interactive-accent) 12%, var(--background-modifier-border))
+      )
+      border-box;
+}

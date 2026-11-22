@@ -283,13 +283,19 @@ export function markPaidPendingEntitlement(): void {
   });
 }
 
+const CLEARED_ENTITLEMENT = Object.freeze({
+  isPaidUser: false,
+  isPlusUser: false,
+  entitlementToken: "",
+  entitlementExpiresAt: 0,
+});
+
 function clearEntitlement(): void {
-  setSettings({
-    isPaidUser: false,
-    isPlusUser: false,
-    entitlementToken: "",
-    entitlementExpiresAt: 0,
-  });
+  setSettings(CLEARED_ENTITLEMENT);
+}
+
+export function removeLicense(): void {
+  setSettings({ ...CLEARED_ENTITLEMENT, plusLicenseKey: "" });
 }
 
 export function turnOffPaid(app?: App): void {
