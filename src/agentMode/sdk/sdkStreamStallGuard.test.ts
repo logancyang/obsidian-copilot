@@ -1,5 +1,5 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import { SdkStreamStallGuard } from "./sdkStreamStallGuard";
+import { SDK_STREAM_STALL_TIMEOUT_MS, SdkStreamStallGuard } from "./sdkStreamStallGuard";
 
 function streamEvent(innerType: string): SDKMessage {
   return { type: "stream_event", event: { type: innerType } } as unknown as SDKMessage;
@@ -48,6 +48,18 @@ describe("sdkStreamStallGuard", () => {
         jest.advanceTimersByTime(5_000);
 
         expect(onStall).not.toHaveBeenCalled();
+      });
+
+      it("https://github.com/logancyang/obsidian-copilot/issues/4259 by default stays quiet through the 5 minutes Claude Code waits before retrying a silent stream itself, then reports the stall", () => {
+        const onStall = jest.fn();
+        const guard = new SdkStreamStallGuard(onStall);
+
+        guard.observe(streamEvent("content_block_delta"));
+        jest.advanceTimersByTime(5 * 60_000);
+        expect(onStall).not.toHaveBeenCalled();
+        jest.advanceTimersByTime(SDK_STREAM_STALL_TIMEOUT_MS - 5 * 60_000);
+
+        expect(onStall).toHaveBeenCalledTimes(1);
       });
 
       it("stays quiet through a long gap after a message completes, such as a running tool", () => {
