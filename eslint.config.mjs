@@ -147,9 +147,6 @@ const OBSIDIANMD_RATCHET = Object.fromEntries(
     .map(([id]) => [id, "error"])
 );
 
-const SOURCE_ROOTS = ["apps/obsidian/src"];
-const inSource = (glob) => SOURCE_ROOTS.map((root) => `${root}/${glob}`);
-
 const restrictedSourceImports = [
   {
     selector:
@@ -309,8 +306,8 @@ export default [
   },
 
   {
-    files: inSource("**/*.{ts,tsx}"),
-    ignores: [...inSource("**/*.test.{ts,tsx}"), ...inSource("**/__mocks__/**")],
+    files: ["apps/obsidian/src/**/*.{ts,tsx}"],
+    ignores: ["apps/obsidian/src/**/*.test.{ts,tsx}", "apps/obsidian/src/**/__mocks__/**"],
     plugins: { copilot: copilotLintPlugin },
     rules: {
       "copilot/no-direct-node-imports": "error",
@@ -327,7 +324,7 @@ export default [
   },
 
   {
-    files: inSource("**/*.{ts,tsx}"),
+    files: ["apps/obsidian/src/**/*.{ts,tsx}"],
     ignores: ["apps/obsidian/src/utils/react/createPluginRoot.tsx"],
     rules: {
       "no-restricted-syntax": [
@@ -361,7 +358,7 @@ export default [
   },
 
   {
-    files: inSource("**/*.test.{js,jsx,ts,tsx}"),
+    files: ["apps/obsidian/src/**/*.test.{js,jsx,ts,tsx}"],
     rules: {
       "no-restricted-syntax": ["error", ...restrictedSourceImports],
     },
@@ -402,7 +399,7 @@ export default [
   },
 
   {
-    files: ["dev/gallery/**/*.{ts,tsx}", ...inSource("**/*.stories.{ts,tsx}")],
+    files: ["dev/gallery/**/*.{ts,tsx}", "apps/obsidian/src/**/*.stories.{ts,tsx}"],
     ignores: ["dev/gallery/**/*.test.{ts,tsx}"],
     rules: {
       "@typescript-eslint/no-restricted-imports": [
@@ -503,14 +500,14 @@ export default [
   },
 
   {
-    files: inSource("**/*.{ts,tsx,js,jsx}"),
+    files: ["apps/obsidian/src/**/*.{ts,tsx,js,jsx}"],
     plugins: { boundaries },
     settings: {
       "import/resolver": {
         typescript: { project: "./tsconfig.json" },
         node: true,
       },
-      "boundaries/include": inSource("**/*"),
+      "boundaries/include": ["apps/obsidian/src/**/*"],
       "boundaries/elements": architecture.elements,
       "boundaries/dependency-nodes": ["import", "dynamic-import", "export"],
     },
@@ -533,7 +530,7 @@ export default [
   },
 
   {
-    files: inSource("**/*.{ts,tsx}"),
+    files: ["apps/obsidian/src/**/*.{ts,tsx}"],
     rules: {
       "no-restricted-imports": [
         "error",
