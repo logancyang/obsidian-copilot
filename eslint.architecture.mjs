@@ -65,4 +65,5 @@ export const architecture = {
   rules: [...boxRules, ...backendRules, ...debtRules],
   clientAccessConfigs,
   lintRules: { "no-host-access-in-client": noHostAccessInClient },
+  undisableableRules: ["boundaries/*", clientAccessRule],
 };
