@@ -6,6 +6,7 @@ import { AgentSession, type AgentTask } from "./AgentSession";
 import { buildNativeChatId } from "@/utils/nativeChatId";
 import { AI_SENDER, CHAT_AGENT_VIEWTYPE, USER_SENDER } from "@/constants";
 import { formatDateTime } from "@/utils";
+import { RecentUsageManager } from "@/utils/recentUsageManager";
 import { playNotificationSound } from "@/utils/notificationSound";
 import { refreshLatestVersion } from "@/hooks/useLatestVersion";
 import { AgentSessionIndex } from "./AgentSessionIndex";
@@ -458,11 +459,11 @@ function modelCatalog(baseModelId: string): BackendModelCatalog {
   };
 }
 
-type ManagerDeps = ConstructorParameters<typeof AgentSessionManager>[2];
+type ManagerDeps = ConstructorParameters<typeof AgentSessionManager>[1];
 
 interface ManagerOptions {
   app?: App;
-  plugin?: unknown;
+  chatHistoryLastAccessedAt?: ManagerDeps["chatHistoryLastAccessedAt"];
   descriptor?: BackendDescriptor;
   otherDescriptors?: BackendDescriptor[];
   preloader?: Record<string, unknown>;
@@ -483,35 +484,31 @@ function buildManager(options: ManagerOptions = {}): AgentSessionManager {
     options.descriptor ?? buildDescriptor(),
     ...(options.otherDescriptors ?? []),
   ];
-  const manager = new AgentSessionManager(
-    options.app ?? buildApp(),
-    (options.plugin ?? {
-      manifest: { version: "1.0.0" },
-    }) as ConstructorParameters<typeof AgentSessionManager>[1],
-    {
-      permissionPrompter: jest.fn(),
-      resolveDescriptor: (id) => descriptors.find((descriptor) => descriptor.id === id),
-      modelPreloader: {
-        getCachedModelCatalog: jest.fn(() => null),
-        getEffortCatalog: jest.fn(() => null),
-        preload: jest.fn(async () => undefined),
-        refresh: jest.fn(() => null),
-        subscribe: jest.fn(() => () => {}),
-        shutdown: jest.fn(),
-        clearCached: jest.fn(),
-        takeWarm: jest.fn(() => null),
-        ...options.preloader,
-      } as unknown as ManagerDeps["modelPreloader"],
-      persistenceManager: options.persistence as ManagerDeps["persistenceManager"],
-      sessionIndex: options.sessionIndex,
-      beforeBackendStart: options.beforeBackendStart,
-      backendStartServices: options.backendStartServices ?? fakeBackendStartServices(),
-      copilotMcpServer: options.copilotMcpServer,
-      chatExtensions: options.chatExtensions,
-      resolveAgent: options.resolveAgent ?? mockResolveAgent,
-      onChatReopened: options.onChatReopened,
-    }
-  );
+  const manager = new AgentSessionManager(options.app ?? buildApp(), {
+    permissionPrompter: jest.fn(),
+    resolveDescriptor: (id) => descriptors.find((descriptor) => descriptor.id === id),
+    modelPreloader: {
+      getCachedModelCatalog: jest.fn(() => null),
+      getEffortCatalog: jest.fn(() => null),
+      preload: jest.fn(async () => undefined),
+      refresh: jest.fn(() => null),
+      subscribe: jest.fn(() => () => {}),
+      shutdown: jest.fn(),
+      clearCached: jest.fn(),
+      takeWarm: jest.fn(() => null),
+      ...options.preloader,
+    } as unknown as ManagerDeps["modelPreloader"],
+    persistenceManager: options.persistence as ManagerDeps["persistenceManager"],
+    sessionIndex: options.sessionIndex,
+    beforeBackendStart: options.beforeBackendStart,
+    backendStartServices: options.backendStartServices ?? fakeBackendStartServices(),
+    chatHistoryLastAccessedAt:
+      options.chatHistoryLastAccessedAt ?? new RecentUsageManager<string>(),
+    copilotMcpServer: options.copilotMcpServer,
+    chatExtensions: options.chatExtensions,
+    resolveAgent: options.resolveAgent ?? mockResolveAgent,
+    onChatReopened: options.onChatReopened,
+  });
   builtManagers.push(manager);
   return manager;
 }
@@ -908,6 +905,7 @@ function buildHistoryHarness(opts?: {
   applyInitialSessionConfig?: BackendDescriptor["applyInitialSessionConfig"];
   applySelection?: BackendDescriptor["applySelection"];
   onChatReopened?: ManagerDeps["onChatReopened"];
+  chatHistoryLastAccessedAt?: ManagerDeps["chatHistoryLastAccessedAt"];
 }) {
   const frontmatterByPath = opts?.files ?? {};
   const hiddenByPath = opts?.hiddenFiles ?? {};
@@ -941,12 +939,6 @@ function buildHistoryHarness(opts?: {
       offref: jest.fn(),
     },
   } as unknown as App;
-  const plugin = {
-    manifest: { version: "1.0.0" },
-    getChatHistoryLastAccessedAtManager: () => ({
-      getEffectiveLastUsedAt: (_path: string, fallback: number) => fallback,
-    }),
-  };
   const persistence = {
     getAgentChatHistoryFiles: jest.fn(async () => tfiles),
     updateTopic: jest.fn(async () => undefined),
@@ -976,7 +968,7 @@ function buildHistoryHarness(opts?: {
   });
   const manager = buildManager({
     app,
-    plugin,
+    chatHistoryLastAccessedAt: opts?.chatHistoryLastAccessedAt,
     descriptor,
     persistence,
     sessionIndex: index,
@@ -6113,6 +6105,21 @@ describe("AgentSessionManager", () => {
         expect(native?.id).toBe(buildNativeChatId("opencode", "s2"));
         expect(native?.title).toBe("Native only chat");
         expect(native?.backendId).toBe("opencode");
+      });
+
+      it("dates a saved chat by when it was last opened this run, from the last-accessed tracker the manager is given", async () => {
+        const chatHistoryLastAccessedAt = new RecentUsageManager<string>({ nowMs: () => 9_000 });
+        chatHistoryLastAccessedAt.touch("chats/agent__a.md");
+        const { manager } = buildHistoryHarness({
+          files: {
+            "chats/agent__a.md": { epoch: 1_000, topic: "Saved chat", lastAccessedAt: 2_000 },
+          },
+          chatHistoryLastAccessedAt,
+        });
+
+        const [item] = await manager.getChatHistoryItems();
+
+        expect(item.lastAccessedAt.getTime()).toBe(9_000);
       });
 
       it("https://github.com/logancyang/obsidian-copilot/issues/3195 reports when saved chats were pinned, including notes in hidden folders outside the metadata cache", async () => {

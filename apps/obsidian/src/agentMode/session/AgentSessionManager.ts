@@ -17,7 +17,6 @@ import type { CopilotMcpServer, FindCallingChat } from "@/agentMode/session/copi
 import { refreshLatestVersion } from "@/hooks/useLatestVersion";
 import { resolveEffort } from "@/lib/model-effort";
 import { logError, logInfo, logWarn } from "@/logger";
-import type CopilotPlugin from "@/main";
 import { AgentChatUIState } from "@/agentMode/session/AgentChatUIState";
 import {
   AgentInputDraftStore,
@@ -46,6 +45,7 @@ import type { AgentModelPreloader } from "./AgentModelPreloader";
 import { buildNativeChatId, parseNativeChatId } from "@/utils/nativeChatId";
 import { CHAT_AGENT_VIEWTYPE, USER_SENDER } from "@/constants";
 import { playNotificationSound } from "@/utils/notificationSound";
+import type { RecentUsageManager } from "@/utils/recentUsageManager";
 import type { AgentSessionIndex, AgentSessionIndexEntry } from "./AgentSessionIndex";
 import {
   deriveChatTitleFromMessages,
@@ -173,6 +173,7 @@ export interface AgentSessionManagerOptions {
   modelPreloader: AgentModelPreloader;
   beforeBackendStart?: (id: BackendId) => Promise<void>;
   backendStartServices: BackendStartServices;
+  chatHistoryLastAccessedAt: RecentUsageManager<string>;
   persistenceManager?: AgentChatPersistenceManager;
   sessionIndex?: AgentSessionIndex;
   copilotMcpServer?: CopilotMcpServer;
@@ -280,7 +281,6 @@ export class AgentSessionManager {
 
   constructor(
     private readonly app: App,
-    private readonly plugin: CopilotPlugin,
     private readonly opts: AgentSessionManagerOptions
   ) {
     if (Platform.isMobile) {
@@ -411,12 +411,11 @@ export class AgentSessionManager {
     let markdownEntries: MarkdownChatEntry[] = [];
     if (persistence) {
       files = await persistence.getAgentChatHistoryFiles();
-      const tracker = this.plugin.getChatHistoryLastAccessedAtManager();
       markdownEntries = await Promise.all(
         files.map(async (file) => {
           const frontmatter = await this.readChatFrontmatter(file.path);
           const ref = sessionRefFromFrontmatter(frontmatter);
-          const item = fileToHistoryItem(this.app, file, tracker);
+          const item = fileToHistoryItem(this.app, file, this.opts.chatHistoryLastAccessedAt);
           return {
             item: {
               ...item,

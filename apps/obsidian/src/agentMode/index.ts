@@ -407,7 +407,7 @@ export function createAgentSessionManager(
   const askUserQuestionPrompter = createDefaultAskUserQuestionPrompter(
     (id) => managerRef?.getSessionByBackendId(id) ?? null
   );
-  const manager = new AgentSessionManager(app, plugin, {
+  const manager = new AgentSessionManager(app, {
     // A request from an asked agent's chat, which no list shows, goes to the chat that asked it.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/946
     permissionPrompter: (request) =>
@@ -417,6 +417,7 @@ export function createAgentSessionManager(
     modelPreloader: preloader,
     beforeBackendStart,
     backendStartServices,
+    chatHistoryLastAccessedAt: plugin.getChatHistoryLastAccessedAtManager(),
     persistenceManager,
     sessionIndex,
     chatExtensions: [

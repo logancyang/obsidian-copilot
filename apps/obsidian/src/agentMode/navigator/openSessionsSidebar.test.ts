@@ -1,6 +1,7 @@
 import {
   openNavigatorWhenUnlocked,
   openSessionsSidebar,
+  type NavigatorHost,
 } from "@/agentMode/navigator/openSessionsSidebar";
 import { revealSessionsSidebar } from "@/agentMode/navigator/revealSessionsSidebar";
 import { NavigatorUpsellModal } from "@/agentMode/navigator/ui/NavigatorUpsell";
@@ -9,7 +10,6 @@ import {
   verifyStoredToken,
   setNavigatorAccess,
 } from "@/agentMode/ui/testing/navigatorAccess";
-import type CopilotPlugin from "@/main";
 import { setSettings } from "@/settings/model";
 
 jest.mock("@/entitlement");
@@ -35,7 +35,7 @@ jest.mock("@/agentMode/navigator/ui/NavigatorUpsell", () => ({
 }));
 
 interface TestPlugin {
-  plugin: CopilotPlugin;
+  plugin: NavigatorHost;
   unload: () => void;
 }
 
@@ -44,7 +44,7 @@ function makePlugin(): TestPlugin {
   const plugin = {
     app: {},
     register: jest.fn((cleanup: () => void) => cleanups.push(cleanup)),
-  } as unknown as CopilotPlugin;
+  } as unknown as NavigatorHost;
   return { plugin, unload: () => cleanups.forEach((cleanup) => cleanup()) };
 }
 
