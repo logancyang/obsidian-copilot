@@ -1,9 +1,9 @@
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { SESSIONS_SIDEBAR_VIEWTYPE } from "@/constants";
-import type { CopilotHost } from "@/host/platform/copilotHost";
-import { Notice } from "obsidian";
+import { Notice, type App } from "obsidian";
 
-export interface SessionsSidebarHost extends Pick<CopilotHost, "app"> {
+export interface SessionsSidebarHost {
+  readonly app: App;
   readonly agentSessionManager?: AgentSessionManager;
 }
 

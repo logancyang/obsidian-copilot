@@ -1,7 +1,7 @@
 import type { ApprovedRule, ApprovedRuleStore } from "@/agentMode";
 import type { Meta, StoryObj } from "@/lib/story";
-import type { CopilotHost } from "@/host/platform/copilotHost";
 import React from "react";
+import type { App } from "obsidian";
 import { ApprovedRulesPage, type ApprovedRulesPageProps } from "./ApprovedRulesPage";
 
 const RULES: ReadonlyArray<ApprovedRule> = [
@@ -38,7 +38,7 @@ function fakeRuleStore(overrides: Partial<ApprovedRuleStore> = {}): ApprovedRule
   };
 }
 
-const HOST = {} as Pick<CopilotHost, "app">;
+const APP = {} as App;
 
 const MANY_RULES: ReadonlyArray<ApprovedRule> = Array.from({ length: 30 }, (_, index) => ({
   id: `rule-${index}`,
@@ -78,7 +78,7 @@ function SearchedPage({ text }: { text: string }): React.ReactElement {
       <ApprovedRulesPage
         agentName="Claude"
         store={fakeRuleStore()}
-        host={HOST}
+        app={APP}
         onBack={() => undefined}
       />
     </div>
@@ -91,7 +91,7 @@ const meta = {
   args: {
     agentName: "Claude",
     store: fakeRuleStore(),
-    host: HOST,
+    app: APP,
     onBack: () => undefined,
   },
   parameters: { gallery: { host: "settings-tab", layout: "padded" } },
@@ -177,7 +177,7 @@ function RemovedPage({ failUndo = false }: { failUndo?: boolean }): React.ReactE
   }, [failUndo]);
   return (
     <div ref={root} className="tw-h-[480px]">
-      <ApprovedRulesPage agentName="Claude" store={store} host={HOST} onBack={() => undefined} />
+      <ApprovedRulesPage agentName="Claude" store={store} app={APP} onBack={() => undefined} />
     </div>
   );
 }

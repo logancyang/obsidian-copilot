@@ -3,14 +3,14 @@ import {
   revealSessionsSidebar,
   type SessionsSidebarHost,
 } from "@/agentMode/navigator/revealSessionsSidebar";
-import type { CopilotHost } from "@/host/platform/copilotHost";
+import type { Component } from "obsidian";
 import {
   ensureNavigatorEntitlement,
   isNavigatorEnabled,
 } from "@/agentMode/navigator/navigatorEntitlement";
 import { subscribeToEntitlementChange } from "@/plusUtils";
 
-export type NavigatorHost = SessionsSidebarHost & Pick<CopilotHost, "register">;
+export type NavigatorHost = SessionsSidebarHost & Component;
 
 const hostsAwaitingUnlock = new WeakSet<NavigatorHost>();
 

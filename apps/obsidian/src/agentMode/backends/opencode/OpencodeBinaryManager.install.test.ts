@@ -35,7 +35,7 @@ const issue = "https://github.com/Brevilabs/obsidian-copilot-private/issues/530"
     jest.mocked(npmPackage.verifyNpmIntegrity).mockReset();
     jest.mocked(npmPackage.extractNpmBinary).mockReset();
     root = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-publication-"));
-    manager = new OpencodeBinaryManager({} as never);
+    manager = new OpencodeBinaryManager({} as never, {} as never);
     jest.spyOn(manager, "getDataDir").mockReturnValue(root);
     previous = path.join(root, OPENCODE_PINNED_VERSION, "bin", "opencode");
     fs.mkdirSync(path.dirname(previous), { recursive: true });

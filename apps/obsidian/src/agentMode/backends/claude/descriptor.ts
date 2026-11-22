@@ -189,7 +189,7 @@ async function writeClaudeSettings(
 }
 
 const claudeApprovedRules: ApprovedRuleStore = {
-  async list({ app }) {
+  async list(app) {
     const files = claudeSettingsFiles(claudeChildEnv(getSettings()), getVaultBase(app));
     const perFile = await Promise.all(
       files.map(async (path) => {
@@ -214,7 +214,7 @@ const claudeApprovedRules: ApprovedRuleStore = {
     return perFile.flat();
   },
 
-  async remove(_host, rule) {
+  async remove(_app, rule) {
     const file = (rule.appliesTo as { path: string }).path;
     const loaded = await readClaudeSettings(file);
     const permissions = loaded.settings?.permissions;
@@ -408,7 +408,7 @@ export const ClaudeBackendDescriptor: ClaudeDescriptor = {
     await refreshClaudeInstallState(getSettings(), true);
   },
 
-  openInstallUI({ app }): void {
+  openInstallUI(app): void {
     new ClaudeInstallModal(app, ClaudeBackendDescriptor).open();
   },
 
