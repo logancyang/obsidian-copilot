@@ -3,15 +3,16 @@ import path from "node:path";
 import process from "node:process";
 
 const GENERATED_FILE = "dev/gallery/stories.generated.ts";
-const PRESENTATIONAL_COMPONENT_PATTERNS = ["src/**/ui/**/*.tsx"];
-const STORY_PATTERNS = ["src/**/*.stories.tsx"];
+const SOURCE_ROOT = "apps/obsidian/src";
+const PRESENTATIONAL_COMPONENT_PATTERNS = [`${SOURCE_ROOT}/**/ui/**/*.tsx`];
+const STORY_PATTERNS = [`${SOURCE_ROOT}/**/*.stories.tsx`];
 
 function isPresentationalComponent(filePath) {
   return !filePath.endsWith(".test.tsx") && !filePath.endsWith(".stories.tsx");
 }
 
 function toModuleId(filePath, suffix) {
-  const sourcePath = path.relative("src", filePath).split(path.sep).join("/");
+  const sourcePath = path.relative(SOURCE_ROOT, filePath).split(path.sep).join("/");
   return `@/${sourcePath.slice(0, -suffix.length)}`;
 }
 

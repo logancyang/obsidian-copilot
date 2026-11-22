@@ -4,7 +4,7 @@ description: |
   Create a single high-quality GitHub issue in
   logancyang/obsidian-copilot-preview from a TODO item, design-doc punch list
   entry, or ad-hoc feature/bug request. Each invocation is exactly one issue
-  end-to-end: investigate the surface in src/, draft against the standard,
+  end-to-end: investigate the surface in apps/obsidian/src/, draft against the standard,
   ensure labels exist, push via gh, and (if a source file + line were given)
   edit that line to point at the new issue. Use when asked to "file an issue
   for X", "open a ticket", or "convert this TODO to an issue".
@@ -54,14 +54,14 @@ The caller passes (free-form for ad-hoc use, structured for subagent use):
 
 Before drafting:
 
-1. **Locate the relevant surface in `src/`.** Grep for keywords from the TODO.
+1. **Locate the relevant surface in `apps/obsidian/src/`.** Grep for keywords from the TODO.
    Common entry points for Agent Mode work:
-   - `src/LLMProviders/`
-   - `src/agentMode/` (if present)
-   - `src/components/Chat/`
-   - `src/tools/`
-   - `src/mcp/`
-   - `src/skills/`
+   - `apps/obsidian/src/LLMProviders/`
+   - `apps/obsidian/src/agentMode/` (if present)
+   - `apps/obsidian/src/components/Chat/`
+   - `apps/obsidian/src/tools/`
+   - `apps/obsidian/src/mcp/`
+   - `apps/obsidian/src/skills/`
 2. **Read any design doc referenced by the TODO line.** If the TODO
    references a doc that does not exist, flag this in the issue's Open
    questions section and proceed with the TODO text alone.
@@ -171,8 +171,8 @@ priority: P1
 source-file: <path or null>
 source-lines: <start-end or null>
 investigated:
-  - src/agentMode/binaryDetection.ts
-  - src/LLMProviders/opencode/launch.ts
+  - apps/obsidian/src/agentMode/binaryDetection.ts
+  - apps/obsidian/src/LLMProviders/opencode/launch.ts
 ---
 
 ## Context
@@ -196,7 +196,7 @@ The `investigated` field lists every file the author actually read. The
 reviewer uses this to spot-check: re-grep, re-read at least one cited file,
 and confirm the Context section's claims hold.
 
-If the author could not locate the relevant surface in `src/`, set
+If the author could not locate the relevant surface in `apps/obsidian/src/`, set
 `investigated: []` and explain in the issue's Open questions section that
 the surface was not identified during investigation.
 

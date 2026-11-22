@@ -1,12 +1,16 @@
 {
   "$schema": "https://unpkg.com/knip@5/schema.json",
   "entry": [
-    "src/main.ts",
+    "apps/obsidian/src/main.ts",
     "dev/gallery/main.ts",
-    "src/**/*.stories.{ts,tsx}",
+    "apps/obsidian/src/**/*.stories.{ts,tsx}",
     "scripts/printPromptDebug.js",
     "scripts/printPromptDebugEntry.ts"
   ],
-  "project": ["src/**/*.{ts,tsx,js,jsx}", "dev/gallery/**/*.{ts,tsx}", "scripts/**/*.{ts,js,mjs}"],
-  "ignore": ["src/styles/tailwind.css"]
+  "project": [
+    "apps/obsidian/src/**/*.{ts,tsx,js,jsx}",
+    "dev/gallery/**/*.{ts,tsx}",
+    "scripts/**/*.{ts,js,mjs}"
+  ],
+  "ignore": ["apps/obsidian/src/styles/tailwind.css"]
 }

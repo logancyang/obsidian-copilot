@@ -4,7 +4,7 @@ import path from "node:path";
 import process from "node:process";
 
 const projectRoot = process.cwd();
-const productionSourcePath = path.join(projectRoot, "src/styles/tailwind.css");
+const productionSourcePath = path.join(projectRoot, "apps/obsidian/src/styles/tailwind.css");
 const galleryChromePath = path.join(projectRoot, "dev/gallery/gallery.css");
 const outputPath = path.join(projectRoot, "dev/gallery/styles.source.css");
 

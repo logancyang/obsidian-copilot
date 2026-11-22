@@ -310,8 +310,8 @@ export default [
   },
 
   {
-    files: ["src/**/*.{ts,tsx}"],
-    ignores: ["src/**/*.test.{ts,tsx}", "src/**/__mocks__/**"],
+    files: ["apps/obsidian/src/**/*.{ts,tsx}"],
+    ignores: ["apps/obsidian/src/**/*.test.{ts,tsx}", "apps/obsidian/src/**/__mocks__/**"],
     plugins: { copilot: copilotLintPlugin },
     rules: {
       "copilot/no-direct-node-imports": "error",
@@ -328,8 +328,8 @@ export default [
   },
 
   {
-    files: ["src/**/*.{ts,tsx}"],
-    ignores: ["src/utils/react/createPluginRoot.tsx"],
+    files: ["apps/obsidian/src/**/*.{ts,tsx}"],
+    ignores: ["apps/obsidian/src/utils/react/createPluginRoot.tsx"],
     rules: {
       "no-restricted-syntax": [
         "error",
@@ -342,7 +342,7 @@ export default [
   },
 
   {
-    files: ["src/utils/react/createPluginRoot.tsx"],
+    files: ["apps/obsidian/src/utils/react/createPluginRoot.tsx"],
     rules: {
       "no-restricted-syntax": [
         "error",
@@ -362,15 +362,15 @@ export default [
   },
 
   {
-    files: ["src/**/*.test.{js,jsx,ts,tsx}"],
+    files: ["apps/obsidian/src/**/*.test.{js,jsx,ts,tsx}"],
     rules: {
       "no-restricted-syntax": ["error", ...restrictedSourceImports],
     },
   },
 
   {
-    files: ["src/components/ui/**/*.{ts,tsx}"],
-    ignores: ["src/components/ui/**/*.test.{ts,tsx}"],
+    files: ["apps/obsidian/src/components/ui/**/*.{ts,tsx}"],
+    ignores: ["apps/obsidian/src/components/ui/**/*.test.{ts,tsx}"],
     rules: {
       "@typescript-eslint/consistent-type-imports": "error",
       "@typescript-eslint/no-restricted-imports": [
@@ -389,7 +389,7 @@ export default [
               ],
               allowTypeImports: true,
               message:
-                "src/components/ui must not import values outside @/components/ui, @/lib, " +
+                "apps/obsidian/src/components/ui must not import values outside @/components/ui, @/lib, " +
                 "and @/constants. Type-only imports are always fine. If a primitive needs " +
                 "plugin state, take it as a prop; if it needs a helper, move the helper to " +
                 "@/lib. Reaching into @/settings, @/aiParams, @/utils, or @/agentMode couples " +
@@ -403,7 +403,7 @@ export default [
   },
 
   {
-    files: ["dev/gallery/**/*.{ts,tsx}", "src/**/*.stories.{ts,tsx}"],
+    files: ["dev/gallery/**/*.{ts,tsx}", "apps/obsidian/src/**/*.stories.{ts,tsx}"],
     ignores: ["dev/gallery/**/*.test.{ts,tsx}"],
     rules: {
       "@typescript-eslint/no-restricted-imports": [
@@ -436,7 +436,7 @@ export default [
   },
 
   {
-    files: ["**/*.test.{js,jsx,ts,tsx}", "jest.setup.js", "__mocks__/**"],
+    files: ["**/*.test.{js,jsx,ts,tsx}", "jest.setup.js", "apps/obsidian/__mocks__/**"],
     languageOptions: {
       globals: {
         ...globals.jest,
@@ -469,10 +469,8 @@ export default [
       "*.{js,mjs,cjs}",
       "scripts/**",
       "dev/gallery/esbuild.config.mjs",
-      "esbuild.config.mjs",
+      "apps/obsidian/*.{js,mjs,cjs}",
       "version-bump.mjs",
-      "wasmPlugin.mjs",
-      "nodeModuleShim.mjs",
       "jest.config.js",
       "tailwind.config.js",
     ],
@@ -506,14 +504,14 @@ export default [
   },
 
   {
-    files: ["src/**/*.{ts,tsx,js,jsx}"],
+    files: ["apps/obsidian/src/**/*.{ts,tsx,js,jsx}"],
     plugins: { boundaries },
     settings: {
       "import/resolver": {
         typescript: { project: "./tsconfig.json" },
         node: true,
       },
-      "boundaries/include": ["src/**/*"],
+      "boundaries/include": ["apps/obsidian/src/**/*"],
       "boundaries/elements": architecture.elements,
       "boundaries/dependency-nodes": ["import", "dynamic-import", "export"],
     },
@@ -545,7 +543,7 @@ export default [
   })),
 
   {
-    files: ["**/*.test.{js,jsx,ts,tsx}", "jest.setup.js", "__mocks__/**"],
+    files: ["**/*.test.{js,jsx,ts,tsx}", "jest.setup.js", "apps/obsidian/__mocks__/**"],
     rules: {
       "boundaries/dependencies": "off",
       "eslint-comments/no-restricted-disable": ["error", ...architecture.undisableableRules],
@@ -553,7 +551,7 @@ export default [
   },
 
   {
-    files: ["src/**/*.{ts,tsx}"],
+    files: ["apps/obsidian/src/**/*.{ts,tsx}"],
     rules: {
       "no-restricted-imports": [
         "error",
@@ -562,14 +560,14 @@ export default [
             {
               name: "@agentclientprotocol/sdk",
               message:
-                "ACP wire types are confined to src/agentMode/acp/. session/, sdk/, ui/, backends/, and skills/ should depend on the session-domain types in @/agentMode/session/types instead. See src/agentMode/AGENTS.md.",
+                "ACP wire types are confined to apps/obsidian/src/agentMode/acp/. session/, sdk/, ui/, backends/, and skills/ should depend on the session-domain types in @/agentMode/session/types instead. See apps/obsidian/src/agentMode/AGENTS.md.",
             },
           ],
           patterns: [
             {
               group: ["@/modelManagement/*"],
               message:
-                "Import from @/modelManagement (the barrel) only. Deep imports of @/modelManagement/types/* are not allowed from outside the module. See src/modelManagement/AGENTS.md.",
+                "Import from @/modelManagement (the barrel) only. Deep imports of @/modelManagement/types/* are not allowed from outside the module. See apps/obsidian/src/modelManagement/AGENTS.md.",
             },
           ],
         },
@@ -577,13 +575,13 @@ export default [
     },
   },
   {
-    files: ["src/agentMode/acp/**/*.{ts,tsx}"],
+    files: ["apps/obsidian/src/agentMode/acp/**/*.{ts,tsx}"],
     rules: {
       "no-restricted-imports": "off",
     },
   },
   {
-    files: ["src/modelManagement/**/*.{ts,tsx}"],
+    files: ["apps/obsidian/src/modelManagement/**/*.{ts,tsx}"],
     rules: {
       "no-restricted-imports": "off",
     },
@@ -611,7 +609,10 @@ export default [
   },
 
   {
-    files: ["src/agentMode/**/*.test.{ts,tsx}", "src/projects/{ui,hooks}/**/*.test.{ts,tsx}"],
+    files: [
+      "apps/obsidian/src/agentMode/**/*.test.{ts,tsx}",
+      "apps/obsidian/src/projects/{ui,hooks}/**/*.test.{ts,tsx}",
+    ],
     rules: {
       "@typescript-eslint/no-unsafe-assignment": "off",
       "@typescript-eslint/no-unsafe-argument": "off",

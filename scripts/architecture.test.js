@@ -136,13 +136,19 @@ describe("architecture", () => {
     });
 
     it(`puts a feature's components and hooks in its client box and its other files in its host box (${ISSUE})`, () => {
-      expect(boxOf("src/agents/ui/AgentRoster.tsx")).toBe("client/features/teammates");
-      expect(boxOf("src/agents/agentMode/ui/AgentProfile.tsx")).toBe("client/features/teammates");
-      expect(boxOf("src/projects/hooks/useRefreshEmptyLandingOnContextSourceChange.ts")).toBe(
-        "client/features/projects"
+      expect(boxOf("apps/obsidian/src/agents/ui/AgentRoster.tsx")).toBe(
+        "client/features/teammates"
       );
-      expect(boxOf("src/agents/customAgentsGate.ts")).toBe("host/features/teammates");
-      expect(boxOf("src/agents/agentMode/hiddenAgentChats.ts")).toBe("host/features/teammates");
+      expect(boxOf("apps/obsidian/src/agents/agentMode/ui/AgentProfile.tsx")).toBe(
+        "client/features/teammates"
+      );
+      expect(
+        boxOf("apps/obsidian/src/projects/hooks/useRefreshEmptyLandingOnContextSourceChange.ts")
+      ).toBe("client/features/projects");
+      expect(boxOf("apps/obsidian/src/agents/customAgentsGate.ts")).toBe("host/features/teammates");
+      expect(boxOf("apps/obsidian/src/agents/agentMode/hiddenAgentChats.ts")).toBe(
+        "host/features/teammates"
+      );
     });
   });
 
@@ -376,11 +382,15 @@ describe("architecture", () => {
   });
 
   describe("eslint.config.mjs", () => {
-    const CLIENT_FILE = "src/agentMode/ui/DirectiveProbe.js";
+    const CLIENT_FILE = "apps/obsidian/src/agentMode/ui/DirectiveProbe.js";
     const PROBES = [
       ["boundaries/dependencies", CLIENT_FILE, 'import { getSettings } from "@/settings/model";'],
       ["copilot/no-host-access-in-client", CLIENT_FILE, 'import { Notice } from "obsidian";'],
-      ["boundaries/no-unknown-files", "src/notInAnyBox/DirectiveProbe.js", "export const a = 1;"],
+      [
+        "boundaries/no-unknown-files",
+        "apps/obsidian/src/notInAnyBox/DirectiveProbe.js",
+        "export const a = 1;",
+      ],
     ];
     const disableForms = (rule, line) => [
       `// eslint-disable-next-line ${rule} -- probe\n${line}`,
@@ -448,7 +458,7 @@ describe("architecture", () => {
 
   describe("architecture.json", () => {
     it("names only patterns that still match a source file, so a moved or deleted file leaves no dead entry", () => {
-      const sources = trackedSourceFiles("src");
+      const sources = trackedSourceFiles("apps/obsidian/src");
       const dead = graph.boxes.flatMap(({ box, files }) =>
         files
           .filter((glob) => !sources.some((file) => globToRegExp(glob).test(file)))

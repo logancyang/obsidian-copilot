@@ -16,7 +16,7 @@ Never write `declare const app: App;` in new code. A few legacy files do — don
 
 ## HTTP requests
 
-Prefer Obsidian's `requestUrl` (from `obsidian`) over the global `fetch` for any plugin network call. `requestUrl` bypasses browser CORS, works on mobile and desktop, and matches the rest of the codebase. The standard wrapper is `safeFetch` in `src/utils.ts` — use it when you want a `Response`-shaped return. Reach for native `fetch` only when you need true streaming responses or AbortSignal cancellation; `requestUrl` supports neither.
+Prefer Obsidian's `requestUrl` (from `obsidian`) over the global `fetch` for any plugin network call. `requestUrl` bypasses browser CORS, works on mobile and desktop, and matches the rest of the codebase. The standard wrapper is `safeFetch` in `apps/obsidian/src/utils.ts` — use it when you want a `Response`-shaped return. Reach for native `fetch` only when you need true streaming responses or AbortSignal cancellation; `requestUrl` supports neither.
 
 ## Picking the right `document` / `window` (popout-window safety)
 

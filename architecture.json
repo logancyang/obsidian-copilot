@@ -4,161 +4,193 @@
     {
       "box": "app",
       "files": [
-        "src/main.ts",
-        "src/agentMode/index.ts",
-        "src/agentMode/agentModelDiscovery.ts",
-        "src/commands/index.ts",
-        "src/settings/SettingsPage.tsx",
-        "src/settings/settingsTabs.ts",
-        "src/settings/v2/SettingsMainV2.tsx",
-        "src/components/StartupLoadingView.ts",
-        "src/contexts/**"
+        "apps/obsidian/src/main.ts",
+        "apps/obsidian/src/agentMode/index.ts",
+        "apps/obsidian/src/agentMode/agentModelDiscovery.ts",
+        "apps/obsidian/src/commands/index.ts",
+        "apps/obsidian/src/settings/SettingsPage.tsx",
+        "apps/obsidian/src/settings/settingsTabs.ts",
+        "apps/obsidian/src/settings/v2/SettingsMainV2.tsx",
+        "apps/obsidian/src/components/StartupLoadingView.ts",
+        "apps/obsidian/src/contexts/**"
       ]
     },
     {
       "box": "protocol",
-      "files": ["src/agentMode/session/types.ts", "src/agentMode/session/errors.ts", "src/types/**"]
+      "files": [
+        "apps/obsidian/src/agentMode/session/types.ts",
+        "apps/obsidian/src/agentMode/session/errors.ts",
+        "apps/obsidian/src/types/**"
+      ]
     },
     {
       "box": "host/chat",
-      "files": ["src/agentMode/session/**"]
+      "files": ["apps/obsidian/src/agentMode/session/**"]
     },
     {
       "box": "host/backends",
-      "files": ["src/agentMode/acp/**", "src/agentMode/sdk/**", "src/agentMode/backends/**"]
+      "files": [
+        "apps/obsidian/src/agentMode/acp/**",
+        "apps/obsidian/src/agentMode/sdk/**",
+        "apps/obsidian/src/agentMode/backends/**"
+      ]
     },
     {
       "box": "client/chat",
-      "files": ["src/agentMode/ui/**"]
+      "files": ["apps/obsidian/src/agentMode/ui/**"]
     },
     {
       "box": "client/chatKit",
       "files": [
-        "src/components/chat-components/**",
-        "src/components/Markdown.tsx",
-        "src/components/TruncatedText.tsx",
-        "src/components/recordViewTop.ts",
-        "src/context/ChatInputContext.tsx",
-        "src/hooks/{useChatFileDrop,useChatScrolling,useDayLabels,useNoteDrag,useSmoothedText,useTailPaging,useIncrementalPaging,useActiveFile,useChatBackendModelOptions,useResolvedChatBackendModel}.ts"
+        "apps/obsidian/src/components/chat-components/**",
+        "apps/obsidian/src/components/Markdown.tsx",
+        "apps/obsidian/src/components/TruncatedText.tsx",
+        "apps/obsidian/src/components/recordViewTop.ts",
+        "apps/obsidian/src/context/ChatInputContext.tsx",
+        "apps/obsidian/src/hooks/{useChatFileDrop,useChatScrolling,useDayLabels,useNoteDrag,useSmoothedText,useTailPaging,useIncrementalPaging,useActiveFile,useChatBackendModelOptions,useResolvedChatBackendModel}.ts"
       ]
     },
     {
       "box": "client/features/navigator",
-      "files": ["src/agentMode/navigator/**/*.tsx", "src/agentMode/navigator/**/{ui,hooks}/**"]
+      "files": [
+        "apps/obsidian/src/agentMode/navigator/**/*.tsx",
+        "apps/obsidian/src/agentMode/navigator/**/{ui,hooks}/**"
+      ]
     },
     {
       "box": "host/features/navigator",
-      "files": ["src/agentMode/navigator/**"]
+      "files": ["apps/obsidian/src/agentMode/navigator/**"]
     },
     {
       "box": "client/features/skills",
-      "files": ["src/agentMode/skills/**/*.tsx", "src/agentMode/skills/**/{ui,hooks}/**"]
+      "files": [
+        "apps/obsidian/src/agentMode/skills/**/*.tsx",
+        "apps/obsidian/src/agentMode/skills/**/{ui,hooks}/**"
+      ]
     },
     {
       "box": "host/features/skills",
       "files": [
-        "src/agentMode/skills/**",
-        "src/builtinSkills/**",
-        "src/settings/{builtinSkillPreferences,skillLoadErrorState}.ts"
+        "apps/obsidian/src/agentMode/skills/**",
+        "apps/obsidian/src/builtinSkills/**",
+        "apps/obsidian/src/settings/{builtinSkillPreferences,skillLoadErrorState}.ts"
       ]
     },
     {
       "box": "client/features/teammates",
-      "files": ["src/agents/**/*.tsx", "src/agents/**/{ui,hooks}/**"]
+      "files": ["apps/obsidian/src/agents/**/*.tsx", "apps/obsidian/src/agents/**/{ui,hooks}/**"]
     },
     {
       "box": "host/features/teammates",
-      "files": ["src/agents/**"]
+      "files": ["apps/obsidian/src/agents/**"]
     },
     {
       "box": "client/features/projects",
-      "files": ["src/projects/**/*.tsx", "src/projects/**/{ui,hooks}/**"]
+      "files": [
+        "apps/obsidian/src/projects/**/*.tsx",
+        "apps/obsidian/src/projects/**/{ui,hooks}/**"
+      ]
     },
     {
       "box": "host/features/projects",
-      "files": ["src/projects/**", "src/instructions/**"]
+      "files": ["apps/obsidian/src/projects/**", "apps/obsidian/src/instructions/**"]
     },
     {
       "box": "client/features/miyo",
       "files": [
-        "src/miyo/**/*.tsx",
-        "src/miyo/**/{ui,hooks}/**",
-        "src/hooks/{useChatRelevantNotes,useLiveRelevantNotesRefresh}.ts"
+        "apps/obsidian/src/miyo/**/*.tsx",
+        "apps/obsidian/src/miyo/**/{ui,hooks}/**",
+        "apps/obsidian/src/hooks/{useChatRelevantNotes,useLiveRelevantNotesRefresh}.ts"
       ]
     },
     {
       "box": "host/features/miyo",
       "files": [
-        "src/miyo/**",
-        "src/components/RelevantNotesView.tsx",
-        "src/search/chatRelevantNotesContext.ts"
+        "apps/obsidian/src/miyo/**",
+        "apps/obsidian/src/components/RelevantNotesView.tsx",
+        "apps/obsidian/src/search/chatRelevantNotesContext.ts"
       ]
     },
     {
       "box": "client/features/connectors",
-      "files": ["src/connectors/**/*.tsx", "src/connectors/**/{ui,hooks}/**"]
+      "files": [
+        "apps/obsidian/src/connectors/**/*.tsx",
+        "apps/obsidian/src/connectors/**/{ui,hooks}/**"
+      ]
     },
     {
       "box": "host/features/connectors",
-      "files": ["src/connectors/**", "src/settings/v2/components/ConnectorsSettings.tsx"]
+      "files": [
+        "apps/obsidian/src/connectors/**",
+        "apps/obsidian/src/settings/v2/components/ConnectorsSettings.tsx"
+      ]
     },
     {
       "box": "client/features/excalidraw",
-      "files": ["src/excalidraw/**/*.tsx", "src/excalidraw/**/{ui,hooks}/**"]
+      "files": [
+        "apps/obsidian/src/excalidraw/**/*.tsx",
+        "apps/obsidian/src/excalidraw/**/{ui,hooks}/**"
+      ]
     },
     {
       "box": "host/features/excalidraw",
-      "files": ["src/excalidraw/**"]
+      "files": ["apps/obsidian/src/excalidraw/**"]
     },
     {
       "box": "host/features/openArtifacts",
-      "files": ["src/openArtifacts/**", "src/components/modals/OpenArtifactsModal*"]
+      "files": [
+        "apps/obsidian/src/openArtifacts/**",
+        "apps/obsidian/src/components/modals/OpenArtifactsModal*"
+      ]
     },
     {
       "box": "client/features/customCommands",
       "files": [
-        "src/commands/**/*.tsx",
-        "src/commands/**/{ui,hooks}/**",
-        "src/components/command-ui/**",
-        "src/components/CustomPromptSyntaxInstruction.tsx"
+        "apps/obsidian/src/commands/**/*.tsx",
+        "apps/obsidian/src/commands/**/{ui,hooks}/**",
+        "apps/obsidian/src/components/command-ui/**",
+        "apps/obsidian/src/components/CustomPromptSyntaxInstruction.tsx"
       ]
     },
     {
       "box": "host/features/customCommands",
-      "files": ["src/commands/**", "src/settings/v2/components/CommandSettings.tsx"]
+      "files": [
+        "apps/obsidian/src/commands/**",
+        "apps/obsidian/src/settings/v2/components/CommandSettings.tsx"
+      ]
     },
     {
       "box": "quickChat",
       "files": [
-        "src/components/{Chat,CopilotView}.tsx",
-        "src/components/{quick-ask,composer}/**",
-        "src/settings/v2/components/{QuickChatPanel,ChatModelEnableList,LegacyChatPromptsNotice}*",
-        "src/{core,memory,tools,LLMProviders,state,mentions,imageProcessing,context,system-prompts,editor,pdf,cache}/**",
-        "src/search/v3/**",
-        "src/search/RetrieverFactory*",
-        "src/hooks/{use-streaming-chat-session,useChatManager,useRecentUsageManagerRevision,useLatestVersion}.ts",
-        "src/{chainType,chainUtils,chatUtils,langchainStream,contextProcessor,composerUtils,types,error,noteUtils}.ts",
-        "src/{chatUtils,composerUtils,contextProcessor,langchainStream}.*.ts"
+        "apps/obsidian/src/components/{Chat,CopilotView}.tsx",
+        "apps/obsidian/src/components/{quick-ask,composer}/**",
+        "apps/obsidian/src/settings/v2/components/{QuickChatPanel,ChatModelEnableList,LegacyChatPromptsNotice}*",
+        "apps/obsidian/src/{core,memory,tools,LLMProviders,state,mentions,imageProcessing,context,system-prompts,editor,pdf,cache}/**",
+        "apps/obsidian/src/search/v3/**",
+        "apps/obsidian/src/search/RetrieverFactory*",
+        "apps/obsidian/src/hooks/{use-streaming-chat-session,useChatManager,useRecentUsageManagerRevision,useLatestVersion}.ts",
+        "apps/obsidian/src/{chainType,chainUtils,chatUtils,langchainStream,contextProcessor,composerUtils,types,error,noteUtils}.ts",
+        "apps/obsidian/src/{chatUtils,composerUtils,contextProcessor,langchainStream}.*.ts"
       ]
     },
     {
       "box": "host/platform",
       "files": [
-        "src/settings/**",
-        "src/{modelManagement,entitlement,services,selection,search}/**",
-        "src/{aiParams,plusUtils,logFileManager}.ts",
-        "src/{plusUtils,logFileManager}.*.ts",
-        "src/components/{modals,release-update}/**"
+        "apps/obsidian/src/settings/**",
+        "apps/obsidian/src/{modelManagement,entitlement,services,selection,search}/**",
+        "apps/obsidian/src/{aiParams,plusUtils,logFileManager}.ts",
+        "apps/obsidian/src/{plusUtils,logFileManager}.*.ts",
+        "apps/obsidian/src/components/{modals,release-update}/**"
       ]
     },
     {
       "box": "core",
       "files": [
-        "src/{utils,lib,hooks,styles,__tests__}/**",
-        "src/components/ui/**",
-        "src/components/gallery-hosts.*",
-        "src/{constants,context,errorFormat,logger,utils}.ts",
-        "src/**/*.test.{ts,tsx}"
+        "apps/obsidian/src/{utils,lib,hooks,styles,__tests__}/**",
+        "apps/obsidian/src/components/ui/**",
+        "apps/obsidian/src/components/gallery-hosts.*",
+        "apps/obsidian/src/{constants,context,errorFormat,logger,utils}.ts",
+        "apps/obsidian/src/**/*.test.{ts,tsx}"
       ]
     }
   ],

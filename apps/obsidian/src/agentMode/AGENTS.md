@@ -25,18 +25,18 @@ file disagree, the file wins.
    trail rendering all read session-domain types;
 7. **`skills/`** — canonical-store discovery, symlink lifecycle, reconciliation,
    and the Skills settings UI.
-8. **`src/miyo/agentMode/`** — Miyo's pieces of the agent trail.
-9. **`src/connectors/agentMode/`** — Connectors' pieces of the chat: the
+8. **`apps/obsidian/src/miyo/agentMode/`** — Miyo's pieces of the agent trail.
+9. **`apps/obsidian/src/connectors/agentMode/`** — Connectors' pieces of the chat: the
    `suggest_connector` tool, its chat state and extension, and its card slot.
 10. **`navigator/`** — Copilot Navigator, the sessions sidebar: its view,
     components, hooks, and stories. Code whose purpose
     is the Navigator belongs here; generic helpers it uses belong in shared
     modules even when the Navigator is their only caller.
-11. **`src/agents/agentMode/`** — Custom agents' pieces of the chat: the
+11. **`apps/obsidian/src/agents/agentMode/`** — Custom agents' pieces of the chat: the
     lines that show a rule an agent saved to its memory, the tool card
     kind that puts them in place of the edit that wrote it, the tools an
     agent calls (`ask_teammate`, `draft_teammate`), and the draft card.
-12. **`src/projects/ui/` and `src/projects/hooks/`** — the Projects feature's
+12. **`apps/obsidian/src/projects/ui/` and `apps/obsidian/src/projects/hooks/`** — the Projects feature's
     UI and hooks: the project home and its Files tab, the project header and
     popover, and the create and edit forms.
 
@@ -81,17 +81,17 @@ Then in either case:
 2. Import the descriptor directly from `descriptor.ts` and add it to
    `backends/registry.ts`.
 3. Settings: store backend-specific config under `agentMode.backends.<id>`
-   (extend `CopilotSettings.agentMode.backends` in `src/settings/model.ts`).
+   (extend `CopilotSettings.agentMode.backends` in `apps/obsidian/src/settings/model.ts`).
 4. Done. **No edits to `acp/`, `session/`, `sdk/`, or `ui/` should be
    required.** If you need one, the boundary is leaking — extend the
    descriptor surface instead.
 
 ## Adding a new layer
 
-1. Create `src/agentMode/<layer>/`.
+1. Create `apps/obsidian/src/agentMode/<layer>/`.
 2. Add the folder to a box in the root `architecture.json`, or add a box and
    its row under `edges`.
-3. Re-export from `src/agentMode/index.ts` if it should be visible to
+3. Re-export from `apps/obsidian/src/agentMode/index.ts` if it should be visible to
    plugin host code.
 4. Update this doc.
 
@@ -128,8 +128,8 @@ Then in either case:
 popout-window behavior, native header chrome, ESC handling, and visual
 consistency with the rest of the plugin.
 
-The standard pattern is in `src/components/modals/ConfirmModal.tsx` and
-`src/agentMode/skills/ui/DeleteConfirmDialog.tsx`. If a surface must live
+The standard pattern is in `apps/obsidian/src/components/modals/ConfirmModal.tsx` and
+`apps/obsidian/src/agentMode/skills/ui/DeleteConfirmDialog.tsx`. If a surface must live
 inside an existing React tree, keep its visual content as a presentational
 component and host it from an Obsidian modal instead of introducing a second
 modal system.
@@ -157,7 +157,7 @@ vault, under the OS temp directory:
 <tmp>/obsidian-copilot/acp-frames/<vault-hash>/acp-frames.ndjson
 ```
 
-Each line is a `FrameRecord` (`src/agentMode/session/debugSink.ts`):
+Each line is a `FrameRecord` (`apps/obsidian/src/agentMode/session/debugSink.ts`):
 
 ```ts
 { ts, dir: "→" | "←", tag, kind: "request" | "notif" | "result" | "error" | "raw",

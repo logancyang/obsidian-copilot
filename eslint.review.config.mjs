@@ -3,7 +3,10 @@ import typescriptParser from "@typescript-eslint/parser";
 import obsidianmd from "eslint-plugin-obsidianmd";
 import { PlainTextParser } from "eslint-plugin-obsidianmd/dist/lib/plainTextParser.js";
 
-const sourceFiles = ["src/**/*.{ts,tsx}", "dev/gallery/**/*.{ts,tsx}"];
+const sourceFiles = [
+  "apps/obsidian/src/**/*.{ts,tsx}",
+  "dev/gallery/**/*.{ts,tsx}",
+];
 
 export default [
   ...baseConfig,
@@ -51,7 +54,7 @@ export default [
     },
   },
   {
-    files: ["src/logger.ts"],
+    files: ["apps/obsidian/src/logger.ts"],
     rules: {
       "obsidianmd/rule-custom-message": [
         "warn",

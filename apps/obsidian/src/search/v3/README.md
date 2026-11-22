@@ -331,5 +331,5 @@ interface ExpandedQuery {
 - Older docs referenced 90/10 weighted query-expansion scoring. Current code does not do that.
 - Older docs referenced an `<expanded>` term section. Current parser uses `<salient>` and `<queries>` only.
 - Miyo retrieval is independent of the local Search v3 index and embedding pipeline.
-- `FilterRetriever` is a standalone class at `src/search/v3/FilterRetriever.ts`, not a LangChain `BaseRetriever` subclass.
-- `mergeFilterAndSearchResults` in `src/search/v3/mergeResults.ts` handles the dedup logic between filter and search results.
+- `FilterRetriever` is a standalone class at `apps/obsidian/src/search/v3/FilterRetriever.ts`, not a LangChain `BaseRetriever` subclass.
+- `mergeFilterAndSearchResults` in `apps/obsidian/src/search/v3/mergeResults.ts` handles the dedup logic between filter and search results.
