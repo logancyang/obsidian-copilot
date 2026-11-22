@@ -19,8 +19,8 @@ function resolveWithTsconfig(tsconfigPath, specifier) {
   const { config } = ts.readConfigFile(tsconfigPath, ts.sys.readFile);
   const { options } = ts.parseJsonConfigFileContent(config, ts.sys, path.dirname(tsconfigPath));
   const importer = path.join(path.dirname(tsconfigPath), "src", "importer.ts");
-  return ts.resolveModuleName(specifier, importer, options, ts.sys).resolvedModule
-    ?.resolvedFileName;
+  const resolved = ts.resolveModuleName(specifier, importer, options, ts.sys).resolvedModule;
+  return resolved && path.normalize(resolved.resolvedFileName);
 }
 
 describe("workspace packages", () => {
