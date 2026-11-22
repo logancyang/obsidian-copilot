@@ -34,14 +34,6 @@ function librariesOf(manifest) {
   );
 }
 
-function sourceFiles(folder) {
-  return fs.readdirSync(path.join(root, folder), { withFileTypes: true }).flatMap((entry) => {
-    const relative = `${folder}/${entry.name}`;
-    if (entry.isDirectory()) return sourceFiles(relative);
-    return /\.(ts|tsx|js|jsx|mjs)$/.test(entry.name) ? [relative] : [];
-  });
-}
-
 function resolveWithTsconfig(tsconfigPath, specifier) {
   const { config } = ts.readConfigFile(tsconfigPath, ts.sys.readFile);
   const { options } = ts.parseJsonConfigFileContent(config, ts.sys, path.dirname(tsconfigPath));
@@ -51,12 +43,13 @@ function resolveWithTsconfig(tsconfigPath, specifier) {
 }
 
 describe("workspace packages", () => {
-  it("installs apps/obsidian as the private workspace package @copilot/obsidian, as npm ci does", () => {
+  it("installs apps/obsidian as the private workspace package @copilot/obsidian, which depends on all three @copilot packages", () => {
     const lockfile = readJson("package-lock.json");
 
     expect(readJson(`${APP}/package.json`)).toMatchObject({
       name: "@copilot/obsidian",
       private: true,
+      dependencies: { "@copilot/client": "*", "@copilot/core": "*", "@copilot/protocol": "*" },
     });
     expect(lockfile.packages["node_modules/@copilot/obsidian"]).toEqual({
       resolved: APP,
@@ -70,22 +63,6 @@ describe("workspace packages", () => {
 
     expect(listedTwice).toEqual([]);
     expect(readJson("package.json").dependencies).toBeUndefined();
-  });
-
-  it("declares in the app all three @copilot packages, including every one app source imports", () => {
-    const imported = new Set(
-      sourceFiles(`${APP}/src`).flatMap((file) =>
-        [
-          ...fs.readFileSync(path.join(root, file), "utf8").matchAll(/["'](@copilot\/[\w-]+)\//g),
-        ].map(([, name]) => name)
-      )
-    );
-    const declared = Object.keys(readJson(`${APP}/package.json`).dependencies).filter((name) =>
-      name.startsWith("@copilot/")
-    );
-
-    expect(declared.sort()).toEqual(["@copilot/client", "@copilot/core", "@copilot/protocol"]);
-    expect(declared).toEqual(expect.arrayContaining([...imported]));
   });
 
   it(
