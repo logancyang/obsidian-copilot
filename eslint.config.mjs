@@ -147,12 +147,15 @@ const OBSIDIANMD_RATCHET = Object.fromEntries(
     .map(([id]) => [id, "error"])
 );
 
+const SOURCE_ROOTS = ["apps/obsidian/src", "packages/*/src"];
+const inSource = (glob) => SOURCE_ROOTS.map((root) => `${root}/${glob}`);
+
 const restrictedSourceImports = [
   {
     selector:
       "ImportDeclaration[source.value=/^\\.\\.($|\\u002f)/], ImportExpression[source.value=/^\\.\\.($|\\u002f)/]",
     message:
-      "Parent-relative imports (`../foo`) are banned. Use the `@/` path alias (e.g. `@/components/Foo`) instead.",
+      "Parent-relative imports (`../foo`) are banned. Use the `@/` path alias (e.g. `@/components/Foo`) or a package name (e.g. `@copilot/core/...`) instead.",
   },
   {
     selector:
@@ -306,8 +309,8 @@ export default [
   },
 
   {
-    files: ["apps/obsidian/src/**/*.{ts,tsx}"],
-    ignores: ["apps/obsidian/src/**/*.test.{ts,tsx}", "apps/obsidian/src/**/__mocks__/**"],
+    files: inSource("**/*.{ts,tsx}"),
+    ignores: [...inSource("**/*.test.{ts,tsx}"), ...inSource("**/__mocks__/**")],
     plugins: { copilot: copilotLintPlugin },
     rules: {
       "copilot/no-direct-node-imports": "error",
@@ -324,7 +327,7 @@ export default [
   },
 
   {
-    files: ["apps/obsidian/src/**/*.{ts,tsx}"],
+    files: inSource("**/*.{ts,tsx}"),
     ignores: ["apps/obsidian/src/utils/react/createPluginRoot.tsx"],
     rules: {
       "no-restricted-syntax": [
@@ -358,7 +361,7 @@ export default [
   },
 
   {
-    files: ["apps/obsidian/src/**/*.test.{js,jsx,ts,tsx}"],
+    files: inSource("**/*.test.{js,jsx,ts,tsx}"),
     rules: {
       "no-restricted-syntax": ["error", ...restrictedSourceImports],
     },
@@ -399,7 +402,7 @@ export default [
   },
 
   {
-    files: ["dev/gallery/**/*.{ts,tsx}", "apps/obsidian/src/**/*.stories.{ts,tsx}"],
+    files: ["dev/gallery/**/*.{ts,tsx}", ...inSource("**/*.stories.{ts,tsx}")],
     ignores: ["dev/gallery/**/*.test.{ts,tsx}"],
     rules: {
       "@typescript-eslint/no-restricted-imports": [
@@ -493,6 +496,7 @@ export default [
       "scripts/bundleSizeGuard.test.js",
       "scripts/architecture.js",
       "scripts/architecture.test.js",
+      "scripts/workspacePackages.test.js",
     ],
     rules: {
       "@typescript-eslint/no-require-imports": "off",
@@ -500,14 +504,14 @@ export default [
   },
 
   {
-    files: ["apps/obsidian/src/**/*.{ts,tsx,js,jsx}"],
+    files: inSource("**/*.{ts,tsx,js,jsx}"),
     plugins: { boundaries },
     settings: {
       "import/resolver": {
         typescript: { project: "./tsconfig.json" },
         node: true,
       },
-      "boundaries/include": ["apps/obsidian/src/**/*"],
+      "boundaries/include": inSource("**/*"),
       "boundaries/elements": architecture.elements,
       "boundaries/dependency-nodes": ["import", "dynamic-import", "export"],
     },
@@ -530,7 +534,7 @@ export default [
   },
 
   {
-    files: ["apps/obsidian/src/**/*.{ts,tsx}"],
+    files: inSource("**/*.{ts,tsx}"),
     rules: {
       "no-restricted-imports": [
         "error",
@@ -608,7 +612,7 @@ export default [
   },
 
   {
-    files: ["**/package.json"],
+    files: ["package.json"],
     rules: {
       "depend/ban-dependencies": [
         "error",

@@ -67,6 +67,9 @@ describe("pr-size workflow", () => {
     it("counts additions and deletions together", async () => {
       await check([file("apps/obsidian/src/main.ts", 50, 50)], "size/M");
     });
+    it("counts production lines in workspace packages", async () => {
+      await check([file("packages/core/src/logger.ts", 100)], "size/M");
+    });
     it("counts fully deleted production files", async () => {
       await check([file("apps/obsidian/src/deleted.ts", 0, 100)], "size/M");
     });
@@ -81,6 +84,7 @@ describe("pr-size workflow", () => {
           "apps/obsidian/src/__fixtures__/a.json",
           "apps/obsidian/src/fixtures/a.json",
           "apps/obsidian/esbuild.config.mjs",
+          "packages/core/package.json",
           "docs/a.md",
           "package-lock.json",
           "styles.css",

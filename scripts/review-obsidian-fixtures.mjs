@@ -11,7 +11,7 @@ import {
 } from "./review-obsidian-package.mjs";
 
 const repositoryRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
-const reviewSourceRoots = ["apps/obsidian/src", "dev/gallery"];
+const reviewSourceRoots = ["apps/obsidian/src", "packages", "dev/gallery"];
 const reviewSourceExtensions = new Set([".cjs", ".js", ".jsx", ".mjs", ".ts", ".tsx"]);
 
 const invalidSourceFixture = `import "node:fs";
@@ -148,14 +148,19 @@ async function main() {
     invalidSourceFixture,
     "apps/obsidian/src/utils.ts"
   );
-  assert(invalidSourceResult.errorCount > 0, "ESLint accepted its invalid source fixture");
-  expectEslintRules(invalidSourceResult, [
-    "obsidianmd/no-nodejs-modules",
-    "copilot/no-direct-node-imports",
-    "no-restricted-globals",
-    "eslint-comments/require-description",
-    "eslint-comments/no-restricted-disable",
-  ]);
+  for (const result of [
+    invalidSourceResult,
+    await lintSourceFixture(invalidSourceFixture, "packages/core/src/index.ts"),
+  ]) {
+    assert(result.errorCount > 0, "ESLint accepted its invalid source fixture");
+    expectEslintRules(result, [
+      "obsidianmd/no-nodejs-modules",
+      "copilot/no-direct-node-imports",
+      "no-restricted-globals",
+      "eslint-comments/require-description",
+      "eslint-comments/no-restricted-disable",
+    ]);
+  }
   assert(
     ["node:fs", "node:util", "path", "node:os"].every((moduleName) =>
       invalidSourceResult.messages.some(

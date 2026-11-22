@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "module": "ESNext",
+    "target": "ES6",
+    "noImplicitAny": true,
+    "moduleResolution": "bundler",
+    "isolatedModules": true,
+    "jsx": "react",
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "strictNullChecks": true,
+    "skipLibCheck": true,
+    "lib": ["DOM", "DOM.Iterable", "ES5", "ES6", "ES7", "ES2022", "ESNext"]
+  }
+}

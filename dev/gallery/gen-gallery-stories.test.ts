@@ -89,5 +89,24 @@ describe("gen-gallery-stories", () => {
         'componentId: "@/future/ui/FutureCard",\n    load: (): Promise<unknown> => import("@/future/ui/FutureCard.stories")'
       );
     });
+
+    it("imports a workspace package's stories and components by package name for https://github.com/Brevilabs/obsidian-copilot-private/issues/1010", async () => {
+      await Promise.all([
+        addFile(projectRoot, "packages/client/src/chat/ui/MessageCard.tsx"),
+        addFile(projectRoot, "packages/client/src/chat/ui/MessageCard.stories.tsx"),
+        addFile(projectRoot, "packages/core/src/ui/Badge.tsx"),
+      ]);
+
+      await execFileAsync(process.execPath, [GENERATOR_PATH], { cwd: projectRoot });
+      const output = await readFile(
+        path.join(projectRoot, "dev/gallery/stories.generated.ts"),
+        "utf8"
+      );
+
+      expect(output).toContain("export const presentationalComponentCount = 2;");
+      expect(output).toContain(
+        'componentId: "@copilot/client/chat/ui/MessageCard",\n    load: (): Promise<unknown> => import("@copilot/client/chat/ui/MessageCard.stories")'
+      );
+    });
   });
 });

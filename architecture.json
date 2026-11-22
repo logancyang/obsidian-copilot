@@ -20,7 +20,8 @@
       "files": [
         "apps/obsidian/src/agentMode/session/types.ts",
         "apps/obsidian/src/agentMode/session/errors.ts",
-        "apps/obsidian/src/types/**"
+        "apps/obsidian/src/types/**",
+        "packages/protocol/**"
       ]
     },
     {
@@ -37,7 +38,7 @@
     },
     {
       "box": "client/chat",
-      "files": ["apps/obsidian/src/agentMode/ui/**"]
+      "files": ["apps/obsidian/src/agentMode/ui/**", "packages/client/src/index.ts"]
     },
     {
       "box": "client/chatKit",
@@ -190,7 +191,8 @@
         "apps/obsidian/src/components/ui/**",
         "apps/obsidian/src/components/gallery-hosts.*",
         "apps/obsidian/src/{constants,context,errorFormat,logger,utils}.ts",
-        "apps/obsidian/src/**/*.test.{ts,tsx}"
+        "apps/obsidian/src/**/*.test.{ts,tsx}",
+        "packages/core/**"
       ]
     }
   ],
