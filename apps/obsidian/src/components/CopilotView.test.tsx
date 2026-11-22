@@ -18,10 +18,10 @@ jest.mock("@/components/Chat", () => ({
   },
 }));
 
-function quickChatServices(chainManager: ChainManager): QuickChatViewServices {
+function quickChatServices(getCurrentChainManager: () => ChainManager): QuickChatViewServices {
   return {
     app: { workspace: { on: jest.fn(() => ({})) } } as unknown as App,
-    chainOwner: { getCurrentChainManager: () => chainManager },
+    chainOwner: { getCurrentChainManager },
     chatUIState: {} as ChatManagerChatUIState,
     updateUserMessageHistory: jest.fn(),
     chatSelectionHighlightController: { persistFromPointerDown: jest.fn() },
@@ -54,17 +54,29 @@ describe("CopilotView", () => {
     describe("onOpen()", () => {
       it("renders Quick Chat with the services' current chain manager, UI state and history", async () => {
         const chainManager = {} as ChainManager;
-        const services = quickChatServices(chainManager);
+        const services = quickChatServices(() => chainManager);
 
         const view = await openView(services);
 
-        expect(mockRenderedChat.props).toMatchObject({
-          chainManager,
-          chatUIState: services.chatUIState,
-          services,
-        });
+        expect(mockRenderedChat.props?.chainManager).toBe(chainManager);
+        expect(mockRenderedChat.props?.chatUIState).toBe(services.chatUIState);
+        expect(mockRenderedChat.props?.services).toBe(services);
         mockRenderedChat.props?.updateUserMessageHistory("Summarize this note");
         expect(services.updateUserMessageHistory).toHaveBeenCalledWith("Summarize this note");
+        await act(() => view.onClose());
+      });
+    });
+
+    describe("updateView()", () => {
+      it("re-renders Quick Chat with the chain manager the services hold now, not the one at open", async () => {
+        let current = {} as ChainManager;
+        const view = await openView(quickChatServices(() => current));
+        const replacement = {} as ChainManager;
+        current = replacement;
+
+        act(() => view.updateView());
+
+        expect(mockRenderedChat.props?.chainManager).toBe(replacement);
         await act(() => view.onClose());
       });
     });
