@@ -13,6 +13,7 @@ The plugin lives in `apps/obsidian` (`src/`, its build config); `@/` imports res
 - **NEVER RUN `npm run dev`**.
 - `npm run build` — production build (TypeScript check + minified output).
 - `npm run lint` / `npm run lint:fix` — ESLint check / autofix.
+- `npm run lint:debt` — fails if `architecture.debt.json` totals grew against `origin/master` (CI runs it on every PR). The list only shrinks: fix a rejected import, never list it.
 - `npm run format` / `npm run format:check` — Prettier write / check.
 - **Before PR: always run `npm run format && npm run lint`.**
 - `npm run test` — unit tests. Single test: `npm test -- -t "test name"`.
