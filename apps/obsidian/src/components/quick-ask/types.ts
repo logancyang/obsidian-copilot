@@ -1,10 +1,11 @@
 import type { EditorView } from "@codemirror/view";
-import type { Component, Editor } from "obsidian";
-import type { CopilotHost } from "@/host/platform/copilotHost";
+import type { App, Component, Editor } from "obsidian";
 import type { ReplaceGuard } from "@/editor/replaceGuard";
 import type { ResizeDirection } from "@/hooks/use-resizable";
 
-export interface QuickAskHost extends Pick<CopilotHost, "app">, Component {}
+export interface QuickAskHost extends Component {
+  readonly app: App;
+}
 
 export type QuickAskMode = "ask" | "edit" | "edit-direct";
 

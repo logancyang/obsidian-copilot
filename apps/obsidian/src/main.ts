@@ -485,7 +485,12 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup, Cop
 
     const messageRepo = new MessageRepository();
     const chainManager = this.chainOwner.getCurrentChainManager();
-    const chatManager = new ChatManager(messageRepo, chainManager, this.fileParserManager, this);
+    const chatManager = new ChatManager(
+      messageRepo,
+      chainManager,
+      this.fileParserManager,
+      this.app
+    );
     this.chatUIState = new ChatManagerChatUIState(chatManager);
 
     this.userMemoryManager = new UserMemoryManager(this.app);
@@ -494,7 +499,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup, Cop
     this.registerEditorExtension(this.quickAskController.createExtension());
     this.registerEditorExtension(releaseCursorAssociation);
 
-    this.chatSelectionHighlightController = new ChatSelectionHighlightController(this);
+    this.chatSelectionHighlightController = new ChatSelectionHighlightController(this.app);
     this.chatSelectionHighlightController.initialize();
     this.register(
       subscribeSelection((contexts) =>
@@ -513,7 +518,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup, Cop
     addIcon(COPILOT_AGENT_ICON_ID, COPILOT_AGENT_ICON_SVG);
 
     if (isDesktopRuntime()) {
-      registerNoteHeaderAction(this, (note, openInRightSidebar) =>
+      registerNoteHeaderAction(this.app, this, (note, openInRightSidebar) =>
         this.addNoteToAgentChat(note, openInRightSidebar)
       );
     }
