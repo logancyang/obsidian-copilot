@@ -84,8 +84,8 @@ Then in either case:
    (extend `CopilotSettings.agentMode.backends` in `apps/obsidian/src/settings/model.ts`).
 4. Never import the plugin class (`@/main`). The descriptor's methods and
    settings panel receive the host (`CopilotHost` from
-   `apps/obsidian/src/host/platform/copilotHost.ts`: the Obsidian `app`, the
-   plugin `manifest` and cleanup registration), and `createBackendProcess(args)` receives
+   `apps/obsidian/src/host/platform/copilotHost.ts`: the Obsidian `app` and
+   the plugin `manifest`), and `createBackendProcess(args)` receives
    `BackendStartArgs`; name only the members you use, e.g.
    `Pick<CopilotHost, "app">`.
 5. Done. **No edits to `acp/`, `session/`, `sdk/`, or `ui/` should be

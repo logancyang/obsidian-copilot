@@ -17,6 +17,5 @@ export function fakeCopilotHost({
   return {
     app: { vault: { adapter, configDir } } as unknown as App,
     manifest: { id: pluginId, version: "1.0.0" } as PluginManifest,
-    register: () => undefined,
   };
 }
