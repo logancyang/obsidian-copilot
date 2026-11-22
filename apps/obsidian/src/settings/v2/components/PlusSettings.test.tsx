@@ -1,3 +1,5 @@
+import type { AccountSignIn, SignInOutcome } from "@/copilotAccount/accountAuth";
+import { CopilotAccount, type CopilotAccountDeps } from "@/copilotAccount/copilotAccount";
 import { resetSettings, getSettings, setSettings } from "@/settings/model";
 import type { LicenseUsageWindow } from "@/settings/v2/components/ui/CopilotLicenseSection";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
@@ -8,6 +10,8 @@ jest.mock("@/context", () => ({
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook
   useApp: () => mockApp,
 }));
+
+let mockCopilotAccount: CopilotAccount | undefined;
 
 const mockValidateLicenseKey = jest.fn<Promise<{ isValid: boolean | undefined }>, unknown[]>();
 jest.mock("@/LLMProviders/brevilabsClient", () => ({
@@ -53,6 +57,35 @@ const USAGE_WINDOWS: readonly LicenseUsageWindow[] = [
 
 const mockReadLicenseUsage = jest.fn<Promise<readonly LicenseUsageWindow[] | null>, []>();
 
+function accountAuth({ hasLogin }: { hasLogin: boolean }) {
+  return {
+    hasLogin: jest.fn(() => hasLogin),
+    login: jest.fn(),
+    accessToken: jest.fn(async () => ({ status: "unreachable" as const })),
+    disconnect: jest.fn(async () => {}),
+  } satisfies CopilotAccountDeps["auth"];
+}
+
+function failingLogin(outcome: SignInOutcome): AccountSignIn {
+  return {
+    outcome: Promise.resolve(outcome),
+    loginUrl: () => null,
+    cancel: () => {},
+  };
+}
+
+function provideAccount(auth: CopilotAccountDeps["auth"]): CopilotAccount {
+  const account = new CopilotAccount({
+    auth,
+    fetch: jest.fn(),
+    websiteOrigin: "https://www.obsidiancopilot.com",
+    installId: () => "install-1",
+    openUrl: jest.fn(),
+  });
+  mockCopilotAccount = account;
+  return account;
+}
+
 function storeActiveLicense(): void {
   setSettings({ plusLicenseKey: "stored-key", isPaidUser: true, entitlementExpiresAt: 0 });
 }
@@ -61,6 +94,7 @@ describe("PlusSettings", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     confirmRequests.length = 0;
+    mockCopilotAccount = undefined;
     resetSettings();
     mockReadLicenseUsage.mockResolvedValue(USAGE_WINDOWS);
   });
@@ -71,7 +105,9 @@ describe("PlusSettings", () => {
 
   describe("PlusSettings()", () => {
     it("offers the license key field, Apply and See plans while no license is stored", () => {
-      render(<PlusSettings readLicenseUsage={mockReadLicenseUsage} />);
+      render(
+        <PlusSettings readLicenseUsage={mockReadLicenseUsage} copilotAccount={mockCopilotAccount} />
+      );
 
       expect(screen.getByPlaceholderText(KEY_FIELD_PLACEHOLDER)).toBeTruthy();
       expect(screen.getByRole("button", { name: "Apply" })).toBeTruthy();
@@ -84,7 +120,9 @@ describe("PlusSettings", () => {
         setSettings({ isPaidUser: true });
         return { isValid: true };
       });
-      render(<PlusSettings readLicenseUsage={mockReadLicenseUsage} />);
+      render(
+        <PlusSettings readLicenseUsage={mockReadLicenseUsage} copilotAccount={mockCopilotAccount} />
+      );
 
       fireEvent.change(screen.getByPlaceholderText(KEY_FIELD_PLACEHOLDER), {
         target: { value: "fresh-key" },
@@ -107,7 +145,9 @@ describe("PlusSettings", () => {
           resolveValidation = resolve;
         })
       );
-      render(<PlusSettings readLicenseUsage={mockReadLicenseUsage} />);
+      render(
+        <PlusSettings readLicenseUsage={mockReadLicenseUsage} copilotAccount={mockCopilotAccount} />
+      );
       expect(screen.getByText("Inactive")).toBeTruthy();
 
       act(() => {
@@ -128,7 +168,9 @@ describe("PlusSettings", () => {
     it("shows the 5-hour and weekly usage read when the settings open with an active license", async () => {
       storeActiveLicense();
 
-      render(<PlusSettings readLicenseUsage={mockReadLicenseUsage} />);
+      render(
+        <PlusSettings readLicenseUsage={mockReadLicenseUsage} copilotAccount={mockCopilotAccount} />
+      );
 
       const usageLine = await screen.findByRole("list", { name: "Usage" });
       expect(
@@ -143,7 +185,9 @@ describe("PlusSettings", () => {
       mockReadLicenseUsage.mockResolvedValue(null);
       storeActiveLicense();
 
-      render(<PlusSettings readLicenseUsage={mockReadLicenseUsage} />);
+      render(
+        <PlusSettings readLicenseUsage={mockReadLicenseUsage} copilotAccount={mockCopilotAccount} />
+      );
 
       await waitFor(() => expect(mockReadLicenseUsage).toHaveBeenCalledTimes(1));
       await act(async () => {
@@ -155,7 +199,9 @@ describe("PlusSettings", () => {
 
     it("removes the license after a confirmation that the plan is unaffected, restoring an empty key row", async () => {
       storeActiveLicense();
-      render(<PlusSettings readLicenseUsage={mockReadLicenseUsage} />);
+      render(
+        <PlusSettings readLicenseUsage={mockReadLicenseUsage} copilotAccount={mockCopilotAccount} />
+      );
       await screen.findByRole("list", { name: "Usage" });
 
       fireEvent.click(screen.getByRole("button", { name: "Remove license" }));
@@ -172,6 +218,66 @@ describe("PlusSettings", () => {
       expect(getSettings().isPaidUser).toBe(false);
       expect(screen.getByPlaceholderText<HTMLInputElement>(KEY_FIELD_PLACEHOLDER).value).toBe("");
       expect(screen.queryByRole("list", { name: "Usage" })).toBeNull();
+    });
+
+    it("keeps the applied key and its plan, and says what happened, when a sign-in fails — https://github.com/Brevilabs/obsidian-copilot-private/issues/923", async () => {
+      storeActiveLicense();
+      const auth = accountAuth({ hasLogin: false });
+      auth.login.mockReturnValue(failingLogin({ status: "failed", reason: "unreachable" }));
+      provideAccount(auth);
+      render(
+        <PlusSettings readLicenseUsage={mockReadLicenseUsage} copilotAccount={mockCopilotAccount} />
+      );
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+      });
+
+      expect(await screen.findByRole("alert")).toHaveProperty(
+        "textContent",
+        "Couldn't reach the Copilot website. Check your connection."
+      );
+      expect(getSettings().plusLicenseKey).toBe("stored-key");
+      expect(getSettings().isPaidUser).toBe(true);
+      expect(screen.getByRole("button", { name: "Remove license" })).toBeTruthy();
+    });
+
+    it("reads the signed-in account each time the settings open", async () => {
+      const auth = accountAuth({ hasLogin: true });
+      provideAccount(auth);
+
+      render(
+        <PlusSettings readLicenseUsage={mockReadLicenseUsage} copilotAccount={mockCopilotAccount} />
+      );
+
+      await waitFor(() => expect(auth.accessToken).toHaveBeenCalledTimes(1));
+      expect(screen.getByRole("button", { name: "Account" }).textContent).toBe("Signed in");
+    });
+
+    it("signs out from the account menu and leaves a pasted license key in place", async () => {
+      storeActiveLicense();
+      const auth = accountAuth({ hasLogin: true });
+      provideAccount(auth);
+      render(
+        <PlusSettings readLicenseUsage={mockReadLicenseUsage} copilotAccount={mockCopilotAccount} />
+      );
+
+      fireEvent.keyDown(screen.getByRole("button", { name: "Account" }), { key: "Enter" });
+      await act(async () => {
+        fireEvent.click(await screen.findByRole("menuitem", { name: "Sign out" }));
+      });
+
+      expect(auth.disconnect).toHaveBeenCalledWith("copilot-account");
+      expect(screen.getByRole("button", { name: "Sign in" })).toBeTruthy();
+      expect(getSettings().plusLicenseKey).toBe("stored-key");
+    });
+
+    it("offers no Sign in where Copilot has no account sign-in", () => {
+      render(
+        <PlusSettings readLicenseUsage={mockReadLicenseUsage} copilotAccount={mockCopilotAccount} />
+      );
+
+      expect(screen.queryByRole("button", { name: "Sign in" })).toBeNull();
     });
   });
 });

@@ -55,12 +55,15 @@ async function readLicenseUsage(): Promise<readonly LicenseUsageWindow[] | null>
   return reading.kind === "usage" ? reading.planUsage.windows : null;
 }
 
-const BasicSettingsTab: React.FC = () => (
-  <div className="tw-space-y-4">
-    <PlusSettings readLicenseUsage={readLicenseUsage} />
-    <BasicSettings />
-  </div>
-);
+const BasicSettingsTab: React.FC = () => {
+  const { copilotAccount } = usePlugin();
+  return (
+    <div className="tw-space-y-4">
+      <PlusSettings readLicenseUsage={readLicenseUsage} copilotAccount={copilotAccount} />
+      <BasicSettings />
+    </div>
+  );
+};
 
 const icons: Record<CopilotSettingsTabId, JSX.Element> = {
   basic: <Cog className="tw-size-5" />,
