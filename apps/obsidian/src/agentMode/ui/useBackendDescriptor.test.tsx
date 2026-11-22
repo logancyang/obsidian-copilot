@@ -8,6 +8,7 @@ import type {
   ManagedInstallActionState,
 } from "@/agentMode/session/types";
 import type CopilotPlugin from "@/main";
+import type { App, PluginManifest } from "obsidian";
 import type { CopilotSettings } from "@/settings/model";
 import {
   useBackendInstallState,
@@ -95,7 +96,7 @@ function makeManagedInstallDescriptor() {
     id: "opencode",
     managedInstall: {
       getState: () => ({ ...state }),
-      subscribe: (_plugin: CopilotPlugin, listener: () => void) => {
+      subscribe: (_app: App, _manifest: PluginManifest, listener: () => void) => {
         listeners.add(listener);
         return () => listeners.delete(listener);
       },
