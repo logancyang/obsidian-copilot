@@ -1,3 +1,4 @@
+const { execFileSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const { isBuiltin } = require("module");
@@ -18,11 +19,32 @@ function readJson(root, name) {
   return JSON.parse(fs.readFileSync(path.join(root, name), "utf8"));
 }
 
+const DEBT_FILE = "architecture.debt.json";
+
+function readDebtAt(ref, root = process.cwd()) {
+  const show = ["show", `${ref}:${DEBT_FILE}`];
+  return JSON.parse(execFileSync("git", show, { cwd: root, encoding: "utf8", stdio: "pipe" }));
+}
+
+// Totals, not entry paths, so moving a file renames its entries without failing: https://github.com/Brevilabs/obsidian-copilot-private/issues/993
+function compareDebt(base, head) {
+  const before = base.counts;
+  const after = head.counts;
+  const totals = `imports ${before.imports} -> ${after.imports}, client access ${before.clientAccess} -> ${after.clientAccess}`;
+  const ok = after.imports <= before.imports && after.clientAccess <= before.clientAccess;
+  return {
+    ok,
+    message: ok
+      ? `${DEBT_FILE} did not grow (${totals}).`
+      : `${DEBT_FILE} grew against the base branch (${totals}). The list only shrinks: fix the import instead of listing it.`,
+  };
+}
+
 function loadArchitecture(root = process.cwd()) {
   return {
     root,
     graph: readJson(root, "architecture.json"),
-    debt: readJson(root, "architecture.debt.json"),
+    debt: readJson(root, DEBT_FILE),
   };
 }
 
@@ -185,9 +207,18 @@ const noHostAccessInClient = {
 
 module.exports = {
   clientBoxes,
+  compareDebt,
   createBoxOf,
   globToRegExp,
   importRows,
   loadArchitecture,
   noHostAccessInClient,
+  readDebtAt,
 };
+
+if (require.main === module) {
+  const head = readJson(process.cwd(), DEBT_FILE);
+  const { ok, message } = compareDebt(readDebtAt(process.argv[2] ?? "origin/master"), head);
+  (ok ? process.stdout : process.stderr).write(`${message}\n`);
+  if (!ok) process.exitCode = 1;
+}

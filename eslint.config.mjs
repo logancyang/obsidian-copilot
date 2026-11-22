@@ -134,13 +134,17 @@ const OBSIDIANMD_UNRATCHETED = new Set([
   "rule-custom-message",
 ]);
 
+const OBSIDIANMD_RULES = (
+  Array.isArray(obsidianmd.configs.recommended)
+    ? obsidianmd.configs.recommended
+    : [obsidianmd.configs.recommended]
+).reduce((rules, block) => Object.assign(rules, block.rules), {});
+
+const [, ...OBSIDIANMD_RESTRICTED_DISABLES] =
+  OBSIDIANMD_RULES["eslint-comments/no-restricted-disable"];
+
 const OBSIDIANMD_RATCHET = Object.fromEntries(
-  Object.entries(
-    (Array.isArray(obsidianmd.configs.recommended)
-      ? obsidianmd.configs.recommended
-      : [obsidianmd.configs.recommended]
-    ).reduce((rules, block) => Object.assign(rules, block.rules), {})
-  )
+  Object.entries(OBSIDIANMD_RULES)
     .filter(([id]) => id.startsWith("obsidianmd/"))
     .filter(([, severity]) => severity !== "off" && severity !== 0)
     .filter(([id]) => !OBSIDIANMD_UNRATCHETED.has(id.slice("obsidianmd/".length)))
@@ -518,6 +522,22 @@ export default [
     rules: {
       "boundaries/dependencies": ["error", { default: "disallow", rules: architecture.rules }],
       "boundaries/no-unknown-files": "error",
+      "eslint-comments/no-restricted-disable": [
+        "error",
+        ...OBSIDIANMD_RESTRICTED_DISABLES,
+        ...architecture.undisableableRules,
+      ],
+      "eslint-comments/no-use": [
+        "error",
+        {
+          allow: [
+            "eslint-disable",
+            "eslint-disable-line",
+            "eslint-disable-next-line",
+            "eslint-enable",
+          ],
+        },
+      ],
     },
   },
 
@@ -530,6 +550,7 @@ export default [
     files: ["**/*.test.{js,jsx,ts,tsx}", "jest.setup.js", "apps/obsidian/__mocks__/**"],
     rules: {
       "boundaries/dependencies": "off",
+      "eslint-comments/no-restricted-disable": ["error", ...architecture.undisableableRules],
     },
   },
 

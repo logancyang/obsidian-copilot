@@ -30,6 +30,7 @@
     "review:obsidian:audit": "npm audit --omit=dev --audit-level=critical",
     "review:obsidian:fixtures": "node scripts/review-obsidian-fixtures.mjs",
     "lint:dead": "npx --yes knip@5",
+    "lint:debt": "node scripts/architecture.js",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write 'apps/obsidian/src/**/*.{js,ts,tsx,md}' 'packages/*/src/**/*.{js,ts,tsx,md}'",
     "format:check": "prettier --check 'apps/obsidian/src/**/*.{js,ts,tsx,md}' 'packages/*/src/**/*.{js,ts,tsx,md}'",
