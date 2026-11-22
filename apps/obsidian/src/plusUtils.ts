@@ -140,7 +140,9 @@ export async function checkIsPaidUser(
   context: LicenseCheckContext
 ): Promise<boolean | undefined> {
   if (!getSettings().plusLicenseKey) {
-    turnOffPaid(app);
+    // The paid mark syncs between devices but the key stays on each one, so a device with no key has no plan that ended.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/924
+    clearEntitlement();
     return false;
   }
   const brevilabsClient = BrevilabsClient.getInstance();
@@ -294,14 +296,33 @@ function clearEntitlement(): void {
   setSettings(CLEARED_ENTITLEMENT);
 }
 
+// The account's key is a secret setting, kept in this device's secret storage beside the key: data.json syncs between
+// devices that each hold their own account key, so a synced mark would make one device's account key look pasted, or
+// another device's key pasted here look like the account's. https://github.com/Brevilabs/obsidian-copilot-private/issues/924
+export function isAccountLicense(
+  settings: Pick<CopilotSettings, "plusLicenseKey" | "accountLicenseKey">
+): boolean {
+  return settings.plusLicenseKey !== "" && settings.accountLicenseKey === settings.plusLicenseKey;
+}
+
+export function applyAccountLicense(licenseKey: string): void {
+  setSettings({ plusLicenseKey: licenseKey, accountLicenseKey: licenseKey });
+}
+
 export function removeLicense(): void {
-  setSettings({ ...CLEARED_ENTITLEMENT, plusLicenseKey: "" });
+  setSettings({ ...CLEARED_ENTITLEMENT, plusLicenseKey: "", accountLicenseKey: "" });
 }
 
 export function turnOffPaid(app?: App): void {
-  const previousIsPaidUser = getSettings().isPaidUser;
-  clearEntitlement();
-  if (previousIsPaidUser && app) {
+  const settings = getSettings();
+  // A refused license from the account goes with its plan; a pasted key stays for the user to fix.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/924
+  if (isAccountLicense(settings)) {
+    removeLicense();
+  } else {
+    clearEntitlement();
+  }
+  if (settings.isPaidUser && app) {
     new CopilotPlusExpiredModal(app).open();
   }
 }

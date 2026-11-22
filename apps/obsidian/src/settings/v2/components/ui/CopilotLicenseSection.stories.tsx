@@ -56,14 +56,38 @@ export const SignInFailed: StoryObj<CopilotLicenseSectionProps> = {
 };
 
 export const SignedInFree: StoryObj<CopilotLicenseSectionProps> = {
-  args: { account: account({ status: "signed-in", profile: PROFILE }) },
+  args: { account: account({ status: "signed-in", profile: PROFILE, notice: null }) },
 };
 
 export const SignedInPaid: StoryObj<CopilotLicenseSectionProps> = {
   args: {
     license: { status: "active", plan: "plus" },
     usageWindows: USAGE_WINDOWS,
-    account: account({ status: "signed-in", profile: { ...PROFILE, plan: "plus" } }),
+    onRemoveLicense: null,
+    account: account({ status: "signed-in", profile: { ...PROFILE, plan: "plus" }, notice: null }),
+  },
+};
+
+export const JustUpgraded: StoryObj<CopilotLicenseSectionProps> = {
+  args: {
+    license: { status: "active", plan: "plus" },
+    usageWindows: USAGE_WINDOWS,
+    onRemoveLicense: null,
+    account: account({
+      status: "signed-in",
+      profile: { ...PROFILE, plan: "plus" },
+      notice: { kind: "applied", plan: "plus" },
+    }),
+  },
+};
+
+export const PlanEnded: StoryObj<CopilotLicenseSectionProps> = {
+  args: {
+    account: account({
+      status: "signed-in",
+      profile: PROFILE,
+      notice: { kind: "ended", plan: "plus" },
+    }),
   },
 };
 
@@ -71,7 +95,11 @@ export const ProfileMenuOpen: StoryObj<CopilotLicenseSectionProps> = {
   args: {
     license: { status: "active", plan: "plus" },
     usageWindows: USAGE_WINDOWS,
-    account: account({ status: "signed-in", profile: { ...PROFILE, plan: "plus" } }, true),
+    onRemoveLicense: null,
+    account: account(
+      { status: "signed-in", profile: { ...PROFILE, plan: "plus" }, notice: null },
+      true
+    ),
   },
 };
 

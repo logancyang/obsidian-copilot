@@ -1,7 +1,9 @@
 import type { AccountSignIn, SignInOutcome } from "@/copilotAccount/accountAuth";
 import { CopilotAccount, type CopilotAccountDeps } from "@/copilotAccount/copilotAccount";
+import { applyAccountLicense, isAccountLicense, removeLicense } from "@/plusUtils";
 import { resetSettings, getSettings, setSettings } from "@/settings/model";
 import type { LicenseUsageWindow } from "@/settings/v2/components/ui/CopilotLicenseSection";
+import type { App } from "obsidian";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import React from "react";
 
@@ -76,8 +78,10 @@ function failingLogin(outcome: SignInOutcome): AccountSignIn {
 
 function provideAccount(auth: CopilotAccountDeps["auth"]): CopilotAccount {
   const account = new CopilotAccount({
+    app: mockApp as App,
     auth,
     fetch: jest.fn(),
+    validateLicenseKey: () => mockValidateLicenseKey(mockApp, { trigger: "manual" }),
     websiteOrigin: "https://www.obsidiancopilot.com",
     installId: () => "install-1",
     openUrl: jest.fn(),
@@ -96,10 +100,12 @@ describe("PlusSettings", () => {
     confirmRequests.length = 0;
     mockCopilotAccount = undefined;
     resetSettings();
+    removeLicense();
     mockReadLicenseUsage.mockResolvedValue(USAGE_WINDOWS);
   });
 
   afterEach(() => {
+    mockCopilotAccount?.dispose();
     jest.restoreAllMocks();
   });
 
@@ -270,6 +276,67 @@ describe("PlusSettings", () => {
       expect(auth.disconnect).toHaveBeenCalledWith("copilot-account");
       expect(screen.getByRole("button", { name: "Sign in" })).toBeTruthy();
       expect(getSettings().plusLicenseKey).toBe("stored-key");
+    });
+
+    it("offers no Remove license for a license that came from the account — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", async () => {
+      applyAccountLicense("account-key");
+      setSettings({ isPaidUser: true });
+      provideAccount(accountAuth({ hasLogin: true }));
+
+      render(
+        <PlusSettings readLicenseUsage={mockReadLicenseUsage} copilotAccount={mockCopilotAccount} />
+      );
+
+      await screen.findByRole("list", { name: "Usage" });
+      expect(screen.queryByRole("button", { name: "Remove license" })).toBeNull();
+    });
+
+    it("leaves the key field empty rather than showing the account's key when that license is inactive — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", () => {
+      applyAccountLicense("account-key");
+      provideAccount(accountAuth({ hasLogin: true }));
+
+      render(
+        <PlusSettings readLicenseUsage={mockReadLicenseUsage} copilotAccount={mockCopilotAccount} />
+      );
+
+      expect(screen.getByPlaceholderText<HTMLInputElement>(KEY_FIELD_PLACEHOLDER).value).toBe("");
+    });
+
+    it("applies a typed key as the user's own, even one matching the key the account last applied — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", async () => {
+      setSettings({ accountLicenseKey: "typed-key" });
+      mockValidateLicenseKey.mockResolvedValue({ isValid: false });
+      render(
+        <PlusSettings readLicenseUsage={mockReadLicenseUsage} copilotAccount={mockCopilotAccount} />
+      );
+
+      fireEvent.change(screen.getByPlaceholderText(KEY_FIELD_PLACEHOLDER), {
+        target: { value: "typed-key" },
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+      });
+
+      expect(getSettings().plusLicenseKey).toBe("typed-key");
+      expect(isAccountLicense(getSettings())).toBe(false);
+    });
+
+    it("checks the account again when the user comes back to Obsidian from See plans — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", async () => {
+      const openPage = jest.spyOn(window, "open").mockReturnValue(null);
+      const auth = accountAuth({ hasLogin: true });
+      provideAccount(auth);
+      render(
+        <PlusSettings readLicenseUsage={mockReadLicenseUsage} copilotAccount={mockCopilotAccount} />
+      );
+      await waitFor(() => expect(auth.accessToken).toHaveBeenCalledTimes(1));
+
+      fireEvent.click(screen.getByRole("button", { name: "See plans" }));
+      act(() => {
+        window.dispatchEvent(new Event("focus"));
+      });
+
+      await waitFor(() => expect(auth.accessToken).toHaveBeenCalledTimes(2));
+      expect(openPage).toHaveBeenCalledWith(expect.stringContaining("/pricing"), "_blank");
+      openPage.mockRestore();
     });
 
     it("offers no Sign in where Copilot has no account sign-in", () => {

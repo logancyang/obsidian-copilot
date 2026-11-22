@@ -17,6 +17,8 @@ function accountIn(state: CopilotAccountState): AccountControlProps {
 
 const SIGNED_OUT: CopilotAccountState = { status: "signed-out", failure: null };
 
+const PLUS_PROFILE = { email: "you@example.com", name: "You", plan: "plus" };
+
 const KEY_FIELD_PLACEHOLDER = "Enter your license key";
 
 function renderSection(overrides: Partial<CopilotLicenseSectionProps> = {}) {
@@ -51,7 +53,7 @@ describe("CopilotLicenseSection", () => {
       expect(screen.getByPlaceholderText(KEY_FIELD_PLACEHOLDER)).toBeTruthy();
       expect(screen.getByRole("button", { name: "Apply" })).toBeTruthy();
       fireEvent.click(screen.getByRole("button", { name: "See plans" }));
-      expect(props.onSeePlans).toHaveBeenCalledTimes(1);
+      expect(props.onSeePlans).toHaveBeenCalledWith(window);
       expect(screen.queryByRole("button", { name: "Remove license" })).toBeNull();
     });
 
@@ -163,12 +165,83 @@ describe("CopilotLicenseSection", () => {
         account: accountIn({
           status: "signed-in",
           profile: { email: "you@example.com", name: "You", plan: "free" },
+          notice: null,
         }),
       });
 
       expect(screen.getByRole("button", { name: "Account, Free plan" })).toBeTruthy();
       expect(screen.queryByText("plus")).toBeNull();
       expect(screen.queryByRole("button", { name: "Sign in" })).toBeNull();
+    });
+
+    it("offers no Remove license for a license that came from the account — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", () => {
+      renderSection({
+        license: { status: "active", plan: "plus" },
+        usageWindows: [{ id: "weekly", label: "Weekly", percent: 34 }],
+        onRemoveLicense: null,
+        account: accountIn({ status: "signed-in", profile: PLUS_PROFILE, notice: null }),
+      });
+
+      expect(usageLineText()).toEqual(["Weekly 34% used"]);
+      expect(screen.queryByRole("button", { name: "Remove license" })).toBeNull();
+    });
+
+    it("shows no usage row for the account's license when usage cannot be read — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", () => {
+      renderSection({
+        license: { status: "active", plan: "plus" },
+        usageWindows: null,
+        onRemoveLicense: null,
+      });
+
+      expect(document.querySelector("section")?.lastElementChild?.textContent).toContain(
+        "OpenArtifacts"
+      );
+    });
+
+    it("confirms, under the plan's name, a license just applied from the account — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", () => {
+      renderSection({
+        license: { status: "active", plan: "plus" },
+        onRemoveLicense: null,
+        account: accountIn({
+          status: "signed-in",
+          profile: PLUS_PROFILE,
+          notice: { kind: "applied", plan: "plus" },
+        }),
+      });
+
+      expect(screen.getByRole("status").textContent).toBe(
+        "You're on Plus. Your license was applied from your account."
+      );
+    });
+
+    it("says the plan ended while the user stays signed in, with the key row back — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", () => {
+      renderSection({
+        account: accountIn({
+          status: "signed-in",
+          profile: { ...PLUS_PROFILE, plan: "free" },
+          notice: { kind: "ended", plan: "believer" },
+        }),
+      });
+
+      expect(screen.getByRole("status").textContent).toBe(
+        "Your Lifetime plan has ended. You're still signed in, now on the free plan."
+      );
+      expect(screen.getByRole("button", { name: "Account, Free plan" })).toBeTruthy();
+      expect(screen.getByPlaceholderText(KEY_FIELD_PLACEHOLDER)).toBeTruthy();
+    });
+
+    it("says a paid plan ended when the plan's name is unknown", () => {
+      renderSection({
+        account: accountIn({
+          status: "signed-in",
+          profile: null,
+          notice: { kind: "ended", plan: null },
+        }),
+      });
+
+      expect(screen.getByRole("status").textContent).toBe(
+        "Your paid plan has ended. You're still signed in, now on the free plan."
+      );
     });
 
     it("says why the last sign-in didn't finish and keeps the applied license", () => {

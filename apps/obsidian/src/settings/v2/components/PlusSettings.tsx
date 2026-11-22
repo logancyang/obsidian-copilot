@@ -3,8 +3,14 @@ import { CopilotPlusWelcomeModal } from "@/components/modals/CopilotPlusWelcomeM
 import { useApp } from "@/context";
 import type { CopilotAccount } from "@/copilotAccount/copilotAccount";
 import { useAccountControl } from "@/copilotAccount/ui/useAccountControl";
-import { checkIsPaidUser, navigateToPlusPage, removeLicense, useLicenseState } from "@/plusUtils";
-import { updateSetting, useSettingsValue } from "@/settings/model";
+import {
+  checkIsPaidUser,
+  isAccountLicense,
+  navigateToPlusPage,
+  removeLicense,
+  useLicenseState,
+} from "@/plusUtils";
+import { setSettings, useSettingsValue } from "@/settings/model";
 import {
   CopilotLicenseSection,
   type LicenseUsageWindow,
@@ -44,7 +50,12 @@ export function PlusSettings({ readLicenseUsage, copilotAccount }: PlusSettingsP
   const [error, setError] = useState<string | null>(null);
   const [isChecking, setIsChecking] = useState(false);
   const license = useLicenseState();
-  const [localLicenseKey, setLocalLicenseKey] = useState(settings.plusLicenseKey);
+  const isLicenseFromAccount = isAccountLicense(settings);
+  // The account's key is never shown, also not in the key row of an inactive license.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/924
+  const [localLicenseKey, setLocalLicenseKey] = useState(
+    isLicenseFromAccount ? "" : settings.plusLicenseKey
+  );
   const usageWindows = useLicenseUsage(
     !isChecking && license.status === "active",
     readLicenseUsage
@@ -75,7 +86,7 @@ export function PlusSettings({ readLicenseUsage, copilotAccount }: PlusSettingsP
       onLicenseKeyChange={setLocalLicenseKey}
       isApplying={isChecking}
       onApply={safeAsyncHandler(async () => {
-        updateSetting("plusLicenseKey", localLicenseKey);
+        setSettings({ plusLicenseKey: localLicenseKey, accountLicenseKey: "" });
         setIsChecking(true);
         const result = await checkIsPaidUser(app, { trigger: "manual" });
         setIsChecking(false);
@@ -87,9 +98,12 @@ export function PlusSettings({ readLicenseUsage, copilotAccount }: PlusSettingsP
         }
       })}
       applyError={error}
-      onSeePlans={() => navigateToPlusPage("settings")}
+      onSeePlans={(win) => {
+        navigateToPlusPage("settings");
+        copilotAccount?.watchForPurchase(win);
+      }}
       usageWindows={usageWindows}
-      onRemoveLicense={confirmRemoveLicense}
+      onRemoveLicense={isLicenseFromAccount ? null : confirmRemoveLicense}
       account={account}
     />
   );
