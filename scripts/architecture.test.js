@@ -74,7 +74,10 @@ function commitDebt(repo, debtFile) {
     "user.name=test",
     "-c",
     "user.email=test@example.com",
+    "-c",
+    "commit.gpgsign=false",
     "commit",
+    "--no-verify",
     "--allow-empty",
     "-qm",
     "commit"
