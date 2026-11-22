@@ -382,11 +382,11 @@ describe("architecture", () => {
   });
 
   describe("eslint.config.mjs", () => {
-    const CLIENT_FILE = "src/agentMode/ui/DirectiveProbe.js";
+    const CLIENT_FILE = "apps/obsidian/src/agentMode/ui/DirectiveProbe.js";
     const PROBES = [
       ["boundaries/dependencies", CLIENT_FILE, 'import { getSettings } from "@/settings/model";'],
       ["copilot/no-host-access-in-client", CLIENT_FILE, 'import { Notice } from "obsidian";'],
-      ["boundaries/no-unknown-files", "src/notInAnyBox/DirectiveProbe.js", "export const a = 1;"],
+      ["boundaries/no-unknown-files", "apps/obsidian/src/notInAnyBox/DirectiveProbe.js", "export const a = 1;"],
     ];
     const disableForms = (rule, line) => [
       `// eslint-disable-next-line ${rule} -- probe\n${line}`,
