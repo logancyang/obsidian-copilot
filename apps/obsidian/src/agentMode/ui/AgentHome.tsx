@@ -250,7 +250,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
 
   const descriptor = useSessionBackendDescriptor(manager);
   const handleInstall = useCallback(() => {
-    descriptor.openInstallUI(plugin);
+    descriptor.openInstallUI(plugin.app, plugin.manifest);
   }, [descriptor, plugin]);
 
   const projects = useProjects();
@@ -989,7 +989,9 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
               setupProblem={
                 customAgentsGate === "full" ? needsSetup.get(profile.agent.slug) : undefined
               }
-              onSetUp={(backendId) => backendRegistry[backendId].openInstallUI(plugin)}
+              onSetUp={(backendId) =>
+                backendRegistry[backendId].openInstallUI(plugin.app, plugin.manifest)
+              }
             />
           )
         }

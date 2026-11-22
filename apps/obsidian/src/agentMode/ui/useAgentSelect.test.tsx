@@ -48,7 +48,7 @@ const mockSessionDescriptor = useSessionBackendDescriptor as jest.MockedFunction
 >;
 const openInstallUI = backendRegistry.codex.openInstallUI as jest.Mock;
 
-const plugin = {} as CopilotPlugin;
+const plugin = { app: {}, manifest: { id: "copilot" } } as unknown as CopilotPlugin;
 
 function makeManager(startResult: Promise<unknown> = Promise.resolve({})) {
   const listeners = new Set<() => void>();
@@ -151,7 +151,7 @@ describe("useAgentSelect", () => {
       );
 
       act(() => result.current.runCta());
-      expect(openInstallUI).toHaveBeenCalledWith(plugin);
+      expect(openInstallUI).toHaveBeenCalledWith(plugin.app, plugin.manifest);
       act(() => result.current.select("claude"));
       expect(result.current.cta).toEqual({
         action: "wait",
@@ -188,7 +188,7 @@ describe("useAgentSelect", () => {
 
       act(() => result.current.runCta());
 
-      expect(openInstallUI).toHaveBeenCalledWith(plugin);
+      expect(openInstallUI).toHaveBeenCalledWith(plugin.app, plugin.manifest);
       expect(manager.setDefaultBackend).not.toHaveBeenCalled();
     });
 
@@ -222,7 +222,7 @@ describe("useAgentSelect", () => {
         action: "configure",
       });
       act(() => result.current.runCta());
-      expect(openInstallUI).toHaveBeenCalledWith(plugin);
+      expect(openInstallUI).toHaveBeenCalledWith(plugin.app, plugin.manifest);
       expect(manager.getOrCreateActiveSession).not.toHaveBeenCalled();
       act(() => result.current.select("codex"));
       expect(result.current.cta.action).toBe("wait");

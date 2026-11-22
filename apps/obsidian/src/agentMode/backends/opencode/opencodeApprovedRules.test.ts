@@ -4,9 +4,7 @@ import * as path from "node:path";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import { spawn } from "child_process";
-import { requestUrl, type RequestUrlParam } from "obsidian";
-import type { CopilotHost } from "@/host/platform/copilotHost";
-import { fakeCopilotHost } from "@/host/platform/testing/fakeCopilotHost";
+import { FileSystemAdapter, requestUrl, type App, type RequestUrlParam } from "obsidian";
 import { resetSettings, setSettings } from "@/settings/model";
 import { __resetVaultBaseCache } from "@/utils/vaultPath";
 import { opencodeApprovedRules } from "./opencodeApprovedRules";
@@ -83,7 +81,7 @@ const LIST_ROUTES = {
 describe("opencodeApprovedRules", () => {
   let binDir: string;
   let binaryPath: string;
-  let host: CopilotHost;
+  let app: App;
 
   function installOpencode(version: string, envOverrides?: Record<string, string>): void {
     setSettings({
@@ -100,7 +98,9 @@ describe("opencodeApprovedRules", () => {
     resetSettings();
     __resetVaultBaseCache();
     installOpencode("2.0.32");
-    host = fakeCopilotHost({ vaultBase: PROJECT.directory });
+    const adapter = Object.create(FileSystemAdapter.prototype) as FileSystemAdapter;
+    adapter.getBasePath = () => PROJECT.directory;
+    app = { vault: { adapter } } as unknown as App;
   });
 
   afterEach(() => {
@@ -118,7 +118,7 @@ describe("opencodeApprovedRules", () => {
       jest.mocked(spawn).mockReturnValue(server as never);
       answer(LIST_ROUTES);
 
-      const rules = await opencodeApprovedRules.list(host);
+      const rules = await opencodeApprovedRules.list(app);
 
       expect(rules).toEqual([
         {
@@ -140,7 +140,7 @@ describe("opencodeApprovedRules", () => {
       jest.mocked(spawn).mockReturnValue(server as never);
       answer(LIST_ROUTES);
 
-      await opencodeApprovedRules.list(host);
+      await opencodeApprovedRules.list(app);
 
       const [command, args, spawnOptions] = jest.mocked(spawn).mock.calls[0] as unknown as [
         string,
@@ -171,20 +171,20 @@ describe("opencodeApprovedRules", () => {
         [`GET /api/permission/saved?projectID=${PROJECT.id}`]: { status: 200, json: { data: [] } },
       });
 
-      await expect(opencodeApprovedRules.list(host)).resolves.toEqual([]);
+      await expect(opencodeApprovedRules.list(app)).resolves.toEqual([]);
     });
 
     it(`${ISSUE} rejects with a not-installed message, without starting anything, when OpenCode isn't installed`, async () => {
       fs.rmSync(binaryPath);
 
-      await expect(opencodeApprovedRules.list(host)).rejects.toThrow("OpenCode isn't installed.");
+      await expect(opencodeApprovedRules.list(app)).rejects.toThrow("OpenCode isn't installed.");
       expect(spawn).not.toHaveBeenCalled();
     });
 
     it(`${ISSUE} rejects asking for a newer OpenCode, without starting it, when the installed OpenCode predates the saved-permission API`, async () => {
       installOpencode("1.19.5");
 
-      await expect(opencodeApprovedRules.list(host)).rejects.toThrow(
+      await expect(opencodeApprovedRules.list(app)).rejects.toThrow(
         "OpenCode v1.19.5 is not supported. Copilot requires OpenCode v2.0.21 or newer."
       );
       expect(spawn).not.toHaveBeenCalled();
@@ -193,7 +193,7 @@ describe("opencodeApprovedRules", () => {
     it(`${ISSUE} rejects when the OpenCode binary exits before its server is ready, as a binary without \`serve --stdio\` does`, async () => {
       jest.mocked(spawn).mockReturnValue(fakeServer({ ready: false }) as never);
 
-      await expect(opencodeApprovedRules.list(host)).rejects.toThrow(
+      await expect(opencodeApprovedRules.list(app)).rejects.toThrow(
         "OpenCode's server stopped before it was ready (exit code 1)."
       );
       expect(requestUrl).not.toHaveBeenCalled();
@@ -206,7 +206,7 @@ describe("opencodeApprovedRules", () => {
         "GET /api/location": { status: 404, text: "" },
       });
 
-      await expect(opencodeApprovedRules.list(host)).rejects.toThrow(
+      await expect(opencodeApprovedRules.list(app)).rejects.toThrow(
         "OpenCode answered 404 to GET /api/location."
       );
       expect(server.exited).toBe(true);
@@ -225,7 +225,7 @@ describe("opencodeApprovedRules", () => {
         },
       });
 
-      const listing = opencodeApprovedRules.list(host);
+      const listing = opencodeApprovedRules.list(app);
       const settled = expect(listing).rejects.toThrow("OpenCode didn't answer within 30 seconds.");
       await requestStarted;
       jest.advanceTimersByTime(30_000);
@@ -243,7 +243,7 @@ describe("opencodeApprovedRules", () => {
         [`GET /api/permission/saved?projectID=${PROJECT.id}`]: { status: 200, json: { data: [] } },
       });
 
-      const listing = opencodeApprovedRules.list(host);
+      const listing = opencodeApprovedRules.list(app);
       await server.stopRequested;
       jest.advanceTimersByTime(3_000);
 
@@ -264,7 +264,7 @@ describe("opencodeApprovedRules", () => {
       jest.mocked(spawn).mockReturnValue(server as never);
       answer({ "DELETE /api/permission/saved/psv_1": { status: 204 } });
 
-      await opencodeApprovedRules.remove(host, rule);
+      await opencodeApprovedRules.remove(app, rule);
 
       expect(jest.mocked(requestUrl).mock.calls.map(([request]) => request)).toEqual([
         expect.objectContaining({
@@ -285,7 +285,7 @@ describe("opencodeApprovedRules", () => {
         },
       });
 
-      await expect(opencodeApprovedRules.remove(host, rule)).rejects.toThrow(
+      await expect(opencodeApprovedRules.remove(app, rule)).rejects.toThrow(
         'OpenCode answered 500 to DELETE /api/permission/saved/psv_1. {"_tag":"DatabaseError","message":"database is locked"}'
       );
       expect(server.exited).toBe(true);
