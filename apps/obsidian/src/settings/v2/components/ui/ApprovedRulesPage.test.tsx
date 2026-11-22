@@ -1,10 +1,10 @@
 import type { ApprovedRule, ApprovedRuleStore } from "@/agentMode";
-import type CopilotPlugin from "@/main";
+import { fakeCopilotHost } from "@/host/platform/testing/fakeCopilotHost";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import React from "react";
 import { ApprovedRulesPage } from "./ApprovedRulesPage";
 
-const PLUGIN = {} as CopilotPlugin;
+const HOST = fakeCopilotHost();
 
 const GIT_STATUS: ApprovedRule = {
   id: "rule-git",
@@ -30,9 +30,7 @@ function makeStore(rules: ReadonlyArray<ApprovedRule>): jest.Mocked<ApprovedRule
 }
 
 function renderPage(store: ApprovedRuleStore, onBack: () => void = jest.fn()) {
-  return render(
-    <ApprovedRulesPage agentName="Claude" store={store} plugin={PLUGIN} onBack={onBack} />
-  );
+  return render(<ApprovedRulesPage agentName="Claude" store={store} host={HOST} onBack={onBack} />);
 }
 
 function ruleRows(): HTMLElement[] {
@@ -53,7 +51,7 @@ describe("ApprovedRulesPage", () => {
       renderPage(store);
 
       expect(screen.getByText("Loading approved rules…")).not.toBeNull();
-      expect(store.list).toHaveBeenCalledWith(PLUGIN);
+      expect(store.list).toHaveBeenCalledWith(HOST);
 
       await act(async () => resolveList([GIT_STATUS, NPM_TEST, WEB_FETCH]));
 
@@ -130,7 +128,7 @@ describe("ApprovedRulesPage", () => {
 
       fireEvent.click(within(ruleRows()[0]).getByRole("button", { name: "Remove" }));
 
-      expect(store.remove).toHaveBeenCalledWith(PLUGIN, GIT_STATUS);
+      expect(store.remove).toHaveBeenCalledWith(HOST, GIT_STATUS);
       expect(
         screen.getAllByRole("button", { name: "Remove" }).map((b) => b.hasAttribute("disabled"))
       ).toEqual([true, true]);

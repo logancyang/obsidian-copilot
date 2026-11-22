@@ -39,7 +39,7 @@ export function useAgentSelect(
   const getIsStarting = React.useCallback(() => manager?.getIsStarting() ?? false, [manager]);
   const isStarting = React.useSyncExternalStore(subscribe, getIsStarting, getIsStarting);
   const descriptors = backendDisplayOrder();
-  const states = useBackendInstallStates(plugin);
+  const states = useBackendInstallStates();
   const sessionBackendId = useSessionBackendDescriptor(manager).id;
   const [pickedId, setPickedId] = React.useState<BackendId | null>(null);
   const selectedId = pickedId ?? sessionBackendId;

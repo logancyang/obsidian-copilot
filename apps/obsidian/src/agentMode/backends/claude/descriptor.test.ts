@@ -11,7 +11,9 @@ jest.mock("os", () => {
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { BackendState } from "@/agentMode/session/types";
 import { getSettings, resetSettings, setSettings, type CopilotSettings } from "@/settings/model";
-import type CopilotPlugin from "@/main";
+import type { CopilotHost } from "@/host/platform/copilotHost";
+import { fakeCopilotHost } from "@/host/platform/testing/fakeCopilotHost";
+import { fakeBackendStartServices } from "@/agentMode/session/testing/fakeBackendStartServices";
 import { __resetVaultBaseCache } from "@/utils/vaultPath";
 import { FileSystemAdapter, type App } from "obsidian";
 import { resolveClaudeBinary } from "./claudeBinaryResolver";
@@ -241,7 +243,7 @@ describe("descriptor", () => {
     let homeDir: string;
     let configDir: string;
     let vaultBase: string;
-    let plugin: CopilotPlugin;
+    let host: CopilotHost;
     const userFile = () => path.join(configDir, "settings.json");
     const projectFile = () => path.join(vaultBase, ".claude", "settings.json");
     const localFile = () => path.join(vaultBase, ".claude", "settings.local.json");
@@ -266,9 +268,7 @@ describe("descriptor", () => {
           backends: { claude: { envOverrides: { CLAUDE_CONFIG_DIR: configDir } } },
         },
       });
-      const adapter = Object.create(FileSystemAdapter.prototype) as FileSystemAdapter;
-      adapter.getBasePath = () => vaultBase;
-      plugin = { app: { vault: { adapter } } } as never;
+      host = fakeCopilotHost({ vaultBase });
     });
     afterEach(() => {
       resetSettings();
@@ -290,7 +290,7 @@ describe("descriptor", () => {
           permissions: { allow: ["Bash(npm test:*)", "Read(//tmp/**)"], ask: ["Bash(curl:*)"] },
         });
 
-        const rules = await store().list(plugin);
+        const rules = await store().list(host);
 
         expect(rules.map((rule) => [rule.allows, rule.appliesTo])).toEqual([
           ["Bash(git status:*)", { kind: "file", path: userFile() }],
@@ -304,7 +304,7 @@ describe("descriptor", () => {
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/866 lists no rules from a settings file that does not exist", async () => {
         writeJson(localFile(), { permissions: { allow: ["Bash(ls:*)"] } });
 
-        const rules = await store().list(plugin);
+        const rules = await store().list(host);
 
         expect(rules.map((rule) => rule.allows)).toEqual(["Bash(ls:*)"]);
       });
@@ -313,7 +313,7 @@ describe("descriptor", () => {
         writeJson(userFile(), { permissions: { allow: ["Bash(ls:*)"] } });
         writeJson(projectFile(), "{ not json");
 
-        await expect(store().list(plugin)).rejects.toThrow(`${projectFile()} isn't valid JSON`);
+        await expect(store().list(host)).rejects.toThrow(`${projectFile()} isn't valid JSON`);
       });
     });
 
@@ -330,9 +330,9 @@ describe("descriptor", () => {
           model: "sonnet",
         });
         const userBefore = fs.readFileSync(userFile(), "utf8");
-        const rule = (await store().list(plugin)).find((r) => r.allows === "Bash(npm test:*)")!;
+        const rule = (await store().list(host)).find((r) => r.allows === "Bash(npm test:*)")!;
 
-        await store().remove(plugin, rule);
+        await store().remove(host, rule);
 
         expect(readJson(localFile())).toEqual({
           env: { HTTPS_PROXY: "http://proxy.example" },
@@ -344,7 +344,7 @@ describe("descriptor", () => {
           model: "sonnet",
         });
         expect(fs.readFileSync(userFile(), "utf8")).toBe(userBefore);
-        expect((await store().list(plugin)).map((r) => r.allows)).toEqual([
+        expect((await store().list(host)).map((r) => r.allows)).toEqual([
           "Bash(git status:*)",
           "Read(//tmp/**)",
         ]);
@@ -355,11 +355,11 @@ describe("descriptor", () => {
           permissions: { allow: ["Bash(npm test:*)"] },
           env: { KEEP: "yes" },
         });
-        const [rule] = await store().list(plugin);
+        const [rule] = await store().list(host);
         const before = fs.readFileSync(localFile(), "utf8");
         const open = jest.spyOn(fs.promises, "open").mockRejectedValueOnce(new Error("disk full"));
         try {
-          await expect(store().remove(plugin, rule)).rejects.toThrow("disk full");
+          await expect(store().remove(host, rule)).rejects.toThrow("disk full");
         } finally {
           open.mockRestore();
         }
@@ -369,7 +369,7 @@ describe("descriptor", () => {
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/866 refuses to replace settings edited while the removal is being staged", async () => {
         writeJson(localFile(), { permissions: { allow: ["Bash(npm test:*)"] } });
-        const [rule] = await store().list(plugin);
+        const [rule] = await store().list(host);
         const concurrent = {
           permissions: { allow: ["Bash(npm test:*)", "Read(//tmp/**)"] },
           model: "new model",
@@ -383,7 +383,7 @@ describe("descriptor", () => {
             return dir;
           });
         try {
-          await expect(store().remove(plugin, rule)).rejects.toThrow("changed while saving");
+          await expect(store().remove(host, rule)).rejects.toThrow("changed while saving");
         } finally {
           staging.mockRestore();
         }
@@ -393,8 +393,8 @@ describe("descriptor", () => {
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/866 restores only the removed allowance and preserves settings and grants saved afterward", async () => {
         writeJson(localFile(), { permissions: { allow: ["Bash(npm test:*)"] } });
-        const [rule] = await store().list(plugin);
-        const removal = await store().remove(plugin, rule);
+        const [rule] = await store().list(host);
+        const removal = await store().remove(host, rule);
         expect(removal).toBeDefined();
         if (!removal) throw new Error("Expected an undoable removal");
         writeJson(localFile(), {
@@ -421,9 +421,9 @@ describe("descriptor", () => {
           fs.renameSync(userFile(), target);
           fs.chmodSync(target, 0o600);
           fs.symlinkSync(target, userFile());
-          const [rule] = await store().list(plugin);
+          const [rule] = await store().list(host);
 
-          await store().remove(plugin, rule);
+          await store().remove(host, rule);
 
           expect(fs.lstatSync(userFile()).isSymbolicLink()).toBe(true);
           expect(readJson(target)).toEqual({ permissions: { allow: [] } });
@@ -435,17 +435,17 @@ describe("descriptor", () => {
         "https://github.com/Brevilabs/obsidian-copilot-private/issues/866 respects a POSIX read-only settings file instead of bypassing it with a rename",
         async () => {
           writeJson(localFile(), { permissions: { allow: ["Bash(npm test:*)"] } });
-          const [rule] = await store().list(plugin);
+          const [rule] = await store().list(host);
           const before = fs.readFileSync(localFile(), "utf8");
           fs.chmodSync(localFile(), 0o400);
-          await expect(store().remove(plugin, rule)).rejects.toThrow("EACCES");
+          await expect(store().remove(host, rule)).rejects.toThrow("EACCES");
           expect(fs.readFileSync(localFile(), "utf8")).toBe(before);
         }
       );
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/866 leaves the original file intact when atomic replacement fails", async () => {
         writeJson(localFile(), { permissions: { allow: ["Bash(npm test:*)"] } });
-        const [rule] = await store().list(plugin);
+        const [rule] = await store().list(host);
         const before = fs.readFileSync(localFile(), "utf8");
         const rename = jest
           .spyOn(jest.requireActual<typeof import("fs")>("fs"), "renameSync")
@@ -453,7 +453,7 @@ describe("descriptor", () => {
             throw new Error("replacement denied");
           });
         try {
-          await expect(store().remove(plugin, rule)).rejects.toThrow("replacement denied");
+          await expect(store().remove(host, rule)).rejects.toThrow("replacement denied");
         } finally {
           rename.mockRestore();
         }
@@ -463,8 +463,8 @@ describe("descriptor", () => {
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/866 refuses Undo when later edits removed the permissions list or made the settings invalid", async () => {
         writeJson(localFile(), { permissions: { allow: ["Bash(npm test:*)"] } });
-        const [rule] = await store().list(plugin);
-        const removal = await store().remove(plugin, rule);
+        const [rule] = await store().list(host);
+        const removal = await store().remove(host, rule);
         if (!removal) throw new Error("Expected an undoable removal");
         writeJson(localFile(), { model: "changed" });
         await expect(removal.undo()).rejects.toThrow("no longer has a permissions.allow list");
@@ -476,23 +476,21 @@ describe("descriptor", () => {
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/866 leaves the file byte-for-byte as it was when it no longer holds the rule", async () => {
         writeJson(localFile(), { permissions: { allow: ["Bash(npm test:*)"] } });
-        const [rule] = await store().list(plugin);
+        const [rule] = await store().list(host);
         const edited = '{"permissions":{"allow":["Bash(ls:*)"]},\n"model":   "sonnet"}';
         writeJson(localFile(), edited);
 
-        await store().remove(plugin, rule);
+        await store().remove(host, rule);
 
         expect(fs.readFileSync(localFile(), "utf8")).toBe(edited);
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/866 fails and leaves the file untouched when it stopped being valid JSON after the rule was listed", async () => {
         writeJson(localFile(), { permissions: { allow: ["Bash(npm test:*)"] } });
-        const [rule] = await store().list(plugin);
+        const [rule] = await store().list(host);
         writeJson(localFile(), '{ "permissions": { "allow": ["Bash(npm test:*)"] ');
 
-        await expect(store().remove(plugin, rule)).rejects.toThrow(
-          `${localFile()} isn't valid JSON`
-        );
+        await expect(store().remove(host, rule)).rejects.toThrow(`${localFile()} isn't valid JSON`);
         expect(fs.readFileSync(localFile(), "utf8")).toBe(
           '{ "permissions": { "allow": ["Bash(npm test:*)"] '
         );
@@ -528,7 +526,7 @@ describe("descriptor", () => {
       const app = { vault: { adapter, getName: () => "active-vault" } } as unknown as App;
 
       const process = ClaudeBackendDescriptor.createBackendProcess({
-        plugin: {} as never,
+        ...fakeBackendStartServices(),
         app,
         clientVersion: "4.0.0",
         descriptor: ClaudeBackendDescriptor,
@@ -546,7 +544,7 @@ describe("descriptor", () => {
     it("https://github.com/logancyang/obsidian-copilot/issues/2892 hands new chats the current auto memory choice, with no value for Default", () => {
       mockResolveClaudeBinary.mockReturnValue("/usr/local/bin/claude");
       const process = ClaudeBackendDescriptor.createBackendProcess({
-        plugin: {} as never,
+        ...fakeBackendStartServices(),
         app: {} as App,
         clientVersion: "4.0.0",
         descriptor: ClaudeBackendDescriptor,

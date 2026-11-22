@@ -52,14 +52,11 @@ export function useSessionBackendDescriptor(
   return getActiveBackendDescriptor(settings);
 }
 
-export function useBackendInstallState(
-  descriptor: BackendDescriptor,
-  plugin: CopilotPlugin
-): InstallState {
+export function useBackendInstallState(descriptor: BackendDescriptor): InstallState {
   const settings = useSettingsValue();
   const subscribe = React.useCallback(
-    (listener: () => void) => descriptor.subscribeInstallState(plugin, listener),
-    [descriptor, plugin]
+    (listener: () => void) => descriptor.subscribeInstallState(listener),
+    [descriptor]
   );
   const getSnapshot = React.useCallback(
     () => installStateSignature(descriptor.getInstallState(settings)),
@@ -95,7 +92,7 @@ export function useManagedInstallActionState(
   }, [action, plugin, signature]);
 }
 
-export function useBackendInstallStates(plugin: CopilotPlugin) {
+export function useBackendInstallStates() {
   const descriptors = React.useMemo(() => listBackendDescriptors(), []);
-  return useDescriptorInstallStates(plugin, descriptors);
+  return useDescriptorInstallStates(descriptors);
 }

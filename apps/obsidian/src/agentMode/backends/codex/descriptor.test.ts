@@ -1,5 +1,5 @@
 import { codexAuth } from "./codexAuth";
-import type CopilotPlugin from "@/main";
+import { fakeCopilotHost } from "@/host/platform/testing/fakeCopilotHost";
 import { getSettings, setSettings, type CopilotSettings } from "@/settings/model";
 import { detectBinary } from "@/utils/detectBinary";
 import { resolveCodexAcpBinary } from "./codexBinaryResolver";
@@ -381,10 +381,7 @@ describe("descriptor", () => {
         (field) => {
           const original = getSettings().agentMode;
           const listener = jest.fn();
-          const unsubscribe = CodexBackendDescriptor.subscribeInstallState(
-            {} as CopilotPlugin,
-            listener
-          );
+          const unsubscribe = CodexBackendDescriptor.subscribeInstallState(listener);
           try {
             setSettings((current) => ({
               agentMode: {
@@ -413,14 +410,14 @@ describe("descriptor", () => {
         const listener = jest.fn();
         const subscribe = jest.spyOn(manager, "subscribeRuntimeState");
         try {
-          expect(CodexBackendDescriptor.managedInstall?.getState({} as CopilotPlugin)).toEqual({
+          expect(CodexBackendDescriptor.managedInstall?.getState(fakeCopilotHost())).toEqual({
             kind: "idle",
           });
           const unsubscribe = CodexBackendDescriptor.managedInstall?.subscribe(
-            {} as CopilotPlugin,
+            fakeCopilotHost(),
             listener
           );
-          await CodexBackendDescriptor.managedInstall?.run({} as CopilotPlugin);
+          await CodexBackendDescriptor.managedInstall?.run(fakeCopilotHost());
           expect(subscribe).toHaveBeenCalledWith(listener);
           expect(install).toHaveBeenCalledTimes(1);
           unsubscribe?.();
@@ -435,7 +432,7 @@ describe("descriptor", () => {
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/530 checks the shipped pin before completing plugin load", async () => {
         const automatic = jest.spyOn(getCodexBinaryManager(), "autoUpgrade").mockResolvedValue();
         try {
-          await CodexBackendDescriptor.onPluginLoad?.({} as CopilotPlugin);
+          await CodexBackendDescriptor.onPluginLoad?.(fakeCopilotHost());
           expect(automatic).toHaveBeenCalledWith(
             CODEX_PINNED_VERSION,
             CODEX_MIN_VERSION,
@@ -447,7 +444,7 @@ describe("descriptor", () => {
       });
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/368 clears the singleton failure for each plugin lifecycle", async () => {
         const reset = jest.spyOn(getCodexBinaryManager(), "forgetSettledError");
-        await CodexBackendDescriptor.onPluginLoad?.({} as CopilotPlugin);
+        await CodexBackendDescriptor.onPluginLoad?.(fakeCopilotHost());
         expect(reset).toHaveBeenCalledTimes(1);
         reset.mockRestore();
       });

@@ -72,7 +72,7 @@ function makeInstallDescriptor(initial: InstallState, id: BackendId = "claude") 
   const backend = {
     id,
     getInstallState: () => ({ ...state }),
-    subscribeInstallState: (_plugin: CopilotPlugin, listener: () => void) => {
+    subscribeInstallState: (listener: () => void) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
@@ -153,8 +153,7 @@ describe("useBackendDescriptor", () => {
   describe("useBackendInstallState()", () => {
     it("updates when the install-state value changes despite fresh descriptor objects", () => {
       const fake = makeInstallDescriptor({ kind: "checking", source: "custom" });
-      const plugin = {} as CopilotPlugin;
-      const { result } = renderHook(() => useBackendInstallState(fake.backend, plugin));
+      const { result } = renderHook(() => useBackendInstallState(fake.backend));
 
       expect(result.current).toEqual({ kind: "checking", source: "custom" });
       act(() =>
@@ -178,11 +177,10 @@ describe("useBackendDescriptor", () => {
     it("skips rerenders when a notification does not change install state", () => {
       const ready: InstallState = { kind: "ready", source: "custom" };
       const fake = makeInstallDescriptor(ready);
-      const plugin = {} as CopilotPlugin;
       let renderCount = 0;
       const { result } = renderHook(() => {
         renderCount += 1;
-        return useBackendInstallState(fake.backend, plugin);
+        return useBackendInstallState(fake.backend);
       });
       const before = result.current;
       const rendersBeforeNotification = renderCount;
@@ -195,9 +193,7 @@ describe("useBackendDescriptor", () => {
 
     it("unsubscribes from install-state changes on unmount", () => {
       const fake = makeInstallDescriptor({ kind: "absent" });
-      const { unmount } = renderHook(() =>
-        useBackendInstallState(fake.backend, {} as CopilotPlugin)
-      );
+      const { unmount } = renderHook(() => useBackendInstallState(fake.backend));
 
       unmount();
 
@@ -235,7 +231,7 @@ describe("useBackendDescriptor", () => {
 
   describe("useBackendInstallStates()", () => {
     it("reuses one frozen empty record across settings identity changes", () => {
-      const { result, rerender } = renderHook(() => useBackendInstallStates({} as CopilotPlugin));
+      const { result, rerender } = renderHook(() => useBackendInstallStates());
       const first = result.current;
 
       mockSettings = { ...mockSettings };
@@ -251,7 +247,7 @@ describe("useBackendDescriptor", () => {
       registry.opencode = opencode.backend;
       registry.claude = claude.backend;
 
-      const { result } = renderHook(() => useBackendInstallStates({} as CopilotPlugin));
+      const { result } = renderHook(() => useBackendInstallStates());
 
       expect(result.current).toEqual({
         opencode: { kind: "ready", source: "managed" },
@@ -264,7 +260,7 @@ describe("useBackendDescriptor", () => {
       const claude = makeInstallDescriptor({ kind: "absent" }, "claude");
       registry.opencode = opencode.backend;
       registry.claude = claude.backend;
-      const { result } = renderHook(() => useBackendInstallStates({} as CopilotPlugin));
+      const { result } = renderHook(() => useBackendInstallStates());
 
       act(() => claude.emit({ kind: "ready", source: "custom" }));
 
@@ -276,7 +272,7 @@ describe("useBackendDescriptor", () => {
       const ready: InstallState = { kind: "ready", source: "managed" };
       const opencode = makeInstallDescriptor(ready, "opencode");
       registry.opencode = opencode.backend;
-      const { result } = renderHook(() => useBackendInstallStates({} as CopilotPlugin));
+      const { result } = renderHook(() => useBackendInstallStates());
       const before = result.current;
 
       act(() => opencode.emit(ready));
@@ -289,7 +285,7 @@ describe("useBackendDescriptor", () => {
       const claude = makeInstallDescriptor({ kind: "absent" }, "claude");
       registry.opencode = opencode.backend;
       registry.claude = claude.backend;
-      const { unmount } = renderHook(() => useBackendInstallStates({} as CopilotPlugin));
+      const { unmount } = renderHook(() => useBackendInstallStates());
 
       unmount();
 

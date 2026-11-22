@@ -12,7 +12,7 @@ import {
 } from "@/agentMode/backends/shared/ManagedBinaryManager";
 import { OPENCODE_MIN_VERSION, OPENCODE_PINNED_VERSION } from "./ui/opencodeVersion";
 import { logError, logInfo, logWarn } from "@/logger";
-import type CopilotPlugin from "@/main";
+import type { CopilotHost } from "@/host/platform/copilotHost";
 import { getSettings, setSettings, type OpencodeBackendSettings } from "@/settings/model";
 import { FileSystemAdapter } from "obsidian";
 import { copilotAppDataDir } from "@/utils/appPaths";
@@ -147,7 +147,7 @@ export function legacyVaultDataDir(
 }
 
 export class OpencodeBinaryManager extends ManagedBinaryManager<InstallOptions> {
-  constructor(private plugin: CopilotPlugin) {
+  constructor(private host: Pick<CopilotHost, "app" | "manifest">) {
     super("opencode");
   }
 
@@ -160,8 +160,8 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<InstallOptions> 
     updateOpencodeFields(settings);
   }
 
-  adoptPlugin(plugin: CopilotPlugin): void {
-    this.plugin = plugin;
+  adoptHost(host: Pick<CopilotHost, "app" | "manifest">): void {
+    this.host = host;
   }
 
   protected async runExclusive<T>(
@@ -187,7 +187,7 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<InstallOptions> 
   }
 
   getDataDir(): string {
-    const adapter = this.plugin.app.vault.adapter;
+    const adapter = this.host.app.vault.adapter;
     if (!(adapter instanceof FileSystemAdapter)) {
       throw new Error("Copilot Chat requires Obsidian on desktop.");
     }
@@ -383,13 +383,13 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<InstallOptions> 
     } catch (error) {
       logInfo("[opencode] No managed data directory to reclaim", error);
     }
-    const adapter = this.plugin.app.vault.adapter;
+    const adapter = this.host.app.vault.adapter;
     if (adapter instanceof FileSystemAdapter) {
       dirs.push(
         legacyVaultDataDir(
           adapter.getBasePath(),
-          this.plugin.app.vault.configDir,
-          this.plugin.manifest.id
+          this.host.app.vault.configDir,
+          this.host.manifest.id
         )
       );
     }

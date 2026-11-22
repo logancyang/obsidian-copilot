@@ -177,6 +177,7 @@
     {
       "box": "host/platform",
       "files": [
+        "apps/obsidian/src/host/platform/**",
         "apps/obsidian/src/settings/**",
         "apps/obsidian/src/{modelManagement,entitlement,services,selection,search}/**",
         "apps/obsidian/src/{aiParams,plusUtils,logFileManager}.ts",

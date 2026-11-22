@@ -1,15 +1,8 @@
 import { EnvOverridesSetting } from "@/agentMode/backends/shared/EnvOverridesSetting";
-import type CopilotPlugin from "@/main";
 import { updateAgentModeBackendFields, useSettingsValue } from "@/settings/model";
-import type { App } from "obsidian";
 import React from "react";
 
-interface Props {
-  plugin: CopilotPlugin;
-  app: App;
-}
-
-export const OpencodeSettingsPanel: React.FC<Props> = () => {
+export const OpencodeSettingsPanel: React.FC = () => {
   const settings = useSettingsValue();
   return (
     <EnvOverridesSetting

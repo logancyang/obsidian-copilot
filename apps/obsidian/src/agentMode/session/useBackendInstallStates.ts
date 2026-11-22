@@ -1,6 +1,5 @@
 import type { BackendDescriptor, BackendId, InstallState } from "@/agentMode/session/types";
 import { useSettingsValue } from "@/settings/model";
-import type CopilotPlugin from "@/main";
 import React from "react";
 
 const EMPTY_BACKEND_INSTALL_STATES = Object.freeze({}) as Record<BackendId, InstallState>;
@@ -26,20 +25,19 @@ export function installStateSignature(state: InstallState): string {
 }
 
 export function useBackendInstallStates(
-  plugin: CopilotPlugin,
   descriptors: readonly BackendDescriptor[]
 ): Record<BackendId, InstallState> {
   const settings = useSettingsValue();
   const subscribe = React.useCallback(
     (listener: () => void) => {
       const unsubscribes = descriptors.map((descriptor) =>
-        descriptor.subscribeInstallState(plugin, listener)
+        descriptor.subscribeInstallState(listener)
       );
       return () => {
         for (const unsubscribe of unsubscribes) unsubscribe();
       };
     },
-    [plugin, descriptors]
+    [descriptors]
   );
   const getSnapshot = React.useCallback(
     () =>

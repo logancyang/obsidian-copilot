@@ -1,7 +1,6 @@
 import { resolveEffort } from "@/lib/model-effort";
 import type { ModelSelectionSession } from "@/agentMode/session/types";
 import { logWarn } from "@/logger";
-import type CopilotPlugin from "@/main";
 import { err2String } from "@/errorFormat";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { getVaultBase } from "@/utils/vaultPath";
@@ -190,8 +189,8 @@ async function writeClaudeSettings(
 }
 
 const claudeApprovedRules: ApprovedRuleStore = {
-  async list(plugin) {
-    const files = claudeSettingsFiles(claudeChildEnv(getSettings()), getVaultBase(plugin.app));
+  async list({ app }) {
+    const files = claudeSettingsFiles(claudeChildEnv(getSettings()), getVaultBase(app));
     const perFile = await Promise.all(
       files.map(async (path) => {
         const settings = await readClaudeSettings(path).catch((error: NodeJS.ErrnoException) => {
@@ -215,7 +214,7 @@ const claudeApprovedRules: ApprovedRuleStore = {
     return perFile.flat();
   },
 
-  async remove(_plugin, rule) {
+  async remove(_host, rule) {
     const file = (rule.appliesTo as { path: string }).path;
     const loaded = await readClaudeSettings(file);
     const permissions = loaded.settings?.permissions;
@@ -387,7 +386,7 @@ export const ClaudeBackendDescriptor: ClaudeDescriptor = {
     return resolveClaudeCliPath(settings);
   },
 
-  subscribeInstallState(_plugin: CopilotPlugin, cb: () => void): () => void {
+  subscribeInstallState(cb: () => void): () => void {
     const unsubscribeSettings = subscribeToSettingsChange((prev, next) => {
       if (
         prev.agentMode?.claudeCli?.path !== next.agentMode?.claudeCli?.path ||
@@ -409,8 +408,8 @@ export const ClaudeBackendDescriptor: ClaudeDescriptor = {
     await refreshClaudeInstallState(getSettings(), true);
   },
 
-  openInstallUI(plugin: CopilotPlugin): void {
-    new ClaudeInstallModal(plugin.app, ClaudeBackendDescriptor).open();
+  openInstallUI({ app }): void {
+    new ClaudeInstallModal(app, ClaudeBackendDescriptor).open();
   },
 
   auth: {

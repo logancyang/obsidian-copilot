@@ -156,6 +156,7 @@ import { RecentUsageManager } from "@/utils/recentUsageManager";
 import { listMarkdownFiles, readFrontmatterViaAdapter, trashFile } from "@/utils/vaultAdapterUtils";
 import { withTimeout } from "@/utils";
 import { StartupLoadingView, type CopilotStartup } from "@/components/StartupLoadingView";
+import type { CopilotHost } from "@/host/platform/copilotHost";
 import { OpenArtifactsPublisher } from "@/openArtifacts/OpenArtifactsPublisher";
 import { migrateOpenArtifactsFolder } from "@/openArtifacts/openArtifactsLedger";
 import {
@@ -170,7 +171,7 @@ interface TeardownHandoff {
   [PENDING_TEARDOWN]?: Promise<void>;
 }
 
-export default class CopilotPlugin extends Plugin implements CopilotStartup {
+export default class CopilotPlugin extends Plugin implements CopilotStartup, CopilotHost {
   chainOwner: ChainOwner;
   brevilabsClient: BrevilabsClient;
   userMessageHistory: string[] = [];

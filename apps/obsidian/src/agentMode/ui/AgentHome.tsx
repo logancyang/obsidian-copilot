@@ -399,7 +399,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     if (isOrphanedProject) new Notice("This project no longer exists.");
   }, [isOrphanedProject]);
 
-  const modelPickerOverride = useAgentModelPicker(manager, plugin);
+  const modelPickerOverride = useAgentModelPicker(manager);
   const modePickerOverride = useAgentModePicker(manager);
 
   const handleCycleMode = useCallback(() => {
@@ -449,7 +449,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     },
     [manager]
   );
-  const needsSetup = useAgentSetupProblems(plugin, useCustomAgents(customAgents));
+  const needsSetup = useAgentSetupProblems(useCustomAgents(customAgents));
   const agentHome = useAgentHomeSelection(
     customAgents,
     {

@@ -1,9 +1,8 @@
-import type { App } from "obsidian";
-import type CopilotPlugin from "@/main";
 import { AcpBackendProcess } from "@/agentMode/acp/AcpBackendProcess";
 import type { AcpBackend, AcpSpawnDescriptor } from "@/agentMode/acp/types";
 import { augmentPathForNodeShebang } from "@/agentMode/acp/nodeShebangPath";
-import type { BackendDescriptor, BackendProcess } from "@/agentMode/session/types";
+import type { BackendStartArgs } from "@/agentMode/session/descriptor";
+import type { BackendProcess } from "@/agentMode/session/types";
 
 export function buildSimpleSpawnDescriptor(
   binaryPath: string | undefined,
@@ -25,12 +24,7 @@ export function buildSimpleSpawnDescriptor(
 }
 
 export function simpleBinaryBackendProcess(
-  args: {
-    plugin: CopilotPlugin;
-    app: App;
-    clientVersion: string;
-    descriptor: BackendDescriptor;
-  },
+  args: Pick<BackendStartArgs, "app" | "clientVersion" | "descriptor">,
   backend: AcpBackend
 ): BackendProcess {
   return new AcpBackendProcess(args.app, backend, args.clientVersion, args.descriptor);

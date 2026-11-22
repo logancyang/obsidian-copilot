@@ -1,22 +1,14 @@
 {
   "counts": {
-    "imports": 739,
+    "imports": 723,
     "clientAccess": 151
   },
   "imports": {
     "apps/obsidian/src/agentMode/acp/AcpBackendProcess.ts": ["@/commands/compactCommand"],
-    "apps/obsidian/src/agentMode/backends/claude/ClaudeSettingsPanel.tsx": ["@/main"],
-    "apps/obsidian/src/agentMode/backends/claude/descriptor.ts": ["@/main"],
-    "apps/obsidian/src/agentMode/backends/codex/CodexSettingsPanel.tsx": ["@/main"],
-    "apps/obsidian/src/agentMode/backends/codex/descriptor.ts": ["@/main"],
     "apps/obsidian/src/agentMode/backends/opencode/OpencodeBackend.ts": [
       "@/LLMProviders/selfHostServices",
       "@/agentMode/skills"
     ],
-    "apps/obsidian/src/agentMode/backends/opencode/OpencodeBinaryManager.ts": ["@/main"],
-    "apps/obsidian/src/agentMode/backends/opencode/OpencodeSettingsPanel.tsx": ["@/main"],
-    "apps/obsidian/src/agentMode/backends/opencode/descriptor.ts": ["@/main"],
-    "apps/obsidian/src/agentMode/backends/opencode/opencodeApprovedRules.ts": ["@/main"],
     "apps/obsidian/src/agentMode/backends/shared/agentSystemPrompt.ts": [
       "@/builtinSkills/builtinSkills",
       "@/excalidraw/excalidrawApi",
@@ -32,7 +24,6 @@
     "apps/obsidian/src/agentMode/backends/shared/managedInstall.ts": [
       "@/agentMode/skills/renameWithRetry"
     ],
-    "apps/obsidian/src/agentMode/backends/shared/simpleBinaryBackend.ts": ["@/main"],
     "apps/obsidian/src/agentMode/backends/shared/ui/AgentBackendHeader.tsx": [
       "@/components/TruncatedText"
     ],
@@ -87,7 +78,6 @@
       "@/agents/memorySaves",
       "@/commands/compactCommand"
     ],
-    "apps/obsidian/src/agentMode/session/AgentModelPreloader.ts": ["@/main"],
     "apps/obsidian/src/agentMode/session/AgentSession.ts": [
       "@/agents/agentMentions",
       "@/commands/compactCommand"
@@ -117,7 +107,6 @@
       "@/LLMProviders/chainRunner/utils/xmlParsing"
     ],
     "apps/obsidian/src/agentMode/session/copilotToolCalls.ts": ["@/connectors/connectorTools"],
-    "apps/obsidian/src/agentMode/session/descriptor.ts": ["@/main"],
     "apps/obsidian/src/agentMode/session/expandCustomCommandPrefix.ts": [
       "@/commands/compactCommand",
       "@/commands/resolveCustomCommandPrefix",
@@ -141,7 +130,6 @@
       "@/agents/agentMentions",
       "@/agents/memorySaves"
     ],
-    "apps/obsidian/src/agentMode/session/useBackendInstallStates.ts": ["@/main"],
     "apps/obsidian/src/agentMode/skills/ui/BuiltinSkillsTable.tsx": [
       "@/settings/builtinSkillPreferences"
     ],
@@ -471,7 +459,6 @@
       "@/agentMode/backends/registry",
       "@/agentMode/session/AgentSessionManager",
       "@/agentMode/session/translateBackendState",
-      "@/main",
       "@/settings/model"
     ],
     "apps/obsidian/src/agentMode/ui/useAgentSelect.ts": [
@@ -583,8 +570,7 @@
       "@/agents/memorySaves"
     ],
     "apps/obsidian/src/agents/agentMode/useAgentSetupProblems.ts": [
-      "@/agentMode/ui/useBackendDescriptor",
-      "@/main"
+      "@/agentMode/ui/useBackendDescriptor"
     ],
     "apps/obsidian/src/agents/customAgentFiles.ts": ["@/agentMode"],
     "apps/obsidian/src/agents/ui/AgentDeleteModal.tsx": [
@@ -1108,11 +1094,8 @@
       "@/instructions/InstructionsTextarea"
     ],
     "apps/obsidian/src/settings/v2/components/configuredModelGrouping.ts": ["@/types/destination"],
-    "apps/obsidian/src/settings/v2/components/ui/ApprovedRulesPage.stories.tsx": [
-      "@/agentMode",
-      "@/main"
-    ],
-    "apps/obsidian/src/settings/v2/components/ui/ApprovedRulesPage.tsx": ["@/agentMode", "@/main"],
+    "apps/obsidian/src/settings/v2/components/ui/ApprovedRulesPage.stories.tsx": ["@/agentMode"],
+    "apps/obsidian/src/settings/v2/components/ui/ApprovedRulesPage.tsx": ["@/agentMode"],
     "apps/obsidian/src/system-prompts/systemPromptBuilder.ts": ["@/instructions/agentsFile"],
     "apps/obsidian/src/tools/FileParserManager.ts": ["@/miyo/miyoDocParsers"],
     "apps/obsidian/src/types/message.ts": ["@/context/PromptContextTypes"],

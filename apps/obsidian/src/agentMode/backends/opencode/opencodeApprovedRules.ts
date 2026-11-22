@@ -1,7 +1,7 @@
 import { requestUrl } from "obsidian";
 import type { ApprovedRuleStore } from "@/agentMode/session/types";
 import { assertBinaryCompatible } from "@/agentMode/backends/shared/binaryCompatibility";
-import type CopilotPlugin from "@/main";
+import type { CopilotHost } from "@/host/platform/copilotHost";
 import { getSettings } from "@/settings/model";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { agentShellPath } from "@/utils/loginShellPath";
@@ -54,7 +54,7 @@ async function stop(server: ChildProcess, exited: Promise<void>): Promise<void> 
 // the same data and project. The server also exits when Obsidian goes away and closes its stdin.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/867
 async function withOpencodeServer<T>(
-  plugin: CopilotPlugin,
+  host: Pick<CopilotHost, "app">,
   work: (callApi: CallApi) => Promise<T>
 ): Promise<T> {
   const opencode = getSettings().agentMode?.backends?.opencode;
@@ -68,7 +68,7 @@ async function withOpencodeServer<T>(
   const { randomBytes } = requireNodeModule<typeof import("node:crypto")>("crypto");
   const password = randomBytes(32).toString("base64url");
   const server = spawn(install.path, ["serve", "--stdio", "--port", "0"], {
-    cwd: getVaultBase(plugin.app) ?? undefined,
+    cwd: getVaultBase(host.app) ?? undefined,
     env: {
       ...process.env,
       PATH: await agentShellPath(),
@@ -123,8 +123,8 @@ async function withOpencodeServer<T>(
 }
 
 export const opencodeApprovedRules: ApprovedRuleStore = {
-  list(plugin) {
-    return withOpencodeServer(plugin, async (callApi) => {
+  list(host) {
+    return withOpencodeServer(host, async (callApi) => {
       const { project } = (await callApi("GET", "/api/location")).json as OpencodeLocation;
       const saved = (
         await callApi("GET", `/api/permission/saved?projectID=${encodeURIComponent(project.id)}`)
@@ -137,8 +137,8 @@ export const opencodeApprovedRules: ApprovedRuleStore = {
     });
   },
 
-  remove(plugin, rule) {
-    return withOpencodeServer(plugin, async (callApi) => {
+  remove(host, rule) {
+    return withOpencodeServer(host, async (callApi) => {
       await callApi("DELETE", `/api/permission/saved/${encodeURIComponent(rule.id)}`);
     });
   },
