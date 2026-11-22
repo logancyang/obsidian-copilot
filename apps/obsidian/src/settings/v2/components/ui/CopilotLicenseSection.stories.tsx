@@ -40,6 +40,7 @@ const meta = {
     usageWindows: null,
     onRemoveLicense: () => {},
     account: account({ status: "signed-out", failure: null }),
+    onDismissDiscordInvite: () => {},
   },
   parameters: { gallery: { host: "settings-tab", layout: "padded" } },
 } satisfies Meta<CopilotLicenseSectionProps>;
@@ -57,6 +58,13 @@ export const SignInFailed: StoryObj<CopilotLicenseSectionProps> = {
 
 export const SignedInFree: StoryObj<CopilotLicenseSectionProps> = {
   args: { account: account({ status: "signed-in", profile: PROFILE, notice: null }) },
+};
+
+export const DiscordInviteDismissed: StoryObj<CopilotLicenseSectionProps> = {
+  args: {
+    account: account({ status: "signed-in", profile: PROFILE, notice: null }),
+    onDismissDiscordInvite: null,
+  },
 };
 
 export const SignedInPaid: StoryObj<CopilotLicenseSectionProps> = {
