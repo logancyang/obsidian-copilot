@@ -1,6 +1,8 @@
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { CopilotPlusWelcomeModal } from "@/components/modals/CopilotPlusWelcomeModal";
 import { useApp } from "@/context";
+import type { CopilotAccount } from "@/copilotAccount/copilotAccount";
+import { useAccountControl } from "@/copilotAccount/ui/useAccountControl";
 import { checkIsPaidUser, navigateToPlusPage, removeLicense, useLicenseState } from "@/plusUtils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import {
@@ -12,6 +14,7 @@ import React, { useEffect, useState } from "react";
 
 export interface PlusSettingsProps {
   readLicenseUsage: () => Promise<readonly LicenseUsageWindow[] | null>;
+  copilotAccount: CopilotAccount | undefined;
 }
 
 function useLicenseUsage(
@@ -35,7 +38,7 @@ function useLicenseUsage(
   return usageWindows;
 }
 
-export function PlusSettings({ readLicenseUsage }: PlusSettingsProps) {
+export function PlusSettings({ readLicenseUsage, copilotAccount }: PlusSettingsProps) {
   const app = useApp();
   const settings = useSettingsValue();
   const [error, setError] = useState<string | null>(null);
@@ -46,6 +49,7 @@ export function PlusSettings({ readLicenseUsage }: PlusSettingsProps) {
     !isChecking && license.status === "active",
     readLicenseUsage
   );
+  const account = useAccountControl(copilotAccount);
 
   const confirmRemoveLicense = () => {
     new ConfirmModal(
@@ -86,6 +90,7 @@ export function PlusSettings({ readLicenseUsage }: PlusSettingsProps) {
       onSeePlans={() => navigateToPlusPage("settings")}
       usageWindows={usageWindows}
       onRemoveLicense={confirmRemoveLicense}
+      account={account}
     />
   );
 }

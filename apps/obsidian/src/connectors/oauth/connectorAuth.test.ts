@@ -172,6 +172,38 @@ describe("connectorAuth", () => {
         expect(page.body).toContain('<div class="tile service">N</div>');
       });
 
+      it("adds the target's extra parameters to the login page address it opens and offers again, never replacing the login's own — https://github.com/Brevilabs/obsidian-copilot-private/issues/923", async () => {
+        const { startLogin } = setUp();
+
+        const { login, authorizationUrl } = await startLogin({
+          ...NOTION,
+          authorizationParams: { install_id: "install-1", state: "not-this-login" },
+        });
+
+        expect(authorizationUrl.searchParams.get("install_id")).toBe("install-1");
+        expect(authorizationUrl.searchParams.getAll("state")).not.toContain("not-this-login");
+        expect(authorizationUrl.searchParams.get("code_challenge_method")).toBe("S256");
+        expect(login.loginUrl()).toBe(authorizationUrl.href);
+      });
+
+      it("shows the target's own completion wording with only Copilot's mark when the target provides it — https://github.com/Brevilabs/obsidian-copilot-private/issues/923", async () => {
+        const { connect } = setUp();
+
+        const page = await connect({
+          ...NOTION,
+          resultCopy: (result) => ({
+            heading: result.status === "failed" ? "Didn't finish" : "Signed in",
+            body: "Go back to <Obsidian> & close this tab.",
+          }),
+        });
+
+        expect(page.body).toContain("<h1>Signed in</h1>");
+        expect(page.body).toContain("<p>Go back to &#60;Obsidian&#62; &#38; close this tab.</p>");
+        expect(page.body).toContain(COPILOT_AGENT_ICON_PATH);
+        expect(page.body).not.toContain("is connected to Copilot");
+        expect(page.body).not.toContain("tile service");
+      });
+
       it("registers as 'Copilot for Obsidian' with its website, logo and loopback callback when the service has no client metadata document support", async () => {
         const { service, startLogin } = setUp();
 

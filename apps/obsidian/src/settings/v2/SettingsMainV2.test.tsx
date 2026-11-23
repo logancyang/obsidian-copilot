@@ -207,6 +207,13 @@ describe("SettingsMainV2", () => {
       expect(screen.getByRole("button", { name: "Agent tab: Claude" })).not.toBeNull();
     });
 
+    it("gives the license section the plugin's Copilot account", () => {
+      const copilotAccount = {};
+      render(<SettingsMainV2 plugin={{ ...plugin, copilotAccount } as unknown as CopilotPlugin} />);
+
+      expect(mockPlusSettings?.copilotAccount).toBe(copilotAccount);
+    });
+
     it("gives the license section the Copilot Plus usage windows read through Agent Mode", async () => {
       const windows = [{ id: "five_hour", label: "5h", percent: 12 }];
       mockReadPlanUsage.mockResolvedValue({ kind: "usage", planUsage: { windows, updatedAt: 1 } });

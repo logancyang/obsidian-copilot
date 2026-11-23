@@ -40,9 +40,17 @@ export class FakeOAuthService {
   readonly registrations: Array<Record<string, unknown>> = [];
   unreachable = false;
   refreshFailsEchoingRequest = false;
+  account: Record<string, unknown> = {
+    email: "you@example.com",
+    name: "Your Name",
+    image: null,
+    plan: "free",
+    licenseKey: null,
+  };
   private readonly clientSecrets = new Map<string, string | undefined>();
   private readonly codes = new Map<string, IssuedCode>();
   private readonly refreshTokens = new Set<string>();
+  private readonly accessTokens = new Set<string>();
   private readonly revocationWaiters: Array<(token: string) => void> = [];
   private issued = 0;
 
@@ -91,6 +99,10 @@ export class FakeOAuthService {
     this.refreshTokens.clear();
   }
 
+  rejectAccessTokens(): void {
+    this.accessTokens.clear();
+  }
+
   private redirect(authorizationUrl: URL, params: Record<string, string>): string {
     const callback = new URL(authorizationUrl.searchParams.get("redirect_uri") ?? "");
     for (const [name, value] of Object.entries(params)) callback.searchParams.set(name, value);
@@ -131,6 +143,11 @@ export class FakeOAuthService {
         this.revokedTokens.push(token);
         this.revocationWaiters.shift()?.(token);
         return { status: 200, headers: {}, text: "" };
+      }
+      case "GET /api/plugin/account": {
+        const token = /^Bearer (.+)$/.exec(request.headers.authorization ?? "")?.[1] ?? "";
+        if (!this.accessTokens.has(token)) return json(401, { error: "invalid_token" });
+        return json(200, this.account);
       }
       default:
         return json(404, { error: "not_found" });
@@ -196,9 +213,11 @@ export class FakeOAuthService {
 
   private issueTokens(): Record<string, unknown> {
     const refreshToken = `refresh-${++this.issued}`;
+    const accessToken = `access-${this.issued}`;
     this.refreshTokens.add(refreshToken);
+    this.accessTokens.add(accessToken);
     return {
-      access_token: `access-${this.issued}`,
+      access_token: accessToken,
       token_type: "Bearer",
       expires_in: 3600,
       refresh_token: refreshToken,
