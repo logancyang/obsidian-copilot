@@ -76,6 +76,7 @@ import {
   isSelfHostModeValid,
   markPaidPendingEntitlement,
   navigateToPlusPage,
+  removeLicense,
   turnOffPaid,
   subscribeToEntitlementChange,
   useIsSelfHostEligible,
@@ -617,6 +618,23 @@ describe("plusUtils", () => {
       mockGetSettings.mockReturnValue(buildSettings({ enableSelfHostMode: true, ...pendingState }));
       expect(hasVerifiedFeature("multi_agent")).toBe(false);
       expect(isSelfHostModeValid()).toBe(false);
+    });
+  });
+
+  describe("removeLicense()", () => {
+    it("clears the stored key and its entitlement in one settings write", () => {
+      mockGetSettings.mockReturnValue(tokenBackedSettings({ isPaidUser: true, isPlusUser: true }));
+
+      removeLicense();
+
+      expect(mockSetSettings).toHaveBeenCalledTimes(1);
+      expect(mockSetSettings).toHaveBeenCalledWith({
+        plusLicenseKey: "",
+        isPaidUser: false,
+        isPlusUser: false,
+        entitlementToken: "",
+        entitlementExpiresAt: 0,
+      });
     });
   });
 

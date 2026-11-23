@@ -10,8 +10,6 @@ type ProductUrl = (typeof PRODUCT_URLS)[keyof typeof PRODUCT_URLS];
 export type ProductUtmMedium =
   | "settings"
   | "license_settings"
-  | "usage_footer"
-  | "pairing"
   | "miyo_settings"
   | "connection"
   | "relevant_notes"

@@ -5,8 +5,6 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { Notice } from "obsidian";
 import React from "react";
 
-jest.mock("@/settings/v2/components/PlusSettings", () => ({ PlusSettings: () => null }));
-
 jest.mock("@/settings/v2/components/AgentSettings", () => ({
   AgentSettings: () => <div data-testid="agents-section">agents</div>,
 }));

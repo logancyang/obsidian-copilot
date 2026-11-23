@@ -21,6 +21,7 @@ import { AGENT_DRAFT_CARD, AGENT_DRAFT_CARD_EXTENSION } from "@/agents/agentMode
 jest.mock("@/constants", () => ({}));
 jest.mock("@/logger", () => ({ logError: jest.fn() }));
 jest.mock("@/miyo/MiyoClient", () => ({ MiyoClient: jest.fn() }));
+jest.mock("./backends/shared/copilotPlusUsage", () => ({ CopilotPlusUsageReader: jest.fn() }));
 jest.mock("@/utils", () => ({ err2String: jest.fn() }));
 jest.mock("@/modelManagement", () => ({
   BackendConfigRegistry: jest.requireActual("@/modelManagement/backends/BackendConfigRegistry")

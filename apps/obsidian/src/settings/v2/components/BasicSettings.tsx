@@ -24,7 +24,6 @@ import { QuickChatPanel } from "@/settings/v2/components/QuickChatPanel";
 import { DesktopOnlySettingsPanel } from "@/settings/v2/components/DesktopOnlySettingsPanel";
 import { CopilotFolderChangeNotice } from "@/settings/v2/components/CopilotFolderChangeNotice";
 import { LegacyChatPromptsNotice } from "@/settings/v2/components/LegacyChatPromptsNotice";
-import { PlusSettings } from "@/settings/v2/components/PlusSettings";
 import { VaultInstructionsSetting } from "@/settings/v2/components/VaultInstructionsSetting";
 import { formatDateTime } from "@/utils";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
@@ -192,8 +191,6 @@ export const BasicSettings: React.FC = () => {
 
   return (
     <div className="tw-space-y-4">
-      <PlusSettings />
-
       <AgentsSection />
 
       <SettingSection label="General">
