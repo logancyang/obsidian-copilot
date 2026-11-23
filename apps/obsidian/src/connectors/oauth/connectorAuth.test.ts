@@ -37,6 +37,7 @@ const NOTION = {
 };
 const FIVE_MINUTES_MS = 5 * 60 * 1000;
 const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+const RETURN_LINK = "obsidian://copilot-auth";
 
 interface StoredLoginView {
   client: { client_id: string; client_secret?: string };
@@ -83,14 +84,22 @@ function fakeBrowser() {
   };
 }
 
+function linkParams(link: string): Record<string, string> {
+  const url = new URL(link);
+  return { action: url.host, ...Object.fromEntries(url.searchParams) };
+}
+
 const startedLogins: ConnectorLogin[] = [];
 
-function setUp(options: FakeOAuthServiceOptions = {}) {
+function setUp(
+  options: FakeOAuthServiceOptions = {},
+  { returnLink }: { returnLink?: string } = {}
+) {
   const service = new FakeOAuthService(options);
   setRequestUrlImpl(service.requestUrl);
   const keychain = fakeKeychain();
   const browser = fakeBrowser();
-  const connectorAuth = new ConnectorAuth({ keychain, openUrl: browser.open });
+  const connectorAuth = new ConnectorAuth({ keychain, openUrl: browser.open, returnLink });
 
   async function startLogin(
     target: ConnectorLoginTarget = NOTION
@@ -467,6 +476,166 @@ describe("connectorAuth", () => {
           .find((written) => written.client.client_id === replacedClientId);
         expect(storedLogin().client.client_id).not.toBe(replacedClientId);
         await expect(revocation).resolves.toBe(refreshed?.tokens.refresh_token);
+      });
+
+      it("asks the service to send the browser back to the return link, with PKCE, on a device that has one, and opens no local address — https://github.com/Brevilabs/obsidian-copilot-private/issues/926", async () => {
+        const { startLogin } = setUp(
+          { supportsClientMetadataDocuments: true },
+          {
+            returnLink: RETURN_LINK,
+          }
+        );
+
+        const { authorizationUrl } = await startLogin();
+
+        expect(authorizationUrl.searchParams.get("redirect_uri")).toBe(RETURN_LINK);
+        expect(authorizationUrl.searchParams.get("code_challenge_method")).toBe("S256");
+        expect(authorizationUrl.searchParams.get("code_challenge")).toMatch(/.{43}/);
+        expect(authorizationUrl.searchParams.get("state")).toMatch(/.{16,}/);
+      });
+
+      it("ends as cancelled-on-service when the return link says the user denied the login — https://github.com/Brevilabs/obsidian-copilot-private/issues/926", async () => {
+        const { service, connectorAuth, keychain, startLogin } = setUp(
+          {},
+          {
+            returnLink: RETURN_LINK,
+          }
+        );
+        const { login, authorizationUrl } = await startLogin();
+
+        connectorAuth.receiveReturnLink(linkParams(service.deny(authorizationUrl.href)));
+
+        await expect(login.outcome).resolves.toEqual({
+          status: "failed",
+          reason: "cancelled-on-service",
+        });
+        expect(keychain.secrets.size).toBe(0);
+      });
+    });
+
+    describe("receiveReturnLink()", () => {
+      it("connects the waiting login, exchanging the code for the return link it was issued to, when the link carries the login's state — https://github.com/Brevilabs/obsidian-copilot-private/issues/926", async () => {
+        const { service, connectorAuth, startLogin, storedLogin } = setUp(
+          { supportsClientMetadataDocuments: true },
+          { returnLink: RETURN_LINK }
+        );
+        const { login, authorizationUrl } = await startLogin();
+
+        connectorAuth.receiveReturnLink(linkParams(service.approve(authorizationUrl.href)));
+
+        await expect(login.outcome).resolves.toEqual({ status: "connected" });
+        const exchange = new URLSearchParams(service.requestsTo("/token")[0].body);
+        expect(exchange.get("redirect_uri")).toBe(RETURN_LINK);
+        expect(exchange.get("code_verifier")).toMatch(/.{43}/);
+        expect(storedLogin().tokens.access_token).toMatch(/^access-/);
+      });
+
+      it("ignores a link whose state is wrong or missing, a denial included, exchanging only the code of the login's own link — https://github.com/Brevilabs/obsidian-copilot-private/issues/926", async () => {
+        const { service, connectorAuth, startLogin } = setUp({}, { returnLink: RETURN_LINK });
+        const { login, authorizationUrl } = await startLogin();
+        const link = linkParams(service.approve(authorizationUrl.href));
+        const forged = { ...link, code: "code-from-another-page", state: "forged" };
+        const stateless = { action: link.action, code: "code-from-another-page" };
+        const forgedDenial = { action: link.action, error: "access_denied", state: "forged" };
+
+        connectorAuth.receiveReturnLink(forged);
+        connectorAuth.receiveReturnLink(stateless);
+        connectorAuth.receiveReturnLink(forgedDenial);
+        connectorAuth.receiveReturnLink(link);
+
+        await expect(login.outcome).resolves.toEqual({ status: "connected" });
+        const exchangedCodes = service
+          .requestsTo("/token")
+          .map((request) => new URLSearchParams(request.body).get("code"));
+        expect(exchangedCodes).toEqual([link.code]);
+      });
+
+      it("ignores a link when no login is waiting, and the same link again once the login finished, without contacting the service — https://github.com/Brevilabs/obsidian-copilot-private/issues/926", async () => {
+        const { service, connectorAuth, startLogin, storedLogin } = setUp(
+          {},
+          {
+            returnLink: RETURN_LINK,
+          }
+        );
+        connectorAuth.receiveReturnLink({ action: "copilot-auth", code: "code-x", state: "s" });
+        expect(service.requests).toEqual([]);
+        const { login, authorizationUrl } = await startLogin();
+        const link = linkParams(service.approve(authorizationUrl.href));
+        connectorAuth.receiveReturnLink(link);
+        await login.outcome;
+        const stored = storedLogin();
+        const requestsBefore = service.requests.length;
+
+        connectorAuth.receiveReturnLink(link);
+
+        expect(service.requests.length).toBe(requestsBefore);
+        expect(storedLogin()).toEqual(stored);
+      });
+
+      it("exchanges the code once when the same link arrives again while the exchange is in flight — https://github.com/Brevilabs/obsidian-copilot-private/issues/926", async () => {
+        const { service, connectorAuth, startLogin } = setUp({}, { returnLink: RETURN_LINK });
+        const first = await startLogin();
+        const link = linkParams(service.approve(first.authorizationUrl.href));
+
+        connectorAuth.receiveReturnLink(link);
+        connectorAuth.receiveReturnLink(link);
+        await expect(first.login.outcome).resolves.toEqual({ status: "connected" });
+        const next = await startLogin();
+        const nextLink = linkParams(service.approve(next.authorizationUrl.href));
+        connectorAuth.receiveReturnLink(nextLink);
+        await next.login.outcome;
+
+        const exchangedCodes = service
+          .requestsTo("/token")
+          .map((request) => new URLSearchParams(request.body).get("code"));
+        expect(exchangedCodes).toEqual([link.code, nextLink.code]);
+      });
+
+      it("ignores a link for a login that was cancelled or timed out, storing nothing — https://github.com/Brevilabs/obsidian-copilot-private/issues/926", async () => {
+        jest.useFakeTimers({ doNotFake: ["nextTick", "setImmediate"] });
+        const { service, connectorAuth, keychain, startLogin } = setUp(
+          {},
+          {
+            returnLink: RETURN_LINK,
+          }
+        );
+        const cancelled = await startLogin();
+        cancelled.login.cancel();
+        await expect(cancelled.login.outcome).resolves.toEqual({ status: "cancelled" });
+        const timedOut = await startLogin();
+        jest.advanceTimersByTime(FIVE_MINUTES_MS);
+        await expect(timedOut.login.outcome).resolves.toEqual({
+          status: "failed",
+          reason: "timed-out",
+        });
+        const requestsBefore = service.requests.length;
+
+        connectorAuth.receiveReturnLink(
+          linkParams(service.approve(cancelled.authorizationUrl.href))
+        );
+        connectorAuth.receiveReturnLink(
+          linkParams(service.approve(timedOut.authorizationUrl.href))
+        );
+
+        expect(service.requests.length).toBe(requestsBefore);
+        expect(keychain.secrets.size).toBe(0);
+      });
+
+      it("ignores a link on a device whose logins return to a local address, even one carrying the login's state, and still connects through that address — https://github.com/Brevilabs/obsidian-copilot-private/issues/926", async () => {
+        const { service, connectorAuth, startLogin } = setUp();
+        const { login, authorizationUrl } = await startLogin();
+        const callback = new URL(service.approve(authorizationUrl.href));
+        const requestsBefore = service.requests.length;
+
+        connectorAuth.receiveReturnLink({
+          action: "copilot-auth",
+          code: callback.searchParams.get("code") ?? "",
+          state: callback.searchParams.get("state") ?? "",
+        });
+
+        expect(service.requests.length).toBe(requestsBefore);
+        await visit(callback.href);
+        await expect(login.outcome).resolves.toEqual({ status: "connected" });
       });
     });
 
