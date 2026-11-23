@@ -39,6 +39,10 @@ function openMenu(pillName: string): void {
 }
 
 describe("AccountControl", () => {
+  beforeEach(() => {
+    mockOpenedInSystemBrowser.length = 0;
+  });
+
   describe("AccountControl()", () => {
     it("offers Sign in while signed out", () => {
       const props = renderControl({ status: "signed-out", failure: null });
@@ -88,12 +92,18 @@ describe("AccountControl", () => {
       expect(screen.getByRole("button", { name: "Account" }).textContent).toBe("Signed in");
     });
 
-    it("opens a menu with the account's email, Dashboard, Refresh plan and Sign out from the pill", async () => {
+    it("opens a menu with the account's email, Dashboard, Refresh plan, the Discord invite and Sign out from the pill", async () => {
       const props = renderControl(signedIn(FREE_PROFILE));
 
       openMenu("Account, Free plan");
 
       expect(await screen.findByText("you@example.com")).toBeTruthy();
+      expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual([
+        "Dashboard",
+        "Refresh plan",
+        "Join the Copilot Discord",
+        "Sign out",
+      ]);
       expect(screen.getByRole("menuitem", { name: "Dashboard" }).getAttribute("href")).toBe(
         "https://www.obsidiancopilot.com/dashboard?utm_source=obsidian_copilot&utm_medium=license_settings"
       );
@@ -114,6 +124,26 @@ describe("AccountControl", () => {
         "https://www.obsidiancopilot.com/dashboard?utm_source=obsidian_copilot&utm_medium=license_settings",
       ]);
       await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+    });
+
+    it("opens the Copilot Discord invite, untagged, in the system browser and closes the menu — https://github.com/Brevilabs/obsidian-copilot-private/issues/925", async () => {
+      renderControl(signedIn(FREE_PROFILE));
+      openMenu("Account, Free plan");
+
+      fireEvent.click(await screen.findByRole("menuitem", { name: "Join the Copilot Discord" }));
+
+      expect(mockOpenedInSystemBrowser).toEqual(["https://discord.gg/5byWwcq5Qq"]);
+      await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+    });
+
+    it.each<[string, CopilotAccountState]>([
+      ["signed out", { status: "signed-out", failure: null }],
+      ["signing in", { status: "signing-in" }],
+    ])("offers no account menu, so no Discord invite, while %s", (_label, state) => {
+      renderControl(state);
+
+      expect(screen.queryByRole("button", { name: /^Account/ })).toBeNull();
+      expect(screen.queryByText("Join the Copilot Discord")).toBeNull();
     });
   });
 });

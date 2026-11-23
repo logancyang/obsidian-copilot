@@ -105,6 +105,9 @@ export function PlusSettings({ readLicenseUsage, copilotAccount }: PlusSettingsP
       usageWindows={usageWindows}
       onRemoveLicense={isLicenseFromAccount ? null : confirmRemoveLicense}
       account={account}
+      onDismissDiscordInvite={
+        settings.discordInviteDismissed ? null : () => setSettings({ discordInviteDismissed: true })
+      }
     />
   );
 }

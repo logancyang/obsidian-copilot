@@ -1,5 +1,7 @@
 import type { AccountProfile, CopilotAccountState } from "@/copilotAccount/copilotAccount";
 import { Button } from "@/components/ui/button";
+import { DiscordLogo } from "@/components/ui/DiscordLogo";
+import { COPILOT_DISCORD_INVITE_URL } from "@/constants";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -58,6 +60,12 @@ function AccountMenu({ profile, onRefreshPlan, onSignOut, defaultOpen }: Account
   const menuContainer = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(defaultOpen ?? false);
   const plan = profile && planName(profile.plan);
+  const openInSystemBrowser = (event: React.MouseEvent<HTMLAnchorElement>) => {
+    openLinkInSystemBrowser(event);
+    // Opening the system browser cancels the link's click, which also stops the menu from closing itself.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/923
+    setOpen(false);
+  };
   return (
     <div ref={menuContainer}>
       <DropdownMenu modal={false} open={open} onOpenChange={setOpen}>
@@ -90,12 +98,7 @@ function AccountMenu({ profile, onRefreshPlan, onSignOut, defaultOpen }: Account
               href={createProductUrl(PRODUCT_URLS.COPILOT_DASHBOARD, "license_settings")}
               target="_blank"
               rel="noopener noreferrer"
-              onClick={(event) => {
-                openLinkInSystemBrowser(event);
-                // Opening the system browser cancels the link's click, which also stops the menu from closing itself.
-                // https://github.com/Brevilabs/obsidian-copilot-private/issues/923
-                setOpen(false);
-              }}
+              onClick={openInSystemBrowser}
               className="tw-text-normal tw-no-underline"
             >
               <ExternalLink />
@@ -105,6 +108,23 @@ function AccountMenu({ profile, onRefreshPlan, onSignOut, defaultOpen }: Account
           <DropdownMenuItem onSelect={onRefreshPlan}>
             <RefreshCw />
             Refresh plan
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <a
+              href={COPILOT_DISCORD_INVITE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={openInSystemBrowser}
+              className="tw-text-normal tw-no-underline"
+            >
+              <span
+                aria-hidden="true"
+                className="tw-flex tw-size-4 tw-items-center tw-justify-center tw-rounded-sm tw-bg-discord tw-text-white"
+              >
+                <DiscordLogo className="tw-size-3" />
+              </span>
+              Join the Copilot Discord
+            </a>
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={onSignOut}>
             <LogOut />

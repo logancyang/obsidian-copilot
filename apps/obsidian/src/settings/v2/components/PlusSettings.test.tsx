@@ -48,9 +48,20 @@ jest.mock("@/components/modals/ConfirmModal", () => ({
   },
 }));
 
+const mockOpenedInSystemBrowser: string[] = [];
+jest.mock("@/utils/electronShell", () => ({
+  openLinkInSystemBrowser: (event: { preventDefault(): void; currentTarget: { href: string } }) => {
+    event.preventDefault();
+    mockOpenedInSystemBrowser.push(event.currentTarget.href);
+  },
+}));
+
 import { PlusSettings } from "./PlusSettings";
 
 const KEY_FIELD_PLACEHOLDER = "Enter your license key";
+
+const DISCORD_INVITE_TEXT =
+  "You're invited to the Copilot Discord: help from the team and other users.";
 
 const USAGE_WINDOWS: readonly LicenseUsageWindow[] = [
   { id: "five_hour", label: "5h", percent: 12 },
@@ -68,7 +79,7 @@ function accountAuth({ hasLogin }: { hasLogin: boolean }) {
   } satisfies CopilotAccountDeps["auth"];
 }
 
-function failingLogin(outcome: SignInOutcome): AccountSignIn {
+function finishedLogin(outcome: SignInOutcome): AccountSignIn {
   return {
     outcome: Promise.resolve(outcome),
     loginUrl: () => null,
@@ -98,8 +109,10 @@ describe("PlusSettings", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     confirmRequests.length = 0;
+    mockOpenedInSystemBrowser.length = 0;
     mockCopilotAccount = undefined;
     resetSettings();
+    setSettings({ discordInviteDismissed: undefined });
     removeLicense();
     mockReadLicenseUsage.mockResolvedValue(USAGE_WINDOWS);
   });
@@ -229,7 +242,7 @@ describe("PlusSettings", () => {
     it("keeps the applied key and its plan, and says what happened, when a sign-in fails — https://github.com/Brevilabs/obsidian-copilot-private/issues/923", async () => {
       storeActiveLicense();
       const auth = accountAuth({ hasLogin: false });
-      auth.login.mockReturnValue(failingLogin({ status: "failed", reason: "unreachable" }));
+      auth.login.mockReturnValue(finishedLogin({ status: "failed", reason: "unreachable" }));
       provideAccount(auth);
       render(
         <PlusSettings readLicenseUsage={mockReadLicenseUsage} copilotAccount={mockCopilotAccount} />
@@ -345,6 +358,47 @@ describe("PlusSettings", () => {
       );
 
       expect(screen.queryByRole("button", { name: "Sign in" })).toBeNull();
+    });
+    it("invites the user to the Discord after sign-in and, once closed, never again, also after signing out and in — https://github.com/Brevilabs/obsidian-copilot-private/issues/925", async () => {
+      const auth = accountAuth({ hasLogin: false });
+      auth.login.mockReturnValue(finishedLogin({ status: "connected" }));
+      provideAccount(auth);
+      render(
+        <PlusSettings readLicenseUsage={mockReadLicenseUsage} copilotAccount={mockCopilotAccount} />
+      );
+      expect(screen.queryByText(DISCORD_INVITE_TEXT)).toBeNull();
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+      });
+      expect(screen.getByText(DISCORD_INVITE_TEXT)).toBeTruthy();
+
+      fireEvent.click(screen.getByRole("button", { name: "Hide the Discord invite" }));
+      expect(getSettings().discordInviteDismissed).toBe(true);
+      expect(screen.queryByText(DISCORD_INVITE_TEXT)).toBeNull();
+
+      fireEvent.keyDown(screen.getByRole("button", { name: "Account" }), { key: "Enter" });
+      await act(async () => {
+        fireEvent.click(await screen.findByRole("menuitem", { name: "Sign out" }));
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+      });
+      expect(screen.getByRole("button", { name: "Account" })).toBeTruthy();
+      expect(screen.queryByText(DISCORD_INVITE_TEXT)).toBeNull();
+    });
+
+    it("opens the Discord invite and puts the invite away for good from Join Discord", async () => {
+      provideAccount(accountAuth({ hasLogin: true }));
+      render(
+        <PlusSettings readLicenseUsage={mockReadLicenseUsage} copilotAccount={mockCopilotAccount} />
+      );
+
+      fireEvent.click(await screen.findByRole("link", { name: "Join Discord" }));
+
+      expect(mockOpenedInSystemBrowser).toEqual(["https://discord.gg/5byWwcq5Qq"]);
+      expect(getSettings().discordInviteDismissed).toBe(true);
+      expect(screen.queryByText(DISCORD_INVITE_TEXT)).toBeNull();
     });
   });
 });
