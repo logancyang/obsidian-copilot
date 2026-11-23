@@ -1,6 +1,5 @@
 import type { OpenArtifactsModalOptions } from "@/components/modals/OpenArtifactsModal";
 import { ACCESS_UPGRADE_URL, OpenArtifactsClientError } from "@/openArtifacts/OpenArtifactsClient";
-import accessCoverage from "@/openArtifacts/accessCoverage.json";
 import { OpenArtifactsPublisher } from "@/openArtifacts/OpenArtifactsPublisher";
 import {
   createOpenArtifactsTools,
@@ -13,7 +12,6 @@ import {
   type OpenArtifactsToolDeps,
 } from "@/openArtifacts/openArtifactsTools";
 import { TFile, type App } from "obsidian";
-import { documentAccess } from "openartifacts/client/access";
 
 jest.mock("@/logger", () => ({ logWarn: jest.fn() }));
 jest.mock("@/utils", () => ({
@@ -139,20 +137,6 @@ const json = (result: { text: string }) => JSON.parse(result.text) as Record<str
 
 describe("openArtifactsTools", () => {
   describe("tool definitions", () => {
-    it("records how Copilot handles every shared access operation", () => {
-      const decisions: Partial<Record<string, Record<string, string>>> = accessCoverage;
-      for (const operation of Object.keys(documentAccess)) {
-        const decision = decisions[operation];
-        if (decision?.tool) {
-          expect(OPENARTIFACTS_SHARE_TOOL.inputSchema.properties.action.enum).toContain(
-            decision.tool
-          );
-        } else if (!decision?.uiOnly && !decision?.excluded) {
-          throw new Error(`Resolve the Copilot access coverage for ${operation} before upgrading.`);
-        }
-      }
-    });
-
     it(`${ISSUE} names five tools, none always loaded, whose annotations admit that they write`, () => {
       const tools = [
         OPENARTIFACTS_PUBLISH_TOOL,

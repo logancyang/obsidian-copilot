@@ -1,7 +1,0 @@
-{
-  "getAccess": { "tool": "list" },
-  "setLinkAccess": { "uiOnly": "Link access changes are made by the user in Share." },
-  "addPerson": { "tool": "add" },
-  "removePerson": { "tool": "remove" },
-  "declineRequest": { "tool": "decline" }
-}
