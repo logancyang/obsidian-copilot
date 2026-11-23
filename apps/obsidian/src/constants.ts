@@ -454,6 +454,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   entitlementToken: "",
   entitlementExpiresAt: 0,
   plusLicenseKey: "",
+  accountLicenseKey: "",
   openAIApiKey: "",
   openAIOrgId: "",
   huggingfaceApiKey: "",

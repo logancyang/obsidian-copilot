@@ -18,7 +18,7 @@ const FREE_PROFILE: AccountProfile = {
 };
 
 function signedIn(profile: AccountProfile | null): CopilotAccountState {
-  return { status: "signed-in", profile };
+  return { status: "signed-in", profile, notice: null };
 }
 
 function renderControl(state: CopilotAccountState) {
