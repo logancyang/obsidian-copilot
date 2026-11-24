@@ -52,7 +52,7 @@ jest.mock("@/components/quick-ask/useQuickAskSession", () => ({ useQuickAskSessi
 jest.mock("@/components/ui/help-tooltip", () => ({ HelpTooltip: () => null }));
 
 const props = {
-  plugin: { app: { workspace: { getActiveFile: () => null } } },
+  host: { app: { workspace: { getActiveFile: () => null } } },
   view: {},
   editor: {},
   selectedText: "She go to school yesterday.",

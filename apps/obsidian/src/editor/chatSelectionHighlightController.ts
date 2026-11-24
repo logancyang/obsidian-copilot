@@ -1,7 +1,6 @@
 import { EditorView } from "@codemirror/view";
-import { MarkdownView, type WorkspaceLeaf } from "obsidian";
+import { MarkdownView, type App, type WorkspaceLeaf } from "obsidian";
 
-import type CopilotPlugin from "@/main";
 import { CHAT_AGENT_VIEWTYPE, CHAT_VIEWTYPE } from "@/constants";
 import type { SelectedTextContext } from "@/types/message";
 import { logError, logWarn } from "@/logger";
@@ -29,25 +28,15 @@ interface Snapshot {
   to: number;
 }
 
-export interface ChatSelectionHighlightControllerOptions {
-  closeQuickAskOnChatFocus?: boolean;
-}
-
 export class ChatSelectionHighlightController {
-  private readonly plugin: CopilotPlugin;
-  private readonly closeQuickAskOnChatFocus: boolean;
-
   private lastActiveMarkdownLeaf: WorkspaceLeaf | null = null;
   private lastActiveLeafWasMarkdown = false;
   private snapshot: Snapshot | null = null;
 
-  constructor(plugin: CopilotPlugin, options?: ChatSelectionHighlightControllerOptions) {
-    this.plugin = plugin;
-    this.closeQuickAskOnChatFocus = options?.closeQuickAskOnChatFocus ?? false;
-  }
+  constructor(private readonly app: App) {}
 
   initialize(): void {
-    const markdownView = this.plugin.app.workspace.getActiveViewOfType(MarkdownView);
+    const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
     const leaf = markdownView?.leaf ?? null;
     this.lastActiveLeafWasMarkdown = !!markdownView;
     if (this.lastActiveLeafWasMarkdown && leaf) {
@@ -77,16 +66,12 @@ export class ChatSelectionHighlightController {
     }
 
     if (nextIsChat && prevWasMarkdown) {
-      if (this.closeQuickAskOnChatFocus) {
-        this.plugin.quickAskController?.close(false);
-      }
-
       this.persist({ useFallback: true });
     }
   }
 
   persistFromPointerDown(): void {
-    if (!this.plugin.app.workspace.getActiveViewOfType(MarkdownView)) {
+    if (!this.app.workspace.getActiveViewOfType(MarkdownView)) {
       return;
     }
 
@@ -139,7 +124,7 @@ export class ChatSelectionHighlightController {
   }
 
   private getEditorView(allowFallback: boolean): EditorView | null {
-    const active = this.plugin.app.workspace.getActiveViewOfType(MarkdownView);
+    const active = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (active?.editor?.cm) {
       return active.editor.cm;
     }

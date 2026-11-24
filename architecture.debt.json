@@ -1,6 +1,6 @@
 {
   "counts": {
-    "imports": 718,
+    "imports": 709,
     "clientAccess": 151
   },
   "imports": {
@@ -670,8 +670,6 @@
     "apps/obsidian/src/commands/customCommandChatEngine.ts": ["@/LLMProviders/chatModelManager"],
     "apps/obsidian/src/commands/customCommandManager.ts": ["@/error"],
     "apps/obsidian/src/commands/customCommandUtils.ts": ["@/types"],
-    "apps/obsidian/src/components/Chat.tsx": ["@/main"],
-    "apps/obsidian/src/components/CopilotView.tsx": ["@/main"],
     "apps/obsidian/src/components/RelevantNotesView.tsx": [
       "@/components/chat-components/RelevantNotes"
     ],
@@ -817,9 +815,6 @@
     "apps/obsidian/src/components/modals/YoutubeTranscriptModal.tsx": [
       "@/LLMProviders/brevilabsClient"
     ],
-    "apps/obsidian/src/components/quick-ask/QuickAskMessage.tsx": ["@/main"],
-    "apps/obsidian/src/components/quick-ask/QuickAskOverlay.tsx": ["@/main"],
-    "apps/obsidian/src/components/quick-ask/types.ts": ["@/main"],
     "apps/obsidian/src/components/quick-ask/useQuickAskSession.ts": [
       "@/commands/customCommandUtils",
       "@/commands/quickCommandPrompts"
@@ -903,13 +898,9 @@
     "apps/obsidian/src/core/ChatManager.ts": [
       "@/commands/customCommandUtils",
       "@/commands/resolveCustomCommandPrefix",
-      "@/commands/state",
-      "@/main"
+      "@/commands/state"
     ],
     "apps/obsidian/src/core/ContextManager.ts": ["@/commands/customCommandUtils"],
-    "apps/obsidian/src/editor/chatSelectionHighlightController.ts": ["@/main"],
-    "apps/obsidian/src/editor/quickAskController.ts": ["@/main"],
-    "apps/obsidian/src/editor/registerNoteHeaderAction.ts": ["@/main"],
     "apps/obsidian/src/excalidraw/agentMode/excalidrawCardKind.tsx": [
       "@/excalidraw/agentMode/excalidrawToolRun"
     ],

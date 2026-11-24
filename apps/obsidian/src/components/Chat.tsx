@@ -29,25 +29,42 @@ import { getAIResponse } from "@/langchainStream";
 import ChainManager from "@/LLMProviders/chainManager";
 import { clearRecordedPromptPayload } from "@/LLMProviders/chainRunner/utils/promptPayloadRecorder";
 import { logFileManager } from "@/logFileManager";
-import CopilotPlugin from "@/main";
 import { getModelKeyFromModel, useSettingsValue } from "@/settings/model";
 import { ChatManagerChatUIState } from "@/state/ChatUIState";
 import { ChatMessage } from "@/types/message";
 import { err2String, isPlusChain, modelSupportsVision } from "@/utils";
 import { arrayBufferToBase64 } from "@/utils/base64";
 import { appendUniqueFiles } from "@/utils/fileListUtils";
-import { Notice, TFile } from "obsidian";
+import { Notice, TFile, type App } from "obsidian";
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { useActiveWebTabState } from "@/components/chat-components/hooks/useActiveWebTabState";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
+import type { ChatSelectionHighlightController } from "@/editor/chatSelectionHighlightController";
+import type { UserMemoryManager } from "@/memory/UserMemoryManager";
+
+export interface QuickChatServices {
+  readonly app: App;
+  readonly chatSelectionHighlightController: Pick<
+    ChatSelectionHighlightController,
+    "persistFromPointerDown"
+  >;
+  readonly userMemoryManager: Pick<UserMemoryManager, "addRecentConversation">;
+  getChatHistoryItems(): Promise<ChatHistoryItem[]>;
+  updateChatTitle(fileId: string, newTitle: string): Promise<void>;
+  deleteChatHistory(fileId: string): Promise<void>;
+  loadChatById(fileId: string): Promise<void>;
+  openChatSourceFile(fileId: string): Promise<void>;
+  copyChatLink(resolveNotePath: () => Promise<string>): Promise<void>;
+  activateAgentView(): Promise<unknown>;
+}
 
 interface ChatProps {
   chainManager: ChainManager;
   onSaveChat: (saveAsNote: () => Promise<void>) => void;
   updateUserMessageHistory: (newMessage: string) => void;
-  plugin: CopilotPlugin;
+  services: QuickChatServices;
   chatUIState: ChatManagerChatUIState;
 }
 
@@ -55,7 +72,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
   chainManager,
   onSaveChat,
   updateUserMessageHistory,
-  plugin,
+  services,
   chatUIState,
   chatInput,
 }) => {
@@ -106,8 +123,8 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
   const handleChatPointerDownCapture = useCallback((): void => {
-    plugin.chatSelectionHighlightController.persistFromPointerDown();
-  }, [plugin]);
+    services.chatSelectionHighlightController.persistFromPointerDown();
+  }, [services]);
 
   const safeSet = useMemo<{
     setCurrentAiMessage: (value: string) => void;
@@ -137,7 +154,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
   const [selectedChain] = useChainType();
 
   const appContext = useContext(AppContext);
-  const app = plugin.app || appContext;
+  const app = services.app || appContext;
 
   const handleAddImage = useCallback((files: File[]) => {
     setSelectedImages((prev) => appendUniqueFiles(prev, files));
@@ -297,12 +314,12 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
 
   const handleCopyChatLink = useCallback(
     () =>
-      plugin.copyChatLink(async () => {
+      services.copyChatLink(async () => {
         // Links need a saved note: https://github.com/Brevilabs/obsidian-copilot-private/issues/601
         if (!chatUIState.getSourcePath()) await chatUIState.saveChat(currentModelKey);
         return chatUIState.getSourcePath();
       }),
-    [plugin, chatUIState, currentModelKey]
+    [services, chatUIState, currentModelKey]
   );
 
   const handleStopGenerating = useCallback(
@@ -513,7 +530,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     if (settings.enableRecentConversations) {
       try {
         const chatModel = chainManager.chatModelManager.getChatModel();
-        plugin.userMemoryManager.addRecentConversation(chatUIState.getMessages(), chatModel);
+        services.userMemoryManager.addRecentConversation(chatUIState.getMessages(), chatModel);
       } catch (error) {
         logInfo("Failed to analyze chat messages for memory:", error);
       }
@@ -541,23 +558,23 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     settings.enableRecentConversations,
     handleSaveAsNote,
     safeSet,
-    plugin,
+    services,
   ]);
 
   const handleLoadChatHistory = useCallback(async () => {
     try {
-      const historyItems = await plugin.getChatHistoryItems();
+      const historyItems = await services.getChatHistoryItems();
       setChatHistoryItems(historyItems);
     } catch (error) {
       logError("Error loading chat history:", error);
       new Notice("Failed to load chat history.");
     }
-  }, [plugin]);
+  }, [services]);
 
   const handleUpdateChatTitle = useCallback(
     async (id: string, newTitle: string) => {
       try {
-        await plugin.updateChatTitle(id, newTitle);
+        await services.updateChatTitle(id, newTitle);
         await handleLoadChatHistory();
       } catch (error) {
         logError("Error updating chat title:", error);
@@ -565,13 +582,13 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
         throw error;
       }
     },
-    [plugin, handleLoadChatHistory]
+    [services, handleLoadChatHistory]
   );
 
   const handleDeleteChat = useCallback(
     async (id: string) => {
       try {
-        await plugin.deleteChatHistory(id);
+        await services.deleteChatHistory(id);
         await handleLoadChatHistory();
       } catch (error) {
         logError("Error deleting chat:", error);
@@ -579,32 +596,32 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
         throw error;
       }
     },
-    [plugin, handleLoadChatHistory]
+    [services, handleLoadChatHistory]
   );
 
   const handleLoadChat = useCallback(
     async (id: string) => {
       try {
-        await plugin.loadChatById(id);
+        await services.loadChatById(id);
         resetSessionSystemPromptSettings();
       } catch (error) {
         logError("Error loading chat:", error);
         new Notice("Failed to load chat.");
       }
     },
-    [plugin]
+    [services]
   );
 
   const handleOpenSourceFile = useCallback(
     async (id: string) => {
       try {
-        await plugin.openChatSourceFile(id);
+        await services.openChatSourceFile(id);
       } catch (error) {
         logError("Error opening source file:", error);
         new Notice("Failed to open source file.");
       }
     },
-    [plugin]
+    [services]
   );
 
   useEffect(() => {
@@ -637,7 +654,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
       <div className="tw-flex tw-size-full tw-flex-col tw-overflow-hidden">
         {isChatEmpty(chatHistory, currentAiMessage) && (
           <div className="tw-mx-auto tw-flex tw-w-full tw-max-w-lg tw-flex-1 tw-items-center tw-px-4">
-            <AgentModeBanner onOpenAgent={safeAsyncHandler(() => plugin.activateAgentView())} />
+            <AgentModeBanner onOpenAgent={safeAsyncHandler(() => services.activateAgentView())} />
           </div>
         )}
         <ChatMessages

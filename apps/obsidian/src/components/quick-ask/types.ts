@@ -1,8 +1,11 @@
 import type { EditorView } from "@codemirror/view";
-import type { Editor } from "obsidian";
-import type CopilotPlugin from "@/main";
+import type { App, Component, Editor } from "obsidian";
 import type { ReplaceGuard } from "@/editor/replaceGuard";
 import type { ResizeDirection } from "@/hooks/use-resizable";
+
+export interface QuickAskHost extends Component {
+  readonly app: App;
+}
 
 export type QuickAskMode = "ask" | "edit" | "edit-direct";
 
@@ -14,7 +17,7 @@ export interface QuickAskMessage {
 }
 
 export interface QuickAskPanelProps {
-  plugin: CopilotPlugin;
+  host: QuickAskHost;
   editor: Editor;
   view: EditorView;
   selectedText: string;
@@ -33,7 +36,7 @@ export interface QuickAskWidgetPayload {
   topAnchorPos?: number | null;
   focusAnchorPos?: number | null;
   options: {
-    plugin: CopilotPlugin;
+    host: QuickAskHost;
     editor: Editor;
     view: EditorView;
     selectedText: string;

@@ -3,10 +3,9 @@ jest.mock("obsidian", () => ({
   TFile: class TFile {},
 }));
 
-import type CopilotPlugin from "@/main";
 import { registerNoteHeaderAction } from "@/editor/registerNoteHeaderAction";
 import { COPILOT_AGENT_ICON_ID } from "@/constants";
-import { MarkdownView, TFile, type WorkspaceLeaf } from "obsidian";
+import { MarkdownView, TFile, type App, type Component, type WorkspaceLeaf } from "obsidian";
 
 interface NoteView extends MarkdownView {
   addAction: jest.Mock;
@@ -44,16 +43,16 @@ function fixture(views: NoteView[]) {
       return {};
     }),
   };
-  const plugin = {
-    app: { workspace },
-    addNoteToAgentChat,
+  const app = { workspace } as unknown as App;
+  const component = {
     registerEvent: jest.fn(),
     register: jest.fn((callback: () => void) => {
       cleanup = callback;
     }),
-  } as unknown as CopilotPlugin;
+  } as unknown as Component;
   return {
-    plugin,
+    app,
+    component,
     workspace,
     listeners,
     layoutReady: () => layoutReady(),
@@ -66,9 +65,9 @@ describe("registerNoteHeaderAction", () => {
   it("https://github.com/Brevilabs/obsidian-copilot-private/issues/579 adds a Copilot action to every open note and passes the clicked view's current file", () => {
     const research = noteView("Research.md");
     const journal = noteView("Journal.md");
-    const { plugin, layoutReady, addNoteToAgentChat } = fixture([research, journal]);
+    const { app, component, layoutReady, addNoteToAgentChat } = fixture([research, journal]);
 
-    registerNoteHeaderAction(plugin);
+    registerNoteHeaderAction(app, component, addNoteToAgentChat);
     layoutReady();
     const button = research.addAction.mock.results[0].value as HTMLButtonElement;
     expect(button.dataset.icon).toBe(COPILOT_AGENT_ICON_ID);
@@ -83,9 +82,9 @@ describe("registerNoteHeaderAction", () => {
   it("https://github.com/Brevilabs/obsidian-copilot-private/issues/579 adds an action once per note leaf, including leaves opened later, and removes them on unload", () => {
     const first = noteView("First.md");
     const views = [first];
-    const { plugin, layoutReady, listeners, cleanup } = fixture(views);
+    const { app, component, layoutReady, listeners, cleanup, addNoteToAgentChat } = fixture(views);
 
-    registerNoteHeaderAction(plugin);
+    registerNoteHeaderAction(app, component, addNoteToAgentChat);
     layoutReady();
     listeners.get("layout-change")!();
     expect(first.addAction).toHaveBeenCalledTimes(1);
@@ -102,9 +101,9 @@ describe("registerNoteHeaderAction", () => {
 
   it("https://github.com/Brevilabs/obsidian-copilot-private/issues/579 leaves Agent Chat closed when the clicked Markdown view has no note", () => {
     const view = noteView("Research.md");
-    const { plugin, layoutReady, addNoteToAgentChat } = fixture([view]);
+    const { app, component, layoutReady, addNoteToAgentChat } = fixture([view]);
 
-    registerNoteHeaderAction(plugin);
+    registerNoteHeaderAction(app, component, addNoteToAgentChat);
     layoutReady();
     Object.assign(view, { file: null });
     (view.addAction.mock.results[0].value as HTMLButtonElement).click();

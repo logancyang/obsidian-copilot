@@ -1,18 +1,25 @@
 import ChainManager from "@/LLMProviders/chainManager";
-import Chat from "@/components/Chat";
+import type ChainOwner from "@/LLMProviders/chainOwner";
+import Chat, { type QuickChatServices } from "@/components/Chat";
 import { CHAT_VIEWTYPE } from "@/constants";
 import { recordViewTop } from "@/components/recordViewTop";
 import { ChatViewEventTarget, EventTargetContext } from "@/context";
-import CopilotPlugin from "@/main";
 import { registerActiveLeafChangeBridge } from "@/utils/registerActiveLeafChangeBridge";
 import { mountPluginViewRoot, type PluginViewRootHandle } from "@/utils/react/mountPluginViewRoot";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { ItemView, Platform, WorkspaceLeaf } from "obsidian";
 import * as React from "react";
+import type { ChatManagerChatUIState } from "@/state/ChatUIState";
+
+export interface QuickChatViewServices extends QuickChatServices {
+  readonly chainOwner: Pick<ChainOwner, "getCurrentChainManager">;
+  readonly chatUIState: ChatManagerChatUIState;
+  updateUserMessageHistory(newMessage: string): void;
+}
 
 export default class CopilotView extends ItemView {
   private get chainManager(): ChainManager {
-    return this.plugin.chainOwner.getCurrentChainManager();
+    return this.services.chainOwner.getCurrentChainManager();
   }
 
   private viewRoot: PluginViewRootHandle | null = null;
@@ -22,12 +29,12 @@ export default class CopilotView extends ItemView {
 
   constructor(
     leaf: WorkspaceLeaf,
-    private plugin: CopilotPlugin
+    private services: QuickChatViewServices
   ) {
     super(leaf);
-    this.app = plugin.app;
+    this.app = services.app;
     this.eventTarget = new ChatViewEventTarget();
-    this.plugin = plugin;
+    this.services = services;
   }
 
   getViewType(): string {
@@ -94,7 +101,7 @@ export default class CopilotView extends ItemView {
   };
 
   private handleUpdateUserMessageHistory = (newMessage: string): void => {
-    this.plugin.updateUserMessageHistory(newMessage);
+    this.services.updateUserMessageHistory(newMessage);
   };
 
   private renderTree(): React.ReactNode {
@@ -104,9 +111,9 @@ export default class CopilotView extends ItemView {
           <Chat
             chainManager={this.chainManager}
             updateUserMessageHistory={this.handleUpdateUserMessageHistory}
-            plugin={this.plugin}
+            services={this.services}
             onSaveChat={this.setSaveHandler}
-            chatUIState={this.plugin.chatUIState}
+            chatUIState={this.services.chatUIState}
           />
         </Tooltip.Provider>
       </EventTargetContext.Provider>

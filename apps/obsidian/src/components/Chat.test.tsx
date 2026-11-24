@@ -49,10 +49,21 @@ jest.mock("@/context/ChatInputContext", () => ({
 }));
 /* eslint-enable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
 jest.mock("@/components/chat-components/ChatControls", () => ({
-  ChatControls: ({ onCopyChatLink }: { onCopyChatLink?: () => void }) => (
-    <button type="button" disabled={!onCopyChatLink} onClick={onCopyChatLink}>
-      Copy chat link
-    </button>
+  ChatControls: ({
+    onCopyChatLink,
+    onLoadChat,
+  }: {
+    onCopyChatLink?: () => void;
+    onLoadChat: (id: string) => Promise<void>;
+  }) => (
+    <>
+      <button type="button" disabled={!onCopyChatLink} onClick={onCopyChatLink}>
+        Copy chat link
+      </button>
+      <button type="button" onClick={() => void onLoadChat("conversations/saved.md")}>
+        Load saved chat
+      </button>
+    </>
   ),
 }));
 jest.mock("@/components/chat-components/ui/AgentModeBanner", () => ({
@@ -90,7 +101,7 @@ jest.mock("@/components/chat-components/ChatMessages", () => ({
     </button>
   ),
 }));
-jest.mock("@/system-prompts", () => ({}));
+jest.mock("@/system-prompts", () => ({ resetSessionSystemPromptSettings: jest.fn() }));
 jest.mock("@/langchainStream", () => ({}));
 jest.mock("@/logFileManager", () => ({ logFileManager: {} }));
 jest.mock("@/LLMProviders/chainRunner/utils/promptPayloadRecorder", () => ({}));
@@ -113,10 +124,11 @@ function renderChat(savedPath = "") {
     chainManager: { chatModelManager: {} },
     onSaveChat: jest.fn(),
     updateUserMessageHistory: jest.fn(),
-    plugin: {
+    services: {
       app: {},
       copyChatLink: jest.fn((resolveChatId: () => Promise<string>) => resolveChatId()),
-      chatSelectionHighlightController: { clearIfNoNoteContexts: jest.fn() },
+      loadChatById: jest.fn().mockResolvedValue(undefined),
+      chatSelectionHighlightController: { persistFromPointerDown: jest.fn() },
     },
   } as unknown as React.ComponentProps<typeof Chat>;
   const eventTarget = new EventTarget();
@@ -125,12 +137,36 @@ function renderChat(savedPath = "") {
       <Chat {...props} />
     </EventTargetContext.Provider>
   );
-  return { chatUIState, copyChatLink: props.plugin.copyChatLink as jest.Mock, eventTarget };
+  return { chatUIState, services: props.services, eventTarget };
 }
 
 describe("Chat", () => {
   afterEach(() => {
     mockSettings.autoAttachActiveNote = true;
+  });
+
+  describe("handleChatPointerDownCapture()", () => {
+    it("keeps the note's selection highlighted when the pointer goes down in Quick Chat", () => {
+      const { services } = renderChat();
+
+      fireEvent.pointerDown(screen.getByText("Send"));
+
+      expect(
+        services.chatSelectionHighlightController.persistFromPointerDown
+      ).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("handleLoadChat()", () => {
+    it("opens the saved chat picked from history through Quick Chat's services", async () => {
+      const { services } = renderChat();
+
+      fireEvent.click(screen.getByText("Load saved chat"));
+
+      await waitFor(() =>
+        expect(services.loadChatById).toHaveBeenCalledWith("conversations/saved.md")
+      );
+    });
   });
 
   describe("handleSendMessage()", () => {
@@ -212,20 +248,24 @@ describe("Chat", () => {
 
   describe("handleCopyChatLink()", () => {
     it("links an already saved chat without saving it again", async () => {
-      const { chatUIState, copyChatLink } = renderChat("conversations/existing.md");
+      const { chatUIState, services } = renderChat("conversations/existing.md");
 
       fireEvent.click(screen.getByText("Copy chat link"));
 
-      await expect(copyChatLink.mock.results[0].value).resolves.toBe("conversations/existing.md");
+      await expect(jest.mocked(services.copyChatLink).mock.results[0].value).resolves.toBe(
+        "conversations/existing.md"
+      );
       expect(chatUIState.saveChat).not.toHaveBeenCalled();
     });
 
     it("saves an unsaved chat before linking to it https://github.com/Brevilabs/obsidian-copilot-private/issues/601", async () => {
-      const { chatUIState, copyChatLink } = renderChat();
+      const { chatUIState, services } = renderChat();
 
       fireEvent.click(screen.getByText("Copy chat link"));
 
-      await expect(copyChatLink.mock.results[0].value).resolves.toBe("conversations/chat.md");
+      await expect(jest.mocked(services.copyChatLink).mock.results[0].value).resolves.toBe(
+        "conversations/chat.md"
+      );
       expect(chatUIState.saveChat).toHaveBeenCalledTimes(1);
     });
 

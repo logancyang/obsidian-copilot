@@ -6,7 +6,7 @@ import { Root } from "react-dom/client";
 import { updateDynamicStyleClass, clearDynamicStyleClass } from "@/utils/dom/dynamicStyleManager";
 import { QuickAskPanel } from "./QuickAskPanel";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
-import type CopilotPlugin from "@/main";
+import type { QuickAskHost } from "./types";
 import type { ReplaceGuard } from "@/editor/replaceGuard";
 import type { ResizeDirection } from "@/hooks/use-resizable";
 
@@ -28,7 +28,7 @@ interface AnchorRect {
 }
 
 interface QuickAskOverlayOptions {
-  plugin: CopilotPlugin;
+  host: QuickAskHost;
   editor: Editor;
   view: EditorView;
   selectedText: string;
@@ -192,7 +192,7 @@ export class QuickAskOverlay {
 
     this.root.render(
       <QuickAskPanel
-        plugin={this.options.plugin}
+        host={this.options.host}
         editor={this.options.editor}
         view={this.options.view}
         selectedText={this.options.selectedText}
@@ -276,7 +276,7 @@ export class QuickAskOverlay {
     const overlayContainer = overlayRoot.createDiv("copilot-quick-ask-overlay");
     this.overlayContainer = overlayContainer;
 
-    this.root = createPluginRoot(overlayContainer, this.options.plugin.app);
+    this.root = createPluginRoot(overlayContainer, this.options.host.app);
     this.renderPanel();
 
     const handleScroll = () => {
