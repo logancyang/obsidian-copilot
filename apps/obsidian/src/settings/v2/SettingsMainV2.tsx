@@ -7,7 +7,7 @@ import {
   type TabItem as TabItemType,
 } from "@/components/ui/setting-tabs";
 import { PluginProvider } from "@/contexts/PluginContext";
-import { TabProvider, useTab } from "@/contexts/TabContext";
+import { TabProvider, useTab } from "@/settings/v2/TabContext";
 import { useLatestVersion } from "@/hooks/useLatestVersion";
 import CopilotPlugin from "@/main";
 import { ByokPanel, ModelManagementProvider } from "@/modelManagement";

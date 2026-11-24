@@ -4,7 +4,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import React from "react";
 import { setSettings } from "@/settings/model";
 import { playNotificationSound } from "@/utils/notificationSound";
-import { TabProvider } from "@/contexts/TabContext";
+import { TabProvider } from "@/settings/v2/TabContext";
 import { SettingsSubPageHost } from "@/settings/v2/SettingsSubPage";
 import { AgentSettings } from "./AgentSettings";
 

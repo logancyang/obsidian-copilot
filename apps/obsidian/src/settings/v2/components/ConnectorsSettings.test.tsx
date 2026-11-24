@@ -23,7 +23,7 @@ import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { TabContent } from "@/components/ui/setting-tabs";
 import { AppContext } from "@/context";
 import { PluginProvider } from "@/contexts/PluginContext";
-import { TabProvider, useTab } from "@/contexts/TabContext";
+import { TabProvider, useTab } from "@/settings/v2/TabContext";
 import type CopilotPlugin from "@/main";
 import { ConnectorsSettings } from "@/settings/v2/components/ConnectorsSettings";
 import { SettingsSubPageHost } from "@/settings/v2/SettingsSubPage";

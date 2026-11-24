@@ -1,4 +1,4 @@
-import { useTab } from "@/contexts/TabContext";
+import { useTab } from "@/settings/v2/TabContext";
 import { cn } from "@/lib/utils";
 import { getScrollableParent } from "@/utils/dom/scrollableParent";
 import React from "react";

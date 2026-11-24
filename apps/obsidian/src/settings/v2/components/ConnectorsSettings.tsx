@@ -20,7 +20,7 @@ import { useConnectorsSnapshot } from "@/connectors/ui/useConnectorsSnapshot";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { useApp } from "@/context";
 import { usePlugin } from "@/contexts/PluginContext";
-import { useTab } from "@/contexts/TabContext";
+import { useTab } from "@/settings/v2/TabContext";
 import { navigateToPlusPage } from "@/plusUtils";
 import { err2String } from "@/utils";
 import { Notice } from "obsidian";

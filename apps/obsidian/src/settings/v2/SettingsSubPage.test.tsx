@@ -1,4 +1,4 @@
-import { TabProvider, useTab } from "@/contexts/TabContext";
+import { TabProvider, useTab } from "@/settings/v2/TabContext";
 import { SettingsSubPageHost, useSettingsSubPage } from "@/settings/v2/SettingsSubPage";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
