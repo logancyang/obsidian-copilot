@@ -48,7 +48,7 @@ jest.mock("@/context/ChatInputContext", () => ({
   useChatInput: () => ({}),
 }));
 /* eslint-enable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
-jest.mock("@/components/chat-components/ChatControls", () => ({
+jest.mock("@/quickChat/components/ChatControls", () => ({
   ChatControls: ({
     onCopyChatLink,
     onLoadChat,
@@ -66,7 +66,7 @@ jest.mock("@/components/chat-components/ChatControls", () => ({
     </>
   ),
 }));
-jest.mock("@/components/chat-components/ui/AgentModeBanner", () => ({
+jest.mock("@/quickChat/components/ui/AgentModeBanner", () => ({
   AgentModeBanner: () => null,
 }));
 jest.mock("@/components/chat-components/ChatModeInput", () => ({
@@ -92,7 +92,7 @@ jest.mock("@/components/chat-components/ChatModeInput", () => ({
     </>
   ),
 }));
-jest.mock("@/components/chat-components/ChatMessages", () => ({
+jest.mock("@/quickChat/components/ChatMessages", () => ({
   __esModule: true,
   isChatEmpty: () => false,
   default: ({ onEdit }: { onEdit: (index: number, text: string) => void }) => (

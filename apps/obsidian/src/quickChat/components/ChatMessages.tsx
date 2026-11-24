@@ -1,4 +1,4 @@
-import { BottomLoadingIndicator } from "@/components/chat-components/BottomLoadingIndicator";
+import { BottomLoadingIndicator } from "@/quickChat/components/BottomLoadingIndicator";
 import ChatSingleMessage from "@/components/chat-components/ChatSingleMessage";
 import { ChatDayLabel } from "@/components/chat-components/ui/ChatDayLabel";
 import { ChatTranscriptViewport } from "@/components/chat-components/ui/ChatTranscriptViewport";

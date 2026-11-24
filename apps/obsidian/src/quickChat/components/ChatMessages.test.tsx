@@ -1,6 +1,6 @@
 import React from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import ChatMessages, { isChatEmpty } from "@/components/chat-components/ChatMessages";
+import ChatMessages, { isChatEmpty } from "@/quickChat/components/ChatMessages";
 import { ChatMessage } from "@/types/message";
 
 const mockScrollState = { paused: false, onResume: jest.fn() };

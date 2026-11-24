@@ -1,6 +1,6 @@
 import { useChainType } from "@/aiParams";
 import { ChainType } from "@/chainType";
-import { ChatModeSelector } from "@/components/chat-components/ChatModeSelector";
+import { ChatModeSelector } from "@/quickChat/components/ChatModeSelector";
 import { Button } from "@/components/ui/button";
 import { DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { SettingSwitch } from "@/components/ui/setting-switch";
@@ -14,9 +14,9 @@ import {
   ChatHistoryItem,
   ChatHistoryPopover,
 } from "@/components/chat-components/ChatHistoryPopover";
-import { TokenCounter } from "./TokenCounter";
+import { TokenCounter } from "@/components/chat-components/TokenCounter";
 import { CopyChatLinkButton } from "./CopyChatLinkButton";
-import { ChatSettingsPopover } from "@/components/chat-components/ChatSettingsPopover";
+import { ChatSettingsPopover } from "@/quickChat/components/ChatSettingsPopover";
 
 interface ChatControlsProps {
   onNewChat: () => void;

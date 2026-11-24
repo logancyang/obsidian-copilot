@@ -1,4 +1,4 @@
-import { ChatSettingsPopover } from "@/components/chat-components/ChatSettingsPopover";
+import { ChatSettingsPopover } from "@/quickChat/components/ChatSettingsPopover";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";

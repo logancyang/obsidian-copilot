@@ -1,4 +1,4 @@
-import { recordViewTop } from "@/components/recordViewTop";
+import { recordViewTop } from "@/quickChat/components/recordViewTop";
 
 describe("recordViewTop", () => {
   describe("recordViewTop()", () => {

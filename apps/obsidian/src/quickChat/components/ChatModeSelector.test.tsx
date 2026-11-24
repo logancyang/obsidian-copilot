@@ -1,5 +1,5 @@
 import { ChainType } from "@/chainType";
-import { ChatModeSelector } from "@/components/chat-components/ChatModeSelector";
+import { ChatModeSelector } from "@/quickChat/components/ChatModeSelector";
 import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 
