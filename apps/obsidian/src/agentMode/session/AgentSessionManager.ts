@@ -93,6 +93,7 @@ import type {
   PermissionPrompt,
   SessionId,
 } from "./types";
+import type { BackendStartServices } from "./descriptor";
 
 const AUTOSAVE_DEBOUNCE_MS = 500;
 
@@ -171,6 +172,7 @@ export interface AgentSessionManagerOptions {
   resolveDescriptor: DescriptorResolver;
   modelPreloader: AgentModelPreloader;
   beforeBackendStart?: (id: BackendId) => Promise<void>;
+  backendStartServices: BackendStartServices;
   persistenceManager?: AgentChatPersistenceManager;
   sessionIndex?: AgentSessionIndex;
   copilotMcpServer?: CopilotMcpServer;
@@ -2833,9 +2835,8 @@ export class AgentSessionManager {
       if (installState.kind === "incompatible") throw new Error(installState.message);
 
       const proc = descriptor.createBackendProcess({
-        plugin: this.plugin,
+        ...this.opts.backendStartServices,
         app: this.app,
-        clientVersion: this.plugin.manifest.version,
         descriptor,
         copilotMcpServer: this.opts.copilotMcpServer,
       });

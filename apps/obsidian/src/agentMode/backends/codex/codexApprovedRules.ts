@@ -150,7 +150,7 @@ export const codexApprovedRules: ApprovedRuleStore = {
     });
   },
 
-  async remove(_plugin, rule) {
+  async remove(_app, rule) {
     const file = (rule.appliesTo as { path: string }).path;
     const codex = await codexCliInvocation(
       getSettings(),

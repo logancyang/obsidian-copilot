@@ -82,7 +82,11 @@ Then in either case:
    `backends/registry.ts`.
 3. Settings: store backend-specific config under `agentMode.backends.<id>`
    (extend `CopilotSettings.agentMode.backends` in `apps/obsidian/src/settings/model.ts`).
-4. Done. **No edits to `acp/`, `session/`, `sdk/`, or `ui/` should be
+4. Never import the plugin class (`@/main`). The descriptor's methods and
+   settings panel take what they read as explicit parameters (the Obsidian
+   `app`, the plugin `manifest`), and `createBackendProcess(args)` receives
+   `BackendStartArgs`.
+5. Done. **No edits to `acp/`, `session/`, `sdk/`, or `ui/` should be
    required.** If you need one, the boundary is leaking — extend the
    descriptor surface instead.
 

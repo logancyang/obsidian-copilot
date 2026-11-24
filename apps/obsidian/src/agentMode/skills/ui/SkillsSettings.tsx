@@ -82,7 +82,7 @@ export const SkillsSettings: React.FC = () => {
   const [builtinError, setBuiltinError] = useState<string>();
   const [refreshError, setRefreshError] = useState<string>();
   const userSkills = useMemo(() => skills.filter((skill) => !skill.builtin), [skills]);
-  const installStates = useBackendInstallStates(plugin, descriptors);
+  const installStates = useBackendInstallStates(descriptors);
   const lastAvailableAgents = useRef<readonly string[]>(
     skills.filter((skill) => skill.builtin).flatMap((skill) => skill.enabledAgents)
   );

@@ -11,6 +11,7 @@ import { refreshLatestVersion } from "@/hooks/useLatestVersion";
 import { AgentSessionIndex } from "./AgentSessionIndex";
 import { listAgentChats } from "@/agents/agentMode/agentChats";
 import { AgentSessionManager } from "./AgentSessionManager";
+import { fakeBackendStartServices } from "./testing/fakeBackendStartServices";
 import type { FindCallingChat } from "./copilotMcpServer";
 import { FEEDBACK_OFFER_EXTENSION } from "./feedback/feedbackOffer";
 import {
@@ -468,6 +469,7 @@ interface ManagerOptions {
   persistence?: unknown;
   sessionIndex?: AgentSessionIndex;
   beforeBackendStart?: ManagerDeps["beforeBackendStart"];
+  backendStartServices?: ManagerDeps["backendStartServices"];
   copilotMcpServer?: ManagerDeps["copilotMcpServer"];
   chatExtensions?: ManagerDeps["chatExtensions"];
   resolveAgent?: ManagerDeps["resolveAgent"];
@@ -503,6 +505,7 @@ function buildManager(options: ManagerOptions = {}): AgentSessionManager {
       persistenceManager: options.persistence as ManagerDeps["persistenceManager"],
       sessionIndex: options.sessionIndex,
       beforeBackendStart: options.beforeBackendStart,
+      backendStartServices: options.backendStartServices ?? fakeBackendStartServices(),
       copilotMcpServer: options.copilotMcpServer,
       chatExtensions: options.chatExtensions,
       resolveAgent: options.resolveAgent ?? mockResolveAgent,
@@ -1106,6 +1109,24 @@ describe("AgentSessionManager", () => {
     });
 
     describe("createSession()", () => {
+      it("starts the backend with the vault app and the host's start services, so a backend never receives the plugin", async () => {
+        const app = buildApp();
+        const backendStartServices = fakeBackendStartServices({ clientVersion: "4.1.0" });
+        const copilotMcpServer =
+          buildCopilotMcpServer() as unknown as ManagerDeps["copilotMcpServer"];
+        const descriptor = buildDescriptor();
+        const mgr = buildManager({ app, descriptor, backendStartServices, copilotMcpServer });
+
+        await mgr.createSession();
+
+        expect(descriptor.createBackendProcess).toHaveBeenCalledWith({
+          ...backendStartServices,
+          app,
+          descriptor,
+          copilotMcpServer,
+        });
+      });
+
       it("creates a session and sets it as the active one", async () => {
         const mgr = buildManager();
         const session = await mgr.createSession();

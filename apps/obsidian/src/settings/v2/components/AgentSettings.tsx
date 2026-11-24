@@ -149,7 +149,7 @@ const BackendPanel: React.FC<{
   const Panel = descriptor.SettingsPanel;
   const manager = plugin.agentSessionManager;
 
-  const installState = useBackendInstallState(descriptor, plugin);
+  const installState = useBackendInstallState(descriptor);
   const managedInstall = useManagedInstallActionState(descriptor, plugin);
   const auth = useBackendAuthState(descriptor);
   const resolvedPath = descriptor.getResolvedBinaryPath?.(settings) ?? null;
@@ -187,7 +187,7 @@ const BackendPanel: React.FC<{
           authStatus={descriptor.auth ? auth.status : undefined}
           managedInstall={managedInstall}
           resolvedPath={resolvedPath ? formatBinaryPathForDisplay(resolvedPath) : null}
-          onConfigure={() => descriptor.openInstallUI(plugin)}
+          onConfigure={() => descriptor.openInstallUI(plugin.app, plugin.manifest)}
           destination={descriptor.dataDestination?.(settings, getVaultBase(plugin.app))}
         />
 
@@ -201,7 +201,7 @@ const BackendPanel: React.FC<{
           </div>
         )}
 
-        {Panel && <Panel plugin={plugin} app={plugin.app} />}
+        {Panel && <Panel app={plugin.app} manifest={plugin.manifest} />}
 
         {/* Only agents whose backend can read and remove its saved rules offer the page.
             https://github.com/Brevilabs/obsidian-copilot-private/issues/865 */}
@@ -219,7 +219,7 @@ const BackendPanel: React.FC<{
                   <ApprovedRulesPage
                     agentName={descriptor.displayName}
                     store={approvedRules}
-                    plugin={plugin}
+                    app={plugin.app}
                     onBack={subPage.close}
                   />
                 )

@@ -8,6 +8,7 @@ import { loadAgentSessionPrompt } from "@/agents/agentSessionPrompt";
 import type { CustomAgentStore } from "@/agents/CustomAgentStore";
 import { trackTabStripShown } from "./ui/trackTabStripShown";
 import { AgentSessionManager } from "./session/AgentSessionManager";
+import { AgentModelPreloader } from "./session/AgentModelPreloader";
 import { reconcileBuiltinSkills } from "./skills/builtin/reconcileBuiltinSkills";
 import { BackendConfigRegistry } from "@/modelManagement";
 import { isObsidianCliEnabled } from "@/services/obsidianCli/ObsidianCliClient";
@@ -151,12 +152,12 @@ const mockStates: Record<string, InstallState> = {};
 const mockInstallListeners: Record<string, () => void> = {};
 const mockDescriptors = ["claude", "opencode"].map((id) => ({
   id,
-  onPluginLoad: jest.fn(async (_plugin: CopilotPlugin) => {}),
+  onPluginLoad: jest.fn(async (_host: unknown) => {}),
   skillsProjectDir: `.${id}/skills`,
   restartOnProviderConfigChange: id === "opencode",
   restartOnSystemPromptChange: id === "opencode",
   getInstallState: () => mockStates[id],
-  subscribeInstallState: (_plugin: unknown, listener: () => void) => {
+  subscribeInstallState: (listener: () => void) => {
     mockInstallListeners[id] = listener;
   },
 }));
@@ -230,7 +231,7 @@ describe("agentMode", () => {
         subscribe: () => () => {},
       } as unknown as CustomAgentStore;
       plugin = {
-        manifest: { id: "copilot" },
+        manifest: { id: "copilot", version: "4.1.0" },
         register: jest.fn(),
         modelManagement: {
           providerRegistry: { subscribe: jest.fn() },
@@ -254,6 +255,33 @@ describe("agentMode", () => {
       await mockRefresh.mock.results[0].value;
       expect(reconcile).toHaveBeenLastCalledWith(
         expect.objectContaining({ settings: expect.objectContaining({ plusLicenseKey: "" }) })
+      );
+    });
+
+    it("gives the preloader and the manager the same start services, built from the plugin's version and model registries", () => {
+      createAgentSessionManager({} as App, plugin, customAgents);
+
+      const services = jest.mocked(AgentModelPreloader).mock.calls[0][1];
+      expect(services).toEqual(
+        expect.objectContaining({
+          clientVersion: "4.1.0",
+          modelManagement: plugin.modelManagement,
+        })
+      );
+      expect(jest.mocked(AgentSessionManager).mock.calls[0][2].backendStartServices).toBe(services);
+    });
+
+    it("opens the plugin's current self-host web search channel each time a backend asks, and fails when the plugin has none", async () => {
+      createAgentSessionManager({} as App, plugin, customAgents);
+      const { getSelfHostWebSearchChannel } = jest.mocked(AgentModelPreloader).mock.calls[0][1];
+      const channel = { url: "http://127.0.0.1:4100/search", token: "t0k3n" };
+
+      plugin.selfHostWebSearchAgentBridge = { getChannel: async () => channel, dispose: jest.fn() };
+      await expect(getSelfHostWebSearchChannel()).resolves.toBe(channel);
+
+      plugin.selfHostWebSearchAgentBridge = undefined;
+      expect(() => getSelfHostWebSearchChannel()).toThrow(
+        "Copilot self-host web search channel is unavailable."
       );
     });
 

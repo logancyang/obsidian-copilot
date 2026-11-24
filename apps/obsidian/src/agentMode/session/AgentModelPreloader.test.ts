@@ -1,7 +1,7 @@
 import { App, FileSystemAdapter } from "obsidian";
 import { waitFor } from "@testing-library/react";
-import type CopilotPlugin from "@/main";
 import { AgentModelPreloader } from "./AgentModelPreloader";
+import { fakeBackendStartServices } from "./testing/fakeBackendStartServices";
 import type { CopilotMcpServer } from "./copilotMcpServer";
 import type {
   BackendDescriptor,
@@ -24,10 +24,6 @@ jest.mock("@/settings/model", () => ({
 function buildApp(): App {
   const adapter = new (FileSystemAdapter as unknown as new (basePath: string) => unknown)("/vault");
   return { vault: { adapter } } as unknown as App;
-}
-
-function buildPlugin(): CopilotPlugin {
-  return { manifest: { version: "1.0.0" } } as unknown as CopilotPlugin;
 }
 
 interface MockProcHandle {
@@ -139,12 +135,40 @@ function pushCatalog(procHandle: MockProcHandle, state: BackendState): void {
 
 describe("AgentModelPreloader", () => {
   describe("preload()", () => {
+    it("starts the probe with the vault app and the host's start services, so a backend never receives the plugin", async () => {
+      const { descriptor } = buildDescriptor(() => makeMockProc());
+      const app = buildApp();
+      const services = fakeBackendStartServices({ clientVersion: "4.1.0" });
+      const preloader = new AgentModelPreloader(app, services, () => descriptor);
+
+      await preloader.preload("claude-sdk");
+
+      expect(descriptor.createBackendProcess).toHaveBeenCalledWith({
+        ...services,
+        app,
+        descriptor,
+      });
+    });
+
+    it("hands the new probe session id to the backend to keep", async () => {
+      const { descriptor } = buildDescriptor(() => makeMockProc());
+      const persistProbeSessionId = jest.fn(async (_sessionId: string) => {});
+      const preloader = new AgentModelPreloader(buildApp(), fakeBackendStartServices(), () => ({
+        ...descriptor,
+        persistProbeSessionId,
+      }));
+
+      await preloader.preload("claude-sdk");
+
+      expect(persistProbeSessionId).toHaveBeenCalledWith("probe-1");
+    });
+
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/862 starts the probe with Copilot's MCP server, so the process it hands to a chat knows which Copilot tools are read-only", async () => {
       const { descriptor } = buildDescriptor(() => makeMockProc());
       const copilotMcpServer = {} as CopilotMcpServer;
       const preloader = new AgentModelPreloader(
         buildApp(),
-        buildPlugin(),
+        fakeBackendStartServices(),
         () => descriptor,
         undefined,
         copilotMcpServer
@@ -159,7 +183,11 @@ describe("AgentModelPreloader", () => {
 
     it("retains the probe subprocess after a successful preload and hands it to the manager", async () => {
       const { descriptor, procHandle } = buildDescriptor(() => makeMockProc());
-      const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+      const preloader = new AgentModelPreloader(
+        buildApp(),
+        fakeBackendStartServices(),
+        () => descriptor
+      );
 
       await preloader.preload("claude-sdk");
 
@@ -195,7 +223,11 @@ describe("AgentModelPreloader", () => {
           if (listening.get(sessionId) === handler) listening.delete(sessionId);
         };
       });
-      const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+      const preloader = new AgentModelPreloader(
+        buildApp(),
+        fakeBackendStartServices(),
+        () => descriptor
+      );
 
       await preloader.preload("claude-sdk");
 
@@ -210,7 +242,7 @@ describe("AgentModelPreloader", () => {
       });
       const preloader = new AgentModelPreloader(
         buildApp(),
-        buildPlugin(),
+        fakeBackendStartServices(),
         () => descriptor,
         () => upgrade
       );
@@ -231,7 +263,7 @@ describe("AgentModelPreloader", () => {
       });
       const preloader = new AgentModelPreloader(
         buildApp(),
-        buildPlugin(),
+        fakeBackendStartServices(),
         () => descriptor,
         () => upgrade
       );
@@ -261,7 +293,11 @@ describe("AgentModelPreloader", () => {
             credentialState: "ok",
           },
         ];
-        const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+        const preloader = new AgentModelPreloader(
+          buildApp(),
+          fakeBackendStartServices(),
+          () => descriptor
+        );
         const probe = preloader.preload(descriptor.id);
         await waitFor(() => expect(descriptor.prefetchEffortCatalog).toHaveBeenCalled());
         if (event === "plugin shutdown") preloader.shutdown();
@@ -287,7 +323,11 @@ describe("AgentModelPreloader", () => {
         minVersion: "2",
         message: "Upgrade required",
       });
-      const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+      const preloader = new AgentModelPreloader(
+        buildApp(),
+        fakeBackendStartServices(),
+        () => descriptor
+      );
       await preloader.preload(descriptor.id);
       expect(descriptor.createBackendProcess).not.toHaveBeenCalled();
       expect(procHandle.start).not.toHaveBeenCalled();
@@ -309,7 +349,11 @@ describe("AgentModelPreloader", () => {
           credentialState: "ok",
         },
       ]);
-      const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+      const preloader = new AgentModelPreloader(
+        buildApp(),
+        fakeBackendStartServices(),
+        () => descriptor
+      );
 
       await preloader.preload("claude-sdk");
       expect(preloader.takeWarm("claude-sdk")).not.toBeNull();
@@ -326,7 +370,11 @@ describe("AgentModelPreloader", () => {
       const { descriptor, procHandle } = buildDescriptor(() =>
         makeMockProc({ newSessionState: { model: null, mode: null } })
       );
-      const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+      const preloader = new AgentModelPreloader(
+        buildApp(),
+        fakeBackendStartServices(),
+        () => descriptor
+      );
 
       await preloader.preload("claude-sdk");
 
@@ -340,7 +388,11 @@ describe("AgentModelPreloader", () => {
         handle.newSession.mockRejectedValueOnce(new Error("agent unreachable"));
         return handle;
       });
-      const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+      const preloader = new AgentModelPreloader(
+        buildApp(),
+        fakeBackendStartServices(),
+        () => descriptor
+      );
 
       await preloader.preload("claude-sdk");
 
@@ -371,7 +423,11 @@ describe("AgentModelPreloader", () => {
         },
       };
       const { descriptor } = buildDescriptor(() => makeMockProc({ newSessionState: probeState }));
-      const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+      const preloader = new AgentModelPreloader(
+        buildApp(),
+        fakeBackendStartServices(),
+        () => descriptor
+      );
 
       await preloader.preload("claude-sdk");
 
@@ -392,7 +448,11 @@ describe("AgentModelPreloader", () => {
       const { descriptor } = buildDescriptor(() =>
         makeMockProc({ newSessionState: modeOnlyState })
       );
-      const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+      const preloader = new AgentModelPreloader(
+        buildApp(),
+        fakeBackendStartServices(),
+        () => descriptor
+      );
 
       await preloader.preload("claude-sdk");
 
@@ -410,7 +470,11 @@ describe("AgentModelPreloader", () => {
         const { descriptor, procHandle } = buildDescriptor(() =>
           makeMockProc({ newSessionState: earlyCatalog })
         );
-        const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+        const preloader = new AgentModelPreloader(
+          buildApp(),
+          fakeBackendStartServices(),
+          () => descriptor
+        );
         await preloader.preload("claude-sdk");
         preloader.takeWarm("claude-sdk");
         const listener = jest.fn();
@@ -441,7 +505,11 @@ describe("AgentModelPreloader", () => {
             return {};
           },
         });
-        const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+        const preloader = new AgentModelPreloader(
+          buildApp(),
+          fakeBackendStartServices(),
+          () => descriptor
+        );
 
         await preloader.preload("claude-sdk");
 
@@ -454,7 +522,11 @@ describe("AgentModelPreloader", () => {
         const { descriptor, procHandle } = buildDescriptor(() =>
           makeMockProc({ newSessionState: earlyCatalog })
         );
-        const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+        const preloader = new AgentModelPreloader(
+          buildApp(),
+          fakeBackendStartServices(),
+          () => descriptor
+        );
         await preloader.preload("claude-sdk");
         preloader.clearCached("claude-sdk");
 
@@ -486,7 +558,11 @@ describe("AgentModelPreloader", () => {
         ],
         prefetchEffortCatalog,
       });
-      const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+      const preloader = new AgentModelPreloader(
+        buildApp(),
+        fakeBackendStartServices(),
+        () => descriptor
+      );
       await preloader.preload("claude-sdk");
       expect(preloader.getEffortCatalog("claude-sdk")).toBeNull();
       const seenEfforts: Array<Record<string, unknown> | null> = [];
@@ -518,7 +594,11 @@ describe("AgentModelPreloader", () => {
         getBlockedModels,
         prefetchEffortCatalog,
       });
-      const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+      const preloader = new AgentModelPreloader(
+        buildApp(),
+        fakeBackendStartServices(),
+        () => descriptor
+      );
 
       await preloader.preload("claude-sdk");
 
@@ -537,7 +617,11 @@ describe("AgentModelPreloader", () => {
     it("re-probes a warm backend against current settings", async () => {
       const { descriptor } = buildDescriptor(() => makeMockProc());
       const create = descriptor.createBackendProcess as jest.Mock;
-      const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+      const preloader = new AgentModelPreloader(
+        buildApp(),
+        fakeBackendStartServices(),
+        () => descriptor
+      );
 
       await preloader.preload("claude-sdk");
       expect(create).toHaveBeenCalledTimes(1);
@@ -548,7 +632,11 @@ describe("AgentModelPreloader", () => {
 
     it("returns null when nothing is warm or in flight", async () => {
       const { descriptor } = buildDescriptor(() => makeMockProc());
-      const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+      const preloader = new AgentModelPreloader(
+        buildApp(),
+        fakeBackendStartServices(),
+        () => descriptor
+      );
 
       expect(preloader.refresh("claude-sdk")).toBeNull();
     });
@@ -556,7 +644,11 @@ describe("AgentModelPreloader", () => {
     it("coalesces a burst of refreshes into a single trailing re-probe", async () => {
       const { descriptor } = buildDescriptor(() => makeMockProc());
       const create = descriptor.createBackendProcess as jest.Mock;
-      const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+      const preloader = new AgentModelPreloader(
+        buildApp(),
+        fakeBackendStartServices(),
+        () => descriptor
+      );
 
       await preloader.preload("claude-sdk");
       expect(create).toHaveBeenCalledTimes(1);
@@ -574,7 +666,11 @@ describe("AgentModelPreloader", () => {
   describe("clearCached()", () => {
     it("shuts down and drops a still-warm proc", async () => {
       const { descriptor, procHandle } = buildDescriptor(() => makeMockProc());
-      const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+      const preloader = new AgentModelPreloader(
+        buildApp(),
+        fakeBackendStartServices(),
+        () => descriptor
+      );
 
       await preloader.preload("claude-sdk");
       expect(preloader.getCachedModelCatalog("claude-sdk")).not.toBeNull();
@@ -590,7 +686,11 @@ describe("AgentModelPreloader", () => {
   describe("shutdown()", () => {
     it("shuts down a still-warm proc so the subprocess does not leak", async () => {
       const { descriptor, procHandle } = buildDescriptor(() => makeMockProc());
-      const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+      const preloader = new AgentModelPreloader(
+        buildApp(),
+        fakeBackendStartServices(),
+        () => descriptor
+      );
 
       await preloader.preload("claude-sdk");
       expect(procHandle.shutdown).not.toHaveBeenCalled();

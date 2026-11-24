@@ -1,6 +1,5 @@
 import type { BackendDescriptor, InstallState } from "@/agentMode/session/types";
 import { act, renderHook } from "@testing-library/react";
-import type CopilotPlugin from "@/main";
 import { installStateSignature, useBackendInstallStates } from "./useBackendInstallStates";
 
 describe("useBackendInstallStates", () => {
@@ -13,14 +12,13 @@ describe("useBackendInstallStates", () => {
         {
           id: "opencode",
           getInstallState: () => state,
-          subscribeInstallState: (_plugin: CopilotPlugin, listener: () => void) => {
+          subscribeInstallState: (listener: () => void) => {
             notify = listener;
             return unsubscribe;
           },
         },
       ] as unknown as BackendDescriptor[];
-      const plugin = {} as CopilotPlugin;
-      const { result, unmount } = renderHook(() => useBackendInstallStates(plugin, descriptors));
+      const { result, unmount } = renderHook(() => useBackendInstallStates(descriptors));
       expect(result.current.opencode.kind).toBe("absent");
       act(() => {
         state = { kind: "ready", source: "managed" };

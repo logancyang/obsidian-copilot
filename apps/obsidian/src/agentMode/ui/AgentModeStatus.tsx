@@ -19,7 +19,7 @@ interface Props {
 
 export const AgentModeStatus: React.FC<Props> = ({ manager, plugin, onInstallClick }) => {
   const descriptor = useSessionBackendDescriptor(manager);
-  const installState = useBackendInstallState(descriptor, plugin);
+  const installState = useBackendInstallState(descriptor);
   const managedInstall = useManagedInstallActionState(descriptor, plugin);
   const auth = useBackendAuthState(descriptor);
 
@@ -47,7 +47,7 @@ export const AgentModeStatus: React.FC<Props> = ({ manager, plugin, onInstallCli
     if (!action || managedInstall.kind === "running") return;
     new Notice(`Updating ${descriptor.displayName}…`);
     action
-      .run(plugin)
+      .run(plugin.app, plugin.manifest)
       .then(() => new Notice(`${descriptor.displayName} updated.`))
       .catch((e) => {
         logError("[AgentMode] upgrade failed", e);
@@ -98,7 +98,9 @@ export const AgentModeStatus: React.FC<Props> = ({ manager, plugin, onInstallCli
                 : "Update"
             : `Configure ${descriptor.displayName}`,
           disabled: canUpgrade && upgrading,
-          onClick: canUpgrade ? handleUpgrade : () => descriptor.openInstallUI(plugin),
+          onClick: canUpgrade
+            ? handleUpgrade
+            : () => descriptor.openInstallUI(plugin.app, plugin.manifest),
         }}
       />
     );
@@ -112,7 +114,7 @@ export const AgentModeStatus: React.FC<Props> = ({ manager, plugin, onInstallCli
         message={installState.message}
         action={{
           label: `Configure ${descriptor.displayName}`,
-          onClick: () => descriptor.openInstallUI(plugin),
+          onClick: () => descriptor.openInstallUI(plugin.app, plugin.manifest),
         }}
       />
     );

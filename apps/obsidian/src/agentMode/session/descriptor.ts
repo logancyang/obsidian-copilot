@@ -1,6 +1,6 @@
-import type { App } from "obsidian";
+import type { App, PluginManifest } from "obsidian";
 import type React from "react";
-import type CopilotPlugin from "@/main";
+import type { ModelManagementApi } from "@/modelManagement";
 import type { CopilotSettings } from "@/settings/model";
 import type { Destination } from "@/types/destination";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
@@ -48,9 +48,9 @@ export type ManagedInstallActionState =
   | { kind: "error"; message: string };
 
 export interface ManagedInstallAction {
-  getState(plugin: CopilotPlugin): ManagedInstallActionState;
-  subscribe(plugin: CopilotPlugin, onChange: () => void): () => void;
-  run(plugin: CopilotPlugin): Promise<void>;
+  getState(app: App, manifest: PluginManifest): ManagedInstallActionState;
+  subscribe(app: App, manifest: PluginManifest, onChange: () => void): () => void;
+  run(app: App, manifest: PluginManifest): Promise<void>;
 }
 
 export type ApprovedRuleScope = { kind: "folder"; path: string } | { kind: "file"; path: string };
@@ -62,8 +62,8 @@ export interface ApprovedRule {
 }
 
 export interface ApprovedRuleStore {
-  list(plugin: CopilotPlugin): Promise<ReadonlyArray<ApprovedRule>>;
-  remove(plugin: CopilotPlugin, rule: ApprovedRule): Promise<void | { undo(): Promise<void> }>;
+  list(app: App): Promise<ReadonlyArray<ApprovedRule>>;
+  remove(app: App, rule: ApprovedRule): Promise<void | { undo(): Promise<void> }>;
 }
 
 export interface BackendAuthStatus {
@@ -85,6 +85,18 @@ export interface BackendAuth {
     settings: CopilotSettings,
     options?: { signal?: AbortSignal }
   ): Promise<BackendAuthStatus>;
+}
+
+export interface BackendStartServices {
+  readonly clientVersion: string;
+  readonly modelManagement: Pick<ModelManagementApi, "providerRegistry" | "backendConfigRegistry">;
+  readonly getSelfHostWebSearchChannel: () => Promise<Readonly<{ url: string; token: string }>>;
+}
+
+export interface BackendStartArgs extends BackendStartServices {
+  readonly app: App;
+  readonly descriptor: BackendDescriptor;
+  readonly copilotMcpServer?: CopilotMcpServer;
 }
 
 export interface BackendDescriptor {
@@ -135,9 +147,9 @@ export interface BackendDescriptor {
 
   getResolvedBinaryPath?(settings: CopilotSettings): string | null;
 
-  subscribeInstallState(plugin: CopilotPlugin, cb: () => void): () => void;
+  subscribeInstallState(cb: () => void): () => void;
 
-  openInstallUI(plugin: CopilotPlugin): void;
+  openInstallUI(app: App, manifest: PluginManifest): void;
 
   managedInstall?: ManagedInstallAction;
 
@@ -145,17 +157,11 @@ export interface BackendDescriptor {
 
   approvedRules?: ApprovedRuleStore;
 
-  createBackendProcess(args: {
-    plugin: CopilotPlugin;
-    app: App;
-    clientVersion: string;
-    descriptor: BackendDescriptor;
-    copilotMcpServer?: CopilotMcpServer;
-  }): BackendProcess;
+  createBackendProcess(args: BackendStartArgs): BackendProcess;
 
-  SettingsPanel?: React.FC<{ plugin: CopilotPlugin; app: App }>;
+  SettingsPanel?: React.FC<{ app: App; manifest: PluginManifest }>;
 
-  onPluginLoad?(plugin: CopilotPlugin): Promise<void>;
+  onPluginLoad?(app: App, manifest: PluginManifest): Promise<void>;
 
   // A backend that keeps an agent's prompt in a file outside the vault removes it when the agent is deleted.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/991
@@ -204,7 +210,7 @@ export interface BackendDescriptor {
 
   getWireBaseId?(configuredModelId: string, settings: CopilotSettings): string | null;
 
-  persistProbeSessionId?(sessionId: string, plugin: CopilotPlugin): Promise<void>;
+  persistProbeSessionId?(sessionId: string): Promise<void>;
 
   prefetchEffortCatalog?(args: {
     proc: BackendProcess;

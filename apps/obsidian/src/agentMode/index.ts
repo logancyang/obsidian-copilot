@@ -27,6 +27,7 @@ import { buildAgentSystemPrompt } from "./backends/shared/agentSystemPrompt";
 import { getBuiltinSkillEnvRestartPolicy } from "./backends/shared/builtinSkillEnv";
 import { backendRegistry, listBackendDescriptors } from "./backends/registry";
 import type { BackendId } from "./session/types";
+import type { BackendStartServices } from "./session/descriptor";
 import { AgentChatPersistenceManager } from "./session/AgentChatPersistenceManager";
 import { AgentModelPreloader } from "./session/AgentModelPreloader";
 import { AgentSessionIndex } from "./session/AgentSessionIndex";
@@ -381,9 +382,20 @@ export function createAgentSessionManager(
     connectorTools
   );
   plugin.register(relistOnAgentsChange(customAgents, () => copilotMcpServer.notifyToolsChanged()));
+  const backendStartServices: BackendStartServices = {
+    clientVersion: plugin.manifest.version,
+    modelManagement: plugin.modelManagement,
+    getSelfHostWebSearchChannel: () => {
+      const bridge = plugin.selfHostWebSearchAgentBridge;
+      if (!bridge) {
+        throw new Error("Copilot self-host web search channel is unavailable.");
+      }
+      return bridge.getChannel();
+    },
+  };
   const preloader = new AgentModelPreloader(
     app,
-    plugin,
+    backendStartServices,
     (id) => backendRegistry[id],
     beforeBackendStart,
     copilotMcpServer
@@ -404,6 +416,7 @@ export function createAgentSessionManager(
     resolveDescriptor: (id) => backendRegistry[id],
     modelPreloader: preloader,
     beforeBackendStart,
+    backendStartServices,
     persistenceManager,
     sessionIndex,
     chatExtensions: [
@@ -567,7 +580,7 @@ export function createAgentSessionManager(
   });
   const startupSkillLinks = new Map<BackendId, Promise<void>>();
   for (const descriptor of listBackendDescriptors()) {
-    descriptor.subscribeInstallState(plugin, () => {
+    descriptor.subscribeInstallState(() => {
       // Startup reads the final installation; reacting to intermediate writes would duplicate
       // probes. https://github.com/Brevilabs/obsidian-copilot-private/issues/530
       const duringStartup = initializing.has(descriptor.id);
@@ -587,7 +600,7 @@ export function createAgentSessionManager(
   });
   for (const descriptor of listBackendDescriptors()) {
     const ready = Promise.resolve()
-      .then(() => descriptor.onPluginLoad?.(plugin))
+      .then(() => descriptor.onPluginLoad?.(plugin.app, plugin.manifest))
       .catch((e) => logError(`[AgentMode] backend ${descriptor.id} onPluginLoad failed`, e))
       .then(() => initialSkillsReady)
       .then(() => startupSkillLinks.get(descriptor.id))

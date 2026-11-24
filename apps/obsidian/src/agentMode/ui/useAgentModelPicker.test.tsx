@@ -3,7 +3,6 @@ import type { AgentChatUIState } from "@/agentMode/session/AgentChatUIState";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import type { BackendDescriptor, BackendState } from "@/agentMode/session/types";
-import type CopilotPlugin from "@/main";
 import { useAgentModelPicker } from "./useAgentModelPicker";
 
 let mockInstallKind: "ready" | "incompatible" = "ready";
@@ -21,7 +20,7 @@ const mockDescriptors = [
             minVersion: "1.16.0",
             message: "Update required",
           } as const),
-    subscribeInstallState: (_plugin: CopilotPlugin, listener: () => void) => {
+    subscribeInstallState: (listener: () => void) => {
       mockInstallListener = listener;
       return () => {
         mockInstallListener = null;
@@ -29,7 +28,6 @@ const mockDescriptors = [
     },
   },
 ] as unknown as BackendDescriptor[];
-const plugin = {} as CopilotPlugin;
 
 jest.mock("@/settings/model", () => ({
   useSettingsValue: jest.fn().mockReturnValue({}),
@@ -109,7 +107,7 @@ describe("useAgentModelPicker", () => {
         isTiedToAgent: () => tied,
       } as unknown as AgentSessionManager;
 
-      const { result } = renderHook(() => useAgentModelPicker(manager, plugin));
+      const { result } = renderHook(() => useAgentModelPicker(manager));
       expect(result.current?.value).toBe("first:catalog-one:ready:free");
 
       state = stateWithModel("second");

@@ -1,9 +1,8 @@
-import { Notice } from "obsidian";
+import { Notice, type App, type PluginManifest } from "obsidian";
 import { OPENCODE_PINNED_VERSION, OPENCODE_MIN_VERSION } from "./ui/opencodeVersion";
 import { resolveEffort } from "@/lib/model-effort";
 import { OpencodeInstallModal } from "@/agentMode/backends/opencode/OpencodeInstallModal";
 import OpencodeLogo from "@/agentMode/backends/opencode/logo.svg";
-import type CopilotPlugin from "@/main";
 import { prefetchConfigEfforts } from "@/agentMode/backends/shared/prefetchConfigEfforts";
 import {
   getSettings,
@@ -73,8 +72,11 @@ const opencodeWire: ModelWireCodec = {
   },
 };
 
-export function getOpencodeBinaryManager(plugin: CopilotPlugin): OpencodeBinaryManager {
-  if (!managerRef) managerRef = new OpencodeBinaryManager(plugin);
+export function getOpencodeBinaryManager(
+  app: App,
+  manifest: PluginManifest
+): OpencodeBinaryManager {
+  if (!managerRef) managerRef = new OpencodeBinaryManager(app, manifest);
   return managerRef;
 }
 
@@ -126,7 +128,7 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
     return settings.agentMode?.backends?.opencode?.binaryPath ?? null;
   },
 
-  subscribeInstallState(_plugin: CopilotPlugin, cb: () => void): () => void {
+  subscribeInstallState(cb: () => void): () => void {
     return subscribeToSettingsChange((prev, next) => {
       const p = prev.agentMode?.backends?.opencode;
       const n = next.agentMode?.backends?.opencode;
@@ -140,24 +142,24 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
     });
   },
 
-  openInstallUI(plugin: CopilotPlugin): void {
-    new OpencodeInstallModal(plugin.app, getOpencodeBinaryManager(plugin), {
+  openInstallUI(app, manifest): void {
+    new OpencodeInstallModal(app, getOpencodeBinaryManager(app, manifest), {
       platform: mapNodePlatform(process.platform) ?? process.platform,
       arch: mapNodeArch(process.arch) ?? process.arch,
     }).open();
   },
 
   managedInstall: {
-    getState(plugin: CopilotPlugin): ManagedInstallActionState {
-      return getOpencodeBinaryManager(plugin).getActionState();
+    getState(app, manifest): ManagedInstallActionState {
+      return getOpencodeBinaryManager(app, manifest).getActionState();
     },
 
-    subscribe(plugin: CopilotPlugin, onChange: () => void): () => void {
-      return getOpencodeBinaryManager(plugin).subscribeRuntimeState(onChange);
+    subscribe(app, manifest, onChange: () => void): () => void {
+      return getOpencodeBinaryManager(app, manifest).subscribeRuntimeState(onChange);
     },
 
-    async run(plugin: CopilotPlugin): Promise<void> {
-      const manager = getOpencodeBinaryManager(plugin);
+    async run(app, manifest): Promise<void> {
+      const manager = getOpencodeBinaryManager(app, manifest);
       const state = computeInstallState(getSettings().agentMode?.backends?.opencode);
       if (state.kind !== "installed") return;
       if (state.source === "custom") {
@@ -202,7 +204,7 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
   prefetchEffortCatalog: prefetchConfigEfforts,
 
   createBackendProcess(args): BackendProcess {
-    const { providerRegistry, backendConfigRegistry } = args.plugin.modelManagement;
+    const { providerRegistry, backendConfigRegistry } = args.modelManagement;
     return simpleBinaryBackendProcess(
       args,
       new OpencodeBackend({
@@ -211,13 +213,7 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
         backendConfigRegistry,
         clientVersion: args.clientVersion,
         getCopilotPluginDir: opencodeCopilotPluginDir,
-        getSelfHostWebSearchChannel: () => {
-          const bridge = args.plugin.selfHostWebSearchAgentBridge;
-          if (!bridge) {
-            throw new Error("Copilot self-host web search channel is unavailable.");
-          }
-          return bridge.getChannel();
-        },
+        getSelfHostWebSearchChannel: args.getSelfHostWebSearchChannel,
         readCopilotReadOnlyToolNames: async () =>
           (await args.copilotMcpServer?.readOnlyToolNames()) ?? [],
         customAgentsFile: opencodeAgentsFilePath(args.app),
@@ -231,9 +227,9 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
 
   forgetAgent: (app, slug) => removeAgentEntries(opencodeAgentsFilePath(app), slug),
 
-  async onPluginLoad(plugin: CopilotPlugin): Promise<void> {
-    const manager = getOpencodeBinaryManager(plugin);
-    manager.adoptPlugin(plugin);
+  async onPluginLoad(app, manifest): Promise<void> {
+    const manager = getOpencodeBinaryManager(app, manifest);
+    manager.adopt(app, manifest);
     manager.forgetSettledError();
     await manager.refreshInstallState();
     await manager.autoUpgrade(OPENCODE_PINNED_VERSION, OPENCODE_MIN_VERSION, (message) => {
@@ -246,7 +242,7 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
     return id && id.length > 0 ? id : undefined;
   },
 
-  async persistProbeSessionId(sessionId: string, _plugin: CopilotPlugin): Promise<void> {
+  async persistProbeSessionId(sessionId: string): Promise<void> {
     updateAgentModeBackendFields("opencode", { probeSessionId: sessionId });
   },
 

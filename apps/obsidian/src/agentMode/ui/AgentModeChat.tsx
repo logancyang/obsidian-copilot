@@ -33,7 +33,7 @@ export const AgentModeChat: React.FC<Props> = ({
 }) => {
   const manager = plugin.agentSessionManager;
   const descriptor = useSessionBackendDescriptor(manager);
-  const installState = useBackendInstallState(descriptor, plugin);
+  const installState = useBackendInstallState(descriptor);
   const auth = useBackendAuthState(descriptor);
   const awaitingAuth = Boolean(
     installState.kind === "ready" && descriptor.auth && (auth.checking || auth.status === null)
@@ -70,7 +70,7 @@ export const AgentModeChat: React.FC<Props> = ({
   ]);
 
   const handleInstall = React.useCallback(() => {
-    descriptor.openInstallUI(plugin);
+    descriptor.openInstallUI(plugin.app, plugin.manifest);
   }, [descriptor, plugin]);
 
   if (!manager) return null;

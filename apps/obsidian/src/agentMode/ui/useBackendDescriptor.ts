@@ -52,14 +52,11 @@ export function useSessionBackendDescriptor(
   return getActiveBackendDescriptor(settings);
 }
 
-export function useBackendInstallState(
-  descriptor: BackendDescriptor,
-  plugin: CopilotPlugin
-): InstallState {
+export function useBackendInstallState(descriptor: BackendDescriptor): InstallState {
   const settings = useSettingsValue();
   const subscribe = React.useCallback(
-    (listener: () => void) => descriptor.subscribeInstallState(plugin, listener),
-    [descriptor, plugin]
+    (listener: () => void) => descriptor.subscribeInstallState(listener),
+    [descriptor]
   );
   const getSnapshot = React.useCallback(
     () => installStateSignature(descriptor.getInstallState(settings)),
@@ -78,24 +75,25 @@ export function useManagedInstallActionState(
 ): ManagedInstallActionState {
   const action = descriptor.managedInstall;
   const subscribe = React.useCallback(
-    (listener: () => void) => action?.subscribe(plugin, listener) ?? (() => {}),
+    (listener: () => void) =>
+      action?.subscribe(plugin.app, plugin.manifest, listener) ?? (() => {}),
     [action, plugin]
   );
   const getSnapshot = React.useCallback(
     () =>
       managedInstallActionStateSignature(
-        action?.getState(plugin) ?? IDLE_MANAGED_INSTALL_ACTION_STATE
+        action?.getState(plugin.app, plugin.manifest) ?? IDLE_MANAGED_INSTALL_ACTION_STATE
       ),
     [action, plugin]
   );
   const signature = React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
   return React.useMemo(() => {
     void signature;
-    return action?.getState(plugin) ?? IDLE_MANAGED_INSTALL_ACTION_STATE;
+    return action?.getState(plugin.app, plugin.manifest) ?? IDLE_MANAGED_INSTALL_ACTION_STATE;
   }, [action, plugin, signature]);
 }
 
-export function useBackendInstallStates(plugin: CopilotPlugin) {
+export function useBackendInstallStates() {
   const descriptors = React.useMemo(() => listBackendDescriptors(), []);
-  return useDescriptorInstallStates(plugin, descriptors);
+  return useDescriptorInstallStates(descriptors);
 }

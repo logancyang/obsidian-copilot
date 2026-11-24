@@ -3,7 +3,6 @@ import { Notice } from "obsidian";
 import { resolveEffort } from "@/lib/model-effort";
 import { codexAuth } from "./codexAuth";
 import { codexApprovedRules } from "./codexApprovedRules";
-import type CopilotPlugin from "@/main";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { detectBinary } from "@/utils/detectBinary";
 import {
@@ -177,7 +176,7 @@ export const CodexBackendDescriptor: BackendDescriptor = {
     return settings.agentMode?.backends?.codex?.binaryPath ?? null;
   },
 
-  subscribeInstallState(_plugin: CopilotPlugin, cb: () => void): () => void {
+  subscribeInstallState(cb: () => void): () => void {
     return subscribeToSettingsChange((prev, next) => {
       if (
         prev.agentMode?.backends?.codex?.binaryPath !==
@@ -192,8 +191,8 @@ export const CodexBackendDescriptor: BackendDescriptor = {
     });
   },
 
-  openInstallUI(plugin: CopilotPlugin): void {
-    new CodexInstallModal(plugin.app).open();
+  openInstallUI(app): void {
+    new CodexInstallModal(app).open();
   },
 
   async onPluginLoad(): Promise<void> {
@@ -205,7 +204,7 @@ export const CodexBackendDescriptor: BackendDescriptor = {
 
   managedInstall: {
     getState: () => codexBinaryManager.getActionState(),
-    subscribe: (_plugin, onChange) => codexBinaryManager.subscribeRuntimeState(onChange),
+    subscribe: (_app, _manifest, onChange) => codexBinaryManager.subscribeRuntimeState(onChange),
     run: async () => {
       await codexBinaryManager.install();
     },

@@ -1,8 +1,8 @@
 import { logError, logInfo, logWarn } from "@/logger";
-import type CopilotPlugin from "@/main";
 import { getSettings } from "@/settings/model";
 import { App, FileSystemAdapter, Platform } from "obsidian";
 import type { CopilotMcpServer } from "./copilotMcpServer";
+import type { BackendStartServices } from "./descriptor";
 import { MethodUnsupportedError } from "./errors";
 import type {
   BackendDescriptor,
@@ -31,7 +31,7 @@ export class AgentModelPreloader {
 
   constructor(
     private readonly app: App,
-    private readonly plugin: CopilotPlugin,
+    private readonly backendStartServices: BackendStartServices,
     private readonly resolveDescriptor: (id: BackendId) => BackendDescriptor | undefined,
     private readonly beforeBackendStart?: (id: BackendId) => Promise<void>,
     private readonly copilotMcpServer?: CopilotMcpServer
@@ -157,9 +157,8 @@ export class AgentModelPreloader {
     if (this.disposed || descriptor.getInstallState(getSettings()).kind !== "ready") return;
 
     const proc = descriptor.createBackendProcess({
-      plugin: this.plugin,
+      ...this.backendStartServices,
       app: this.app,
-      clientVersion: this.plugin.manifest.version,
       descriptor,
       copilotMcpServer: this.copilotMcpServer,
     });
@@ -334,7 +333,7 @@ export class AgentModelPreloader {
     logInfo(`[AgentMode] preload ${backendId}: created probe session ${resp.sessionId}`);
     if (descriptor.persistProbeSessionId) {
       try {
-        await descriptor.persistProbeSessionId(resp.sessionId, this.plugin);
+        await descriptor.persistProbeSessionId(resp.sessionId);
       } catch (e) {
         logWarn(`[AgentMode] preload ${backendId}: persistProbeSessionId failed`, e);
       }

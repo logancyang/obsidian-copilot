@@ -2,11 +2,10 @@ import { EnvOverridesSetting } from "@/agentMode/backends/shared/EnvOverridesSet
 import { ClaudeAutoMemorySetting } from "@/agentMode/backends/claude/ui/ClaudeAutoMemorySetting";
 import { ClaudeAutoModePermissionSetting } from "@/agentMode/backends/claude/ui/ClaudeAutoModePermissionSetting";
 import { SettingItem } from "@/components/ui/setting-item";
-import type CopilotPlugin from "@/main";
+import type { App, PluginManifest } from "obsidian";
 import { useSettingsValue } from "@/settings/model";
 import { openWithSystemDefault } from "@/utils/openWithSystemDefault";
 import { getVaultBase } from "@/utils/vaultPath";
-import type { App } from "obsidian";
 import React from "react";
 import {
   findClaudeAutoMemoryFolder,
@@ -15,13 +14,14 @@ import {
 } from "./descriptor";
 
 interface Props {
-  plugin: CopilotPlugin;
   app: App;
+  manifest: PluginManifest;
 }
 
-export const ClaudeSettingsPanel: React.FC<Props> = ({ plugin, app }) => {
+export const ClaudeSettingsPanel: React.FC<Props> = ({ app, manifest }) => {
   const settings = useSettingsValue();
   const vaultBase = getVaultBase(app);
+  const clientVersion = manifest.version;
   const autoMemory = settings.agentMode?.backends?.claude?.autoMemory;
   const envOverridesKey = JSON.stringify(settings.agentMode?.backends?.claude?.envOverrides ?? {});
   const [memoryFolder, setMemoryFolder] = React.useState<string | undefined>();
@@ -29,13 +29,13 @@ export const ClaudeSettingsPanel: React.FC<Props> = ({ plugin, app }) => {
   React.useEffect(() => {
     if (!vaultBase) return;
     let current = true;
-    void findClaudeAutoMemoryFolder(vaultBase, plugin.manifest.version).then((folder) => {
+    void findClaudeAutoMemoryFolder(vaultBase, clientVersion).then((folder) => {
       if (current) setMemoryFolder(folder);
     });
     return () => {
       current = false;
     };
-  }, [vaultBase, plugin, autoMemory, envOverridesKey]);
+  }, [vaultBase, clientVersion, autoMemory, envOverridesKey]);
 
   return (
     <>

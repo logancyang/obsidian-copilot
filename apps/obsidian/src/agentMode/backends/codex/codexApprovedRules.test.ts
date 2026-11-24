@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as os from "os";
 import * as path from "node:path";
-import type CopilotPlugin from "@/main";
+import type { App } from "obsidian";
 import { buildSimpleSpawnDescriptor } from "@/agentMode/backends/shared/simpleBinaryBackend";
 import { getSettings, resetSettings, setSettings } from "@/settings/model";
 import { codexApprovedRules } from "./codexApprovedRules";
@@ -9,7 +9,7 @@ import { codexApprovedRules } from "./codexApprovedRules";
 jest.mock("os", () => ({ ...jest.requireActual<object>("os"), homedir: jest.fn() }));
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/868";
-const plugin = {} as CopilotPlugin;
+const app = {} as App;
 const erasedLine = (line: string) => `#${line.slice(1)}\n`;
 
 const HAND_WRITTEN = [
@@ -126,7 +126,7 @@ describe("codexApprovedRules", () => {
     it("lists each command and host Codex was told to always allow, in readable form, saved in rules/default.rules of the Codex home", async () => {
       writeRules(`${GH_API}\n${HAND_WRITTEN}\n${COMMIT}\n${GITHUB_HOST}\n`);
 
-      const rules = await codexApprovedRules.list(plugin);
+      const rules = await codexApprovedRules.list(app);
 
       expect(rules).toEqual([
         { id: GH_API, allows: "gh api", appliesTo: { kind: "file", path: rulesFile() } },
@@ -149,7 +149,7 @@ describe("codexApprovedRules", () => {
         fs.mkdirSync(path.join(home, "rules"), { recursive: true });
         fs.writeFileSync(path.join(home, "rules", "default.rules"), `${GH_API}\n`);
       }
-      const listedFile = async () => (await codexApprovedRules.list(plugin))[0].appliesTo;
+      const listedFile = async () => (await codexApprovedRules.list(app))[0].appliesTo;
 
       const fromOverride = await listedFile();
       configure({});
@@ -174,7 +174,7 @@ describe("codexApprovedRules", () => {
         const host = Object.getOwnPropertyDescriptor(process, "platform") as PropertyDescriptor;
         Object.defineProperty(process, "platform", { value: platform });
         try {
-          return (await codexApprovedRules.list(plugin))[0].appliesTo;
+          return (await codexApprovedRules.list(app))[0].appliesTo;
         } finally {
           Object.defineProperty(process, "platform", host);
         }
@@ -190,22 +190,22 @@ describe("codexApprovedRules", () => {
     });
 
     it(`gives no rules when the Codex home has no rules file yet: ${ISSUE}`, async () => {
-      await expect(codexApprovedRules.list(plugin)).resolves.toEqual([]);
+      await expect(codexApprovedRules.list(app)).resolves.toEqual([]);
     });
 
     it(`rejects when the rules file can't be read, so the page shows it can't read the rules: ${ISSUE}`, async () => {
       fs.mkdirSync(rulesFile(), { recursive: true });
 
-      await expect(codexApprovedRules.list(plugin)).rejects.toThrow("EISDIR");
+      await expect(codexApprovedRules.list(app)).rejects.toThrow("EISDIR");
     });
   });
 
   describe("remove()", () => {
     it("comments only that rule, keeps every other byte, and has the configured Codex check the edited text first", async () => {
       writeRules(`${HAND_WRITTEN}\n${GH_API}\n${COMMIT}\n`);
-      const [ghApi] = await codexApprovedRules.list(plugin);
+      const [ghApi] = await codexApprovedRules.list(app);
 
-      await codexApprovedRules.remove(plugin, ghApi);
+      await codexApprovedRules.remove(app, ghApi);
 
       expect(readRules()).toBe(`${HAND_WRITTEN}\n${erasedLine(GH_API)}${COMMIT}\n`);
       expect(fs.readFileSync(checkLog, "utf8").split("\n").slice(0, 3)).toEqual([
@@ -222,19 +222,19 @@ describe("codexApprovedRules", () => {
       const grant = 'prefix_rule(pattern=["echo", "résumé🧪"], decision="allow")';
       const before = `# Café 🧪\n${grant}\n${GH_API}\n${grant}\n`;
       writeRules(before);
-      const [rule] = await codexApprovedRules.list(plugin);
+      const [rule] = await codexApprovedRules.list(app);
 
-      await codexApprovedRules.remove(plugin, rule);
+      await codexApprovedRules.remove(app, rule);
 
       expect(readRules()).toBe(`# Café 🧪\n${erasedLine(grant)}${GH_API}\n${erasedLine(grant)}`);
       expect(Buffer.byteLength(readRules())).toBe(Buffer.byteLength(before));
-      expect((await codexApprovedRules.list(plugin)).map((listed) => listed.id)).toEqual([GH_API]);
+      expect((await codexApprovedRules.list(app)).map((listed) => listed.id)).toEqual([GH_API]);
     });
 
     it(`restores only the removed grant and keeps approvals appended after removal: ${ISSUE}`, async () => {
       writeRules(`${GH_API}\n${COMMIT}\n`);
-      const [rule] = await codexApprovedRules.list(plugin);
-      const removal = await codexApprovedRules.remove(plugin, rule);
+      const [rule] = await codexApprovedRules.list(app);
+      const removal = await codexApprovedRules.remove(app, rule);
       expect(removal).toBeDefined();
       if (!removal) throw new Error("Expected an undoable removal");
       fs.appendFileSync(rulesFile(), `${GITHUB_HOST}\n`);
@@ -248,8 +248,8 @@ describe("codexApprovedRules", () => {
 
     it(`refuses Undo if the disabled rule was edited, keeping every newer byte unchanged: ${ISSUE}`, async () => {
       writeRules(`${GH_API}\n${COMMIT}\n`);
-      const [rule] = await codexApprovedRules.list(plugin);
-      const removal = await codexApprovedRules.remove(plugin, rule);
+      const [rule] = await codexApprovedRules.list(app);
+      const removal = await codexApprovedRules.remove(app, rule);
       if (!removal) throw new Error("Expected an undoable removal");
       writeRules(`# changed by user\n${COMMIT}\n`);
       const edited = readRules();
@@ -261,7 +261,7 @@ describe("codexApprovedRules", () => {
 
     it(`leaves complete commented or active rules if writing another duplicate fails, never a half-erased rule: ${ISSUE}`, async () => {
       writeRules(`${GH_API}\n${GH_API}\n`);
-      const [rule] = await codexApprovedRules.list(plugin);
+      const [rule] = await codexApprovedRules.list(app);
       const open = fs.promises.open.bind(fs.promises);
       const opening = jest
         .spyOn(fs.promises, "open")
@@ -281,7 +281,7 @@ describe("codexApprovedRules", () => {
           return handle;
         });
       try {
-        await expect(codexApprovedRules.remove(plugin, rule)).rejects.toThrow("write interrupted");
+        await expect(codexApprovedRules.remove(app, rule)).rejects.toThrow("write interrupted");
       } finally {
         opening.mockRestore();
       }
@@ -291,7 +291,7 @@ describe("codexApprovedRules", () => {
 
     it(`refuses to change a rule replaced after the last read and before the file is opened for writing: ${ISSUE}`, async () => {
       writeRules(`${GH_API}\n`);
-      const [rule] = await codexApprovedRules.list(plugin);
+      const [rule] = await codexApprovedRules.list(app);
       const open = fs.promises.open.bind(fs.promises);
       const opening = jest
         .spyOn(fs.promises, "open")
@@ -300,7 +300,7 @@ describe("codexApprovedRules", () => {
           return open(file, flags, mode);
         });
       try {
-        await expect(codexApprovedRules.remove(plugin, rule)).rejects.toThrow("rules file changed");
+        await expect(codexApprovedRules.remove(app, rule)).rejects.toThrow("rules file changed");
       } finally {
         opening.mockRestore();
       }
@@ -309,7 +309,7 @@ describe("codexApprovedRules", () => {
 
     it(`reports a marker write that made no progress instead of reporting a successful removal: ${ISSUE}`, async () => {
       writeRules(`${GH_API}\n`);
-      const [rule] = await codexApprovedRules.list(plugin);
+      const [rule] = await codexApprovedRules.list(app);
       const open = fs.promises.open.bind(fs.promises);
       const opening = jest
         .spyOn(fs.promises, "open")
@@ -322,7 +322,7 @@ describe("codexApprovedRules", () => {
           return handle;
         });
       try {
-        await expect(codexApprovedRules.remove(plugin, rule)).rejects.toThrow(
+        await expect(codexApprovedRules.remove(app, rule)).rejects.toThrow(
           "marker could not be written"
         );
       } finally {
@@ -333,8 +333,8 @@ describe("codexApprovedRules", () => {
 
     it(`keeps the rule disabled and preserves new grants when Codex rejects the Undo candidate: ${ISSUE}`, async () => {
       writeRules(`${GH_API}\n${COMMIT}\n`);
-      const [rule] = await codexApprovedRules.list(plugin);
-      const removal = await codexApprovedRules.remove(plugin, rule);
+      const [rule] = await codexApprovedRules.list(app);
+      const removal = await codexApprovedRules.remove(app, rule);
       if (!removal) throw new Error("Expected an undoable removal");
       fs.writeFileSync(`${checkLog}.fail`, "");
       fs.appendFileSync(rulesFile(), `${GITHUB_HOST}\n`);
@@ -346,17 +346,17 @@ describe("codexApprovedRules", () => {
 
     it(`keeps a grant Codex saves while the check runs: ${ISSUE}`, async () => {
       writeRules(`${GH_API}\n${COMMIT}\n`);
-      const [ghApi] = await codexApprovedRules.list(plugin);
+      const [ghApi] = await codexApprovedRules.list(app);
       configure({ CODEX_HOME: codexHome, FAKE_CODEX_SAVES: GITHUB_HOST });
 
-      await codexApprovedRules.remove(plugin, ghApi);
+      await codexApprovedRules.remove(app, ghApi);
 
       expect(readRules()).toBe(`${erasedLine(GH_API)}${COMMIT}\n${GITHUB_HOST}\n`);
     });
 
     it(`keeps a grant appended after the final read, without truncating or replacing the rules file: ${ISSUE}`, async () => {
       writeRules(`${GH_API}\n${COMMIT}\n`);
-      const [ghApi] = await codexApprovedRules.list(plugin);
+      const [ghApi] = await codexApprovedRules.list(app);
       const readFile = fs.promises.readFile.bind(fs.promises);
       const inode = fs.statSync(rulesFile()).ino;
       const read = jest.spyOn(fs.promises, "readFile");
@@ -366,14 +366,14 @@ describe("codexApprovedRules", () => {
         return text;
       });
       try {
-        await codexApprovedRules.remove(plugin, ghApi);
+        await codexApprovedRules.remove(app, ghApi);
       } finally {
         read.mockRestore();
       }
 
       expect(readRules()).toContain(`${COMMIT}\n${GITHUB_HOST}\n`);
       expect(fs.statSync(rulesFile()).ino).toBe(inode);
-      expect((await codexApprovedRules.list(plugin)).map((rule) => rule.id)).toEqual([
+      expect((await codexApprovedRules.list(app)).map((rule) => rule.id)).toEqual([
         COMMIT,
         GITHUB_HOST,
       ]);
@@ -381,11 +381,11 @@ describe("codexApprovedRules", () => {
 
     it(`runs the check with the environment codex-acp gets, including its PATH and the user's CODEX_HOME: ${ISSUE}`, async () => {
       writeRules(`${GH_API}\n`);
-      const [ghApi] = await codexApprovedRules.list(plugin);
+      const [ghApi] = await codexApprovedRules.list(app);
       const codex = getSettings().agentMode.backends?.codex;
       const adapterEnv = buildSimpleSpawnDescriptor(codex?.binaryPath, "", codex?.envOverrides).env;
 
-      await codexApprovedRules.remove(plugin, ghApi);
+      await codexApprovedRules.remove(app, ghApi);
 
       expect(fs.readFileSync(checkLog, "utf8").split("\n").slice(5, 7)).toEqual([
         `CODEX_HOME=${codexHome}`,
@@ -395,19 +395,19 @@ describe("codexApprovedRules", () => {
 
     it(`comments a last line without changing its missing line break: ${ISSUE}`, async () => {
       writeRules(`${HAND_WRITTEN}\n${GITHUB_HOST}`);
-      const [githubHost] = await codexApprovedRules.list(plugin);
+      const [githubHost] = await codexApprovedRules.list(app);
 
-      await codexApprovedRules.remove(plugin, githubHost);
+      await codexApprovedRules.remove(app, githubHost);
 
       expect(readRules()).toBe(`${HAND_WRITTEN}\n#${GITHUB_HOST.slice(1)}`);
     });
 
     it(`leaves the file as it was, including a grant Codex saves meanwhile, and rejects with Codex's error when Codex can't read the edited text: ${ISSUE}`, async () => {
       writeRules(`${HAND_WRITTEN}\n${GH_API}\n`);
-      const [ghApi] = await codexApprovedRules.list(plugin);
+      const [ghApi] = await codexApprovedRules.list(app);
       configure({ CODEX_HOME: codexHome, FAKE_CODEX_FAIL: "1", FAKE_CODEX_SAVES: GITHUB_HOST });
 
-      await expect(codexApprovedRules.remove(plugin, ghApi)).rejects.toThrow(
+      await expect(codexApprovedRules.remove(app, ghApi)).rejects.toThrow(
         `Codex couldn't validate the changed rules, so the file was left as it was. starlark error: Parse error: unexpected new line --> ${rulesFile()}:2:1`
       );
       expect(readRules()).toBe(`${HAND_WRITTEN}\n${GH_API}\n${GITHUB_HOST}\n`);
@@ -415,11 +415,11 @@ describe("codexApprovedRules", () => {
 
     it(`leaves the file untouched when it no longer holds the rule: ${ISSUE}`, async () => {
       writeRules(`${GH_API}\n`);
-      const [ghApi] = await codexApprovedRules.list(plugin);
+      const [ghApi] = await codexApprovedRules.list(app);
       writeRules(`${HAND_WRITTEN}\n`);
       const modified = fs.statSync(rulesFile()).mtimeMs;
 
-      await codexApprovedRules.remove(plugin, ghApi);
+      await codexApprovedRules.remove(app, ghApi);
 
       expect(readRules()).toBe(`${HAND_WRITTEN}\n`);
       expect(fs.statSync(rulesFile()).mtimeMs).toBe(modified);
@@ -428,7 +428,7 @@ describe("codexApprovedRules", () => {
 
     it(`rejects without touching the file when Codex isn't set up to check it: ${ISSUE}`, async () => {
       writeRules(`${GH_API}\n`);
-      const [ghApi] = await codexApprovedRules.list(plugin);
+      const [ghApi] = await codexApprovedRules.list(app);
       setSettings({
         agentMode: {
           ...getSettings().agentMode,
@@ -436,17 +436,17 @@ describe("codexApprovedRules", () => {
         },
       });
 
-      await expect(codexApprovedRules.remove(plugin, ghApi)).rejects.toThrow("Install Codex");
+      await expect(codexApprovedRules.remove(app, ghApi)).rejects.toThrow("Install Codex");
       expect(readRules()).toBe(`${GH_API}\n`);
     });
 
     it(`comments both rules when two removals run at once, since each changes only its own byte: ${ISSUE}`, async () => {
       writeRules(`${GH_API}\n${COMMIT}\n${GITHUB_HOST}\n`);
-      const [ghApi, commit] = await codexApprovedRules.list(plugin);
+      const [ghApi, commit] = await codexApprovedRules.list(app);
 
       await Promise.all([
-        codexApprovedRules.remove(plugin, ghApi),
-        codexApprovedRules.remove(plugin, commit),
+        codexApprovedRules.remove(app, ghApi),
+        codexApprovedRules.remove(app, commit),
       ]);
 
       expect(readRules()).toBe(`${erasedLine(GH_API)}${erasedLine(COMMIT)}${GITHUB_HOST}\n`);
