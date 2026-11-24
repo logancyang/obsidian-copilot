@@ -140,8 +140,8 @@ jest.mock("@/agentMode", () => ({
     return React.useSyncExternalStore(subscribe, read, read);
   },
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook export
-  useManagedInstallActionState: (descriptor: { id: string }, appAndManifest: unknown) => {
-    mockManagedInstallHostArgs[descriptor.id] = appAndManifest;
+  useManagedInstallActionState: (descriptor: { id: string }, app: unknown, manifest: unknown) => {
+    mockManagedInstallHostArgs[descriptor.id] = [app, manifest];
     return managedInstallStates[descriptor.id] ?? { kind: "idle" };
   },
   AgentDefaultModelSetting: ({ descriptor }: { descriptor: { id: string } }) => (
@@ -430,10 +430,7 @@ describe("AgentSettings", () => {
 
       expect(DESCRIPTORS[0].openInstallUI).toHaveBeenCalledWith(TEST_APP, TEST_MANIFEST);
       expect(mockSettingsPanelProps.opencode).toEqual({ app: TEST_APP, manifest: TEST_MANIFEST });
-      expect(mockManagedInstallHostArgs.opencode).toEqual({
-        app: TEST_APP,
-        manifest: TEST_MANIFEST,
-      });
+      expect(mockManagedInstallHostArgs.opencode).toEqual([TEST_APP, TEST_MANIFEST]);
     });
 
     it("shows no default-model picker and preloads no models when it has no chat manager", () => {

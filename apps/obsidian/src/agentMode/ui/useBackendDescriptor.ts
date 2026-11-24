@@ -11,11 +11,11 @@ import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManage
 import type {
   BackendDescriptor,
   InstallState,
+  ManagedInstallAction,
   ManagedInstallActionState,
 } from "@/agentMode/session/types";
 import { useSettingsValue } from "@/settings/model";
 import React from "react";
-import type CopilotPlugin from "@/main";
 
 const IDLE_MANAGED_INSTALL_ACTION_STATE = Object.freeze({
   kind: "idle" as const,
@@ -71,26 +71,26 @@ export function useBackendInstallState(descriptor: BackendDescriptor): InstallSt
 
 export function useManagedInstallActionState(
   descriptor: BackendDescriptor,
-  plugin: Pick<CopilotPlugin, "app" | "manifest">
+  app: Parameters<ManagedInstallAction["getState"]>[0],
+  manifest: Parameters<ManagedInstallAction["getState"]>[1]
 ): ManagedInstallActionState {
   const action = descriptor.managedInstall;
   const subscribe = React.useCallback(
-    (listener: () => void) =>
-      action?.subscribe(plugin.app, plugin.manifest, listener) ?? (() => {}),
-    [action, plugin]
+    (listener: () => void) => action?.subscribe(app, manifest, listener) ?? (() => {}),
+    [action, app, manifest]
   );
   const getSnapshot = React.useCallback(
     () =>
       managedInstallActionStateSignature(
-        action?.getState(plugin.app, plugin.manifest) ?? IDLE_MANAGED_INSTALL_ACTION_STATE
+        action?.getState(app, manifest) ?? IDLE_MANAGED_INSTALL_ACTION_STATE
       ),
-    [action, plugin]
+    [action, app, manifest]
   );
   const signature = React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
   return React.useMemo(() => {
     void signature;
-    return action?.getState(plugin.app, plugin.manifest) ?? IDLE_MANAGED_INSTALL_ACTION_STATE;
-  }, [action, plugin, signature]);
+    return action?.getState(app, manifest) ?? IDLE_MANAGED_INSTALL_ACTION_STATE;
+  }, [action, app, manifest, signature]);
 }
 
 export function useBackendInstallStates() {

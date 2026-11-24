@@ -161,10 +161,9 @@ const BackendPanel: React.FC<BackendPanelProps> = ({ descriptor, manager, manife
   const app = useApp();
   const settings = useSettingsValue();
   const Panel = descriptor.SettingsPanel;
-  const appAndManifest = React.useMemo(() => ({ app, manifest }), [app, manifest]);
 
   const installState = useBackendInstallState(descriptor);
-  const managedInstall = useManagedInstallActionState(descriptor, appAndManifest);
+  const managedInstall = useManagedInstallActionState(descriptor, app, manifest);
   const auth = useBackendAuthState(descriptor);
   const resolvedPath = descriptor.getResolvedBinaryPath?.(settings) ?? null;
   const approvedRules = descriptor.approvedRules;

@@ -7,7 +7,6 @@ import type {
   InstallState,
   ManagedInstallActionState,
 } from "@/agentMode/session/types";
-import type CopilotPlugin from "@/main";
 import type { App, PluginManifest } from "obsidian";
 import type { CopilotSettings } from "@/settings/model";
 import {
@@ -92,11 +91,13 @@ function makeInstallDescriptor(initial: InstallState, id: BackendId = "claude") 
 function makeManagedInstallDescriptor() {
   let state: ManagedInstallActionState = { kind: "idle" };
   const listeners = new Set<() => void>();
+  let subscribedWith: [App, PluginManifest] | null = null;
   const backend = {
     id: "opencode",
     managedInstall: {
       getState: () => ({ ...state }),
-      subscribe: (_app: App, _manifest: PluginManifest, listener: () => void) => {
+      subscribe: (app: App, manifest: PluginManifest, listener: () => void) => {
+        subscribedWith = [app, manifest];
         listeners.add(listener);
         return () => listeners.delete(listener);
       },
@@ -110,6 +111,7 @@ function makeManagedInstallDescriptor() {
       for (const listener of listeners) listener();
     },
     unsubscribed: () => listeners.size === 0,
+    subscribedWith: () => subscribedWith,
   };
 }
 
@@ -204,9 +206,10 @@ describe("useBackendDescriptor", () => {
 
   describe("useManagedInstallActionState()", () => {
     it("returns one stable idle state when the backend has no managed action", () => {
-      const plugin = {} as CopilotPlugin;
       const backend = descriptor("claude");
-      const { result, rerender } = renderHook(() => useManagedInstallActionState(backend, plugin));
+      const { result, rerender } = renderHook(() =>
+        useManagedInstallActionState(backend, {} as App, {} as PluginManifest)
+      );
       const first = result.current;
 
       rerender();
@@ -215,12 +218,14 @@ describe("useBackendDescriptor", () => {
       expect(result.current).toEqual({ kind: "idle" });
     });
 
-    it("tracks the shared action progress and unsubscribes on unmount", () => {
+    it("tracks the shared action progress for the given app and manifest and unsubscribes on unmount", () => {
       const fake = makeManagedInstallDescriptor();
-      const plugin = {} as CopilotPlugin;
+      const app = { appId: "vault-app" } as unknown as App;
+      const manifest = { id: "copilot" } as PluginManifest;
       const { result, unmount } = renderHook(() =>
-        useManagedInstallActionState(fake.backend, plugin)
+        useManagedInstallActionState(fake.backend, app, manifest)
       );
+      expect(fake.subscribedWith()).toEqual([app, manifest]);
 
       act(() => fake.emit({ kind: "running", label: "Downloading… 42%" }));
       expect(result.current).toEqual({ kind: "running", label: "Downloading… 42%" });

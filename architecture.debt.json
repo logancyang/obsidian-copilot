@@ -1,6 +1,6 @@
 {
   "counts": {
-    "imports": 700,
+    "imports": 699,
     "clientAccess": 151
   },
   "imports": {
@@ -467,7 +467,6 @@
       "@/agentMode/backends/registry",
       "@/agentMode/session/AgentSessionManager",
       "@/agentMode/session/useBackendInstallStates",
-      "@/main",
       "@/settings/model"
     ],
     "apps/obsidian/src/agentMode/ui/useManagerSubscribe.ts": [
