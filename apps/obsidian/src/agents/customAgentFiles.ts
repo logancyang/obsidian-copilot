@@ -1,4 +1,4 @@
-import type { ModelSelection } from "@/agentMode";
+import type { ModelSelection } from "@/agentMode/session/types";
 import { logWarn } from "@/logger";
 import { getFrontMatterInfo, parseYaml, stringifyYaml } from "obsidian";
 

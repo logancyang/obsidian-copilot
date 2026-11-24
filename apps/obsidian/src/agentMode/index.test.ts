@@ -17,6 +17,7 @@ import { isConnectorsEnabled } from "@/connectors/connectorsEntitlement";
 import { createDefaultPermissionPrompter } from "./ui/permissionPrompter";
 import { fakeChat } from "./session/testing/fakeChat";
 import { buildNativeChatId } from "@/utils/nativeChatId";
+import { RecentUsageManager } from "@/utils/recentUsageManager";
 import { AGENT_DRAFT_CARD, AGENT_DRAFT_CARD_EXTENSION } from "@/agents/agentMode/agentDraftCard";
 
 jest.mock("@/constants", () => ({}));
@@ -134,7 +135,7 @@ const ISSUE = "https://github.com/logancyang/obsidian-copilot/issues/3022";
 function connectorCardsExtension() {
   return jest
     .mocked(AgentSessionManager)
-    .mock.calls[0][2].chatExtensions?.find(({ key }) => key.id === "connector-cards");
+    .mock.calls[0][1].chatExtensions?.find(({ key }) => key.id === "connector-cards");
 }
 
 function connectorCardNote(serviceId: string): string | undefined {
@@ -170,6 +171,7 @@ const mockManager = {
   onInstallStateChanged: jest.fn(async (_id: string) => {}),
 };
 let plugin: CopilotPlugin;
+const chatHistoryLastAccessedAt = new RecentUsageManager<string>();
 let customAgents: CustomAgentStore;
 const reconcile = jest.mocked(reconcileBuiltinSkills);
 function withCards(offerFeedbackCards: boolean): CopilotSettings {
@@ -233,6 +235,7 @@ describe("agentMode", () => {
       plugin = {
         manifest: { id: "copilot", version: "4.1.0" },
         register: jest.fn(),
+        getChatHistoryLastAccessedAtManager: () => chatHistoryLastAccessedAt,
         modelManagement: {
           providerRegistry: { subscribe: jest.fn() },
           backendConfigRegistry: new BackendConfigRegistry(
@@ -268,7 +271,15 @@ describe("agentMode", () => {
           modelManagement: plugin.modelManagement,
         })
       );
-      expect(jest.mocked(AgentSessionManager).mock.calls[0][2].backendStartServices).toBe(services);
+      expect(jest.mocked(AgentSessionManager).mock.calls[0][1].backendStartServices).toBe(services);
+    });
+
+    it("gives the manager the plugin's chat-history last-accessed tracker, so every chat history list orders chats the same way", () => {
+      createAgentSessionManager({} as App, plugin, customAgents);
+
+      expect(jest.mocked(AgentSessionManager).mock.calls[0][1].chatHistoryLastAccessedAt).toBe(
+        chatHistoryLastAccessedAt
+      );
     });
 
     it("opens the plugin's current self-host web search channel each time a backend asks, and fails when the plugin has none", async () => {
@@ -298,7 +309,7 @@ describe("agentMode", () => {
 
       const resolved = await jest
         .mocked(AgentSessionManager)
-        .mock.calls[0][2].resolveAgent?.("coco");
+        .mock.calls[0][1].resolveAgent?.("coco");
 
       expect(resolved).toBe(agent);
       expect(loadAgentSessionPrompt).toHaveBeenCalledWith(store, "coco", "/vault");
@@ -404,7 +415,7 @@ describe("agentMode", () => {
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/833 offers a reload when Obsidian's command line interface is turned on between agent starts, so new chats gain the obsidian_cli steering, without re-reconciling skills", async () => {
       createAgentSessionManager({} as App, plugin, customAgents);
       await mockManager.registerPreload.mock.calls[0][1];
-      const { beforeBackendStart } = jest.mocked(AgentSessionManager).mock.calls[0][2];
+      const { beforeBackendStart } = jest.mocked(AgentSessionManager).mock.calls[0][1];
       const passes = reconcile.mock.calls.length;
 
       await beforeBackendStart!("claude");
@@ -424,7 +435,7 @@ describe("agentMode", () => {
       const app = { plugins: { getPlugin: () => excalidraw } } as unknown as App;
       createAgentSessionManager(app, plugin, customAgents);
       await mockManager.registerPreload.mock.calls[0][1];
-      const { beforeBackendStart } = jest.mocked(AgentSessionManager).mock.calls[0][2];
+      const { beforeBackendStart } = jest.mocked(AgentSessionManager).mock.calls[0][1];
       const passes = reconcile.mock.calls.length;
 
       await beforeBackendStart!("claude");
@@ -879,7 +890,7 @@ describe("agentMode", () => {
       expect(coco.readChatState(AGENT_DRAFT_CARD)?.draftedBy).toBe("coco");
       expect((await draftAgent.call(nora, copilot)).text).toContain("Shown to the user as a card");
       expect(copilot.readChatState(AGENT_DRAFT_CARD)?.draftedBy).toBeNull();
-      expect(jest.mocked(AgentSessionManager).mock.calls[0][2].chatExtensions).toContain(
+      expect(jest.mocked(AgentSessionManager).mock.calls[0][1].chatExtensions).toContain(
         AGENT_DRAFT_CARD_EXTENSION
       );
     });
@@ -988,7 +999,7 @@ describe("agentMode", () => {
         options: [],
       };
 
-      await jest.mocked(AgentSessionManager).mock.calls[0][2].permissionPrompter(request);
+      await jest.mocked(AgentSessionManager).mock.calls[0][1].permissionPrompter(request);
 
       expect(chatPrompter).toHaveBeenCalledWith(request);
     });

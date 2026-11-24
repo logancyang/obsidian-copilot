@@ -1,6 +1,6 @@
 {
   "counts": {
-    "imports": 723,
+    "imports": 718,
     "clientAccess": 151
   },
   "imports": {
@@ -31,8 +31,6 @@
       "@/agentMode/navigator/navigatorEntitlement",
       "@/plusUtils"
     ],
-    "apps/obsidian/src/agentMode/navigator/openSessionsSidebar.ts": ["@/main"],
-    "apps/obsidian/src/agentMode/navigator/revealSessionsSidebar.ts": ["@/main"],
     "apps/obsidian/src/agentMode/navigator/ui/AgentProjectRowMenu.tsx": [
       "@/projects/ui/AgentProjectRowActions"
     ],
@@ -89,7 +87,6 @@
       "@/context/contextUpdatesBlockBuilder",
       "@/hooks/useLatestVersion",
       "@/instructions/agentsFile",
-      "@/main",
       "@/projects/ProjectFileManager",
       "@/projects/moveProjectPrompt",
       "@/projects/projectContentTracker",
@@ -572,7 +569,6 @@
     "apps/obsidian/src/agents/agentMode/useAgentSetupProblems.ts": [
       "@/agentMode/ui/useBackendDescriptor"
     ],
-    "apps/obsidian/src/agents/customAgentFiles.ts": ["@/agentMode"],
     "apps/obsidian/src/agents/ui/AgentDeleteModal.tsx": [
       "@/agents/CustomAgentStore",
       "@/agents/customAgentFiles",
@@ -677,8 +673,7 @@
     "apps/obsidian/src/components/Chat.tsx": ["@/main"],
     "apps/obsidian/src/components/CopilotView.tsx": ["@/main"],
     "apps/obsidian/src/components/RelevantNotesView.tsx": [
-      "@/components/chat-components/RelevantNotes",
-      "@/main"
+      "@/components/chat-components/RelevantNotes"
     ],
     "apps/obsidian/src/components/chat-components/AgentMentionMenu.stories.tsx": [
       "@/agents/ui/agentMentionOptions",
