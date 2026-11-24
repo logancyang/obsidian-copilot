@@ -25,6 +25,7 @@ import { DesktopOnlySettingsPanel } from "@/settings/v2/components/DesktopOnlySe
 import { CopilotFolderChangeNotice } from "@/settings/v2/components/CopilotFolderChangeNotice";
 import { LegacyChatPromptsNotice } from "@/settings/v2/components/LegacyChatPromptsNotice";
 import { PlusSettings } from "@/settings/v2/components/PlusSettings";
+import type { AgentSettingsProps } from "@/settings/v2/components/AgentSettings";
 import { VaultInstructionsSetting } from "@/settings/v2/components/VaultInstructionsSetting";
 import { formatDateTime } from "@/utils";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
@@ -39,7 +40,7 @@ const LazyAgentSettings = React.lazy(() =>
   }))
 );
 
-const AgentsSection: React.FC = () => {
+const AgentsSection: React.FC<AgentSettingsProps> = (agentSettings) => {
   if (!isDesktopRuntime()) {
     // Quick Chat also runs on mobile; its settings must stay outside the desktop import gate.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/373
@@ -52,12 +53,16 @@ const AgentsSection: React.FC = () => {
   }
   return (
     <React.Suspense fallback={null}>
-      <LazyAgentSettings />
+      <LazyAgentSettings {...agentSettings} />
     </React.Suspense>
   );
 };
 
-export const BasicSettings: React.FC = () => {
+interface BasicSettingsProps {
+  agentSettings: AgentSettingsProps;
+}
+
+export const BasicSettings: React.FC<BasicSettingsProps> = ({ agentSettings }) => {
   const app = useApp();
   const settings = useSettingsValue();
   const [isChecking, setIsChecking] = useState(false);
@@ -194,7 +199,7 @@ export const BasicSettings: React.FC = () => {
     <div className="tw-space-y-4">
       <PlusSettings />
 
-      <AgentsSection />
+      <AgentsSection {...agentSettings} />
 
       <SettingSection label="General">
         <SettingItem

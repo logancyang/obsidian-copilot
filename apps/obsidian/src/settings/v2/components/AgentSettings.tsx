@@ -6,6 +6,7 @@ import {
   useBackendInstallState,
   useBackendAuthState,
   useManagedInstallActionState,
+  type AgentSessionManager,
   type BackendDescriptor,
 } from "@/agentMode";
 import { Button } from "@/components/ui/button";
@@ -21,11 +22,12 @@ import {
   TabContent,
   type TabItem as TabItemType,
 } from "@/components/ui/setting-tabs";
-import { usePlugin } from "@/contexts/PluginContext";
+import { useApp } from "@/context";
 import { logError } from "@/logger";
 import { setSettings, useSettingsValue } from "@/settings/model";
 import { formatBinaryPathForDisplay } from "@/utils/binaryPath";
 import { AlertTriangle, MessageCircle } from "lucide-react";
+import type { PluginManifest } from "obsidian";
 import React from "react";
 import { QuickChatPanel } from "./QuickChatPanel";
 import { ConfiguredModelEnableList } from "./ConfiguredModelEnableList";
@@ -37,9 +39,13 @@ import { useSettingsSubPage } from "@/settings/v2/SettingsSubPage";
 
 const QUICK_CHAT_TAB_ID = "quickchat";
 
-export const AgentSettings: React.FC = () => {
+export interface AgentSettingsProps {
+  agentSessionManager: AgentSessionManager | undefined;
+  manifest: PluginManifest;
+}
+
+export const AgentSettings: React.FC<AgentSettingsProps> = ({ agentSessionManager, manifest }) => {
   const settings = useSettingsValue();
-  const plugin = usePlugin();
   const [selectedTab, setSelectedTab] = React.useState<string>(() => backendDisplayOrder()[0].id);
   const tabStripRef = React.useRef<HTMLDivElement>(null);
   const pendingAnchorTop = React.useRef<number | null>(null);
@@ -126,7 +132,11 @@ export const AgentSettings: React.FC = () => {
             isSelected={selectedTabId === descriptor.id}
             variant="inline"
           >
-            <BackendPanel descriptor={descriptor} plugin={plugin} />
+            <BackendPanel
+              descriptor={descriptor}
+              manager={agentSessionManager}
+              manifest={manifest}
+            />
           </TabContent>
         ))}
         <TabContent
@@ -141,16 +151,20 @@ export const AgentSettings: React.FC = () => {
   );
 };
 
-const BackendPanel: React.FC<{
+interface BackendPanelProps {
   descriptor: BackendDescriptor;
-  plugin: ReturnType<typeof usePlugin>;
-}> = ({ descriptor, plugin }) => {
+  manager: AgentSessionManager | undefined;
+  manifest: PluginManifest;
+}
+
+const BackendPanel: React.FC<BackendPanelProps> = ({ descriptor, manager, manifest }) => {
+  const app = useApp();
   const settings = useSettingsValue();
   const Panel = descriptor.SettingsPanel;
-  const manager = plugin.agentSessionManager;
+  const appAndManifest = React.useMemo(() => ({ app, manifest }), [app, manifest]);
 
   const installState = useBackendInstallState(descriptor);
-  const managedInstall = useManagedInstallActionState(descriptor, plugin);
+  const managedInstall = useManagedInstallActionState(descriptor, appAndManifest);
   const auth = useBackendAuthState(descriptor);
   const resolvedPath = descriptor.getResolvedBinaryPath?.(settings) ?? null;
   const approvedRules = descriptor.approvedRules;
@@ -187,8 +201,8 @@ const BackendPanel: React.FC<{
           authStatus={descriptor.auth ? auth.status : undefined}
           managedInstall={managedInstall}
           resolvedPath={resolvedPath ? formatBinaryPathForDisplay(resolvedPath) : null}
-          onConfigure={() => descriptor.openInstallUI(plugin.app, plugin.manifest)}
-          destination={descriptor.dataDestination?.(settings, getVaultBase(plugin.app))}
+          onConfigure={() => descriptor.openInstallUI(app, manifest)}
+          destination={descriptor.dataDestination?.(settings, getVaultBase(app))}
         />
 
         {installState.kind === "ready" && manager && (
@@ -201,7 +215,7 @@ const BackendPanel: React.FC<{
           </div>
         )}
 
-        {Panel && <Panel app={plugin.app} manifest={plugin.manifest} />}
+        {Panel && <Panel app={app} manifest={manifest} />}
 
         {/* Only agents whose backend can read and remove its saved rules offer the page.
             https://github.com/Brevilabs/obsidian-copilot-private/issues/865 */}
@@ -219,7 +233,7 @@ const BackendPanel: React.FC<{
                   <ApprovedRulesPage
                     agentName={descriptor.displayName}
                     store={approvedRules}
-                    app={plugin.app}
+                    app={app}
                     onBack={subPage.close}
                   />
                 )

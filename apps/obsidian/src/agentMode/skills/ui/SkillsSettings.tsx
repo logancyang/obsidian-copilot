@@ -43,7 +43,6 @@ import { useSettingsValue } from "@/settings/model";
 import { AlertTriangle, Search } from "lucide-react";
 import { App, FileSystemAdapter, Notice, TFolder } from "obsidian";
 import { useApp } from "@/context";
-import { usePlugin } from "@/contexts/PluginContext";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const SYNC_BRANDS: ReadonlyArray<{ substr: string; brand: string }> = [
@@ -58,9 +57,12 @@ const BUILTIN_ROWS = BUILTIN_SKILLS.map((skill) => ({
   content: skill.skillMd,
 }));
 
-export const SkillsSettings: React.FC = () => {
+interface SkillsSettingsProps {
+  newAgentChatWithDraft: (draft: string) => void;
+}
+
+export const SkillsSettings: React.FC<SkillsSettingsProps> = ({ newAgentChatWithDraft }) => {
   const app = useApp();
-  const plugin = usePlugin();
   const settings = useSettingsValue();
   const skillsFolder = deriveSkillsFolder(settings);
   const descriptors = useMemo(() => listBackendDescriptors(), []);
@@ -203,9 +205,9 @@ export const SkillsSettings: React.FC = () => {
   const handleFixWithAgent = useCallback(
     (issues: readonly SkillRepairEvidence[]): void => {
       (app as unknown as { setting: { close: () => void } }).setting.close();
-      void plugin.newAgentChatWithDraft(buildSkillRepairPrompt(issues));
+      newAgentChatWithDraft(buildSkillRepairPrompt(issues));
     },
-    [app, plugin]
+    [app, newAgentChatWithDraft]
   );
 
   const loadIssues = useMemo<SkillLoadIssue[]>(() => {

@@ -5,7 +5,6 @@ import { SettingSlider } from "@/components/ui/setting-slider";
 import { SettingSwitch } from "@/components/ui/setting-switch";
 import { createProductUrl, PRODUCT_URLS } from "@/lib/productLinks";
 import { useApp } from "@/context";
-import { usePlugin } from "@/contexts/PluginContext";
 import { cn } from "@/lib/utils";
 import { logWarn } from "@/logger";
 import { MiyoClient } from "@/miyo/MiyoClient";
@@ -80,9 +79,12 @@ function chatSyncStatusText(status: CapabilityStatus): string {
   }
 }
 
-export const MiyoSettings: React.FC = () => {
+interface MiyoSettingsProps {
+  isPluginLifecycleActive: () => boolean;
+}
+
+export const MiyoSettings: React.FC<MiyoSettingsProps> = ({ isPluginLifecycleActive }) => {
   const app = useApp();
-  const plugin = usePlugin();
   const settings = useSettingsValue();
   const status = useMiyoStatus();
 
@@ -232,9 +234,7 @@ export const MiyoSettings: React.FC = () => {
     }
     const attempt = (connectAttemptRef.current += 1);
     const superseded = () =>
-      connectAttemptRef.current !== attempt ||
-      !mountedRef.current ||
-      !plugin.isPluginLifecycleActive();
+      connectAttemptRef.current !== attempt || !mountedRef.current || !isPluginLifecycleActive();
     try {
       // Keep Copilot's own roots and Obsidian-ignored paths out of Miyo's ranked
       // candidate pool. They can contain enough chunks to exhaust the server's
@@ -285,7 +285,7 @@ export const MiyoSettings: React.FC = () => {
     const available = await enableMiyoBackend(superseded);
     if (superseded()) return "unreachable";
     return available ? "added" : "unreachable";
-  }, [app, plugin, enableMiyoBackend]);
+  }, [app, isPluginLifecycleActive, enableMiyoBackend]);
 
   const attemptConnection = useCallback(async (): Promise<ConnectOutcome | "superseded"> => {
     const attempt = (connectAttemptRef.current += 1);
@@ -297,7 +297,7 @@ export const MiyoSettings: React.FC = () => {
       getMiyoConnectionMode(getSettings()) !== getMiyoConnectionMode(target) ||
       getMiyoCustomUrl(getSettings()) !== getMiyoCustomUrl(target) ||
       !mountedRef.current ||
-      !plugin.isPluginLifecycleActive();
+      !isPluginLifecycleActive();
 
     let reachable = await probeReachable();
     if (!reachable && target.enableMiyo) reachable = await refresh(true);
@@ -315,7 +315,7 @@ export const MiyoSettings: React.FC = () => {
     const available = await enableMiyoBackend(superseded);
     if (superseded()) return "superseded";
     return available ? "connected" : "unreachable";
-  }, [app, plugin, probeReachable, enableMiyoBackend, refresh]);
+  }, [app, isPluginLifecycleActive, probeReachable, enableMiyoBackend, refresh]);
 
   const handleEvaluate = useCallback(async (): Promise<ConnectOutcome> => {
     const outcome = await attemptConnection();

@@ -1,6 +1,6 @@
 {
   "counts": {
-    "imports": 705,
+    "imports": 700,
     "clientAccess": 151
   },
   "imports": {
@@ -156,7 +156,6 @@
       "@/agentMode/skills/skillRepairPrompt",
       "@/agentMode/skills/types",
       "@/builtinSkills/builtinSkills",
-      "@/contexts/PluginContext",
       "@/settings/copilotFolder",
       "@/settings/model"
     ],
@@ -955,7 +954,6 @@
       "@/settings/v2/components/CapabilityRow"
     ],
     "apps/obsidian/src/miyo/settings/MiyoSettings.tsx": [
-      "@/contexts/PluginContext",
       "@/miyo/MiyoClient",
       "@/miyo/MiyoServiceDiscovery",
       "@/miyo/miyoIndex",
@@ -1050,13 +1048,11 @@
     ],
     "apps/obsidian/src/settings/v2/components/AdvancedSettings.tsx": [
       "@/agentMode",
-      "@/contexts/PluginContext",
       "@/settings/v2/components/LegacyChatPromptsNotice"
     ],
     "apps/obsidian/src/settings/v2/components/AgentSettings.tsx": [
       "./QuickChatPanel",
-      "@/agentMode",
-      "@/contexts/PluginContext"
+      "@/agentMode"
     ],
     "apps/obsidian/src/settings/v2/components/BasicSettings.tsx": [
       "@/instructions/agentsFile",
@@ -1069,7 +1065,6 @@
       "@/types"
     ],
     "apps/obsidian/src/settings/v2/components/ConfiguredModelEnableList.tsx": ["@/agentMode"],
-    "apps/obsidian/src/settings/v2/components/ConnectorsSettings.tsx": ["@/contexts/PluginContext"],
     "apps/obsidian/src/settings/v2/components/VaultInstructionsSetting.tsx": [
       "@/instructions/InstructionsTextarea"
     ],

@@ -71,7 +71,7 @@ export function useBackendInstallState(descriptor: BackendDescriptor): InstallSt
 
 export function useManagedInstallActionState(
   descriptor: BackendDescriptor,
-  plugin: CopilotPlugin
+  plugin: Pick<CopilotPlugin, "app" | "manifest">
 ): ManagedInstallActionState {
   const action = descriptor.managedInstall;
   const subscribe = React.useCallback(

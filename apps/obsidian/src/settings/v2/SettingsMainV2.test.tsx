@@ -3,12 +3,14 @@ import SettingsMainV2 from "@/settings/v2/SettingsMainV2";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
 
+const mockPanelProps: Record<string, Record<string, unknown>> = {};
 jest.mock("@/settings/v2/components/BasicSettings", () => {
   const { useState } = jest.requireActual<typeof import("react")>("react");
   const { useSettingsSubPage } = jest.requireActual<typeof import("@/settings/v2/SettingsSubPage")>(
     "@/settings/v2/SettingsSubPage"
   );
-  const MockBasicSettings = () => {
+  const MockBasicSettings = (props: Record<string, unknown>) => {
+    mockPanelProps.basic = props;
     const { open, close } = useSettingsSubPage();
     const [agentTab, setAgentTab] = useState("OpenCode");
     return (
@@ -34,23 +36,41 @@ jest.mock("@/settings/v2/components/BasicSettings", () => {
   return { BasicSettings: MockBasicSettings };
 });
 jest.mock("@/miyo/settings/MiyoSettings", () => ({
-  MiyoSettings: () => <div>Miyo settings content</div>,
+  MiyoSettings: (props: Record<string, unknown>) => {
+    mockPanelProps.miyo = props;
+    return <div>Miyo settings content</div>;
+  },
 }));
 jest.mock("@/settings/v2/components/SelfHostSettings", () => ({ SelfHostSettings: () => null }));
 jest.mock("@/settings/v2/components/CommandSettings", () => ({ CommandSettings: () => null }));
-jest.mock("@/settings/v2/components/AdvancedSettings", () => ({ AdvancedSettings: () => null }));
+jest.mock("@/settings/v2/components/AdvancedSettings", () => ({
+  AdvancedSettings: (props: Record<string, unknown>) => {
+    mockPanelProps.advanced = props;
+    return null;
+  },
+}));
 jest.mock("@/settings/v2/components/DesktopOnlySettingsPanel", () => ({
   DesktopOnlySettingsPanel: () => null,
 }));
 const mockSkillManagerRefresh = jest.fn().mockResolvedValue(undefined);
+const mockOpenReportIssueModal = jest.fn();
 jest.mock("@/agentMode", () => ({
-  SkillsSettings: () => null,
+  SkillsSettings: (props: Record<string, unknown>) => {
+    mockPanelProps.skills = props;
+    return <div>Skills settings content</div>;
+  },
+  openReportIssueModal: (...args: unknown[]): void => {
+    mockOpenReportIssueModal(...args);
+  },
 }));
 jest.mock("@/modelManagement", () => ({
   ByokPanel: () => null,
   ModelManagementProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
-jest.mock("@/settings/model", () => ({ resetSettings: jest.fn() }));
+jest.mock("@/settings/model", () => ({
+  getSettings: () => ({ agentMode: { activeBackend: "codex" } }),
+  resetSettings: jest.fn(),
+}));
 let mockSkillLoadErrorCount = 0;
 jest.mock("@/settings/skillLoadErrorState", () => ({
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; the name must match the export
@@ -64,7 +84,10 @@ jest.mock("@/hooks/useLatestVersion", () => ({
 }));
 jest.mock("@/utils/desktopRuntime", () => ({ isDesktopRuntime: () => true }));
 jest.mock("@/settings/v2/components/ConnectorsSettings", () => ({
-  ConnectorsSettings: () => null,
+  ConnectorsSettings: (props: Record<string, unknown>) => {
+    mockPanelProps.connectors = props;
+    return null;
+  },
 }));
 let mockConnectorsEnabled: boolean | undefined = true;
 jest.mock("@/connectors/connectorsEntitlement", () => ({
@@ -94,6 +117,7 @@ describe("SettingsMainV2", () => {
       mockHasUpdate = false;
       mockConnectorsEnabled = true;
       mockSkillManagerRefresh.mockClear();
+      mockOpenReportIssueModal.mockClear();
     });
 
     it("shows the installed version and latest version from the shared update hook", () => {
@@ -193,6 +217,89 @@ describe("SettingsMainV2", () => {
 
       expect(screen.getByRole("tab", { name: "Miyo" }).getAttribute("aria-selected")).toBe("true");
       expect(screen.getByText("Miyo settings content")).toBeTruthy();
+    });
+
+    it("gives the Basic tab's agent settings the plugin's chat manager and manifest", () => {
+      const agentSessionManager = { getActiveSession: () => null };
+      render(
+        <SettingsMainV2 plugin={{ ...plugin, agentSessionManager } as unknown as CopilotPlugin} />
+      );
+
+      expect(mockPanelProps.basic.agentSettings).toEqual({
+        agentSessionManager,
+        manifest: plugin.manifest,
+      });
+    });
+
+    it("gives the Connectors tab the plugin's connection manager, connector tools and custom connectors", () => {
+      const services = {
+        connectionManager: withConnectorsNeedingAttention(false).connectionManager,
+        connectorTools: { name: "tools" },
+        customConnectors: { name: "custom" },
+      };
+      render(
+        <SettingsMainV2
+          plugin={{ ...plugin, ...services } as unknown as CopilotPlugin}
+          initialTab="connectors"
+        />
+      );
+
+      expect(mockPanelProps.connectors).toEqual(services);
+    });
+
+    it("lets the Miyo tab ask whether the plugin is still loaded at the moment it checks", () => {
+      let loaded = true;
+      const lifecyclePlugin = {
+        ...plugin,
+        isPluginLifecycleActive: () => loaded,
+      } as unknown as CopilotPlugin;
+      render(<SettingsMainV2 plugin={lifecyclePlugin} initialTab="miyo" />);
+      const isPluginLifecycleActive = mockPanelProps.miyo.isPluginLifecycleActive as () => boolean;
+
+      expect(isPluginLifecycleActive()).toBe(true);
+      loaded = false;
+      expect(isPluginLifecycleActive()).toBe(false);
+    });
+
+    it("starts the Skills tab's repair chat through the plugin with the draft the panel wrote", async () => {
+      const newAgentChatWithDraft = jest.fn().mockResolvedValue(undefined);
+      render(
+        <SettingsMainV2
+          plugin={{ ...plugin, newAgentChatWithDraft } as unknown as CopilotPlugin}
+          initialTab="skills"
+        />
+      );
+      await screen.findByText("Skills settings content");
+
+      (mockPanelProps.skills.newAgentChatWithDraft as (draft: string) => void)("Repair my skills");
+
+      expect(newAgentChatWithDraft).toHaveBeenCalledWith("Repair my skills");
+    });
+
+    it("opens the issue report from the Advanced tab for the open chat's agent", async () => {
+      const reportPlugin = {
+        ...plugin,
+        agentSessionManager: { getActiveSession: () => ({ backendId: "claude" }) },
+      } as unknown as CopilotPlugin;
+      render(<SettingsMainV2 plugin={reportPlugin} initialTab="advanced" />);
+
+      (mockPanelProps.advanced.onReportIssue as () => void)();
+
+      await waitFor(() =>
+        expect(mockOpenReportIssueModal).toHaveBeenCalledWith(reportPlugin, {
+          activeBackend: "claude",
+        })
+      );
+    });
+
+    it("opens the issue report for the default agent when no chat is open", async () => {
+      render(<SettingsMainV2 plugin={plugin} initialTab="advanced" />);
+
+      (mockPanelProps.advanced.onReportIssue as () => void)();
+
+      await waitFor(() =>
+        expect(mockOpenReportIssueModal).toHaveBeenCalledWith(plugin, { activeBackend: "codex" })
+      );
     });
   });
 });

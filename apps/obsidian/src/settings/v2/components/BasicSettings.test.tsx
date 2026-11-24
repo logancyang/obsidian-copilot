@@ -1,5 +1,6 @@
 import { DEFAULT_SETTINGS } from "@/constants";
 import { settingsAtom, settingsStore } from "@/settings/model";
+import type { AgentSettingsProps } from "@/settings/v2/components/AgentSettings";
 import { BasicSettings } from "@/settings/v2/components/BasicSettings";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { Notice } from "obsidian";
@@ -7,9 +8,18 @@ import React from "react";
 
 jest.mock("@/settings/v2/components/PlusSettings", () => ({ PlusSettings: () => null }));
 
+const mockAgentSettings = jest.fn();
 jest.mock("@/settings/v2/components/AgentSettings", () => ({
-  AgentSettings: () => <div data-testid="agents-section">agents</div>,
+  AgentSettings: (props: unknown) => {
+    mockAgentSettings(props);
+    return <div data-testid="agents-section">agents</div>;
+  },
 }));
+
+const AGENT_SETTINGS = {
+  agentSessionManager: undefined,
+  manifest: { id: "copilot", version: "1.2.3" },
+} as unknown as AgentSettingsProps;
 
 jest.mock("@/settings/v2/components/QuickChatPanel", () => ({
   QuickChatPanel: () => <div>Quick Chat models</div>,
@@ -88,7 +98,7 @@ describe("BasicSettings", () => {
     });
 
     it("puts the Agents section above General so setup comes before preferences", async () => {
-      render(<BasicSettings />);
+      render(<BasicSettings agentSettings={AGENT_SETTINGS} />);
       const agents = await screen.findByTestId("agents-section");
       const general = screen.getByText("General");
       expect(
@@ -96,9 +106,16 @@ describe("BasicSettings", () => {
       ).toBeTruthy();
     });
 
+    it("hands the Agents section the agent settings it was given", async () => {
+      render(<BasicSettings agentSettings={AGENT_SETTINGS} />);
+
+      await screen.findByTestId("agents-section");
+      expect(mockAgentSettings).toHaveBeenLastCalledWith(AGENT_SETTINGS);
+    });
+
     it("shows Quick Chat settings beside the desktop agent notice on mobile (https://github.com/Brevilabs/obsidian-copilot-private/issues/373)", async () => {
       isDesktopRuntime.mockReturnValue(false);
-      render(<BasicSettings />);
+      render(<BasicSettings agentSettings={AGENT_SETTINGS} />);
       expect(screen.getByText("Agent settings are available on desktop.")).not.toBeNull();
       expect(screen.queryByTestId("agents-section")).toBeNull();
       expect(screen.getByText("Quick Chat models")).not.toBeNull();
@@ -106,7 +123,7 @@ describe("BasicSettings", () => {
     });
 
     it("hides the filename template behind a collapsed Advanced disclosure", () => {
-      render(<BasicSettings />);
+      render(<BasicSettings agentSettings={AGENT_SETTINGS} />);
       expect(screen.getByRole("button", { name: "Advanced" })).not.toBeNull();
       expect(screen.queryByText("Chat note name template")).toBeNull();
 
@@ -120,14 +137,14 @@ describe("BasicSettings", () => {
         copilotFolder: "copilot",
         autosaveChat: false,
       });
-      render(<BasicSettings />);
+      render(<BasicSettings agentSettings={AGENT_SETTINGS} />);
 
       fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
       expect(screen.getByText("Chat note name template")).not.toBeNull();
     });
 
     it("turns off active-note auto-attach from its switch (https://github.com/logancyang/obsidian-copilot/issues/3663)", () => {
-      render(<BasicSettings />);
+      render(<BasicSettings agentSettings={AGENT_SETTINGS} />);
 
       const row = screen.getByText("Auto-attach active note").parentElement!.parentElement!;
       fireEvent.click(within(row).getByRole("switch"));
@@ -136,12 +153,12 @@ describe("BasicSettings", () => {
     });
 
     it("binds the Copilot folder input to the persisted root", () => {
-      render(<BasicSettings />);
+      render(<BasicSettings agentSettings={AGENT_SETTINGS} />);
       expect(screen.getByLabelText<HTMLInputElement>("Copilot folder").value).toBe("copilot");
     });
 
     it("rejects an invalid root on Apply without opening the confirm modal", () => {
-      render(<BasicSettings />);
+      render(<BasicSettings agentSettings={AGENT_SETTINGS} />);
       fireEvent.change(screen.getByLabelText("Copilot folder"), { target: { value: "../escape" } });
       fireEvent.click(screen.getByRole("button", { name: "Apply Copilot folder" }));
       expect(Notice).toHaveBeenCalledTimes(1);
@@ -150,7 +167,7 @@ describe("BasicSettings", () => {
     });
 
     it("rejects a root inside the vault's active config directory", () => {
-      render(<BasicSettings />);
+      render(<BasicSettings agentSettings={AGENT_SETTINGS} />);
       fireEvent.change(screen.getByLabelText("Copilot folder"), {
         target: { value: ".vault-config/plugins" },
       });
@@ -163,7 +180,7 @@ describe("BasicSettings", () => {
 
     it("rejects a root whose path is occupied by an existing file without opening the confirm modal", () => {
       findCopilotRootFileConflict.mockReturnValue("ai.txt");
-      render(<BasicSettings />);
+      render(<BasicSettings agentSettings={AGENT_SETTINGS} />);
       fireEvent.change(screen.getByLabelText("Copilot folder"), { target: { value: "ai.txt" } });
       fireEvent.click(screen.getByRole("button", { name: "Apply Copilot folder" }));
       expect(Notice).toHaveBeenCalledTimes(1);
@@ -173,7 +190,7 @@ describe("BasicSettings", () => {
 
     it("opens a warning confirmation for a root that already contains Markdown", () => {
       copilotRootContainsNotes.mockReturnValue(true);
-      render(<BasicSettings />);
+      render(<BasicSettings agentSettings={AGENT_SETTINGS} />);
       fireEvent.change(screen.getByLabelText("Copilot folder"), { target: { value: "existing" } });
       fireEvent.click(screen.getByRole("button", { name: "Apply Copilot folder" }));
 
@@ -192,7 +209,7 @@ describe("BasicSettings", () => {
         copilotRootHistory: ["copilot", "old-root"],
       });
       copilotRootContainsNotes.mockReturnValue(true);
-      render(<BasicSettings />);
+      render(<BasicSettings agentSettings={AGENT_SETTINGS} />);
       fireEvent.change(screen.getByLabelText("Copilot folder"), { target: { value: "old-root" } });
       fireEvent.click(screen.getByRole("button", { name: "Apply Copilot folder" }));
 
@@ -202,7 +219,7 @@ describe("BasicSettings", () => {
     });
 
     it("opens the confirm modal for a valid new root and applies the change on confirm", () => {
-      render(<BasicSettings />);
+      render(<BasicSettings agentSettings={AGENT_SETTINGS} />);
       fireEvent.change(screen.getByLabelText("Copilot folder"), { target: { value: "ai" } });
       fireEvent.click(screen.getByRole("button", { name: "Apply Copilot folder" }));
       expect(modalCtor).toHaveBeenCalledTimes(1);
@@ -214,20 +231,20 @@ describe("BasicSettings", () => {
     });
 
     it("does nothing when Apply is pressed with the current root unchanged", () => {
-      render(<BasicSettings />);
+      render(<BasicSettings agentSettings={AGENT_SETTINGS} />);
       fireEvent.click(screen.getByRole("button", { name: "Apply Copilot folder" }));
       expect(modalCtor).not.toHaveBeenCalled();
       expect(applyCopilotRootChange).not.toHaveBeenCalled();
     });
 
     it("opens a blank vault AGENTS.md, never seeded from a Chat prompt", async () => {
-      render(<BasicSettings />);
+      render(<BasicSettings agentSettings={AGENT_SETTINGS} />);
       fireEvent.click(await screen.findByRole("button", { name: /Open AGENTS.md/ }));
       await waitFor(() => expect(openAgentsFile).toHaveBeenCalledWith(expect.anything(), ""));
     });
 
     it("lands a pending edit before opening the file, so the open cannot race the save", async () => {
-      render(<BasicSettings />);
+      render(<BasicSettings agentSettings={AGENT_SETTINGS} />);
       const editor = await screen.findByRole("textbox", { name: "Custom vault instructions" });
       fireEvent.change(editor, { target: { value: "Always cite." } });
 
@@ -242,7 +259,7 @@ describe("BasicSettings", () => {
 
     it("shows what the vault AGENTS.md already says, so editing starts from the real file", async () => {
       readAgentsFile.mockResolvedValue("Cite every source.");
-      render(<BasicSettings />);
+      render(<BasicSettings agentSettings={AGENT_SETTINGS} />);
       const editor = await screen.findByRole<HTMLTextAreaElement>("textbox", {
         name: "Custom vault instructions",
       });
@@ -253,7 +270,7 @@ describe("BasicSettings", () => {
     it("saves an edit back to the vault AGENTS.md once typing settles", async () => {
       jest.useFakeTimers();
       try {
-        render(<BasicSettings />);
+        render(<BasicSettings agentSettings={AGENT_SETTINGS} />);
         const editor = await screen.findByRole("textbox", { name: "Custom vault instructions" });
         fireEvent.change(editor, { target: { value: "Always cite." } });
 
@@ -278,7 +295,7 @@ describe("BasicSettings", () => {
               settleFirst = resolve;
             })
         );
-        render(<BasicSettings />);
+        render(<BasicSettings agentSettings={AGENT_SETTINGS} />);
         const editor = await screen.findByRole("textbox", { name: "Custom vault instructions" });
 
         fireEvent.change(editor, { target: { value: "First" } });
@@ -308,7 +325,7 @@ describe("BasicSettings", () => {
     it("does not lose a pending edit when the tab closes mid-sentence", async () => {
       jest.useFakeTimers();
       try {
-        const { unmount } = render(<BasicSettings />);
+        const { unmount } = render(<BasicSettings agentSettings={AGENT_SETTINGS} />);
         const editor = await screen.findByRole("textbox", { name: "Custom vault instructions" });
         fireEvent.change(editor, { target: { value: "Half a thou" } });
         unmount();
@@ -324,13 +341,13 @@ describe("BasicSettings", () => {
 
     it("points a user who saved Chat prompts at the folder still holding them", () => {
       systemPrompts.mockReturnValue([{ title: "Editor" }, { title: "Researcher" }]);
-      render(<BasicSettings />);
+      render(<BasicSettings agentSettings={AGENT_SETTINGS} />);
       expect(screen.getByText(/2 saved system prompts are/)).toBeTruthy();
       expect(screen.getByText("copilot/system-prompts")).toBeTruthy();
     });
 
     it("says nothing about Chat prompts to a user who never saved one", () => {
-      render(<BasicSettings />);
+      render(<BasicSettings agentSettings={AGENT_SETTINGS} />);
       expect(screen.queryByText(/saved system prompt/)).toBeNull();
     });
   });

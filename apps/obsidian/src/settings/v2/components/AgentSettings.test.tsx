@@ -6,7 +6,9 @@ import { setSettings } from "@/settings/model";
 import { playNotificationSound } from "@/utils/notificationSound";
 import { TabProvider } from "@/settings/v2/TabContext";
 import { SettingsSubPageHost } from "@/settings/v2/SettingsSubPage";
-import { AgentSettings } from "./AgentSettings";
+import { AppContext } from "@/context";
+import type { App, PluginManifest } from "obsidian";
+import { AgentSettings, type AgentSettingsProps } from "./AgentSettings";
 
 jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError: jest.fn() }));
 
@@ -60,6 +62,8 @@ const claudeRuleStore = {
   remove: jest.fn(),
 };
 
+const mockSettingsPanelProps: Record<string, { app: App; manifest: PluginManifest }> = {};
+
 function makeDescriptor(id: string, displayName: string, selfHostable = false) {
   return {
     id,
@@ -70,7 +74,10 @@ function makeDescriptor(id: string, displayName: string, selfHostable = false) {
     getInstallState: () => installStates[id],
     getResolvedBinaryPath: () => resolvedPaths[id] ?? null,
     openInstallUI: jest.fn(),
-    SettingsPanel: () => <div data-testid={`panel-${id}`}>settings panel</div>,
+    SettingsPanel: (props: { app: App; manifest: PluginManifest }) => {
+      mockSettingsPanelProps[id] = props;
+      return <div data-testid={`panel-${id}`}>settings panel</div>;
+    },
     ...(id === "claude" ? { approvedRules: claudeRuleStore } : {}),
     ...(id === "codex"
       ? {
@@ -84,14 +91,21 @@ function makeDescriptor(id: string, displayName: string, selfHostable = false) {
   };
 }
 
+const TEST_APP = { vault: {} } as unknown as App;
+const TEST_MANIFEST = { id: "copilot", version: "1.2.3" } as PluginManifest;
+
 const SettingsView: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <TabProvider>
-    <SettingsSubPageHost>{children}</SettingsSubPageHost>
-  </TabProvider>
+  <AppContext.Provider value={TEST_APP}>
+    <TabProvider>
+      <SettingsSubPageHost>{children}</SettingsSubPageHost>
+    </TabProvider>
+  </AppContext.Provider>
 );
 
+let agentSettingsProps: AgentSettingsProps;
+
 function renderAgentSettings() {
-  return render(<AgentSettings />, { wrapper: SettingsView });
+  return render(<AgentSettings {...agentSettingsProps} />, { wrapper: SettingsView });
 }
 
 const DESCRIPTORS = [
@@ -100,6 +114,7 @@ const DESCRIPTORS = [
   makeDescriptor("codex", "Codex", false),
 ];
 
+const mockManagedInstallHostArgs: Record<string, unknown> = {};
 const mockGetCachedModelCatalog = jest.fn();
 const mockPreloadModels = jest.fn();
 
@@ -125,22 +140,13 @@ jest.mock("@/agentMode", () => ({
     return React.useSyncExternalStore(subscribe, read, read);
   },
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook export
-  useManagedInstallActionState: (descriptor: { id: string }) =>
-    managedInstallStates[descriptor.id] ?? { kind: "idle" },
+  useManagedInstallActionState: (descriptor: { id: string }, appAndManifest: unknown) => {
+    mockManagedInstallHostArgs[descriptor.id] = appAndManifest;
+    return managedInstallStates[descriptor.id] ?? { kind: "idle" };
+  },
   AgentDefaultModelSetting: ({ descriptor }: { descriptor: { id: string } }) => (
     <div data-testid={`default-model-${descriptor.id}`}>default model</div>
   ),
-}));
-
-jest.mock("@/contexts/PluginContext", () => ({
-  // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real `usePlugin` hook; the name must match the export
-  usePlugin: () => ({
-    app: {},
-    agentSessionManager: {
-      getCachedModelCatalog: mockGetCachedModelCatalog,
-      preloadModels: mockPreloadModels,
-    },
-  }),
 }));
 
 jest.mock("./ChatModelEnableList", () => ({
@@ -186,6 +192,13 @@ describe("AgentSettings", () => {
         },
       ]);
       claudeRuleStore.remove.mockReset().mockResolvedValue(undefined);
+      agentSettingsProps = {
+        agentSessionManager: {
+          getCachedModelCatalog: mockGetCachedModelCatalog,
+          preloadModels: mockPreloadModels,
+        } as unknown as AgentSettingsProps["agentSessionManager"],
+        manifest: TEST_MANIFEST,
+      };
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/865 offers Edit approved rules only on tabs of agents that can list their saved rules", () => {
@@ -201,7 +214,7 @@ describe("AgentSettings", () => {
       render(
         <SettingsView>
           <h1>Copilot settings</h1>
-          <AgentSettings />
+          <AgentSettings {...agentSettingsProps} />
           <section aria-label="General">General settings</section>
         </SettingsView>
       );
@@ -236,10 +249,10 @@ describe("AgentSettings", () => {
         expect(screen.getByText("Sign in required")).toBeTruthy();
         expect(screen.queryByText("Ready")).toBeNull();
         mockAuthStatuses[id] = null;
-        view.rerender(<AgentSettings />);
+        view.rerender(<AgentSettings {...agentSettingsProps} />);
         expect(screen.getByText("Checking sign-in…")).toBeTruthy();
         mockAuthStatuses[id] = { signedIn: true };
-        view.rerender(<AgentSettings />);
+        view.rerender(<AgentSettings {...agentSettingsProps} />);
         expect(screen.getByText("Ready")).toBeTruthy();
       }
     );
@@ -396,18 +409,42 @@ describe("AgentSettings", () => {
       expect(runManagedInstall).not.toHaveBeenCalled();
 
       managedInstallStates.codex = { kind: "running", label: "Installing… 30%" };
-      view.rerender(<AgentSettings />);
+      view.rerender(<AgentSettings {...agentSettingsProps} />);
       expect(screen.getByText("Installing… 30%")).toBeTruthy();
       expect(screen.getByRole("button", { name: "Configure" }).hasAttribute("disabled")).toBe(
         false
       );
 
       managedInstallStates.codex = { kind: "error", message: "npm unavailable" };
-      view.rerender(<AgentSettings />);
+      view.rerender(<AgentSettings {...agentSettingsProps} />);
       expect(screen.getByText("npm unavailable")).toBeTruthy();
       fireEvent.click(screen.getByRole("button", { name: "Configure" }));
       expect(DESCRIPTORS.find((d) => d.id === "codex")!.openInstallUI).toHaveBeenCalledTimes(2);
       expect(runManagedInstall).not.toHaveBeenCalled();
+    });
+
+    it("hands each agent's install controls and settings panel the app and the plugin manifest it was given", () => {
+      renderAgentSettings();
+
+      fireEvent.click(screen.getByRole("button", { name: "Configure" }));
+
+      expect(DESCRIPTORS[0].openInstallUI).toHaveBeenCalledWith(TEST_APP, TEST_MANIFEST);
+      expect(mockSettingsPanelProps.opencode).toEqual({ app: TEST_APP, manifest: TEST_MANIFEST });
+      expect(mockManagedInstallHostArgs.opencode).toEqual({
+        app: TEST_APP,
+        manifest: TEST_MANIFEST,
+      });
+    });
+
+    it("shows no default-model picker and preloads no models when it has no chat manager", () => {
+      agentSettingsProps = { ...agentSettingsProps, agentSessionManager: undefined };
+
+      renderAgentSettings();
+
+      expect(screen.queryByTestId("default-model-opencode")).toBeNull();
+      expect(screen.getByTestId("model-list-opencode")).not.toBeNull();
+      expect(mockGetCachedModelCatalog).not.toHaveBeenCalled();
+      expect(mockPreloadModels).not.toHaveBeenCalled();
     });
   });
 });
