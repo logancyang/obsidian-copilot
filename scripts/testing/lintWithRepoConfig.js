@@ -13,8 +13,10 @@ function lintWithRepoConfig(root, probes) {
       process.stdout.write(JSON.stringify(reports));
     })();
   `;
+  const envThatLintsProbeTextEvenWhenCiIsSet = { ...process.env, TSESTREE_SINGLE_RUN: "false" };
   const output = execFileSync(process.execPath, ["-e", script, JSON.stringify(probes)], {
     cwd: root,
+    env: envThatLintsProbeTextEvenWhenCiIsSet,
   });
   return JSON.parse(output.toString());
 }
