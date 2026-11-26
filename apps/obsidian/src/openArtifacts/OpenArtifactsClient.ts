@@ -277,7 +277,8 @@ export class OpenArtifactsClient {
     ) {
       throw malformedResponse(response.status);
     }
-    return value as unknown as OpenArtifactsAccess;
+    const { customUrl, ...access } = value;
+    return { ...access, ...parseCustomUrl(customUrl, docId) } as unknown as OpenArtifactsAccess;
   }
 
   private async threads(
@@ -399,7 +400,7 @@ function parseReceipt(response: RequestUrlResponse, expectedDocId?: string): Ope
     throw malformedResponse(response.status);
   }
 
-  const { docId, url, version, linkAccess, guidance } = value;
+  const { docId, url, customUrl, version, linkAccess, guidance } = value;
   if (
     typeof docId !== "string" ||
     !OPENARTIFACTS_DOC_ID_PATTERN.test(docId) ||
@@ -417,9 +418,29 @@ function parseReceipt(response: RequestUrlResponse, expectedDocId?: string): Ope
     docId,
     url,
     version,
+    ...parseCustomUrl(customUrl, docId),
     ...((linkAccess === "anyone" || linkAccess === "invited") && { linkAccess }),
     ...(isGuidance(guidance) && { guidance: { message: guidance.message, url: guidance.url } }),
   };
+}
+
+// A bad optional share link must not turn a successful publish into an ambiguous one.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/1024
+function parseCustomUrl(value: unknown, docId: string): { customUrl: string } | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" &&
+      !url.username &&
+      !url.password &&
+      url.pathname === `/d/${docId}`
+      ? { customUrl: value }
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function isGuidance(value: unknown): value is OpenArtifactsGuidance {

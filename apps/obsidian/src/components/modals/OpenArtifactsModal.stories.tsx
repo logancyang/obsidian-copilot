@@ -9,6 +9,7 @@ import {
 } from "./OpenArtifactsModal";
 
 const DOC_ID = "9f2k4mvq7t0xbz3n";
+const CUSTOM_URL = `https://docs.example.com/d/${DOC_ID}`;
 const PRICING_URL = createProductUrl(PRODUCT_URLS.COPILOT_PRICING, "openartifacts_private_sharing");
 
 const PUBLIC_ACCESS: OpenArtifactsAccess = {
@@ -98,6 +99,10 @@ export const Manage: StoryObj<OpenArtifactsModalContentProps> = {
   args: { docId: DOC_ID, access: fakeAccessPort(PUBLIC_ACCESS) },
 };
 
+export const ManageWithCustomDomain: StoryObj<OpenArtifactsModalContentProps> = {
+  args: { docId: DOC_ID, access: fakeAccessPort({ ...PUBLIC_ACCESS, customUrl: CUSTOM_URL }) },
+};
+
 // The first-publish confirmation with Only those invited chosen.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/707
 export const PublishPrivate: StoryObj<OpenArtifactsModalContentProps> = {
@@ -169,6 +174,17 @@ export const PublishedWithAccessPanel: StoryObj<OpenArtifactsModalContentProps> 
       kind: "success",
       action: "publish",
       receipt: { docId: DOC_ID, url: PRIVATE_ACCESS.url, version: 1, linkAccess: "invited" },
+    },
+  },
+};
+
+export const PublishedWithCustomDomain: StoryObj<OpenArtifactsModalContentProps> = {
+  args: {
+    access: fakeAccessPort({ ...PUBLIC_ACCESS, customUrl: CUSTOM_URL }),
+    initialResult: {
+      kind: "success",
+      action: "publish",
+      receipt: { docId: DOC_ID, url: PUBLIC_ACCESS.url, version: 1, customUrl: CUSTOM_URL },
     },
   },
 };

@@ -43,6 +43,8 @@ const RECEIPT: OpenArtifactsReceipt = {
   version: 2,
 };
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/707";
+const CUSTOM_DOMAIN_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/1024";
+const CUSTOM_URL = `https://docs.example.com/d/${DOC_ID}`;
 const mountedModals: OpenArtifactsModal[] = [];
 
 function accessFixture(overrides: Partial<OpenArtifactsAccess> = {}): OpenArtifactsAccess {
@@ -268,6 +270,28 @@ describe("OpenArtifactsModal", () => {
 
         await clickButton("Copy link");
         expect(writeText).toHaveBeenCalledWith(RECEIPT.url);
+        await clickButton("Open");
+        expect(port.open).toHaveBeenCalledWith(DOC_ID);
+        expect(open).toHaveBeenCalledWith(RECEIPT.url, "_blank", "noopener,noreferrer");
+      });
+
+      it(`${CUSTOM_DOMAIN_ISSUE} shows and copies the custom link in the access panel while Open uses the owner link`, async () => {
+        const writeText = jest.fn().mockResolvedValue(undefined);
+        Object.defineProperty(window.navigator, "clipboard", {
+          configurable: true,
+          value: { writeText },
+        });
+        const open = jest.spyOn(window, "open").mockImplementation(() => null);
+        const port = accessPort({
+          load: jest.fn().mockResolvedValue(accessFixture({ customUrl: CUSTOM_URL })),
+          open: jest.fn().mockResolvedValue(RECEIPT.url),
+        });
+        renderModal(createConfirmMock(), DOC_ID, undefined, undefined, port, RECEIPT.url);
+
+        const link = await screen.findByRole("link", { name: CUSTOM_URL });
+        expect(link.getAttribute("href")).toBe(CUSTOM_URL);
+        await clickButton("Copy link");
+        expect(writeText).toHaveBeenCalledWith(CUSTOM_URL);
         await clickButton("Open");
         expect(port.open).toHaveBeenCalledWith(DOC_ID);
         expect(open).toHaveBeenCalledWith(RECEIPT.url, "_blank", "noopener,noreferrer");
@@ -518,7 +542,7 @@ describe("OpenArtifactsModal", () => {
         expect(screen.queryByRole("button", { name: "Retry save" })).toBeNull();
       });
 
-      it("copies and opens the API-returned URL from the success view", async () => {
+      it(`${CUSTOM_DOMAIN_ISSUE} shows and copies the receipt's custom link while Open uses the canonical link`, async () => {
         const writeText = jest.fn().mockResolvedValue(undefined);
         Object.defineProperty(window.navigator, "clipboard", {
           configurable: true,
@@ -528,21 +552,21 @@ describe("OpenArtifactsModal", () => {
         const onConfirm = createConfirmMock().mockResolvedValue({
           kind: "success",
           action: "update",
-          receipt: RECEIPT,
+          receipt: { ...RECEIPT, customUrl: CUSTOM_URL },
         });
         renderModal(onConfirm, DOC_ID);
 
         fireEvent.click(screen.getByRole("button", { name: "Update" }));
         await clickButton("Yes, update");
         expectButtonsInSameRow("Close", "Copy", "Open");
-        const link = screen.getByRole("link", { name: RECEIPT.url });
-        expect(link.getAttribute("href")).toBe(RECEIPT.url);
+        const link = screen.getByRole("link", { name: CUSTOM_URL });
+        expect(link.getAttribute("href")).toBe(CUSTOM_URL);
         expect(link.getAttribute("target")).toBe("_blank");
         expect(link.getAttribute("rel")).toBe("noopener noreferrer");
         await clickButton("Copy");
         fireEvent.click(screen.getByRole("button", { name: "Open" }));
 
-        expect(writeText).toHaveBeenCalledWith(RECEIPT.url);
+        expect(writeText).toHaveBeenCalledWith(CUSTOM_URL);
         expect(open).toHaveBeenCalledWith(RECEIPT.url, "_blank", "noopener,noreferrer");
       });
 

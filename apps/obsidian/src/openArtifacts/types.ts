@@ -18,6 +18,7 @@ export interface OpenArtifactsGuidance {
 export interface OpenArtifactsReceipt {
   docId: string;
   url: string;
+  customUrl?: string;
   version: number;
   linkAccess?: OpenArtifactsLinkAccess;
   guidance?: OpenArtifactsGuidance;
@@ -26,6 +27,7 @@ export interface OpenArtifactsReceipt {
 export interface OpenArtifactsAccess {
   docId: string;
   url: string;
+  customUrl?: string;
   linkAccess: OpenArtifactsLinkAccess;
   // Whether the server sends invite and request emails; when false the owner shares the link.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/707

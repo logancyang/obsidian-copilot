@@ -108,10 +108,13 @@ interface OpenArtifactsReceiptViewProps {
 
 function OpenArtifactsReceiptView({ receipt, access, actions }: OpenArtifactsReceiptViewProps) {
   const [copyMessage, setCopyMessage] = useState("");
+  // Publishers with a live domain share that address from the receipt.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/1024
+  const shareUrl = receipt.customUrl ?? receipt.url;
 
   const copyUrl = async (event: React.MouseEvent<HTMLButtonElement>) => {
     try {
-      await event.currentTarget.win.navigator.clipboard.writeText(receipt.url);
+      await event.currentTarget.win.navigator.clipboard.writeText(shareUrl);
       setCopyMessage("Copied");
     } catch {
       setCopyMessage("Could not copy the link");
@@ -133,16 +136,7 @@ function OpenArtifactsReceiptView({ receipt, access, actions }: OpenArtifactsRec
 
   return (
     <div className="tw-flex tw-flex-col tw-gap-3">
-      <code className="tw-break-all tw-rounded-md tw-bg-secondary tw-p-2 tw-text-small">
-        <a
-          href={receipt.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="tw-text-accent tw-underline"
-        >
-          {receipt.url}
-        </a>
-      </code>
+      <OpenArtifactsShareLink url={shareUrl} />
       <div className="tw-text-small tw-text-muted">
         Document {receipt.docId} · Version {receipt.version}
       </div>
@@ -163,6 +157,21 @@ function OpenArtifactsReceiptView({ receipt, access, actions }: OpenArtifactsRec
         <Button onClick={safeAsyncHandler(openUrl)}>Open</Button>
       </div>
     </div>
+  );
+}
+
+function OpenArtifactsShareLink({ url }: { url: string }) {
+  return (
+    <code className="tw-break-all tw-rounded-md tw-bg-secondary tw-p-2 tw-text-small">
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="tw-text-accent tw-underline"
+      >
+        {url}
+      </a>
+    </code>
   );
 }
 
@@ -222,8 +231,11 @@ function AccessPanel({
   };
 
   const copyLink = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    // A reopened dialog uses the current sharing address when the domain is live.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/1024
+    const shareUrl = state?.customUrl ?? state?.url ?? docUrl ?? "";
     try {
-      await event.currentTarget.win.navigator.clipboard.writeText(state?.url ?? docUrl ?? "");
+      await event.currentTarget.win.navigator.clipboard.writeText(shareUrl);
       setCopyMessage("Copied");
     } catch {
       setCopyMessage("Could not copy the link");
@@ -274,6 +286,9 @@ function AccessPanel({
           </div>
         </>
       )}
+      {/* The receipt already shows the share link when it owns the link actions.
+          https://github.com/Brevilabs/obsidian-copilot-private/issues/1024 */}
+      {showLinkActions && state?.customUrl && <OpenArtifactsShareLink url={state.customUrl} />}
       {showLinkActions && (
         <div className="tw-flex tw-items-center tw-justify-end tw-gap-2">
           {copyMessage && <span className="tw-text-small tw-text-muted">{copyMessage}</span>}
