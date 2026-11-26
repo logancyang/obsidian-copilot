@@ -5,7 +5,7 @@ export const OBSIDIAN_SKILLS_UPSTREAM_REVISION = "a1dc48e68138490d522c04cbf58222
 // In the Obsidian skills eval Claude and Codex wrote this syntax as well without the skills, except
 // Codex building Bases views. https://github.com/Brevilabs/obsidian-copilot-private/issues/726
 const OPENCODE_ONLY = { disabledAgents: ["claude", "codex"] };
-const FORMAT_SKILL_VERSION = 3;
+const FORMAT_SKILL_VERSION = 4;
 const MARKDOWN_SKILL_VERSION = 5;
 
 const UPSTREAM_LICENSE = String.raw`MIT License
@@ -267,7 +267,7 @@ formulas:
   days_until_due: 'if(due, (date(due) - today()).days.round(), "")'
 
 properties:
-  status:
+  note.status:
     displayName: Status
   formula.days_until_due:
     displayName: "Days Until Due"
@@ -297,7 +297,9 @@ views:
       formula.days_until_due: Average
 ~~~
 
-Views may be <code>table</code>, <code>cards</code>, or <code>list</code>.
+Views may be <code>table</code>, <code>cards</code>, <code>list</code>, or <code>kanban</code>.
+A kanban view needs <code>groupBy</code> (one column per value); <code>groupOrder</code>
+lists the columns to show, in order (<code>null</code> for no value).
 A <code>map</code> view depends on compatible map support.
 
 <code>order</code> sets which properties a view shows; <code>sort</code> sets
@@ -316,6 +318,9 @@ Filters may be a single expression or recursively nested <code>and</code>,
   <code>file.tags</code>, <code>file.links</code>, and
   <code>file.backlinks</code>
 - formulas: <code>formula.days_until_due</code>
+
+Under top-level <code>properties:</code>, always write <code>note.status</code>; Obsidian
+ignores a bare key there and keeps the raw column name.
 
 Use <code>file.hasTag()</code>, <code>file.hasLink()</code>,
 <code>file.hasProperty()</code>, and <code>file.inFolder()</code> for indexed
@@ -647,7 +652,6 @@ const OBSIDIAN_MARKDOWN: BuiltinSkill = {
 const OBSIDIAN_BASES: BuiltinSkill = {
   name: "obsidian-bases",
   version: FORMAT_SKILL_VERSION,
-  defaultPreference: { disabledAgents: ["claude"] },
   skillMd: OBSIDIAN_BASES_SKILL_MD,
   files: [
     { path: "references/FUNCTIONS_REFERENCE.md", content: BASES_FUNCTIONS_REFERENCE },

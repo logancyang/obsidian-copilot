@@ -9,10 +9,10 @@ function skillMd(name: string): string {
 
 describe("obsidianSkills", () => {
   describe("OBSIDIAN_SKILLS", () => {
-    it("offers the three skills to every agent but defaults Markdown to every agent, Bases to Codex and OpenCode, and Canvas to OpenCode, the agents the eval showed they help; Claude broke Mermaid semicolons without Markdown (https://github.com/Brevilabs/obsidian-copilot-private/issues/726, https://github.com/logancyang/obsidian-copilot/issues/3868)", () => {
+    it("offers the three skills to every agent but defaults Markdown and Bases to every agent and Canvas to OpenCode, the agents the eval showed they help; Claude broke Mermaid semicolons without Markdown and Bases header renames without Bases (https://github.com/Brevilabs/obsidian-copilot-private/issues/726, https://github.com/logancyang/obsidian-copilot/issues/3868, https://github.com/Brevilabs/obsidian-copilot-private/issues/453)", () => {
       expect(OBSIDIAN_SKILLS.map((skill) => [skill.name, skill.defaultPreference])).toEqual([
         ["obsidian-markdown", undefined],
-        ["obsidian-bases", { disabledAgents: ["claude"] }],
+        ["obsidian-bases", undefined],
         ["json-canvas", { disabledAgents: ["claude", "codex"] }],
       ]);
       for (const skill of OBSIDIAN_SKILLS) {
@@ -20,11 +20,11 @@ describe("obsidianSkills", () => {
       }
     });
 
-    it("bumps every skill whose guidance or description changed so existing vaults reseed it (https://github.com/Brevilabs/obsidian-copilot-private/issues/726, https://github.com/logancyang/obsidian-copilot/issues/3868, https://github.com/logancyang/obsidian-copilot/issues/3666, https://github.com/logancyang/obsidian-copilot/issues/3980)", () => {
+    it("bumps every skill whose guidance or description changed so existing vaults reseed it (https://github.com/Brevilabs/obsidian-copilot-private/issues/726, https://github.com/logancyang/obsidian-copilot/issues/3868, https://github.com/logancyang/obsidian-copilot/issues/3666, https://github.com/logancyang/obsidian-copilot/issues/3980, https://github.com/Brevilabs/obsidian-copilot-private/issues/453)", () => {
       expect(OBSIDIAN_SKILLS.map((skill) => [skill.name, skill.version])).toEqual([
         ["obsidian-markdown", 5],
-        ["obsidian-bases", 3],
-        ["json-canvas", 3],
+        ["obsidian-bases", 4],
+        ["json-canvas", 4],
       ]);
     });
 
@@ -149,6 +149,18 @@ describe("obsidianSkills", () => {
       );
       expect(md).toContain("(date(due) - today()).days.round()");
       expect(md).not.toMatch(/today\(\)\)\.days,/);
+    });
+
+    it("teaches Bases to rename a header with the note. prefix and to build kanban views with groupBy and groupOrder, which agents got wrong from the bare-key example (https://github.com/Brevilabs/obsidian-copilot-private/issues/453)", () => {
+      const md = skillMd("obsidian-bases");
+      expect(md).toContain("properties:\n  note.status:\n    displayName: Status");
+      expect(md).not.toMatch(/^properties:\n {2}status:/m);
+      expect(md).toContain(
+        "Under top-level <code>properties:</code>, always write <code>note.status</code>; Obsidian\nignores a bare key there and keeps the raw column name."
+      );
+      expect(md).toContain(
+        "A kanban view needs <code>groupBy</code> (one column per value); <code>groupOrder</code>\nlists the columns to show, in order (<code>null</code> for no value)."
+      );
     });
 
     it("preserves Bases schema, formula, quoting, and duration guidance", () => {
