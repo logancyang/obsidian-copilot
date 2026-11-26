@@ -86,7 +86,7 @@ You can also choose **Sign in** on the chat's status card. For terminal login, r
 
 ### Cursor
 
-Cursor uses the Cursor agent installed on your computer and the account that agent already holds. It does not use an API key from the BYOK tab. A key named `CURSOR_API_KEY` in Cursor's **Environment variables** is used instead of the browser login.
+Cursor uses the Cursor agent installed on your computer and the account that agent already holds. It does not use an API key from the BYOK tab. Sign in from **Configure**. Copilot does not ask you to save a Cursor API key in settings.
 
 1. Open **Basic → Agents → Cursor → Configure**.
 2. Select **Auto-detect**, or enter the absolute path to the `agent` executable and select **Apply**.

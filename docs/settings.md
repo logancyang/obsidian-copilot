@@ -119,7 +119,7 @@ The Codex row always offers **Configure**, including when its adapter is below t
 
 #### Cursor
 
-Cursor uses the Cursor agent on this computer and the login that agent already holds. It does not use a key from the BYOK tab. A `CURSOR_API_KEY` value under **Environment variables** signs the agent in without the browser login.
+Cursor uses the Cursor agent on this computer and the login that agent already holds. It does not use a key from the BYOK tab. Sign in from **Authentication**. Copilot does not ask you to save a Cursor API key in these settings.
 
 Select **Configure** to open these controls:
 
@@ -129,7 +129,7 @@ Select **Configure** to open these controls:
 | **Install Cursor**                                  | Not applicable                            | Shows the command that installs the Cursor agent. Copy and run it outside Copilot when Cursor is missing.                                                                          |
 | **Sign in**                                         | Not applicable                            | Starts browser sign-in. **Open sign-in page** is available if the browser does not open. Copilot never asks you to paste the login into this dialog.                               |
 | **Default model / Default effort / model switches** | Agent defaults; models reported by Cursor | Curates the models available to Cursor. Billing and limits belong to your Cursor account.                                                                                          |
-| **Environment variables**                           | No rows                                   | Passes values such as `CURSOR_API_KEY` or `HTTPS_PROXY` to the Cursor agent.                                                                                                       |
+| **Environment variables**                           | No rows                                   | Passes values such as `HTTPS_PROXY` or `NO_PROXY` to the Cursor agent.                                                                                                             |
 
 Cursor, Claude, and Codex share an **Authentication** section. The badge beside its heading shows the current sign-in state.
 

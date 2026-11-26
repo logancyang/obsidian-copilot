@@ -77,6 +77,17 @@ describe("descriptor", () => {
           expect.objectContaining({ baseModelId: "composer-2", name: "Composer 2" }),
         ]);
       });
+
+      it("reuses one empty list when Cursor has no enabled models", () => {
+        const empty = {
+          backends: { cursor: { enabledModels: [] } },
+          configuredModels: [],
+        } as unknown as CopilotSettings;
+        const first = CursorBackendDescriptor.getEnabledModelEntries?.(empty);
+        const second = CursorBackendDescriptor.getEnabledModelEntries?.(empty);
+        expect(first).toEqual([]);
+        expect(first).toBe(second);
+      });
     });
 
     describe("applySelection()", () => {

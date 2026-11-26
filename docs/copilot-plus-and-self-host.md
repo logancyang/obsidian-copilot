@@ -80,7 +80,7 @@ The label in the model picker tells you which service handles the conversation:
 | **opencode-reported model** | Authentication managed by OpenCode                             | The provider behind that OpenCode model                         |
 | **Claude**                  | Claude Code login or environment                               | Anthropic under your Claude account                             |
 | **Codex**                   | Codex CLI login through `codex-acp`                            | OpenAI under your Codex or ChatGPT account                      |
-| **Cursor**                  | Cursor agent login, or `CURSOR_API_KEY`                        | Cursor under your Cursor account                                |
+| **Cursor**                  | Cursor agent login                                             | Cursor under your Cursor account                                |
 
 A Claude or ChatGPT subscription is not an API key. Use the Claude or Codex agent setup for those subscriptions. Use BYOK only when you have API access or an OpenAI-compatible endpoint.
 

@@ -67,7 +67,7 @@ For a short conversation that does not need an agent, use [Quick Chat](./docs/ch
 
 - **Copilot-hosted:** Add a Copilot license, then choose an available hosted model for OpenCode or Quick Chat. The model picker and dashboard show current access.
 - **Bring your own key:** Add a cloud, local, or OpenAI-compatible provider under **Settings → Copilot → BYOK**. Keys are stored in this device's Obsidian Keychain, not in the vault's `data.json`.
-- **Claude, Codex, and Cursor accounts:** These agents use their own login rather than a key from Copilot's BYOK settings. Cursor can also use `CURSOR_API_KEY` in its environment variables.
+- **Claude, Codex, and Cursor accounts:** These agents use their own login rather than a key from Copilot's BYOK settings.
 - **Models reported by OpenCode:** OpenCode routes them to their backing provider. Free OpenCode Zen models show a warning because that provider may log or train on prompts; review its terms before sending sensitive content.
 
 Your chosen route determines where prompts and included context are processed. Read [LLM Providers](./docs/llm-providers.md) for setup and [Copilot Plus and Self-Host](./docs/copilot-plus-and-self-host.md) for privacy and routing details.

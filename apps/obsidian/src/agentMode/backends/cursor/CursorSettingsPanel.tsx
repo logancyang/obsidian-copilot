@@ -10,7 +10,7 @@ export const CursorSettingsPanel: React.FC = () => {
       backendDisplayName="Cursor"
       value={settings.agentMode?.backends?.cursor?.envOverrides}
       onChange={(next) => updateCursorFields({ envOverrides: next })}
-      hintExamples={["CURSOR_API_KEY", "HTTPS_PROXY"]}
+      hintExamples={["HTTPS_PROXY", "NO_PROXY"]}
     />
   );
 };

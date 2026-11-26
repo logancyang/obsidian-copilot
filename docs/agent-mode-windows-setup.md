@@ -57,7 +57,7 @@ You can also start the login from PowerShell:
 agent login
 ```
 
-Copilot uses the Cursor agent's credentials. A `CURSOR_API_KEY` value under **Environment variables** signs the agent in without the browser login.
+Copilot uses the Cursor agent's credentials from that login. Copilot does not ask you to save a Cursor API key.
 
 ## Share Skills across agents
 

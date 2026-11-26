@@ -84,9 +84,10 @@ export const CursorBackendDescriptor: BackendDescriptor = {
   },
 
   getEnabledModelEntries(settings: CopilotSettings): EnabledModelEntry[] {
-    return [
-      ...agentOriginEnabledModelEntries(settings, "cursor", (wireId) => cursorWire.decode(wireId)),
-    ];
+    const entries = agentOriginEnabledModelEntries(settings, "cursor", (wireId) =>
+      cursorWire.decode(wireId)
+    );
+    return entries.length > 0 ? [...entries] : (entries as EnabledModelEntry[]);
   },
 
   getInstallState(settings: CopilotSettings): InstallState {

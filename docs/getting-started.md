@@ -55,7 +55,7 @@ If the Cursor agent is already installed, Copilot checks its usual install locat
 2. Select **Auto-detect**, or enter the path to the `agent` executable.
 3. Select **Sign in** and finish in your browser. You can also copy the terminal command and run `agent login` yourself.
 
-Cursor uses the account held by the Cursor agent. An API key in **Environment variables** as `CURSOR_API_KEY` also signs the agent in. You do not paste that key into a chat.
+Cursor uses the account held by the Cursor agent. Sign in from **Configure**, or run `agent login`. Copilot does not ask you to save a Cursor API key.
 
 ## Start Your First Chat
 
