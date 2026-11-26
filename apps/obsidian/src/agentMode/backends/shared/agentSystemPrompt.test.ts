@@ -105,7 +105,7 @@ describe("agentSystemPrompt", () => {
     it("omits every relay skill while Plus is inactive and restores enabled skills after renewal https://github.com/logancyang/obsidian-copilot/issues/4239", () => {
       setBuiltinPreferences({});
       updateSetting("isPaidUser", false);
-      for (const agent of ["claude", "codex", "opencode"] as const) {
+      for (const agent of ["claude", "codex", "opencode", "cursor"] as const) {
         expect(buildAgentSystemPrompt(agent, APP)).not.toContain(COPILOT_SKILL_FIRST_LEAD);
       }
       updateSetting("isPaidUser", true);
@@ -169,6 +169,9 @@ describe("agentSystemPrompt", () => {
       expect(buildAgentSystemPrompt("opencode", APP)).toContain(
         "Edit vault files with your edit/write/patch tools so Copilot shows a diff"
       );
+      expect(buildAgentSystemPrompt("cursor", APP)).toContain(
+        "Edit vault files with your edit/write tools so Copilot shows a diff"
+      );
     });
 
     it("limits shell file writes, not other shell use, to moves, script rewrites of most of a large file, and bulk changes across dozens of files (https://github.com/Brevilabs/obsidian-copilot-private/issues/701)", () => {
@@ -178,13 +181,13 @@ describe("agentSystemPrompt", () => {
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/741 leaves the 200-line write cap out of every agent's shared prompt, so skills' own write instructions stand", () => {
-      for (const backendId of ["claude", "codex", "opencode"] as const) {
+      for (const backendId of ["claude", "codex", "opencode", "cursor"] as const) {
         expect(buildAgentSystemPrompt(backendId, APP)).not.toContain("200 lines");
       }
     });
 
     it(`tells every agent to keep backups and scratch files out of the vault or off .md, so they don't become duplicate notes (${ISSUE_3868})`, () => {
-      for (const backendId of ["claude", "codex", "opencode"] as const) {
+      for (const backendId of ["claude", "codex", "opencode", "cursor"] as const) {
         expect(buildAgentSystemPrompt(backendId, APP)).toContain(
           "Keep backups and scratch files out of the vault, or use a non-.md extension like .md.bak, so they don't show up as notes."
         );
@@ -193,7 +196,7 @@ describe("agentSystemPrompt", () => {
 
     it(`tells every agent on Windows to run code from a file or here-string, double-quote paths and save non-ASCII scripts as UTF-8 with BOM, right after the vault hygiene line (${ISSUE_3867})`, () => {
       const steering = "Backend-specific steering.";
-      for (const backendId of ["claude", "codex", "opencode"] as const) {
+      for (const backendId of ["claude", "codex", "opencode", "cursor"] as const) {
         expect(buildAgentSystemPrompt(backendId, APP, steering, "win32")).toContain(
           `${COPILOT_VAULT_HYGIENE}\n\nPowerShell: run code from a file or piped here-string, not -e/-c; double-quote paths; save non-ASCII scripts as UTF-8 with BOM.\n\n${steering}`
         );
@@ -213,7 +216,7 @@ describe("agentSystemPrompt", () => {
 
     it("steers every agent to the enabled Copilot relay skills first, regardless of Plus status", () => {
       setBuiltinPreferences({});
-      for (const agent of ["claude", "codex", "opencode"]) {
+      for (const agent of ["claude", "codex", "opencode", "cursor"]) {
         const prompt = buildAgentSystemPrompt(agent, APP);
         expect(prompt).toContain(`${ALL_RELAY_SKILLS_LINE} ${COPILOT_SKILL_FALLBACK}`);
       }
@@ -238,6 +241,7 @@ describe("agentSystemPrompt", () => {
       expect(buildAgentSystemPrompt("opencode", APP)).not.toContain("copilot-web-search");
       expect(buildAgentSystemPrompt("claude", APP)).toContain(ALL_RELAY_SKILLS_LINE);
       expect(buildAgentSystemPrompt("codex", APP)).toContain(ALL_RELAY_SKILLS_LINE);
+      expect(buildAgentSystemPrompt("cursor", APP)).toContain(ALL_RELAY_SKILLS_LINE);
     });
 
     it(`omits the skill line but keeps vault-first research guidance when no relay skill is enabled for the agent (${ISSUE_599})`, () => {
@@ -303,7 +307,7 @@ describe("agentSystemPrompt", () => {
 
     it(`never names an Obsidian format skill, so an agent whose skill link is missing is not sent looking for it (https://github.com/logancyang/obsidian-copilot/issues/3980)`, () => {
       setBuiltinPreferences({});
-      for (const agent of ["claude", "codex", "opencode"]) {
+      for (const agent of ["claude", "codex", "opencode", "cursor"]) {
         const prompt = buildAgentSystemPrompt(agent, APP);
         for (const skill of ["obsidian-markdown", "obsidian-bases", "json-canvas"]) {
           expect(prompt).not.toContain(skill);
@@ -313,7 +317,7 @@ describe("agentSystemPrompt", () => {
 
     it(`tells every agent the running Obsidian app is reachable through the obsidian_cli tool while Obsidian's command line interface is on (${ISSUE_833})`, () => {
       mockIsObsidianCliEnabled.mockReturnValue(true);
-      for (const agent of ["claude", "codex", "opencode"] as const) {
+      for (const agent of ["claude", "codex", "opencode", "cursor"] as const) {
         expect(buildAgentSystemPrompt(agent, APP)).toContain(
           "Obsidian is running: the obsidian-copilot obsidian_cli tool reaches its live state and index (open tabs, daily notes, typed properties, backlinks, broken links, Bases results, templates) and link-aware renames. Prefer it over searching files for links and Bases results, and over hand-editing frontmatter to set a typed property."
         );
@@ -321,7 +325,7 @@ describe("agentSystemPrompt", () => {
     });
 
     it(`gives every coding agent the same shared prompt with Copilot Teammates locked or unlocked, naming no Teammates tool and stating no identity, because an agent's chat shares it with Copilot chats (${ISSUE_986})`, async () => {
-      for (const backendId of ["claude", "codex", "opencode"] as const) {
+      for (const backendId of ["claude", "codex", "opencode", "cursor"] as const) {
         await setCustomAgentsAccess("free");
         const locked = buildAgentSystemPrompt(backendId, APP);
         await setCustomAgentsAccess("team");
@@ -354,7 +358,7 @@ describe("agentSystemPrompt", () => {
     it(`appends the Miyo steering for every agent when the search switch is on (${ISSUE_736})`, () => {
       updateSetting("enableMiyo", true);
       updateSetting("enableMiyoSearchSkill", true);
-      for (const agent of ["claude", "codex", "opencode"] as const) {
+      for (const agent of ["claude", "codex", "opencode", "cursor"] as const) {
         expect(buildAgentSystemPrompt(agent, APP)).toContain(COPILOT_MIYO_SEARCH_STEERING);
       }
     });

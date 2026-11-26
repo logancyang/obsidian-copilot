@@ -13,7 +13,7 @@ Commands appear when you type `/` in Quick Chat or Copilot Chat. Skills appear o
 | **Copilot command** | A short, repeatable prompt with optional note variables                      | [**Settings → Copilot → Command**](settings.md#command) |
 | **Skill**           | A reusable agent workflow that can include instructions and supporting files | [**Settings → Copilot → Skills**](settings.md#skills)   |
 
-Skills can be shared with OpenCode, Claude, and Codex. Commands stay inside Copilot and also work from the editor and Obsidian command palette. If a command and skill have the same name, the skill takes the slash-menu spot.
+Skills can be shared with OpenCode, Claude, Codex, and Cursor. Commands stay inside Copilot and also work from the editor and Obsidian command palette. If a command and skill have the same name, the skill takes the slash-menu spot.
 
 ## Create a command
 

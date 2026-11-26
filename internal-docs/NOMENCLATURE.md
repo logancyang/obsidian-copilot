@@ -6,7 +6,7 @@ The words Copilot shows users. Each concept has one plain name; use it in UI lab
 | ----------------------------------------------------------- | -------------------------------------------------------- | ------------------------------------- |
 | One conversation with an agent                              | chat                                                     | session, conversation                 |
 | The chat screen                                             | chat (Copilot Chat in command and view names)            | Agent Chat, Agent Mode                |
-| Claude, Codex, OpenCode                                     | agent; the product's name where a teammate is also meant | backend, coding agent                 |
+| Claude, Codex, OpenCode, Cursor                             | agent; the product's name where a teammate is also meant | backend, coding agent                 |
 | The feature that lets the user make their own teammates     | Copilot Teammates, with a singular verb                  | custom agents, Copilot Teammate       |
 | One the user made                                           | teammate                                                 | agent, custom agent                   |
 | A chat with no teammate picked                              | Copilot                                                  | plain Copilot chat, Classic agent     |

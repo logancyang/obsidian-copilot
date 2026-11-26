@@ -2,7 +2,7 @@
 
 Projects are focused workspaces inside Copilot Chat. Each Project keeps its own instructions, reusable context, and chat history, so ongoing work for a client, codebase, course, or research topic stays together.
 
-A Project works with OpenCode, Claude, or Codex. It uses the agent, model, effort, and permission setting selected for the current chat. It does not lock you to a separate model.
+A Project works with OpenCode, Claude, Codex, or Cursor. It uses the agent, model, effort, and permission setting selected for the current chat. It does not lock you to a separate model.
 
 On the Copilot Chat home screen, open **Projects** to browse your most recently used Projects. Scroll the list to see more, or use **Search projects** to find a Project by name or description. Search includes every Project, even those you have not scrolled to yet.
 
@@ -20,7 +20,7 @@ Each Project has a folder under `<Copilot folder>/projects/`. The default root i
 
 In a Project chat, open the Project info menu beside the name and select **AGENTS.md** under **Project folder**. You can also select **Project settings** beside the name, or **Edit project** from the Projects list, and edit **Project instructions**. Each opens the same Project file.
 
-Vault-wide instructions still apply. Project instructions are more specific, so they take precedence when the two files conflict. The same Project `AGENTS.md` works with OpenCode, Claude, and Codex.
+Vault-wide instructions still apply. Project instructions are more specific, so they take precedence when the two files conflict. The same Project `AGENTS.md` works with OpenCode, Claude, Codex, and Cursor.
 
 Useful Project instructions include:
 

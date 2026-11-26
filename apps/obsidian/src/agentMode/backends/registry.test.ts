@@ -10,6 +10,7 @@ import {
 } from "./registry";
 import { ClaudeBackendDescriptor } from "./claude/descriptor";
 import { CodexBackendDescriptor } from "./codex/descriptor";
+import { CursorBackendDescriptor } from "./cursor/descriptor";
 import { OpencodeBackendDescriptor } from "./opencode/descriptor";
 
 jest.mock("@/agentMode/backends/opencode/OpencodeInstallModal", () => ({
@@ -67,17 +68,19 @@ describe("registry", () => {
           OpencodeBackendDescriptor,
           ClaudeBackendDescriptor,
           CodexBackendDescriptor,
+          CursorBackendDescriptor,
         ])
       );
     });
   });
 
   describe("backendDisplayOrder()", () => {
-    it("lists opencode, then Claude, then Codex", () => {
+    it("lists opencode, then Claude, then Codex, then Cursor", () => {
       expect(backendDisplayOrder()).toEqual([
         OpencodeBackendDescriptor,
         ClaudeBackendDescriptor,
         CodexBackendDescriptor,
+        CursorBackendDescriptor,
       ]);
     });
 
@@ -108,6 +111,7 @@ describe("registry", () => {
         .spyOn(CodexBackendDescriptor, "getEnabledModelEntries")
         .mockReturnValue([{ baseModelId: "gpt-6" } as never]);
       jest.spyOn(OpencodeBackendDescriptor, "getEnabledModelEntries").mockReturnValue([]);
+      jest.spyOn(CursorBackendDescriptor, "getEnabledModelEntries").mockReturnValue([]);
 
       expect(findBackendForModel(baseSettings(), "gpt-6")).toBe(CodexBackendDescriptor);
       expect(findBackendForModel(baseSettings(), "gemini")).toBeUndefined();
@@ -120,13 +124,15 @@ describe("registry", () => {
       expect(backendNeedsSelfHostWarning(OpencodeBackendDescriptor, off)).toBe(false);
       expect(backendNeedsSelfHostWarning(ClaudeBackendDescriptor, off)).toBe(false);
       expect(backendNeedsSelfHostWarning(CodexBackendDescriptor, off)).toBe(false);
+      expect(backendNeedsSelfHostWarning(CursorBackendDescriptor, off)).toBe(false);
     });
 
-    it("warns on cloud agents (Claude, Codex) but not opencode when Self-Host Mode is on", () => {
+    it("warns on cloud agents (Claude, Codex, Cursor) but not opencode when Self-Host Mode is on", () => {
       const on = baseSettings("opencode", true);
       expect(backendNeedsSelfHostWarning(OpencodeBackendDescriptor, on)).toBe(false);
       expect(backendNeedsSelfHostWarning(ClaudeBackendDescriptor, on)).toBe(true);
       expect(backendNeedsSelfHostWarning(CodexBackendDescriptor, on)).toBe(true);
+      expect(backendNeedsSelfHostWarning(CursorBackendDescriptor, on)).toBe(true);
     });
   });
 });

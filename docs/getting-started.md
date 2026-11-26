@@ -1,6 +1,6 @@
 # Getting Started with Copilot V4
 
-Copilot V4 is built around **Copilot Chat**, a desktop workspace where OpenCode, Claude Code, or Codex can read your vault, use tools, and complete multi-step work with the permissions you choose.
+Copilot V4 is built around **Copilot Chat**, a desktop workspace where OpenCode, Claude Code, Codex, or Cursor can read your vault, use tools, and complete multi-step work with the permissions you choose.
 
 Copilot Chat is available in Obsidian on desktop. Quick Chat, Copilot Commands, and Quick Ask remain available for shorter tasks and on mobile.
 
@@ -47,6 +47,16 @@ If your adapter is below the supported minimum, open **Configure** in Settings t
 
 For manual installations, Copilot requires a supported `@agentclientprotocol/codex-acp` adapter and checks compatibility in **Configure**. See [Codex installation details](agent-mode-and-tools.md#codex). Codex uses the login stored by the bundled Codex CLI; there is no Codex key to paste into Copilot.
 
+### Alternative: Link Cursor
+
+If the Cursor agent is already installed, Copilot checks its usual install location and marks **Cursor** as installed. If it is not found:
+
+1. Open **Basic → Agents → Cursor → Configure**.
+2. Select **Auto-detect**, or enter the path to the `agent` executable.
+3. Select **Sign in** and finish in your browser. You can also copy the terminal command and run `agent login` yourself.
+
+Cursor uses the account held by the Cursor agent. An API key in **Environment variables** as `CURSOR_API_KEY` also signs the agent in. You do not paste that key into a chat.
+
 ## Start Your First Chat
 
 1. Click the **Open Copilot Chat** ribbon icon, or run **Open Copilot Chat window** from the command palette.
@@ -63,7 +73,7 @@ From the Copilot Chat home screen, open **Projects** and select **New project**.
 
 ### Share Skills Across Agents
 
-Skills are reusable instruction packets for jobs such as reviewing a change or drafting a release note. Open **Settings → Copilot → Skills** to see skills from Copilot's shared skills folder and the native OpenCode, Claude, and Codex skill folders. Enable each skill for the agents that should use it; Copilot links shared skills into the right agent folders for you.
+Skills are reusable instruction packets for jobs such as reviewing a change or drafting a release note. Open **Settings → Copilot → Skills** to see skills from Copilot's shared skills folder and the native OpenCode, Claude, Codex, and Cursor skill folders. Enable each skill for the agents that should use it; Copilot links shared skills into the right agent folders for you.
 
 Type `/` in Copilot Chat to choose an available skill. Copilot also includes skills for Obsidian Markdown, Bases, and Canvas. Learn more in [Skills across agents](agent-mode-and-tools.md#skills-across-agents).
 

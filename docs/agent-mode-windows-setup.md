@@ -1,6 +1,6 @@
 # Windows setup for Copilot Chat
 
-Copilot Chat runs in the Obsidian desktop app. On Windows, start with **OpenCode** unless you already use Claude Code or Codex.
+Copilot Chat runs in the Obsidian desktop app. On Windows, start with **OpenCode** unless you already use Claude Code, Codex, or Cursor.
 
 ## 1. Install OpenCode with Copilot
 
@@ -44,9 +44,24 @@ For manual installations, the Codex backend needs a supported `@agentclientproto
 
 You can also choose **Sign in to Codex** on the chat's status card. For terminal login, run your configured adapter with `cli login` using the same `CODEX_HOME` as Copilot.
 
+## 4. Connect Cursor
+
+1. Open **Settings → Copilot → Basic → Agents → Cursor** and select **Configure**.
+2. If the Cursor agent is installed, select **Auto-detect** under **Cursor installation**.
+3. If it is not installed, copy the **Install Cursor** command from the dialog and run it in PowerShell, then select **Auto-detect** again. If detection still fails, enter the absolute path to `agent.exe` and select **Apply**.
+4. If the dialog shows **Sign in**, select it and complete the browser login.
+
+You can also start the login from PowerShell:
+
+```powershell
+agent login
+```
+
+Copilot uses the Cursor agent's credentials. A `CURSOR_API_KEY` value under **Environment variables** signs the agent in without the browser login.
+
 ## Share Skills across agents
 
-Open [**Settings → Copilot → Skills**](settings.md#skills) and toggle the OpenCode, Claude, or Codex icons for each Skill. Copilot keeps one shared copy and creates folder links into `.opencode/skills/`, `.claude/skills/`, and `.agents/skills/`.
+Open [**Settings → Copilot → Skills**](settings.md#skills) and toggle the OpenCode, Claude, Codex, or Cursor icons for each Skill. Copilot keeps one shared copy and creates folder links into `.opencode/skills/`, `.claude/skills/`, `.agents/skills/`, and `.cursor/skills/`.
 
 Windows may block creation of these links. Enable **Windows Settings → Privacy & security → For developers → Developer Mode**, or run Obsidian with administrator access, then toggle the affected agent off and on in the **Skills** tab.
 

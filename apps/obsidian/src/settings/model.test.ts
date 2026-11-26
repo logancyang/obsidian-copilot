@@ -801,6 +801,11 @@ describe("model", () => {
               claudeCliPath: "/a/claude",
               opencode: { binaryPath: "/a/oc", binaryVersion: "1", binarySource: "custom" },
               codex: { envOverrides: { GOOD: "1", "bad-key": "x" } },
+              cursor: {
+                binaryPath: "/a/agent",
+                binarySource: "managed",
+                envOverrides: { CURSOR_API_KEY: "k", "bad-key": "x" },
+              },
             },
             "device-b": {},
             "": { claudeCliPath: "/x" },
@@ -814,8 +819,35 @@ describe("model", () => {
       expect(profiles["device-a"]?.claudeCliPath).toBe("/a/claude");
       expect(profiles["device-a"]?.opencode?.binarySource).toBe("custom");
       expect(profiles["device-a"]?.codex?.envOverrides).toEqual({ GOOD: "1" });
+      expect(profiles["device-a"]?.cursor).toEqual({
+        binaryPath: "/a/agent",
+        binarySource: "custom",
+        envOverrides: { CURSOR_API_KEY: "k" },
+      });
       expect(profiles["device-b"]).toBeUndefined();
       expect(profiles[""]).toBeUndefined();
+    });
+
+    it("keeps a Cursor installation path as this computer's custom install", () => {
+      const out = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        agentMode: {
+          ...DEFAULT_SETTINGS.agentMode,
+          backends: {
+            cursor: {
+              binaryPath: "/a/agent",
+              binarySource: "managed",
+              defaultModel: { baseModelId: "composer-2", effort: null },
+            },
+          },
+        },
+      } as unknown as CopilotSettings);
+
+      expect(out.agentMode.backends.cursor).toMatchObject({
+        binaryPath: "/a/agent",
+        binarySource: "custom",
+        defaultModel: { baseModelId: "composer-2", effort: null },
+      });
     });
 
     it("marks every unannotated Codex path as custom ownership (https://github.com/Brevilabs/obsidian-copilot-private/issues/368)", () => {

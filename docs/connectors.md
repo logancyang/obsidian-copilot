@@ -1,6 +1,6 @@
 # Connectors
 
-Connectors let Claude Code, Codex, and OpenCode work with services such as Notion, Linear, Jira, and Todoist from your chats. Log in to a service once and every agent can use it.
+Connectors let Claude Code, Codex, OpenCode, and Cursor work with services such as Notion, Linear, Jira, and Todoist from your chats. Log in to a service once and every agent can use it.
 
 Connectors is a preview for Supporters and works on desktop only. Without Supporter access, the Connectors tab offers **Already a Supporter? Enter your license key** and **See plans**.
 
@@ -88,7 +88,7 @@ From a custom connector's **⋯** menu:
 
 ## A service shows up twice
 
-If you already added a service or a custom connector's server as an MCP server directly in Claude Code, Codex, or OpenCode, that agent sees it twice: once from its own setup and once from Copilot. Remove one of them so the agent has a single set of its tools.
+If you already added a service or a custom connector's server as an MCP server directly in Claude Code, Codex, OpenCode, or Cursor, that agent sees it twice: once from its own setup and once from Copilot. Remove one of them so the agent has a single set of its tools.
 
 ## Service names and logos
 

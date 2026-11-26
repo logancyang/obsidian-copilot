@@ -25,6 +25,7 @@ const OPENCODE_DEVICE_KEYS = [
   "probeSessionId",
   "envOverrides",
 ] as const;
+const CURSOR_DEVICE_KEYS = ["binaryPath", "binarySource", "envOverrides"] as const;
 
 function buildProfileFromFlat(agentMode: AgentMode): DeviceAgentProfile {
   const profile: DeviceAgentProfile = {};
@@ -62,6 +63,16 @@ function buildProfileFromFlat(agentMode: AgentMode): DeviceAgentProfile {
     profile.claude = { envOverrides: claudeSrc.envOverrides };
   }
 
+  const cursorSrc = agentMode.backends?.cursor;
+  if (cursorSrc) {
+    const cursor: NonNullable<DeviceAgentProfile["cursor"]> = {};
+    if (cursorSrc.binaryPath) cursor.binaryPath = cursorSrc.binaryPath;
+    if (cursorSrc.binaryPath && cursorSrc.binarySource)
+      cursor.binarySource = cursorSrc.binarySource;
+    if (cursorSrc.envOverrides) cursor.envOverrides = cursorSrc.envOverrides;
+    if (hasOwnKeys(cursor)) profile.cursor = cursor;
+  }
+
   return profile;
 }
 
@@ -80,6 +91,10 @@ function stripDeviceFieldsFromBackends(backends: Backends | undefined): Backends
   if (backends.opencode) {
     const synced = omitKeys(backends.opencode, OPENCODE_DEVICE_KEYS);
     if (hasOwnKeys(synced)) out.opencode = synced;
+  }
+  if (backends.cursor) {
+    const synced = omitKeys(backends.cursor, CURSOR_DEVICE_KEYS);
+    if (hasOwnKeys(synced)) out.cursor = synced;
   }
   return out;
 }
@@ -114,6 +129,7 @@ export function hydrateDeviceProfile(settings: CopilotSettings, deviceId: string
   if (profile?.codex) nextBackends.codex = { ...nextBackends.codex, ...profile.codex };
   if (profile?.opencode) nextBackends.opencode = { ...nextBackends.opencode, ...profile.opencode };
   if (profile?.claude) nextBackends.claude = { ...nextBackends.claude, ...profile.claude };
+  if (profile?.cursor) nextBackends.cursor = { ...nextBackends.cursor, ...profile.cursor };
 
   const nextAgentMode: AgentMode = {
     ...agentMode,

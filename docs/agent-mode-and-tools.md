@@ -19,6 +19,7 @@ Open [**Settings → Copilot → Basic → Agents**](settings.md#basic). Configu
 | **OpenCode** | Recommended for most people                     | Copilot-hosted models, your API providers, or local OpenAI-compatible APIs |
 | **Claude**   | You already use Claude Code                     | Your Claude Code installation and Anthropic account                        |
 | **Codex**    | You already use the Codex CLI and Codex account | Your Codex CLI login through the `codex-acp` adapter                       |
+| **Cursor**   | You already use the Cursor agent                | Your Cursor account, or a Cursor API key                                   |
 
 For OpenCode and Codex, **Managed by Copilot** uses the version Copilot tests. **My own installation** remains available, but other versions may not work correctly with Copilot. The Configure dialog reminds you of this when you choose your own installation.
 
@@ -82,6 +83,18 @@ For an existing or manually installed `@agentclientprotocol/codex-acp` adapter, 
 The **Authentication** section shows your signed-in ChatGPT email and plan when Codex provides them. Select **Sign out** beside the account to switch accounts. API-key authentication and accounts without an email show the signed-in badge without an email. An installed agent shows **Sign in required** until it is authenticated.
 
 You can also choose **Sign in** on the chat's status card. For terminal login, run your configured adapter with `cli login` using the same `CODEX_HOME` as Copilot.
+
+### Cursor
+
+Cursor uses the Cursor agent installed on your computer and the account that agent already holds. It does not use an API key from the BYOK tab. A key named `CURSOR_API_KEY` in Cursor's **Environment variables** is used instead of the browser login.
+
+1. Open **Basic → Agents → Cursor → Configure**.
+2. Select **Auto-detect**, or enter the absolute path to the `agent` executable and select **Apply**.
+3. If Cursor is missing, copy the **Install Cursor** command and run it, then select **Auto-detect** again.
+4. Select **Sign in** and finish in your browser. If the page does not open, select **Open sign-in page**. You can also run `agent login` from the terminal command shown in the dialog.
+5. Enable the models you want and choose a default.
+
+Cursor models and billing come from your Cursor account. Models added under **BYOK** do not join the Cursor model list.
 
 Switching to your own Codex binary removes unused managed downloads. Your custom binary and account credentials remain on your computer. Cancel is available during downloads; configuration changes finish before another action can start.
 
@@ -166,7 +179,7 @@ Copilot Chat keeps each chat separate:
 - To branch off from an earlier point, hover a reply and select **Continue from here in a new chat**. Copilot saves the chat as a note, saves the conversation up to that reply as a new chat note, even when autosave is off, and opens it in a new tab with the same title, agent, model and Project. The new chat shows that conversation as plain messages with their attached notes and images, without tool steps, and your first message there passes it to the agent, along with an instruction not to read the original chat's note, which holds the later messages. The original chat stays as it was. The option is hidden while the chat is responding.
 - Properties you add to a chat note stay when Copilot saves the chat again. Copilot updates only the properties it manages, such as `backendId`, `sessionId`, `projectId`, `model`, `usage`, `carriedMessages`, `continuedFrom`, and `tags`.
 - A spinner marks a chat while its agent is responding or one of its background tasks runs. Closing a chat's tab keeps it running once you have sent a message in it; a chat you leave or close without sending a message shuts down. When the response stops but the chat is still running, a small blue dot appears on the bottom-right corner of the chat icon. Hover the row and select **Shut down** to stop it. Saved history stays available to reopen, and other chats keep running. If the agent can't shut down a single chat, or shutting down fails, the chat stays marked running with an error.
-- Deleting a chat removes Copilot's chat note and its entry in Copilot's chat history. Claude Code, Codex, and OpenCode may keep their own copy of the conversation on your computer. Copilot does not delete or change those files, so you can still resume the chat in that agent's own tool. The confirmation and the notice after the delete both say this. Deleting an open chat closes it and stops any reply in progress.
+- Deleting a chat removes Copilot's chat note and its entry in Copilot's chat history. Claude Code, Codex, OpenCode, and Cursor may keep their own copy of the conversation on your computer. Copilot does not delete or change those files, so you can still resume the chat in that agent's own tool. The confirmation and the notice after the delete both say this. Deleting an open chat closes it and stops any reply in progress.
 - Add the active note, selected text, other notes, folders, a Copilot Web Viewer tab, or supported images. You can also mention a note with `[[Note title]]`.
 - Hover the context ring beside the send controls to see how much of the model's context window is in use. The ring stays empty until the agent reports usage, and a stopped response keeps the last reported reading. If the connected account reports usage limits, the same panel shows the available limit and reset time.
 
@@ -246,13 +259,13 @@ The card covers the notes an agent changed with its editing tools. Changes an ag
 
 ## Skills across agents
 
-Skills are reusable instruction packets built around a `SKILL.md` file. One Skill can be made available to OpenCode, Claude, and Codex without maintaining three copies.
+Skills are reusable instruction packets built around a `SKILL.md` file. One Skill can be made available to OpenCode, Claude, Codex, and Cursor without maintaining a separate copy for each agent.
 
 1. Open [**Settings → Copilot → Skills**](settings.md#skills).
-2. Find a Skill and toggle the OpenCode, Claude, or Codex icons for the agents that should use it.
+2. Find a Skill and toggle the OpenCode, Claude, Codex, or Cursor icons for the agents that should use it.
 3. Type `/` in Copilot Chat to choose it, or describe the task and let the agent select an enabled Skill.
 
-Shared Skills live under `<Copilot folder>/skills/`. Copilot links them into the native folders used by each agent: `.opencode/skills/`, `.claude/skills/`, and `.agents/skills/`. Skills already present in those native folders also appear in the settings list.
+Shared Skills live under `<Copilot folder>/skills/`. Copilot links them into the native folders used by each agent: `.opencode/skills/`, `.claude/skills/`, `.agents/skills/`, and `.cursor/skills/`. Skills already present in those native folders also appear in the settings list.
 
 The **Built-in skills** table contains Copilot's bundled skills with read-only previews. Turn off a whole skill to remove its generated files, or turn off an individual agent to exclude it. These choices survive restarts and updates. Copilot generates built-in skills only when an available agent can use them. Setting up another agent enables eligible built-ins for that agent unless you previously opted out. Your own skills remain editable in **Your skills**.
 
@@ -274,11 +287,11 @@ On Windows, creating the folder links may require **Developer Mode** or administ
 
 ## The running Obsidian app
 
-While **Command line interface** is on in Obsidian's **Settings → General**, Claude Code, Codex, and OpenCode reach the running Obsidian app through Copilot's Obsidian CLI tool. Ask about open tabs, daily notes, typed properties, tasks, backlinks and unresolved links, or Bases results, or create a note from a template and rename notes with their links updated. There is no skill to turn on. Depending on the permission mode, the agent asks before each command. The tool refuses to reload Obsidian or turn off Copilot, because that would end the chat.
+While **Command line interface** is on in Obsidian's **Settings → General**, Claude Code, Codex, OpenCode, and Cursor reach the running Obsidian app through Copilot's Obsidian CLI tool. Ask about open tabs, daily notes, typed properties, tasks, backlinks and unresolved links, or Bases results, or create a note from a template and rename notes with their links updated. There is no skill to turn on. Depending on the permission mode, the agent asks before each command. The tool refuses to reload Obsidian or turn off Copilot, because that would end the chat.
 
 ## Excalidraw drawings
 
-While the Excalidraw plugin (2.29 or later) is enabled, Claude Code, Codex, and OpenCode read, draw, and edit Excalidraw drawings through Copilot's Excalidraw tools. The Excalidraw plugin builds each drawing, so labels stay inside their shapes and arrows stay attached when you move a shape. There is no skill to turn on.
+While the Excalidraw plugin (2.29 or later) is enabled, Claude Code, Codex, OpenCode, and Cursor read, draw, and edit Excalidraw drawings through Copilot's Excalidraw tools. The Excalidraw plugin builds each drawing, so labels stay inside their shapes and arrows stay attached when you move a shape. There is no skill to turn on.
 
 - Ask for a diagram, flowchart or chart, for example "Draw a diagram of the steps in [[Release process]]". The agent draws it in Excalidraw and embeds it in the note it belongs to. Ask for a Mermaid diagram or a canvas to get that instead. Creating a drawing never overwrites an existing file.
 - Select shapes in an open drawing to point the agent at them, for example "make these red". The selection is attached to your next message, like selected text. Clicking empty canvas removes it.
@@ -289,7 +302,7 @@ While the Excalidraw plugin (2.29 or later) is enabled, Claude Code, Codex, and 
 
 ## Outside services
 
-Connect services such as Notion, Linear, and Todoist under **Settings → Copilot → Connectors**, and Claude Code, Codex, and OpenCode can use them in your chats. See [Connectors](connectors.md). OpenCode calls connected tools individually, so each step and permission request names its tool. Native OpenCode code execution still uses Execute.
+Connect services such as Notion, Linear, and Todoist under **Settings → Copilot → Connectors**, and Claude Code, Codex, OpenCode, and Cursor can use them in your chats. See [Connectors](connectors.md). OpenCode calls connected tools individually, so each step and permission request names its tool. Native OpenCode code execution still uses Execute.
 
 ## Applying a settings change
 
@@ -313,7 +326,7 @@ Turning on Self-Host Mode never waits: it restarts the agent straight away, so n
 
 ### Publishing from Copilot Chat
 
-Claude Code, Codex, and OpenCode publish through Copilot's own OpenArtifacts tools, which send your Copilot Plus license key to `api.openartifacts.ai` over HTTPS. There is nothing to install and no skill to turn on. Every chat has the tools; without Copilot Plus, the agent tells you that OpenArtifacts comes with Copilot Plus and gives you an upgrade link, and nothing is published.
+Claude Code, Codex, OpenCode, and Cursor publish through Copilot's own OpenArtifacts tools, which send your Copilot Plus license key to `api.openartifacts.ai` over HTTPS. There is nothing to install and no skill to turn on. Every chat has the tools; without Copilot Plus, the agent tells you that OpenArtifacts comes with Copilot Plus and gives you an upgrade link, and nothing is published.
 
 Ask the agent to publish a Markdown note or an existing HTML file. For Markdown, the agent renders the note to HTML and publishes it in the same turn, without writing a file. For an HTML file, it publishes that file's contents; only that page is uploaded, so relative local images or styles in it will not load. A page the agent creates is always private: only you, and anyone you name, can open it. Copilot opens a new page in your browser, already signed in, and to make it open to anyone with the link, choose **Anyone with the link** in **Share** on the page. Updating a page that is already published keeps who can open it.
 

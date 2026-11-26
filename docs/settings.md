@@ -4,7 +4,7 @@ Open **Settings → Copilot** to configure Copilot V4. Settings normally save as
 
 Copilot V4 starts with [Copilot Chat](agent-mode-and-tools.md). Quick Chat remains available for lightweight conversations and as the main chat on mobile. Copilot Chat, its agent settings, and Skills require desktop Obsidian.
 
-> **Choose your data route deliberately.** Copilot-hosted models, cloud BYOK providers, Claude, Codex, remote Miyo servers, and hosted skills can receive the prompt, note excerpts, or files needed for a request. Local models and local Miyo can keep model and search traffic on your computer, but an agent or skill can still use a network service when you ask it to. See [Copilot Plans, Privacy, and Self-Hosting](copilot-plus-and-self-host.md#understand-service-data-routes).
+> **Choose your data route deliberately.** Copilot-hosted models, cloud BYOK providers, Claude, Codex, Cursor, remote Miyo servers, and hosted skills can receive the prompt, note excerpts, or files needed for a request. Local models and local Miyo can keep model and search traffic on your computer, but an agent or skill can still use a network service when you ask it to. See [Copilot Plans, Privacy, and Self-Hosting](copilot-plus-and-self-host.md#understand-service-data-routes).
 
 The top of the settings page has two controls that apply across every tab:
 
@@ -25,19 +25,19 @@ Basic contains licensing, the main Copilot Chat setup, Quick Chat model curation
 | **Copilot paid plans / See plans** | Not applicable            | Opens the paid-plan page. Paid access can add Copilot-hosted models, document processing, cloud-backed skills, and other services.                                                                                                             |
 | **Miyo / pair Copilot with Miyo**  | Not applicable            | Opens [miyo.md](https://www.miyo.md/). Miyo is a separate local-first knowledge product. Remote Relay access requires a Relay or Lifetime entitlement after its trial; Supporter and eligible legacy Copilot licenses can include that access. |
 
-A Copilot license is optional. You can use Copilot Chat with OpenCode plus BYOK or local models, Claude with your Claude Code account, or Codex with your Codex account. Those vendors may charge separately. See [Copilot Plans, Privacy, and Self-Hosting](copilot-plus-and-self-host.md) for the full free and paid boundary.
+A Copilot license is optional. You can use Copilot Chat with OpenCode plus BYOK or local models, Claude with your Claude Code account, Codex with your Codex account, or Cursor with your Cursor account. Those vendors may charge separately. See [Copilot Plans, Privacy, and Self-Hosting](copilot-plus-and-self-host.md) for the full free and paid boundary.
 
 ### Agents
 
-On desktop, the first selector and four inline tabs control what new chats in Copilot Chat and Quick Chat can use. On mobile, **Quick Chat models** appears directly in **Basic**, below the desktop-only agent notice. Its default model, search, and model switches work the same on both platforms.
+On desktop, the first selector and five inline tabs control what new chats in Copilot Chat and Quick Chat can use. On mobile, **Quick Chat models** appears directly in **Basic**, below the desktop-only agent notice. Its default model, search, and model switches work the same on both platforms.
 
-| Control                            | Default                      | What it does                                                                                                                                                                                                                                                                                               |
-| ---------------------------------- | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Default agent**                  | **OpenCode**                 | Chooses the agent used when you select **+** for a new chat and when Copilot starts a chat automatically. Choosing a model from another agent in the chat's model picker also changes this default. Options are **OpenCode**, **Claude**, and **Codex**.                                                   |
-| **Notification**                   | **On**                       | Plays a short sound whenever an agent stops and wants you: the turn finished, the turn hit an error, or a tool is waiting for your approval. It stays quiet while focus is inside that chat, and repeated alerts within one second play only once. Turn it off when you do not want audible notifications. |
-| **Sound**                          | **Piano key**                | Chooses which sound plays: **Piano key**, **Marimba**, **Bell**, or **Doorbell**. Selecting one previews it unless another sound played in the last second. Appears only while **Notification** is on.                                                                                                     |
-| **OpenCode / Claude / Codex tabs** | **OpenCode** tab opens first | Configure each installed agent, its default model and effort, its enabled models, and its process environment.                                                                                                                                                                                             |
-| **Quick Chat tab**                 | Not applicable               | Curates the separate model list used by Quick Chat and Quick Ask. Claude and Codex account models do not become Quick Chat models.                                                                                                                                                                         |
+| Control                                     | Default                      | What it does                                                                                                                                                                                                                                                                                               |
+| ------------------------------------------- | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Default agent**                           | **OpenCode**                 | Chooses the agent used when you select **+** for a new chat and when Copilot starts a chat automatically. Choosing a model from another agent in the chat's model picker also changes this default. Options are **OpenCode**, **Claude**, **Codex**, and **Cursor**.                                       |
+| **Notification**                            | **On**                       | Plays a short sound whenever an agent stops and wants you: the turn finished, the turn hit an error, or a tool is waiting for your approval. It stays quiet while focus is inside that chat, and repeated alerts within one second play only once. Turn it off when you do not want audible notifications. |
+| **Sound**                                   | **Piano key**                | Chooses which sound plays: **Piano key**, **Marimba**, **Bell**, or **Doorbell**. Selecting one previews it unless another sound played in the last second. Appears only while **Notification** is on.                                                                                                     |
+| **OpenCode / Claude / Codex / Cursor tabs** | **OpenCode** tab opens first | Configure each installed agent, its default model and effort, its enabled models, and its process environment.                                                                                                                                                                                             |
+| **Quick Chat tab**                          | Not applicable               | Curates the separate model list used by Quick Chat and Quick Ask. Claude, Codex, and Cursor account models do not become Quick Chat models.                                                                                                                                                                |
 
 The model controls shared by installed agents behave as follows:
 
@@ -113,9 +113,25 @@ You can also choose **Sign in to Codex** on the chat's status card. For terminal
 
 The Configure dialog uses the same **Managed by Copilot** and **My own installation** tabs as OpenCode. Switching tabs only changes the controls shown; installing or applying a path changes the active source. **Uninstall** asks for confirmation and keeps your own binary and Codex login.
 
-Codex and Claude share an **Authentication** section. The badge beside its heading shows the current sign-in state. When signed out, choose **Sign in with your browser** or use the displayed terminal command. After signing in, the section shows the account label when the CLI provides one and offers **Sign out** so you can sign in with another account. Sign-out uses the selected CLI profile; environment-provided API keys must be removed from the environment separately.
+Cursor, Claude, and Codex share an **Authentication** section. The badge beside its heading shows the current sign-in state. When signed out, choose **Sign in with your browser** or use the displayed terminal command. After signing in, the section shows the account label when the CLI provides one and offers **Sign out** so you can sign in with another account. Sign-out uses the selected CLI profile; environment-provided API keys must be removed from the environment separately.
 
 The Codex row always offers **Configure**, including when its adapter is below the supported minimum. Progress and failure messages are shared with Copilot Chat; open Configure to manage the installation or retry. A custom binary remains usable and is never changed automatically.
+
+#### Cursor
+
+Cursor uses the Cursor agent on this computer and the login that agent already holds. It does not use a key from the BYOK tab. A `CURSOR_API_KEY` value under **Environment variables** signs the agent in without the browser login.
+
+Select **Configure** to open these controls:
+
+| Control                                             | Default                                   | What it does                                                                                                                                                                       |
+| --------------------------------------------------- | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Cursor installation**                             | Auto-detected when possible               | Shows the resolved `agent` path. **Auto-detect** searches the usual install locations, **Apply** checks and saves a custom absolute path, and **Clear** returns to auto-detection. |
+| **Install Cursor**                                  | Not applicable                            | Shows the command that installs the Cursor agent. Copy and run it outside Copilot when Cursor is missing.                                                                          |
+| **Sign in**                                         | Not applicable                            | Starts browser sign-in. **Open sign-in page** is available if the browser does not open. Copilot never asks you to paste the login into this dialog.                               |
+| **Default model / Default effort / model switches** | Agent defaults; models reported by Cursor | Curates the models available to Cursor. Billing and limits belong to your Cursor account.                                                                                          |
+| **Environment variables**                           | No rows                                   | Passes values such as `CURSOR_API_KEY` or `HTTPS_PROXY` to the Cursor agent.                                                                                                       |
+
+Cursor, Claude, and Codex share an **Authentication** section. The badge beside its heading shows the current sign-in state.
 
 See [Copilot Chat](agent-mode-and-tools.md) for setup, permissions, projects, and normal use.
 
@@ -234,6 +250,7 @@ Copilot discovers skills automatically from:
 - `.opencode/skills/`
 - `.claude/skills/`
 - `.agents/skills/`
+- `.cursor/skills/`
 
 There is no separate Skills folder setting. Change the root under **Basic → General → Copilot folder location**.
 
@@ -247,15 +264,15 @@ If Copilot finds a `SKILL.md` that it cannot load, a warning dot appears on the 
 
 ### Your skills controls
 
-| Control                                       | What it does                                                                                                                                                                                                        |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Search skills**                             | Filters the visible name and description. The adjacent count reports skills that loaded successfully; files awaiting repair are listed separately above it.                                                         |
-| **OpenCode, Claude, and Codex icon switches** | Enables or disables the skill for each agent by managing a link in that agent's native skills folder. A project-only or duplicated skill may first require migration into the shared folder.                        |
-| **Edit SKILL.md**                             | Opens the shared skill in Obsidian. A skill under a hidden agent folder opens with the system's default editor.                                                                                                     |
-| **Properties…**                               | Edits structured `SKILL.md` frontmatter.                                                                                                                                                                            |
-| **Reveal in vault**                           | Reveals a shared skill folder in Obsidian's File Explorer. Hidden agent folders may need your system file manager.                                                                                                  |
-| **Delete…**                                   | Lists every real folder and link that will be removed, then asks for confirmation. Deletion has no built-in undo; vault sync or Git is the recovery path.                                                           |
-| **Migrate to shared folder**                  | Appears for identical copies spread across agent folders. It consolidates them into one shared copy and creates links for the enabled agents. Editing and deletion remain locked until the copies are consolidated. |
+| Control                                               | What it does                                                                                                                                                                                                        |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Search skills**                                     | Filters the visible name and description. The adjacent count reports skills that loaded successfully; files awaiting repair are listed separately above it.                                                         |
+| **OpenCode, Claude, Codex, and Cursor icon switches** | Enables or disables the skill for each agent by managing a link in that agent's native skills folder. A project-only or duplicated skill may first require migration into the shared folder.                        |
+| **Edit SKILL.md**                                     | Opens the shared skill in Obsidian. A skill under a hidden agent folder opens with the system's default editor.                                                                                                     |
+| **Properties…**                                       | Edits structured `SKILL.md` frontmatter.                                                                                                                                                                            |
+| **Reveal in vault**                                   | Reveals a shared skill folder in Obsidian's File Explorer. Hidden agent folders may need your system file manager.                                                                                                  |
+| **Delete…**                                           | Lists every real folder and link that will be removed, then asks for confirmation. Deletion has no built-in undo; vault sync or Git is the recovery path.                                                           |
+| **Migrate to shared folder**                          | Appears for identical copies spread across agent folders. It consolidates them into one shared copy and creates links for the enabled agents. Editing and deletion remain locked until the copies are consolidated. |
 
 The **Properties** dialog contains:
 

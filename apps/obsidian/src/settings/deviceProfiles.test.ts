@@ -92,6 +92,35 @@ describe("deviceProfiles", () => {
       expect(out.agentMode.deviceProfiles?.[DEVICE_A]?.claude?.envOverrides).toEqual({ BAR: "2" });
     });
 
+    it("moves a Cursor installation onto this computer and leaves the default model synced", () => {
+      const settings = makeSettings(
+        makeAgentMode({
+          backends: {
+            cursor: {
+              binaryPath: "/a/agent",
+              binarySource: "custom",
+              envOverrides: { HTTPS_PROXY: "http://proxy" },
+              defaultModel: { baseModelId: "composer-2", effort: null },
+            },
+          },
+        })
+      );
+
+      const out = dehydrateDeviceProfile(settings, DEVICE_A);
+
+      expect(out.agentMode.backends.cursor?.binaryPath).toBeUndefined();
+      expect(out.agentMode.backends.cursor?.envOverrides).toBeUndefined();
+      expect(out.agentMode.backends.cursor?.defaultModel).toEqual({
+        baseModelId: "composer-2",
+        effort: null,
+      });
+      expect(out.agentMode.deviceProfiles?.[DEVICE_A]?.cursor).toEqual({
+        binaryPath: "/a/agent",
+        binarySource: "custom",
+        envOverrides: { HTTPS_PROXY: "http://proxy" },
+      });
+    });
+
     it("preserves other devices' segments and removes own when empty", () => {
       const settings = makeSettings(
         makeAgentMode({
@@ -158,6 +187,25 @@ describe("deviceProfiles", () => {
         effort: null,
       });
       expect(out.agentMode.backends.codex?.binaryPath).toBe("/a/codex");
+    });
+
+    it("restores this computer's Cursor installation without taking another computer's path", () => {
+      const settings = makeSettings(
+        makeAgentMode({
+          backends: { cursor: { defaultModel: { baseModelId: "composer-2", effort: null } } },
+          deviceProfiles: {
+            [DEVICE_A]: { cursor: { binaryPath: "/a/agent", binarySource: "custom" } },
+          },
+        })
+      );
+
+      const here = hydrateDeviceProfile(settings, DEVICE_A);
+      const elsewhere = hydrateDeviceProfile(settings, DEVICE_B);
+
+      expect(here.agentMode.backends.cursor?.binaryPath).toBe("/a/agent");
+      expect(here.agentMode.backends.cursor?.defaultModel?.baseModelId).toBe("composer-2");
+      expect(elsewhere.agentMode.backends.cursor?.binaryPath).toBeUndefined();
+      expect(elsewhere.agentMode.backends.cursor?.defaultModel?.baseModelId).toBe("composer-2");
     });
 
     it("keeps a Codex managed install's ownership and version on the same device", () => {

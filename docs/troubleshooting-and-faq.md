@@ -168,7 +168,7 @@ Logs and screenshots can contain prompts, note contents, paths, and tool inputs.
 
 ## What works on mobile?
 
-Copilot Chat, including OpenCode, Claude, Codex, Projects, Skill execution, and Connectors, is desktop-only. On mobile, use Quick Chat. Agent settings display **Agent settings are available on desktop.** Miyo on mobile requires a remote Miyo connection and manual vault registration in Miyo.
+Copilot Chat, including OpenCode, Claude, Codex, Cursor, Projects, Skill execution, and Connectors, is desktop-only. On mobile, use Quick Chat. Agent settings display **Agent settings are available on desktop.** Miyo on mobile requires a remote Miyo connection and manual vault registration in Miyo.
 
 ## Related
 

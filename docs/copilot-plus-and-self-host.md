@@ -25,7 +25,8 @@ You can use:
 - **Copilot Chat with Claude** through your existing Claude Code installation and subscription.
 - **Copilot Chat with Codex** through `codex-acp` and your existing Codex CLI or ChatGPT login.
 - **Quick Chat and Quick Ask** with a BYOK model.
-- **Projects**, **Copilot Commands**, custom Skills, and Skills shared across OpenCode, Claude, and Codex.
+- **Copilot Chat with Cursor** through the Cursor agent already on your computer and your Cursor account.
+- **Projects**, **Copilot Commands**, custom Skills, and Skills shared across OpenCode, Claude, Codex, and Cursor.
 - The separately available Miyo desktop app and CLI for local semantic search and local-first knowledge ownership.
 
 Free does not mean every model is free. Anthropic, OpenAI, Google, OpenRouter, or another provider may charge your account. A local model uses your own computer instead.
@@ -79,6 +80,7 @@ The label in the model picker tells you which service handles the conversation:
 | **opencode-reported model** | Authentication managed by OpenCode                             | The provider behind that OpenCode model                         |
 | **Claude**                  | Claude Code login or environment                               | Anthropic under your Claude account                             |
 | **Codex**                   | Codex CLI login through `codex-acp`                            | OpenAI under your Codex or ChatGPT account                      |
+| **Cursor**                  | Cursor agent login, or `CURSOR_API_KEY`                        | Cursor under your Cursor account                                |
 
 A Claude or ChatGPT subscription is not an API key. Use the Claude or Codex agent setup for those subscriptions. Use BYOK only when you have API access or an OpenAI-compatible endpoint.
 

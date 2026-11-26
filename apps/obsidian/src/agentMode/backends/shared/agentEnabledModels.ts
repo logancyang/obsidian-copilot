@@ -8,7 +8,7 @@ export type WireDecode = (wireId: string) => { selection: { baseModelId: string 
 
 export function agentOriginEnabledModelEntries(
   settings: CopilotSettings,
-  agentType: "claude" | "codex",
+  agentType: "claude" | "codex" | "cursor",
   wireDecode: WireDecode
 ): readonly EnabledModelEntry[] {
   const enabledIds = settings.backends[agentType]?.enabledModels ?? [];
