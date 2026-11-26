@@ -340,7 +340,7 @@ Ask the agent to address the comments on a page. It lists the open threads, revi
 The **Publish file to OpenArtifacts** command opens the **Share with OpenArtifacts** dialog.
 
 - **Link access** chooses **Anyone with the link** or **Only those invited**. Choose it before the first publish, or change it later from a published note's dialog. To invite people or answer requests, use the **Share** button on the published page.
-- **Copy link** (**Copy** right after you publish or update) copies the page link, and **Open** opens the page for you without a sign-in.
+- **Copy link** (**Copy** right after you publish or update) copies the page link. If your OpenArtifacts custom domain is live, the dialog shows and copies that address. **Open** opens the page for you without a sign-in.
 
 Without a Copilot Plus license key, the dialog opens on **OpenArtifacts access required** with an **Upgrade** link. If your key cannot publish to OpenArtifacts, publishing shows the same screen with OpenArtifacts' reason, and nothing is published, whichever **Link access** you chose. If your plan has lapsed, choosing **Only those invited** shows the plan message with an **Upgrade** link and changes nothing; **Anyone with the link** keeps working. If OpenArtifacts does not support private documents yet, the dialog says so, and **Update**, **Delete**, **Copy link**, and **Open** keep working.
 

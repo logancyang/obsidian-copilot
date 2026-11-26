@@ -12,6 +12,8 @@ jest.mock("obsidian", () => ({
 }));
 
 const DOC_ID = "9f2k4mvq7t0xbz3n";
+const CUSTOM_URL = `https://docs.example.com/d/${DOC_ID}`;
+const CUSTOM_DOMAIN_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/1024";
 const DOCUMENT: OpenArtifactsDocument = {
   title: "Architecture",
   html: "<!doctype html><html><body>Review</body></html>",
@@ -91,6 +93,22 @@ describe("OpenArtifactsClient", () => {
           throw: false,
         });
         expect(mockedRequestUrl).toHaveBeenCalledTimes(1);
+      });
+
+      it(`${CUSTOM_DOMAIN_ISSUE} keeps a valid custom link and drops a malformed one without making the publish ambiguous`, async () => {
+        const receipt = {
+          docId: DOC_ID,
+          url: `https://openartifacts.site/d/${DOC_ID}`,
+          version: 1,
+        };
+        const withCustomUrl = { ...receipt, customUrl: CUSTOM_URL };
+        mockedRequestUrl
+          .mockResolvedValueOnce(response(201, withCustomUrl))
+          .mockResolvedValueOnce(response(201, { ...receipt, customUrl: "https://[" }));
+        const client = new OpenArtifactsClient();
+
+        await expect(client.publish(DOCUMENT, "k")).resolves.toEqual(withCustomUrl);
+        await expect(client.publish(DOCUMENT, "k")).resolves.toStrictEqual(receipt);
       });
 
       it.each([
@@ -578,10 +596,17 @@ describe("OpenArtifactsClient", () => {
           await expectClientError(client.setLinkAccess(DOC_ID, "invited", "k"), expected);
         });
 
-        it("returns the Access the server answered", async () => {
-          mockedRequestUrl.mockResolvedValue(response(200, ACCESS));
+        it(`${CUSTOM_DOMAIN_ISSUE} returns the Access the server answered and omits a custom link for another document`, async () => {
+          const withCustomUrl = { ...ACCESS, customUrl: CUSTOM_URL };
+          mockedRequestUrl
+            .mockResolvedValueOnce(response(200, withCustomUrl))
+            .mockResolvedValueOnce(
+              response(200, { ...ACCESS, customUrl: "https://docs.example.com/d/0123456789abcdef" })
+            );
+          const client = new OpenArtifactsClient();
 
-          await expect(new OpenArtifactsClient().getAccess(DOC_ID, "k")).resolves.toEqual(ACCESS);
+          await expect(client.getAccess(DOC_ID, "k")).resolves.toEqual(withCustomUrl);
+          await expect(client.getAccess(DOC_ID, "k")).resolves.toStrictEqual(ACCESS);
         });
 
         it.each([
