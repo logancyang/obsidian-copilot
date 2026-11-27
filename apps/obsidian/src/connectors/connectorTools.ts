@@ -217,6 +217,7 @@ export class ConnectorTools {
       if (lacking.size > 0) listener((backendId) => lacking.has(backendId));
     };
     const unsubscribers = [
+      this.subscribe(onChange),
       this.deps.manager.subscribe(onChange),
       this.deps.subscribeToEnabledChange(onChange),
       ...(this.deps.custom ? [this.deps.custom.subscribe(onChange)] : []),
@@ -253,7 +254,14 @@ export class ConnectorTools {
         ...runnable.map(({ config }) => JSON.stringify(config)),
       ].join("\n"),
       connected: new Set([
-        ...connections.filter(({ status }) => status === "connected").map(({ id }) => id),
+        // A login check passing mid-listing says nothing about the tools, so counting it restarted the agent on every new chat while a service couldn't be reached.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/1030
+        ...connections
+          .filter(
+            ({ id, status }) =>
+              status === "connected" && (this.loaded.has(id) || !this.loading.has(id))
+          )
+          .map(({ id }) => id),
         ...custom
           .filter(({ status }) => status.kind === "connected")
           .map(({ config }) => config.id),
