@@ -66,7 +66,7 @@ export const ClaudeSettingsPanel: React.FC<Props> = ({ app, manifest }) => {
             >
               Claude in Chrome extension
             </a>
-            . Applies to new chats.
+            .
           </>
         }
         checked={Boolean(settings.agentMode?.backends?.claude?.enableChrome)}
