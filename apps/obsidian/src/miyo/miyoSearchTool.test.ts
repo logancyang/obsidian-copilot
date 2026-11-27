@@ -57,10 +57,18 @@ describe("miyoSearchTool", () => {
       });
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/1028 is used only when the user asks about their notes and skipped for general, coding or external questions", () => {
+      expect(MIYO_SEARCH_TOOL.description).toContain(
+        "skip it for general, coding or external questions"
+      );
+    });
+
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/736 tells the agent when to use it, how to read a result and what to do when it fails, without naming a skill or script", () => {
       const { description } = MIYO_SEARCH_TOOL;
 
-      expect(description).toContain("Use it to find notes you don't know about yet");
+      expect(description).toContain(
+        "Use it only when the user asks about or for their notes, or what they wrote, saved, decided or planned, to find notes you don't know about yet"
+      );
       expect(description).toContain(
         "Never use it to locate or read a note you already know, one that is attached, named, open or found earlier in this conversation"
       );
