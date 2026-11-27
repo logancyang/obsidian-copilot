@@ -16,6 +16,7 @@ jest.mock("@/utils/desktopRuntime", () => ({
 }));
 
 const ISSUE_833 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/833";
+const ISSUE_1032 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/1032";
 
 function processResult(update: Partial<ObsidianCliProcessResult> = {}): ObsidianCliProcessResult {
   return {
@@ -177,12 +178,35 @@ describe("obsidianCliTool", () => {
       });
     });
 
+    it("returns the CLI's output and SIGTERM as an error when the call is killed at its timeout", async () => {
+      const { call } = setup(
+        processResult({ ok: false, exitCode: null, signal: "SIGTERM", stdout: "partial" })
+      );
+
+      await expect(call({ args: ["search", "query=6747"] })).resolves.toEqual({
+        text: "The Obsidian CLI failed (SIGTERM). partial",
+        isError: true,
+      });
+    });
+
     it(`cuts output over 32,000 bytes at a marked point, since Codex drops the middle of longer MCP output (${ISSUE_833})`, async () => {
       const { call } = setup(processResult({ stdout: "é".repeat(20_000) }));
 
-      const { text, isError } = await call({ args: ["files"] });
-      expect(isError).toBe(false);
+      const { text } = await call({ args: ["files"] });
       expect(text).toMatch(/^é{16000}\n\n\[Output cut at 32000 bytes\./);
+    });
+
+    it(`reports cut output as an error, so an agent doesn't parse a partial listing as complete (${ISSUE_1032})`, async () => {
+      const { call } = setup(processResult({ stdout: "x".repeat(32_001) }));
+
+      expect((await call({ args: ["unresolved", "verbose", "format=json"] })).isError).toBe(true);
+    });
+
+    it("keeps output of exactly 32,000 bytes whole and successful", async () => {
+      const output = "x".repeat(32_000);
+      const { call } = setup(processResult({ stdout: output }));
+
+      await expect(call({ args: ["files"] })).resolves.toEqual({ text: output, isError: false });
     });
   });
 
