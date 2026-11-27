@@ -57,6 +57,8 @@ Claude models and billing come from your Claude Code account. Models added under
 
 Claude Code saves what it learns about you and your vault in memory files outside the vault and reads them in later chats. **Auto memory** in Claude's settings tab is **Default**, which follows your Claude Code setting. Choose **On** or **Off** to override it for this vault's new chats. Once Claude has saved memory for the vault, select **Open** under **Memory files** to review it. Deleting a chat doesn't remove what Claude saved from it.
 
+To let Claude use Chrome, install the [Claude in Chrome](https://claude.com/chrome) extension and connect it to Claude Code, then turn on **Claude in Chrome** in Claude's settings tab. New chats can open tabs, read pages, and click or type in Chrome. Browser actions ask for approval like any other tool.
+
 ### Codex
 
 The Codex backend uses `@agentclientprotocol/codex-acp`, which includes a compatible Codex CLI:

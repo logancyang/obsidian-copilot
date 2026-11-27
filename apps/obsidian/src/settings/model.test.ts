@@ -607,6 +607,21 @@ describe("model", () => {
       }
     );
 
+    it.each([
+      [true, true],
+      ["on", undefined],
+    ])(
+      "keeps a Claude in Chrome choice of %p as %p, dropping a non-boolean so the switch reads off (https://github.com/Brevilabs/obsidian-copilot-private/issues/1043)",
+      (enableChrome, kept) => {
+        const sanitized = sanitizeSettings({
+          ...DEFAULT_SETTINGS,
+          agentMode: { enabled: true, byok: {}, backends: { claude: { enableChrome } } },
+        } as unknown as CopilotSettings);
+
+        expect(sanitized.agentMode.backends.claude?.enableChrome).toBe(kept);
+      }
+    );
+
     it("coerces a retired `project` defaultChainType so chain construction never sees it (https://github.com/logancyang/obsidian-copilot-preview/issues/310)", () => {
       const out = sanitizeSettings({
         ...DEFAULT_SETTINGS,

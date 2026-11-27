@@ -931,6 +931,23 @@ describe("ClaudeSdkBackendProcess", () => {
         });
       });
 
+      it.each([
+        [true, { "replay-user-messages": null, chrome: null }],
+        [false, { "replay-user-messages": null }],
+      ])(
+        "with Claude in Chrome set to %p, starts the chat's query with the matching CLI flags, so the browser tools load only when the user turned them on (https://github.com/Brevilabs/obsidian-copilot-private/issues/1043)",
+        async (enableChrome, extraArgs) => {
+          queryMock.mockImplementation(answering([resultMessage()]));
+          const proc = makeProc({ getEnableChrome: () => enableChrome });
+          const { sessionId } = await proc.newSession({ cwd: "/vault" });
+
+          await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "hi" }] });
+
+          const { options } = getPromptQueryCalls()[0][0] as { options: Record<string, unknown> };
+          expect(options.extraArgs).toEqual(extraArgs);
+        }
+      );
+
       it("asks Claude to report its session state, so the chat knows when its subagents and the replies about them are done, and keeps the backend's env overrides (https://github.com/Brevilabs/obsidian-copilot-private/issues/757)", async () => {
         queryMock.mockImplementation(answering([resultMessage()]));
         const proc = makeProc({ getEnvOverrides: () => ({ CLAUDE_CONFIG_DIR: "/config" }) });

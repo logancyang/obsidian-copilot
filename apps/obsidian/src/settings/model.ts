@@ -176,6 +176,7 @@ export interface ClaudeBackendSettings {
   defaultMode?: CopilotMode | null;
   autoModePermission?: ClaudeAutoModePermission;
   enableThinking?: boolean;
+  enableChrome?: boolean;
   autoMemory?: boolean;
   envOverrides?: Record<string, string>;
 }
@@ -1072,6 +1073,7 @@ function sanitizeClaudeBackendSettings(raw: unknown): ClaudeBackendSettings {
     defaultMode: sanitizeDefaultMode(r.defaultMode),
     autoModePermission: sanitizeClaudeAutoModePermission(r.autoModePermission),
     enableThinking: typeof r.enableThinking === "boolean" ? r.enableThinking : undefined,
+    enableChrome: typeof r.enableChrome === "boolean" ? r.enableChrome : undefined,
     autoMemory: typeof r.autoMemory === "boolean" ? r.autoMemory : undefined,
     envOverrides: sanitizeEnvOverrides(r.envOverrides),
   };

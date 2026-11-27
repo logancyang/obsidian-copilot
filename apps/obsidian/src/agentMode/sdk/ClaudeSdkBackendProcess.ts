@@ -111,6 +111,7 @@ export interface ClaudeSdkBackendProcessOptions {
   clientVersion: string;
   descriptor: BackendDescriptor;
   getEnableThinking?: () => boolean;
+  getEnableChrome?: () => boolean;
   getAutoMemoryEnabled?: () => boolean | undefined;
   isPlanModePlanFilePath?: (absolutePath: string) => boolean;
   getDefaultModelId?: () => string | undefined;
@@ -387,8 +388,12 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
           "agents-md@builtin": { options: { instructionFiles: "claude-md-and-agents-md" } },
         },
       },
-      // Each prompt's echo reports when it reaches Claude. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
-      extraArgs: { "replay-user-messages": null },
+      extraArgs: {
+        // Each prompt's echo reports when it reaches Claude. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
+        "replay-user-messages": null,
+        // SDK launches ignore Claude Code's own Chrome default, so the browser tools load only with --chrome. https://github.com/Brevilabs/obsidian-copilot-private/issues/1043
+        ...(this.opts.getEnableChrome?.() ? { chrome: null } : {}),
+      },
       // Stop ends the main turn only; background agents keep running. https://github.com/Brevilabs/obsidian-copilot-private/issues/748
       perTaskStopAffordance: true,
       hooks: { PreToolUse: [{ hooks: [runSubagentsInBackground] }] },
