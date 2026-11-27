@@ -47,12 +47,15 @@ async function readInstalledAgents(
 export async function reconcileBuiltinSkills(options: ReconcileBuiltinOptions): Promise<void> {
   const { folder, fs, availableAgents, registeredAgents, observedAgents } = options;
   let settings = options.settings;
+  const before = new Map<string, string | null>();
   // Another device's agent choice arrives as a file change before (or without) its settings, so
   // a list that changed since this device last saw it is the user's choice, not one to undo.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/1031
   for (const skill of BUILTIN_SKILLS) {
-    const observed = observedAgents.get(skill.name);
+    const key = joinPosix(folder, skill.name);
+    const observed = observedAgents.get(key);
     const installed = await readInstalledAgents(folder, skill.name, fs);
+    before.set(key, installed);
     if (observed === undefined || installed === null || installed === observed) continue;
     const listed = installed.split(", ");
     const builtinPreferences = await options.savePreferences((current) => ({
@@ -70,13 +73,30 @@ export async function reconcileBuiltinSkills(options: ReconcileBuiltinOptions): 
       },
     };
   }
+  const enabledAgents: Record<string, string[]> = {};
+  for (const skill of BUILTIN_SKILLS) {
+    enabledAgents[skill.name] = registeredAgents.filter((agent) =>
+      isBuiltinSkillEnabledFor(settings, skill.name, agent)
+    );
+  }
   try {
-    await reconcileFiles(folder, fs, settings, availableAgents, registeredAgents);
+    await reconcileFiles(folder, fs, enabledAgents, availableAgents);
   } finally {
     for (const skill of BUILTIN_SKILLS) {
+      const key = joinPosix(folder, skill.name);
+      const agents = enabledAgents[skill.name];
+      const reconciled =
+        agents.length === 0
+          ? null
+          : agents.some((agent) => availableAgents.includes(agent))
+            ? [...agents].sort().join(", ")
+            : (before.get(key) ?? null);
       const installed = await readInstalledAgents(folder, skill.name, fs);
-      if (installed === null) observedAgents.delete(skill.name);
-      else observedAgents.set(skill.name, installed);
+      // A synced write landing during this pass stays unobserved so the next pass adopts it.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/1031
+      const observed = installed === reconciled ? installed : (before.get(key) ?? null);
+      if (observed === null) observedAgents.delete(key);
+      else observedAgents.set(key, observed);
     }
   }
 }
@@ -84,21 +104,14 @@ export async function reconcileBuiltinSkills(options: ReconcileBuiltinOptions): 
 async function reconcileFiles(
   folder: string,
   fs: BuiltinSeedFs,
-  settings: CopilotSettings,
-  availableAgents: readonly string[],
-  registeredAgents: readonly string[]
+  enabledAgents: Readonly<Record<string, readonly string[]>>,
+  availableAgents: readonly string[]
 ): Promise<void> {
   const errors: string[] = [];
   // Retired skills are removed regardless of user overrides so cleanup can retry. https://github.com/logancyang/obsidian-copilot/issues/3022
   for (const skill of RETIRED_BUILTIN_SKILLS) {
     const result = await removeSeededBuiltin(folder, skill.name, fs);
     if (result === "failed") errors.push(`Could not remove retired built-in skill ${skill.name}.`);
-  }
-  const enabledAgents: Record<string, string[]> = {};
-  for (const skill of BUILTIN_SKILLS) {
-    enabledAgents[skill.name] = registeredAgents.filter((agent) =>
-      isBuiltinSkillEnabledFor(settings, skill.name, agent)
-    );
   }
   // Canonical files sync between devices, so an unavailable device keeps them rather than
   // deleting another device's tools. https://github.com/logancyang/obsidian-copilot/issues/3022

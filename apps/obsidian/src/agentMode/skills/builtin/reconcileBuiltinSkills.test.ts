@@ -433,6 +433,62 @@ describe("reconcileBuiltinSkills", () => {
         { disabledAgents: ["claude", "codex"] }
       );
     });
+    it(`keeps an agent choice another device synced while this pass was installing it ${ISSUE_1031}`, async () => {
+      const f = fixture();
+      f.options.availableAgents = ["claude"];
+      await reconcileBuiltinSkills(f.options);
+      f.options.settings.agentMode.skills.builtinPreferences = {
+        "obsidian-markdown": { disabledAgents: ["codex"] },
+      };
+      const path = f.path("obsidian-markdown");
+      const write = f.options.fs.write;
+      f.options.fs = {
+        ...f.options.fs,
+        write: async (target, content) => {
+          await write(target, content);
+          if (target === path)
+            await write(
+              target,
+              content.replace(/copilot-enabled-agents:.*/, "copilot-enabled-agents: opencode")
+            );
+        },
+      };
+      await reconcileBuiltinSkills(f.options);
+      f.options.fs = { ...f.options.fs, write };
+
+      await reconcileBuiltinSkills(f.options);
+
+      expect(
+        parseSkillFile(f.files.get(path)!, "obsidian-markdown").frontmatter.enabledAgents
+      ).toEqual(["opencode"]);
+      expect(f.options.settings.agentMode.skills.builtinPreferences?.["obsidian-markdown"]).toEqual(
+        { disabledAgents: ["claude", "codex"] }
+      );
+    });
+    it(`applies this device's choices to built-ins in a newly chosen Copilot folder instead of adopting their lists ${ISSUE_1031}`, async () => {
+      const skill = BUILTIN_SKILLS.find((item) => item.name === "obsidian-markdown")!;
+      const f = fixture({ [skill.name]: { disabledAgents: ["codex"] } });
+      f.options.availableAgents = ["claude"];
+      await reconcileBuiltinSkills(f.options);
+      const otherFolder = "other/skills";
+      const otherPath = `${otherFolder}/${skill.name}/SKILL.md`;
+      f.files.set(
+        otherPath,
+        skill.skillMd.replace(/copilot-enabled-agents:.*/, "copilot-enabled-agents: opencode")
+      );
+      for (const file of skill.files)
+        f.files.set(`${otherFolder}/${skill.name}/${file.path}`, file.content);
+      f.options.folder = otherFolder;
+
+      await reconcileBuiltinSkills(f.options);
+
+      expect(parseSkillFile(f.files.get(otherPath)!, skill.name).frontmatter.enabledAgents).toEqual(
+        ["claude", "opencode"]
+      );
+      expect(f.options.settings.agentMode.skills.builtinPreferences?.[skill.name]).toEqual({
+        disabledAgents: ["codex"],
+      });
+    });
     it(`writes this device's own agent change into a built-in no other device changed ${ISSUE_1031}`, async () => {
       const f = fixture();
       f.options.availableAgents = ["claude"];
