@@ -248,7 +248,7 @@ describe("AgentProfile", () => {
       fireEvent.click(screen.getByRole("button", { name: "Pin" }));
 
       const unpin = await screen.findByRole("button", { name: "Unpin" });
-      expect(vault.readText(`${FOLDER}/instructions.md`)).toMatch(/\npinned: \S+/);
+      expect(vault.readText(`${FOLDER}/instructions.md`)).toMatch(/\npinnedAt: \d+/);
       expect(store.getAgents().find((agent) => agent.slug === "coco")?.pinnedAt).toEqual(
         expect.any(Number)
       );
@@ -256,7 +256,7 @@ describe("AgentProfile", () => {
       fireEvent.click(unpin);
 
       expect(await screen.findByRole("button", { name: "Pin" })).not.toBeNull();
-      expect(vault.readText(`${FOLDER}/instructions.md`)).not.toContain("pinned:");
+      expect(vault.readText(`${FOLDER}/instructions.md`)).not.toContain("pinnedAt:");
     });
 
     it(`downloads the preset faces only once the face picker opens, shows the face worn as chosen, and saves a picked preset byte for byte (${ISSUE})`, async () => {

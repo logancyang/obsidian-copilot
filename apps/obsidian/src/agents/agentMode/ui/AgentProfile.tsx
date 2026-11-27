@@ -120,7 +120,7 @@ export function AgentProfile({
       onChangeModel={(model) => void store.updateAgent(slug, { model }).catch(failed("model"))}
       onTogglePin={() =>
         void store
-          .setPinned(slug, agent.pinnedAt === null ? Date.now() : null)
+          .updateAgent(slug, { pinnedAt: agent.pinnedAt === null ? Date.now() : null })
           .catch((error: unknown) => {
             logError(`[Custom agents] Pinning ${slug} failed`, error);
             new Notice(`Couldn't ${agent.pinnedAt === null ? "pin" : "unpin"} ${name}.`);

@@ -209,22 +209,14 @@ describe("customAgentFiles", () => {
       });
     });
 
-    it.each([
-      { case: "a quoted timestamp", pinned: "'2026-11-20T09:30:00.000Z'" },
-      { case: "a bare timestamp YAML reads as a date", pinned: "2026-11-20T09:30:00.000Z" },
-    ])(
-      `reads $case under pinned as the time the teammate was pinned (https://github.com/Brevilabs/obsidian-copilot-private/issues/1041)`,
-      ({ pinned }) => {
-        const content = `---\nname: Kai\npinned: ${pinned}\n---\nBody`;
+    it(`reads pinnedAt as the time the teammate was pinned (https://github.com/Brevilabs/obsidian-copilot-private/issues/1041)`, () => {
+      const content = "---\nname: Kai\npinnedAt: 1763717400000\n---\nBody";
 
-        expect(parseInstructionsFile(content).pinnedAt).toBe(
-          Date.parse("2026-11-20T09:30:00.000Z")
-        );
-      }
-    );
+      expect(parseInstructionsFile(content).pinnedAt).toBe(1763717400000);
+    });
 
-    it(`reads a pinned value that is not a date as not pinned, so a hand edit never breaks the roster (https://github.com/Brevilabs/obsidian-copilot-private/issues/1041)`, () => {
-      const content = "---\nname: Kai\npinned: soon\n---\nBody";
+    it("reads a pinnedAt that is not a number as not pinned, so a hand edit never breaks the roster", () => {
+      const content = "---\nname: Kai\npinnedAt: soon\n---\nBody";
 
       expect(parseInstructionsFile(content).pinnedAt).toBeNull();
     });

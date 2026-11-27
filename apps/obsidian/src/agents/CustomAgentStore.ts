@@ -128,24 +128,18 @@ export class CustomAgentStore {
     return folder instanceof TFolder ? folder.children.map((child) => child.name) : [];
   }
 
-  async updateAgent(slug: string, { model, ...text }: Partial<CustomAgentProfile>): Promise<void> {
+  async updateAgent(
+    slug: string,
+    { model, pinnedAt, ...text }: Partial<CustomAgentProfile & Pick<CustomAgent, "pinnedAt">>
+  ): Promise<void> {
     assertNotLocked();
     const file = this.app.vault.getAbstractFileByPath(this.pathsFor(slug).instructionsPath);
     if (!(file instanceof TFile)) throw new Error(`No agent at ${slug}.`);
     await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
       Object.assign(frontmatter, text);
       if (model !== undefined) frontmatter.model = serializeModel(model);
-    });
-    await this.refresh();
-  }
-
-  async setPinned(slug: string, pinnedAt: number | null): Promise<void> {
-    assertNotLocked();
-    const file = this.app.vault.getAbstractFileByPath(this.pathsFor(slug).instructionsPath);
-    if (!(file instanceof TFile)) throw new Error(`No agent at ${slug}.`);
-    await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
-      if (pinnedAt === null) delete frontmatter.pinned;
-      else frontmatter.pinned = new Date(pinnedAt).toISOString();
+      if (pinnedAt === null) delete frontmatter.pinnedAt;
+      else if (pinnedAt !== undefined) frontmatter.pinnedAt = pinnedAt;
     });
     await this.refresh();
   }
