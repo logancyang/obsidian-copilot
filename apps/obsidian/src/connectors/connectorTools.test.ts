@@ -25,6 +25,7 @@ jest.mock("@/logger", () => ({ logWarn: jest.fn() }));
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/857";
 const CUSTOM_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/862";
 const TOOLS_PAGE_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/878";
+const LISTING_LOOP_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/1030";
 const ECHO_JSON = JSON.stringify({ name: "Echo", command: "echo", env: { FAKE_KEY: "k" } });
 
 const NOTION: ConnectorCatalogEntry = {
@@ -900,6 +901,38 @@ describe("connectorTools", () => {
 
         expect(listener).toHaveBeenCalledTimes(1);
         expect(listener.mock.calls[0][0]("claude")).toBe(true);
+      });
+
+      it(`stays quiet while a connected service that can't be reached fails its tool listing in every new chat, so the agent isn't restarted in a loop (${LISTING_LOOP_ISSUE})`, async () => {
+        const fake = setUp();
+        fake.notion.unreachable = true;
+        const listener = jest.fn();
+        fake.tools.subscribeToToolSetChange(listener);
+
+        for (const sessionKey of ["chat-a", "chat-b", "chat-c"]) {
+          await fake.tools.refresh();
+          fake.tools.tools({ sessionKey, backendId: "opencode" });
+        }
+
+        expect(fake.statusOf("c-notion")).toBe("unreachable");
+        expect(listener).not.toHaveBeenCalled();
+      });
+
+      it(`tells only the backend of a chat that started while a service couldn't be reached, once a later chat lists that service's tools (${LISTING_LOOP_ISSUE})`, async () => {
+        const fake = setUp();
+        fake.notion.unreachable = true;
+        const listener = jest.fn();
+        fake.tools.subscribeToToolSetChange(listener);
+        await fake.tools.refresh();
+        fake.tools.tools({ sessionKey: "chat-a", backendId: "opencode" });
+        fake.notion.unreachable = false;
+
+        await fake.tools.refresh();
+
+        expect(fake.statusOf("c-notion")).toBe("connected");
+        expect(listener).toHaveBeenCalledTimes(1);
+        expect(listener.mock.calls[0][0]("opencode")).toBe(true);
+        expect(listener.mock.calls[0][0]("claude")).toBe(false);
       });
 
       it(`tells every backend when a custom connector is added, edited, turned off or removed: ${CUSTOM_ISSUE}`, async () => {
