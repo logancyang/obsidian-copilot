@@ -203,10 +203,8 @@ export class ClaudeLiveQuery {
     if (!this.openTurnId) return;
     const stopReason = mapStopReason(msg);
     let error: Error | undefined;
-    if (loginRejected && msg.is_error) {
-      error = new AuthRequiredError(
-        msg.subtype === "success" && msg.result.trim() ? msg.result : undefined
-      );
+    if (loginRejected && msg.subtype === "success" && msg.is_error) {
+      error = new AuthRequiredError(msg.result.trim() || undefined);
     }
     // Claude's own result names its API, account, context or execution failure, which a Copilot bug report cannot fix.
     // https://github.com/logancyang/obsidian-copilot/issues/4483
