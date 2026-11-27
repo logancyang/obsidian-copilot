@@ -22,7 +22,9 @@ import { App, FileSystemAdapter } from "obsidian";
 import { AcpProcessManager, AcpProcessManagerOptions } from "./AcpProcessManager";
 import { VaultClient } from "./VaultClient";
 import {
+  ACP_AUTH_REQUIRED,
   AgentReportedError,
+  AuthRequiredError,
   JSONRPC_METHOD_NOT_FOUND,
   MethodUnsupportedError,
 } from "@/agentMode/session/errors";
@@ -109,9 +111,11 @@ const MALFORMED_REQUEST_CODES: ReadonlySet<number> = new Set([
 // An agent's error reply to a well-formed prompt reports its own provider, model, account or service, which a Copilot bug report cannot fix.
 // https://github.com/logancyang/obsidian-copilot/issues/4483
 function agentReportedOr(err: unknown): unknown {
-  return err instanceof RequestError && !MALFORMED_REQUEST_CODES.has(err.code)
-    ? new AgentReportedError(err.message, { cause: err })
-    : err;
+  if (!(err instanceof RequestError) || MALFORMED_REQUEST_CODES.has(err.code)) return err;
+  // A login the account check accepted can still be rejected mid-chat, and the chat must then offer Sign in.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/1029
+  if (err.code === ACP_AUTH_REQUIRED) return new AuthRequiredError(err.message, { cause: err });
+  return new AgentReportedError(err.message, { cause: err });
 }
 
 // The plugin's ACP SDK predates the standard per-session system prompt, so its request types lack the field.

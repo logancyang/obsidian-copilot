@@ -6,7 +6,7 @@ import type {
   SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import { v4 as uuidv4 } from "uuid";
-import { AgentReportedError } from "@/agentMode/session/errors";
+import { AgentReportedError, AuthRequiredError } from "@/agentMode/session/errors";
 import { logWarn } from "@/logger";
 import { err2String } from "@/utils";
 import type { SessionEvent, SessionId, SessionUpdate, TurnEnd } from "@/agentMode/session/types";
@@ -49,6 +49,7 @@ export class ClaudeLiveQuery {
   private interrupted = false;
   private stopWithdrawals: string[] | null = null;
   private stallError: Error | null = null;
+  private loginRejected = false;
   private resultWatch: number | undefined;
 
   constructor(private readonly opts: ClaudeLiveQueryOptions) {
@@ -155,6 +156,11 @@ export class ClaudeLiveQuery {
     if (!taskToolCallId && isTurnContent(msg)) this.startTurn();
     // A background task's frames say nothing about the main reply's stream, so they must not keep a stalled turn alive. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
     if (!taskToolCallId && this.openTurnId && !("task_id" in msg)) this.stallGuard.observe(msg);
+    // A login `claude auth status` accepted can still be rejected mid-chat, and the chat must then offer Sign in.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/1029
+    if (!taskToolCallId && msg.type === "assistant" && msg.error === "authentication_failed") {
+      this.loginRejected = true;
+    }
     // A subagent's frames carry the tool call that launched it; they belong to its task, not to a main-agent reply. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
     for (const event of translateSdkMessage(msg, this.opts.sessionId, this.opts.translator)) {
       this.opts.emit(taskToolCallId ? { ...event, taskToolCallId } : event);
@@ -192,12 +198,19 @@ export class ClaudeLiveQuery {
     if (Array.isArray(consumed)) {
       for (const uuid of consumed) if (typeof uuid === "string") this.deliver(uuid);
     }
+    const loginRejected = this.loginRejected;
+    this.loginRejected = false;
     if (!this.openTurnId) return;
     const stopReason = mapStopReason(msg);
     let error: Error | undefined;
+    if (loginRejected && msg.is_error) {
+      error = new AuthRequiredError(
+        msg.subtype === "success" && msg.result.trim() ? msg.result : undefined
+      );
+    }
     // Claude's own result names its API, account, context or execution failure, which a Copilot bug report cannot fix.
     // https://github.com/logancyang/obsidian-copilot/issues/4483
-    if (msg.subtype === "success" && msg.is_error && msg.result.trim()) {
+    else if (msg.subtype === "success" && msg.is_error && msg.result.trim()) {
       error = new AgentReportedError(msg.result);
     } else if (stopReason !== "end_turn" && msg.subtype !== "success") {
       const errors = "errors" in msg ? msg.errors : undefined;
