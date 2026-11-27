@@ -807,7 +807,7 @@ export class AgentSessionManager {
     }
 
     const internalId = uuidv4();
-    const mcpServers = await this.connectCopilotMcpServer(internalId, descriptor, cwd, agentSlug);
+    const mcpServers = await this.connectCopilotMcpServer(internalId, descriptor, agentSlug);
 
     if (this.disposed) {
       this.finishPendingCreate();
@@ -923,7 +923,7 @@ export class AgentSessionManager {
     const backend = await this.ensureBackend(resolvedId, descriptor);
     const internalId = uuidv4();
     this.unlistedSessions.set(internalId, null);
-    const mcpServers = await this.connectCopilotMcpServer(internalId, descriptor, cwd, agent.slug);
+    const mcpServers = await this.connectCopilotMcpServer(internalId, descriptor, agent.slug);
     const options = {
       backend,
       cwd,
@@ -1926,53 +1926,34 @@ export class AgentSessionManager {
   private async connectCopilotMcpServer(
     internalId: string,
     descriptor: BackendDescriptor,
-    cwd: string,
     agentSlug: string | undefined
   ): Promise<ReadonlyArray<AgentMcpServer>> {
     const server = this.opts.copilotMcpServer;
-    if (!server) return EMPTY_MCP_SERVERS;
-    // A folder's chats share one connection, so its token names only the folder and the agent stamps the calling session on each call.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
-    const shared = descriptor.sharesMcpServersAcrossSessions === true;
+    if (!server || descriptor.connectsCopilotMcpServerAtSpawn) return EMPTY_MCP_SERVERS;
     // An asked agent's chat calls its own tools too, though no list shows it.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/945
-    const findChat: FindCallingChat = (callerSessionId) =>
-      (shared
-        ? this.findFolderSession(descriptor.id, cwd, callerSessionId)
-        : (this.sessions.get(internalId) ?? this.unlistedSessions.get(internalId)?.session)) ??
-      null;
+    const findChat: FindCallingChat = () =>
+      this.sessions.get(internalId) ?? this.unlistedSessions.get(internalId)?.session ?? null;
     try {
-      return [
-        await server.connect(
-          shared ? `${descriptor.id}:${cwd}` : internalId,
-          descriptor.id,
-          findChat,
-          shared,
-          // A folder's listing serves every chat in it, so only a chat's own listing names the agent it runs as.
-          // https://github.com/Brevilabs/obsidian-copilot-private/issues/987
-          shared ? undefined : agentSlug
-        ),
-      ];
+      return [await server.connect(internalId, descriptor.id, findChat, false, agentSlug)];
     } catch (err) {
       logWarn("[AgentMode] Copilot MCP server unavailable; continuing without it", err);
       return EMPTY_MCP_SERVERS;
     }
   }
 
-  private findFolderSession(
-    backendId: BackendId,
-    cwd: string,
-    backendSessionId: string | null
-  ): AgentSession | undefined {
-    if (!backendSessionId) return undefined;
+  // An asked agent's chat calls its own tools too, though no list shows it.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/945
+  findCallingChat(backendId: BackendId, backendSessionId: string | null): AgentSession | null {
+    if (!backendSessionId) return null;
     const unlisted = Array.from(this.unlistedSessions.values()).flatMap((entry) =>
       entry ? [entry.session] : []
     );
-    return [...this.sessions.values(), ...unlisted].find(
-      (session) =>
-        session.backendId === backendId &&
-        session.cwd === cwd &&
-        session.getBackendSessionId() === backendSessionId
+    return (
+      [...this.sessions.values(), ...unlisted].find(
+        (session) =>
+          session.backendId === backendId && session.getBackendSessionId() === backendSessionId
+      ) ?? null
     );
   }
 
@@ -2380,7 +2361,7 @@ export class AgentSessionManager {
     }
 
     const internalId = uuidv4();
-    const mcpServers = await this.connectCopilotMcpServer(internalId, descriptor, cwd, agentSlug);
+    const mcpServers = await this.connectCopilotMcpServer(internalId, descriptor, agentSlug);
     if (this.disposed) {
       this.finishPendingCreate();
       return null;

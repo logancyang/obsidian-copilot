@@ -17,6 +17,7 @@ import type {
   ProviderType,
 } from "@/modelManagement";
 import type { Skill } from "@/agentMode/skills";
+import type { AgentMcpServer } from "@/agentMode/session/types";
 import { setSelectedPromptTitle, updateCachedSystemPrompts } from "@/system-prompts/state";
 import {
   buildOpencodeConfig,
@@ -185,6 +186,23 @@ function makePlusReasoningModel(wireId: string, efforts?: readonly string[]): Co
 }
 
 const NO_MODELS_DEPS = makeDeps({ resolved: [] });
+
+const MCP_ISSUE = "https://github.com/logancyang/obsidian-copilot/issues/4688";
+
+function copilotMcpServer(readOnlyToolNames: readonly string[] = []): AgentMcpServer {
+  return {
+    name: "obsidian-copilot",
+    url: "http://127.0.0.1:4100/mcp",
+    headers: { Authorization: "Bearer t0k3n" },
+    readOnlyToolNames,
+  };
+}
+
+const COPILOT_MCP_CONFIG = {
+  type: "remote",
+  url: "http://127.0.0.1:4100/mcp",
+  headers: { Authorization: "Bearer t0k3n" },
+};
 
 function setOpencodeSettings(opencode: OpencodeBackendSettings): void {
   updateAgentModeBackendFields("opencode", opencode);
@@ -970,10 +988,12 @@ describe("OpencodeBackend", () => {
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/862 lets the ask-first agent run Copilot's read-only MCP tools, named as OpenCode names them, without asking, while Auto runs every tool", async () => {
-      const cfg = await buildOpencodeConfig(getSettings(), {
-        ...NO_MODELS_DEPS,
-        readCopilotReadOnlyToolNames: async () => ["send_feedback", "drive_files.list"],
-      });
+      const cfg = await buildOpencodeConfig(
+        getSettings(),
+        NO_MODELS_DEPS,
+        undefined,
+        copilotMcpServer(["send_feedback", "drive_files.list"])
+      );
 
       expect(cfg.agents["copilot-build"].permissions).toEqual([
         ...COPILOT_BUILD_ASKS,
@@ -981,6 +1001,19 @@ describe("OpencodeBackend", () => {
         { action: "obsidian-copilot_drive_files_list", resource: "*", effect: "allow" },
       ]);
       expect(cfg.agents.build.permissions).toBeUndefined();
+    });
+
+    it(`${MCP_ISSUE} names Copilot's MCP server with its URL and token, so OpenCode connects it again whenever it reloads a folder, and leaves it out when none was connected`, async () => {
+      const connected = await buildOpencodeConfig(
+        getSettings(),
+        NO_MODELS_DEPS,
+        undefined,
+        copilotMcpServer()
+      );
+      const unconnected = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
+
+      expect(connected.mcp).toEqual({ servers: { "obsidian-copilot": COPILOT_MCP_CONFIG } });
+      expect(unconnected.mcp).toBeUndefined();
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/986 gives both agents a Copilot chat runs on the shared product prompt byte for byte, then tells it it is Obsidian Copilot", async () => {
@@ -1333,6 +1366,63 @@ describe("OpencodeBackend", () => {
         } finally {
           await fs.promises.rm(root, { recursive: true, force: true });
         }
+      });
+
+      it(`${MCP_ISSUE} connects Copilot's MCP server once before OpenCode starts and names it in the spawn config with its read-only tools allowed`, async () => {
+        setOpencodeSettings({ binaryPath: "/path/to/opencode" });
+        const connectCopilotMcpServer = jest.fn(async () => copilotMcpServer(["send_feedback"]));
+
+        const desc = await new OpencodeBackend({
+          ...NO_MODELS_DEPS,
+          connectCopilotMcpServer,
+        }).buildSpawnDescriptor({ vaultBasePath: "/vault" });
+        const cfg: GeneratedOpencodeConfig = JSON.parse(desc.env.OPENCODE_CONFIG_CONTENT as string);
+
+        expect(connectCopilotMcpServer).toHaveBeenCalledTimes(1);
+        expect(cfg.mcp).toEqual({ servers: { "obsidian-copilot": COPILOT_MCP_CONFIG } });
+        expect(lastRuleFor(cfg, "copilot-build", "obsidian-copilot_send_feedback")?.effect).toBe(
+          "allow"
+        );
+      });
+
+      it(`${MCP_ISSUE} adds Copilot's MCP server to a user's custom configuration beside their own servers`, async () => {
+        setOpencodeSettings({
+          binaryPath: "/path/to/opencode",
+          envOverrides: {
+            OPENCODE_CONFIG_CONTENT: JSON.stringify({
+              model: "custom",
+              mcp: { timeout: { startup: 5000 }, servers: { mine: { type: "remote", url: "x" } } },
+            }),
+          },
+        });
+
+        const desc = await new OpencodeBackend({
+          ...NO_MODELS_DEPS,
+          connectCopilotMcpServer: async () => copilotMcpServer(),
+        }).buildSpawnDescriptor({ vaultBasePath: "/vault" });
+
+        expect(JSON.parse(desc.env.OPENCODE_CONFIG_CONTENT as string)).toEqual({
+          model: "custom",
+          mcp: {
+            timeout: { startup: 5000 },
+            servers: { mine: { type: "remote", url: "x" }, "obsidian-copilot": COPILOT_MCP_CONFIG },
+          },
+        });
+      });
+
+      it(`${MCP_ISSUE} still starts OpenCode, without Copilot's MCP server, when that server cannot start`, async () => {
+        setOpencodeSettings({ binaryPath: "/path/to/opencode" });
+
+        const desc = await new OpencodeBackend({
+          ...NO_MODELS_DEPS,
+          connectCopilotMcpServer: async () => {
+            throw new Error("EADDRINUSE");
+          },
+        }).buildSpawnDescriptor({ vaultBasePath: "/vault" });
+        const cfg: GeneratedOpencodeConfig = JSON.parse(desc.env.OPENCODE_CONFIG_CONTENT as string);
+
+        expect(desc.command).toBe("/path/to/opencode");
+        expect(cfg.mcp).toBeUndefined();
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/665 starts OpenCode with its full prompt when the plugin cannot be written", async () => {

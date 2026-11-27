@@ -428,6 +428,46 @@ describe("descriptor", () => {
           construct.mockRestore();
         }
       });
+
+      it("https://github.com/logancyang/obsidian-copilot/issues/4688 connects one shared Copilot MCP server for the whole OpenCode process, naming no agent, and finds each call's chat by the session OpenCode stamps on it", async () => {
+        const construct = jest
+          .spyOn(opencodeBackendModule, "OpencodeBackend")
+          .mockImplementation(() => ({}) as never);
+        try {
+          const chat = { id: "chat-a" } as never;
+          const findCallingChat = jest.fn(() => chat);
+          const server = { name: "obsidian-copilot" };
+          const connect = jest.fn(async () => server);
+          OpencodeBackendDescriptor.createBackendProcess({
+            ...fakeBackendStartServices({ findCallingChat }),
+            app: vaultApp(os.tmpdir()),
+            descriptor: OpencodeBackendDescriptor,
+            copilotMcpServer: { connect } as never,
+          });
+          const [deps] = construct.mock.calls[0];
+
+          await expect(deps.connectCopilotMcpServer?.()).resolves.toBe(server);
+          const [sessionKey, backendId, findChat, shared, agentSlug] = connect.mock
+            .calls[0] as unknown as [
+            string,
+            string,
+            (id: string | null) => unknown,
+            boolean,
+            unknown,
+          ];
+
+          expect([sessionKey, backendId, shared, agentSlug]).toEqual([
+            "opencode",
+            "opencode",
+            true,
+            undefined,
+          ]);
+          expect(findChat("ses_a")).toBe(chat);
+          expect(findCallingChat).toHaveBeenCalledWith("opencode", "ses_a");
+        } finally {
+          construct.mockRestore();
+        }
+      });
     });
 
     describe("subscribeInstallState()", () => {

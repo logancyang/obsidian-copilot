@@ -208,26 +208,6 @@ describe("copilotMcpServer", () => {
       expect(notListed.promptHints).toEqual([]);
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/862 names the read-only tools, connected services' included after a refresh, for an agent whose permission rules are fixed when it starts", async () => {
-      server.dispose();
-      const provider = connectorProvider();
-      server = createCopilotMcpServer(
-        () => true,
-        [
-          { ...lookupTool(), definition: { name: "peek", annotations: { readOnlyHint: true } } },
-          { ...lookupTool(), definition: { name: "draw", annotations: { readOnlyHint: false } } },
-        ],
-        provider
-      );
-
-      await expect(server.readOnlyToolNames()).resolves.toEqual([
-        "send_feedback",
-        "peek",
-        "notion_search",
-      ]);
-      expect(provider.refresh).toHaveBeenCalledTimes(1);
-    });
-
     it(`${CONNECTORS_ISSUE} refreshes the connected services before handing a session its server, then lists their tools after its own and names their read-only ones`, async () => {
       server.dispose();
       server = createCopilotMcpServer(() => true, [], connectorProvider());
@@ -307,7 +287,7 @@ describe("copilotMcpServer", () => {
       });
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/945 tells a tool whether a listing is shared by every chat in a folder, so one only some chats may call can still reach them", async () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/945 tells a tool whether a listing is shared by every chat an OpenCode process runs, so one only some chats may call can still reach them", async () => {
       server.dispose();
       const listings: unknown[] = [];
       server = createCopilotMcpServer(
@@ -315,14 +295,11 @@ describe("copilotMcpServer", () => {
         [{ ...lookupTool(), listedAs: (listing) => (listings.push(listing), null) }]
       );
 
-      await post(
-        await server.connect("opencode:/vault", "opencode", NO_CHAT, true),
-        rpc(2, "tools/list")
-      );
+      await post(await server.connect("opencode", "opencode", NO_CHAT, true), rpc(2, "tools/list"));
       await post(await server.connect("session-a", "claude", NO_CHAT), rpc(3, "tools/list"));
 
       expect(listings).toEqual([
-        { sessionKey: "opencode:/vault", backendId: "opencode", shared: true },
+        { sessionKey: "opencode", backendId: "opencode", shared: true },
         { sessionKey: "session-a", backendId: "claude", shared: false },
       ]);
     });
@@ -499,7 +476,7 @@ describe("copilotMcpServer", () => {
       server = createCopilotMcpServer(() => true, [lookupTool(call)]);
       const chat = fakeChat();
       const findChat = jest.fn(() => chat);
-      const channel = await server.connect("opencode:/vault", "opencode", findChat);
+      const channel = await server.connect("opencode", "opencode", findChat);
 
       await post(
         channel,
@@ -521,7 +498,7 @@ describe("copilotMcpServer", () => {
         server.dispose();
         server = createCopilotMcpServer(() => true, [lookupTool(call)]);
         const findChat = jest.fn(() => null);
-        const channel = await server.connect("opencode:/vault", "opencode", findChat);
+        const channel = await server.connect("opencode", "opencode", findChat);
         const args = { query: "plans", caller_session_id: "ses_guessed" };
 
         await post(channel, rpc(3, "tools/call", { name: "lookup", arguments: args, _meta }));
@@ -546,7 +523,7 @@ describe("copilotMcpServer", () => {
       server.dispose();
       const provider = connectorProvider();
       server = createCopilotMcpServer(() => true, [], provider);
-      const channel = await server.connect("opencode:/vault", "opencode", NO_CHAT);
+      const channel = await server.connect("opencode", "opencode", NO_CHAT);
 
       await post(
         channel,
@@ -693,7 +670,7 @@ describe("copilotMcpServer", () => {
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 tells the agent nothing was shown when a send_feedback call can't be traced to a chat", async () => {
-      const channel = await server.connect("opencode:/vault", "opencode", NO_CHAT);
+      const channel = await server.connect("opencode", "opencode", NO_CHAT);
 
       const result = await post(
         channel,
@@ -759,7 +736,7 @@ describe("copilotMcpServer", () => {
     it("https://github.com/logancyang/obsidian-copilot/issues/4229 attributes feedback using transport metadata even when a model supplies a different caller argument", async () => {
       const chat = fakeChat();
       const findChat = jest.fn(() => chat);
-      const channel = await server.connect("opencode:/vault", "opencode", findChat);
+      const channel = await server.connect("opencode", "opencode", findChat);
 
       await post(
         channel,
@@ -844,7 +821,7 @@ describe("copilotMcpServer", () => {
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/944 tells each agent holding an event stream open to list the tools again, and ends a session's stream when it disconnects", async () => {
       const opencode = await openEventStream(
-        await server.connect("opencode:/vault", "opencode", NO_CHAT, true)
+        await server.connect("opencode", "opencode", NO_CHAT, true)
       );
       const claude = await openEventStream(await server.connect("session-a", "claude", NO_CHAT));
 
@@ -897,9 +874,9 @@ describe("copilotMcpServer", () => {
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 hands a reconnected key its existing token and sends its calls to the newest chat lookup", async () => {
       const replaced = fakeChat();
       const current = fakeChat();
-      const first = await server.connect("opencode:/vault", "opencode", () => replaced);
+      const first = await server.connect("opencode", "opencode", () => replaced);
 
-      const again = await server.connect("opencode:/vault", "opencode", () => current);
+      const again = await server.connect("opencode", "opencode", () => current);
       await post(first, rpc(1, "tools/call", { name: "send_feedback", arguments: COMPLAINT }));
 
       expect(again).toEqual(first);

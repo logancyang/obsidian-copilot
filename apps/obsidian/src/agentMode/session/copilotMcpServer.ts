@@ -164,7 +164,6 @@ export interface CopilotMcpServer {
     shared?: boolean,
     agentSlug?: string
   ): Promise<AgentMcpServer>;
-  readOnlyToolNames(): Promise<ReadonlyArray<string>>;
   disconnect(sessionKey: string): void;
   notifyToolsChanged(): void;
   dispose(): void;
@@ -232,7 +231,7 @@ export function createCopilotMcpServer(
       const [origin] = await Promise.all([server.origin, refreshProvidedTools()]);
       const url = `${origin}${MCP_PATH}`;
       const crypto = requireNodeModule<typeof import("node:crypto")>("crypto");
-      // A shared key keeps its token, so a later chat re-registering the server leaves the folder's connection on a valid token.
+      // A shared key keeps one token, so connecting it again leaves the connections already using it valid.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
       const token = tokensBySession.get(sessionKey) ?? crypto.randomBytes(32).toString("hex");
       tokensBySession.set(sessionKey, token);
@@ -245,10 +244,6 @@ export function createCopilotMcpServer(
         readOnlyToolNames: listReadOnlyToolNames(),
         promptHints: promptHintsFor(hostedTools, isToolOn, listing),
       });
-    },
-    async readOnlyToolNames(): Promise<ReadonlyArray<string>> {
-      await refreshProvidedTools();
-      return listReadOnlyToolNames();
     },
     disconnect(sessionKey: string): void {
       const token = tokensBySession.get(sessionKey);
@@ -306,7 +301,7 @@ async function handleHttpRequest(
   toolProvider: ToolProvider | undefined
 ): Promise<void> {
   if (request.url !== MCP_PATH) return writeJson(response, 404, { error: "Not found." });
-  // Each session's token selects its own chat, so another vault, session or local page cannot raise a card in it.
+  // Each token selects only its own chats, and OpenCode's only the chat OpenCode stamps on the call, so another vault, process or local page cannot raise a card in one.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
   const token = /^Bearer (.+)$/.exec(request.headers.authorization ?? "")?.[1];
   const handlers = token ? handlersByToken.get(token) : undefined;
