@@ -1,11 +1,16 @@
 import type { InstallState } from "@/agentMode/session/types";
 import type { CopilotSettings } from "@/settings/model";
+import type {
+  BuiltinPreferences,
+  BuiltinPreferencesUpdate,
+} from "@/settings/builtinSkillPreferences";
 import { joinPosix } from "@/utils/pathUtils";
 import {
   BUILTIN_SKILLS,
   RETIRED_BUILTIN_SKILLS,
   isBuiltinSkillEnabledFor,
 } from "@/builtinSkills/builtinSkills";
+import { getBuiltinEnabledAgents } from "./builtinOwnership";
 import {
   inspectBuiltinSkill,
   removeSeededBuiltin,
@@ -21,10 +26,68 @@ export interface ReconcileBuiltinOptions {
   settings: CopilotSettings;
   availableAgents: readonly string[];
   registeredAgents: readonly string[];
+  observedAgents: Map<string, string>;
+  savePreferences(update: BuiltinPreferencesUpdate): Promise<BuiltinPreferences>;
+}
+
+async function readInstalledAgents(
+  folder: string,
+  name: string,
+  fs: BuiltinSeedFs
+): Promise<string | null> {
+  const path = joinPosix(joinPosix(folder, name), "SKILL.md");
+  try {
+    if (!(await fs.exists(path))) return null;
+    return getBuiltinEnabledAgents(await fs.read(path))?.join(", ") ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export async function reconcileBuiltinSkills(options: ReconcileBuiltinOptions): Promise<void> {
-  const { folder, fs, settings, availableAgents, registeredAgents } = options;
+  const { folder, fs, availableAgents, registeredAgents, observedAgents } = options;
+  let settings = options.settings;
+  // Another device's agent choice arrives as a file change before (or without) its settings, so
+  // a list that changed since this device last saw it is the user's choice, not one to undo.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/1031
+  for (const skill of BUILTIN_SKILLS) {
+    const observed = observedAgents.get(skill.name);
+    const installed = await readInstalledAgents(folder, skill.name, fs);
+    if (observed === undefined || installed === null || installed === observed) continue;
+    const listed = installed.split(", ");
+    const builtinPreferences = await options.savePreferences((current) => ({
+      ...current,
+      [skill.name]: {
+        ...current[skill.name],
+        disabledAgents: registeredAgents.filter((agent) => !listed.includes(agent)),
+      },
+    }));
+    settings = {
+      ...settings,
+      agentMode: {
+        ...settings.agentMode,
+        skills: { ...settings.agentMode.skills, builtinPreferences },
+      },
+    };
+  }
+  try {
+    await reconcileFiles(folder, fs, settings, availableAgents, registeredAgents);
+  } finally {
+    for (const skill of BUILTIN_SKILLS) {
+      const installed = await readInstalledAgents(folder, skill.name, fs);
+      if (installed === null) observedAgents.delete(skill.name);
+      else observedAgents.set(skill.name, installed);
+    }
+  }
+}
+
+async function reconcileFiles(
+  folder: string,
+  fs: BuiltinSeedFs,
+  settings: CopilotSettings,
+  availableAgents: readonly string[],
+  registeredAgents: readonly string[]
+): Promise<void> {
   const errors: string[] = [];
   // Retired skills are removed regardless of user overrides so cleanup can retry. https://github.com/logancyang/obsidian-copilot/issues/3022
   for (const skill of RETIRED_BUILTIN_SKILLS) {

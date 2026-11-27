@@ -15,6 +15,7 @@ const ISSUE_736 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/
 const ISSUE_656 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/656";
 const ISSUE_740 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/740";
 const ISSUE_833 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/833";
+const ISSUE_1031 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/1031";
 const INSTALLED_PLUS_READ_PDF_MD = `---
 name: copilot-read-pdf
 description: Extract the full text of a PDF as Markdown using Copilot Plus.
@@ -85,6 +86,12 @@ function fixture(preferences?: BuiltinPreferences) {
     settings,
     availableAgents: [] as string[],
     registeredAgents: ["claude", "codex", "opencode"],
+    observedAgents: new Map<string, string>(),
+    savePreferences: async (update: (current: BuiltinPreferences) => BuiltinPreferences) => {
+      const saved = update(settings.agentMode.skills.builtinPreferences ?? {});
+      settings.agentMode.skills.builtinPreferences = saved;
+      return saved;
+    },
   };
   return {
     files,
@@ -408,6 +415,114 @@ describe("reconcileBuiltinSkills", () => {
       expect(f.options.settings.agentMode.skills.builtinPreferences?.[skill.name].disabled).toBe(
         true
       );
+    });
+    it(`keeps an agent choice another device synced into an installed built-in and saves it as this device's choice ${ISSUE_1031}`, async () => {
+      const f = fixture();
+      f.options.availableAgents = ["claude"];
+      await reconcileBuiltinSkills(f.options);
+      const path = f.path("obsidian-markdown");
+      const synced = f.files
+        .get(path)!
+        .replace(/copilot-enabled-agents:.*/, "copilot-enabled-agents: opencode");
+      f.files.set(path, synced);
+
+      await reconcileBuiltinSkills(f.options);
+
+      expect(f.files.get(path)).toBe(synced);
+      expect(f.options.settings.agentMode.skills.builtinPreferences?.["obsidian-markdown"]).toEqual(
+        { disabledAgents: ["claude", "codex"] }
+      );
+    });
+    it(`writes this device's own agent change into a built-in no other device changed ${ISSUE_1031}`, async () => {
+      const f = fixture();
+      f.options.availableAgents = ["claude"];
+      await reconcileBuiltinSkills(f.options);
+      f.options.settings.agentMode.skills.builtinPreferences = {
+        "obsidian-markdown": { disabledAgents: ["codex"] },
+      };
+
+      await reconcileBuiltinSkills(f.options);
+
+      expect(
+        parseSkillFile(f.files.get(f.path("obsidian-markdown"))!, "obsidian-markdown").frontmatter
+          .enabledAgents
+      ).toEqual(["claude", "opencode"]);
+    });
+    it(`applies this device's saved choices on the first pass after load, before any synced change is seen ${ISSUE_1031}`, async () => {
+      const skill = BUILTIN_SKILLS.find((item) => item.name === "obsidian-markdown")!;
+      const f = fixture();
+      f.options.availableAgents = ["claude"];
+      f.files.set(
+        f.path(skill.name),
+        skill.skillMd.replace(/copilot-enabled-agents:.*/, "copilot-enabled-agents: opencode")
+      );
+      for (const file of skill.files)
+        f.files.set(`${folder}/${skill.name}/${file.path}`, file.content);
+
+      await reconcileBuiltinSkills(f.options);
+
+      expect(
+        parseSkillFile(f.files.get(f.path(skill.name))!, skill.name).frontmatter.enabledAgents
+      ).toEqual(["claude", "codex", "opencode"]);
+      expect(f.options.settings.agentMode.skills.builtinPreferences).toBeUndefined();
+    });
+    it(`retries keeping a synced agent choice when saving it fails, without rewriting the file ${ISSUE_1031}`, async () => {
+      const f = fixture();
+      f.options.availableAgents = ["claude"];
+      await reconcileBuiltinSkills(f.options);
+      const path = f.path("obsidian-markdown");
+      const synced = f.files
+        .get(path)!
+        .replace(/copilot-enabled-agents:.*/, "copilot-enabled-agents: opencode");
+      f.files.set(path, synced);
+      const save = f.options.savePreferences;
+      f.options.savePreferences = async () => {
+        throw new Error("data.json is read-only");
+      };
+
+      await expect(reconcileBuiltinSkills(f.options)).rejects.toThrow("data.json is read-only");
+      expect(f.files.get(path)).toBe(synced);
+
+      f.options.savePreferences = save;
+      await reconcileBuiltinSkills(f.options);
+      expect(f.files.get(path)).toBe(synced);
+      expect(f.options.settings.agentMode.skills.builtinPreferences?.["obsidian-markdown"]).toEqual(
+        { disabledAgents: ["claude", "codex"] }
+      );
+    });
+    it(`reinstalls a built-in whose sync conflict leaves Copilot's marker on both sides, with this device's agents ${ISSUE_1031}`, async () => {
+      const skill = BUILTIN_SKILLS.find((item) => item.name === "obsidian-bases")!;
+      const f = fixture({ [skill.name]: { disabledAgents: ["codex"] } });
+      f.options.availableAgents = ["claude"];
+      f.files.set(
+        f.path(skill.name),
+        skill.skillMd.replace(
+          / {2}copilot-enabled-agents:.*\n/,
+          "<<<<<<< HEAD\n  copilot-enabled-agents: claude, codex, opencode\n=======\n  copilot-enabled-agents: opencode\n>>>>>>> other-device\n"
+        )
+      );
+
+      await reconcileBuiltinSkills(f.options);
+
+      const repaired = f.files.get(f.path(skill.name))!;
+      expect(repaired).not.toContain("<<<<<<<");
+      expect(parseSkillFile(repaired, skill.name).frontmatter.enabledAgents).toEqual([
+        "claude",
+        "opencode",
+      ]);
+      await reconcileBuiltinSkills(f.options);
+      expect(f.files.get(f.path(skill.name))).toBe(repaired);
+    });
+    it(`leaves a sync-conflicted skill untouched when one side lacks Copilot's marker ${ISSUE_1031}`, async () => {
+      const f = fixture();
+      f.options.availableAgents = ["claude"];
+      const content = `---\nname: obsidian-bases\ndescription: Mine.\nmetadata:\n<<<<<<< HEAD\n  copilot-builtin-version: "4"\n=======\n  author: me\n>>>>>>> other-device\n---\nbody`;
+      f.files.set(f.path("obsidian-bases"), content);
+
+      await expect(reconcileBuiltinSkills(f.options)).rejects.toThrow(
+        "A user-owned skill occupies obsidian-bases"
+      );
+      expect(f.files.get(f.path("obsidian-bases"))).toBe(content);
     });
     it(`removes an installed Plus copilot-read-pdf, relay script included ${ISSUE_656}`, async () => {
       const f = fixture({ "copilot-read-pdf": { disabled: true } });

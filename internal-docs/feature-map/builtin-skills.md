@@ -6,6 +6,7 @@ The Built-in skills table shows bundled skills, their availability, and per-agen
 
 - builtin-availability: web search, web fetch, YouTube transcripts, and X require active Plus access and a configured license key. When unavailable, their agent switches are off and disabled, with an explanation.
 - builtin-preferences: saved whole-skill and per-agent choices apply again when Plus becomes active. Free Obsidian skills stay available.
+- builtin-synced-choices: in a vault synced between devices, a per-agent choice changed on another device stays in the skill's file and becomes this device's saved choice. A bundled skill file left with sync conflict markers is reinstalled.
 
 ## How to get to it
 
@@ -15,6 +16,7 @@ The Built-in skills table shows bundled skills, their availability, and per-agen
 
 - Availability: with Plus inactive, inspect a bundled web skill. Its agent switches are off and unavailable; the warning explains that active Copilot Plus is required. A disabled skill's More actions menu cannot enable it.
 - Preferences: with Plus active, enable web search for one installed agent, then deactivate Plus. The switches become unavailable. Restore Plus and confirm the saved choice returns. Check that a free Obsidian skill remains available throughout.
+- Synced choices: while Copilot runs, change `copilot-enabled-agents` in a free Obsidian skill's SKILL.md from outside Obsidian, as another device's sync would. The file keeps the new list, also after a plugin reload. Put conflict markers around that line instead: the file is reinstalled without them within seconds.
 
 ## Gotchas
 

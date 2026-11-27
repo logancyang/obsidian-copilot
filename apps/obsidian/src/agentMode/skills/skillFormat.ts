@@ -95,7 +95,7 @@ function readBoolean(doc: Document.Parsed, key: string): boolean | undefined {
   return typeof v === "boolean" ? v : undefined;
 }
 
-function readEnabledAgents(doc: Document.Parsed): BackendId[] {
+export function readEnabledAgents(doc: Document.Parsed): BackendId[] {
   const metadata = doc.get("metadata");
   if (!isMap(metadata)) return [];
   const raw = metadata.get("copilot-enabled-agents");

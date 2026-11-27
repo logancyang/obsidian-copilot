@@ -98,6 +98,22 @@ describe("seedBuiltinSkills", () => {
       expect(fs.files.get(SCRIPT)).toBe("// user-touched");
     });
 
+    it("leaves a current skill untouched when it lists this device's agents in another order https://github.com/Brevilabs/obsidian-copilot-private/issues/1031", async () => {
+      const synced = skill(1).skillMd.replace("claude, codex, opencode", "opencode, claude");
+      const fs = memFs({ [MD]: synced, [SCRIPT]: "// script v1" });
+      const write = jest.spyOn(fs, "write");
+
+      await seedBuiltinSkills({
+        skillsFolderRelPath: FOLDER,
+        fs,
+        skills: [skill(1)],
+        enabledAgents: { "copilot-web-search": ["claude", "opencode"] },
+      });
+
+      expect(write).not.toHaveBeenCalled();
+      expect(fs.files.get(MD)).toBe(synced);
+    });
+
     it("re-seeds when the bundled version is newer", async () => {
       const fs = memFs({ [MD]: skill(1).skillMd, [SCRIPT]: "// script v1" });
       const { seeded } = await seedBuiltinSkills({

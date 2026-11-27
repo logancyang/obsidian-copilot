@@ -221,6 +221,7 @@ export function createAgentSessionManager(
   };
   const saveSkillPreferences = (update: BuiltinPreferencesUpdate) =>
     saveBuiltinPreferences(update, (data) => plugin.saveData(data));
+  const observedSkillAgents = new Map<string, string>();
   const skillManager = SkillManager.initialize(app, collectAgentSkillsDirsProjectRel(), {
     availableAgents: availableSkillAgents,
     savePreferences: saveSkillPreferences,
@@ -231,6 +232,8 @@ export function createAgentSessionManager(
         settings: getSettings(),
         availableAgents: availableSkillAgents(),
         registeredAgents: Object.keys(collectAgentSkillsDirsProjectRel()),
+        observedAgents: observedSkillAgents,
+        savePreferences: saveSkillPreferences,
       });
     },
   });
