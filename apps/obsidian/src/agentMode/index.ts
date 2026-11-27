@@ -91,6 +91,7 @@ import {
 import { buildBuiltinSeedFs } from "./skills/builtin/miyoSearchSeed";
 import { trackTabStripShown } from "@/agentMode/ui/trackTabStripShown";
 import { FEEDBACK_OFFER_EXTENSION } from "@/agentMode/session/feedback/feedbackOffer";
+import { runsRelaySkillScript } from "@/builtinSkills/builtinSkills";
 import {
   createDefaultAskUserQuestionPrompter,
   createDefaultPermissionPrompter,
@@ -379,7 +380,8 @@ export function createAgentSessionManager(
           ]
         : []),
     ],
-    connectorTools
+    connectorTools,
+    runsRelaySkillScript
   );
   plugin.register(relistOnAgentsChange(customAgents, () => copilotMcpServer.notifyToolsChanged()));
   const backendStartServices: BackendStartServices = {

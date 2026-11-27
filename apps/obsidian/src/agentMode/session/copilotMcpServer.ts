@@ -1,5 +1,5 @@
 import type { ChatStateHost } from "@/agentMode/session/chatExtension";
-import { offerFeedback } from "@/agentMode/session/feedback/feedbackOffer";
+import { offerFeedback, type RunsCopilotScript } from "@/agentMode/session/feedback/feedbackOffer";
 import type { AgentMcpServer, BackendId } from "@/agentMode/session/types";
 import { logWarn } from "@/logger";
 import { requireNodeModule } from "@/utils/desktopRuntime";
@@ -139,20 +139,26 @@ interface SessionHandlers {
   listing: ToolListing;
 }
 
-const SEND_FEEDBACK_HOSTED_TOOL: HostedTool = Object.freeze({
-  definition: SEND_FEEDBACK_TOOL,
-  turnedOffText: OFFER_RESULT_TEXT.turned_off,
-  call: async (args: unknown, chat: ChatStateHost | null) => {
-    const draft = parseDraft(args);
-    if (!draft) {
-      return { text: "title, what_happened and repro must be non-empty strings.", isError: true };
-    }
-    return {
-      text: OFFER_RESULT_TEXT[chat ? offerFeedback(chat, draft) : "unattributed"],
-      isError: false,
-    };
-  },
-});
+function sendFeedbackTool(runsCopilotScript: RunsCopilotScript): HostedTool {
+  return Object.freeze({
+    definition: SEND_FEEDBACK_TOOL,
+    turnedOffText: OFFER_RESULT_TEXT.turned_off,
+    call: async (args: unknown, chat: ChatStateHost | null) => {
+      const draft = parseDraft(args);
+      if (!draft) {
+        return { text: "title, what_happened and repro must be non-empty strings.", isError: true };
+      }
+      return {
+        text: OFFER_RESULT_TEXT[
+          chat ? offerFeedback(chat, draft, runsCopilotScript) : "unattributed"
+        ],
+        isError: false,
+      };
+    },
+  });
+}
+
+const RUNS_NO_COPILOT_SCRIPT: RunsCopilotScript = () => false;
 
 type ToolSwitch = (toolName: string) => boolean;
 
@@ -181,9 +187,13 @@ type JsonRpcReply = { result: unknown } | { error: { code: number; message: stri
 export function createCopilotMcpServer(
   isToolOn: ToolSwitch,
   tools: readonly HostedTool[],
-  toolProvider?: ToolProvider
+  toolProvider?: ToolProvider,
+  runsCopilotScript: RunsCopilotScript = RUNS_NO_COPILOT_SCRIPT
 ): CopilotMcpServer {
-  const hostedTools: readonly HostedTool[] = Object.freeze([SEND_FEEDBACK_HOSTED_TOOL, ...tools]);
+  const hostedTools: readonly HostedTool[] = Object.freeze([
+    sendFeedbackTool(runsCopilotScript),
+    ...tools,
+  ]);
   const handlersByToken = new Map<string, SessionHandlers>();
   const tokensBySession = new Map<string, string>();
   const streams = new Map<ServerResponse, string>();

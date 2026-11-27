@@ -11,7 +11,8 @@ import {
 } from "./copilotMcpServer";
 import type { AgentMcpServer } from "@/agentMode/session/types";
 import { FEEDBACK_OFFER, type FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
-import { fakeChat, type FakeChat } from "@/agentMode/session/testing/fakeChat";
+import { fakeChat, fakeChatView, type FakeChat } from "@/agentMode/session/testing/fakeChat";
+import { AI_SENDER, USER_SENDER } from "@/constants";
 
 jest.mock("@/logger", () => ({ logError: jest.fn(), logWarn: jest.fn() }));
 
@@ -644,6 +645,42 @@ describe("copilotMcpServer", () => {
           isError: false,
         },
       });
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/1026 raises a send_feedback call's card after a failed shell command that the server's script check marks as Copilot's", async () => {
+      server.dispose();
+      server = createCopilotMcpServer(
+        (toolName) => toolName === "send_feedback",
+        [],
+        undefined,
+        (input) => (input as { command?: string }).command === "sh web-search.sh"
+      );
+      const chat = fakeChat(
+        fakeChatView([
+          { id: "u1", sender: USER_SENDER, message: "search", isVisible: true, timestamp: null },
+          {
+            id: "a1",
+            sender: AI_SENDER,
+            message: "",
+            isVisible: true,
+            timestamp: null,
+            parts: [
+              {
+                kind: "tool_call",
+                id: "search",
+                title: "sh web-search.sh",
+                status: "failed",
+                input: { command: "sh web-search.sh" },
+              },
+            ],
+          },
+        ])
+      );
+      const channel = await server.connect("session-a", "codex", () => chat);
+
+      await post(channel, rpc(3, "tools/call", { name: "send_feedback", arguments: COMPLAINT }));
+
+      expect(offerIn(chat)).toMatchObject({ draft: COMPLAINT_DRAFT, status: "open" });
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 tells the agent to stop when its chat already offered a report, and keeps the earlier card", async () => {

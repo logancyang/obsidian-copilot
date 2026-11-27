@@ -6,6 +6,7 @@ import {
   isBuiltinSkillEnabledFor,
   getBuiltinSkillUnavailableReason,
   PLUS_ENV,
+  runsRelaySkillScript,
   SELF_HOST_WEB_SEARCH_ENV,
   SELF_HOST_WEB_SEARCH_TOKEN_ENV,
   SELF_HOST_WEB_SEARCH_URL_ENV,
@@ -314,6 +315,32 @@ describe("builtinSkills", () => {
 
     it("reports a name that is not a managed builtin as disabled", () => {
       expect(isBuiltinSkillEnabledFor(settingsWith({}), "user-authored", "claude")).toBe(false);
+    });
+  });
+
+  describe("runsRelaySkillScript()", () => {
+    it.each([
+      [
+        "the macOS or Linux script",
+        'sh "/vault/.agents/skills/copilot-web-search/web-search.sh" "q"',
+      ],
+      [
+        "the Windows wrapper",
+        '& "C:\\vault\\.claude\\skills\\copilot-web-fetch\\web-fetch.cmd" "https://a.b"',
+      ],
+    ])(
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/1026 recognizes a shell command that runs %s of a Copilot relay skill",
+      (_label, command) => {
+        expect(runsRelaySkillScript({ command })).toBe(true);
+      }
+    );
+
+    it.each([
+      ["another program", { command: "curl -sS https://example.invalid/" }],
+      ["a file of a Copilot skill that calls no relay", { command: "cat obsidian-bases/LICENSE" }],
+      ["no shell command", { server: "obsidian-copilot", tool: "miyo_search" }],
+    ])("does not recognize %s", (_label, input) => {
+      expect(runsRelaySkillScript(input)).toBe(false);
     });
   });
 });
