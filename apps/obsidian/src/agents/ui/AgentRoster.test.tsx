@@ -307,53 +307,6 @@ describe("AgentRoster", () => {
       expect(onOpenProfile).toHaveBeenCalledWith("coco");
     });
 
-    it(`opens a menu to pin the selected agent or edit its profile when its big face is right-clicked, hiding the face's tooltip while it is open (${PIN_ISSUE})`, () => {
-      const onOpenProfile = jest.fn();
-      const { onTogglePin } = renderRoster({ selectedSlug: "coco", onOpenProfile });
-
-      const face = screen.getByRole("button", { name: "Open Coco's profile" });
-      fireEvent.focus(face);
-      fireEvent.contextMenu(face);
-      expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual([
-        "Pin",
-        "Edit profile",
-      ]);
-      expect(screen.queryByRole("tooltip")).toBeNull();
-      fireEvent.click(screen.getByRole("menuitem", { name: "Pin" }));
-      fireEvent.contextMenu(screen.getByRole("button", { name: "Open Coco's profile" }));
-      fireEvent.click(screen.getByRole("menuitem", { name: "Edit profile" }));
-
-      expect(onTogglePin).toHaveBeenCalledWith(COCO);
-      expect(onOpenProfile).toHaveBeenCalledWith("coco");
-    });
-
-    it(`offers Unpin in the big face's menu while the selected agent is pinned (${PIN_ISSUE})`, () => {
-      const { onTogglePin } = renderRoster({
-        agents: [pinned(COCO, 1), MAYA],
-        selectedSlug: "coco",
-        onOpenProfile: () => {},
-      });
-
-      fireEvent.contextMenu(screen.getByRole("button", { name: "Open Coco's profile" }));
-      fireEvent.click(screen.getByRole("menuitem", { name: "Unpin" }));
-
-      expect(onTogglePin).toHaveBeenCalledWith(pinned(COCO, 1));
-    });
-
-    it(`opens the profile, not the menu, when the big face is clicked or chosen with Enter or Space (${PIN_ISSUE})`, () => {
-      const onOpenProfile = jest.fn();
-      renderRoster({ selectedSlug: "coco", onOpenProfile });
-      const face = screen.getByRole("button", { name: "Open Coco's profile" });
-
-      fireEvent.pointerDown(face, { button: 0, ctrlKey: false });
-      fireEvent.click(face);
-      fireEvent.keyDown(face, { key: "Enter" });
-      fireEvent.keyDown(face, { key: " " });
-
-      expect(screen.queryByRole("menu")).toBeNull();
-      expect(onOpenProfile).toHaveBeenCalledTimes(3);
-    });
-
     it(`shows the selected agent's title alone under its name, with no Profile link (${ISSUE})`, () => {
       renderRoster({ selectedSlug: "coco", onOpenProfile: jest.fn() });
 
@@ -451,6 +404,57 @@ describe("AgentRoster", () => {
       renderRoster({ agents: TWELVE, selectedSlug: "gus", width: 260, newAgentButton: NEW_BUTTON });
 
       expect(rowNames()).toEqual(["Copilot", "Gus", "Show 11 more teammates", "New"]);
+    });
+
+    it(`opens a menu to pin an agent or edit its profile when its face in the row is right-clicked, hiding the face's tooltip while it is open (${PIN_ISSUE})`, () => {
+      const onOpenProfile = jest.fn();
+      const { onSelect, onTogglePin } = renderRoster({ onOpenProfile });
+      const maya = screen.getByRole("button", { name: "Maya" });
+
+      fireEvent.focus(maya);
+      fireEvent.contextMenu(maya);
+      expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual([
+        "Pin",
+        "Edit profile",
+      ]);
+      expect(screen.queryByRole("tooltip")).toBeNull();
+      fireEvent.click(screen.getByRole("menuitem", { name: "Pin" }));
+      fireEvent.contextMenu(maya);
+      fireEvent.click(screen.getByRole("menuitem", { name: "Edit profile" }));
+
+      expect(onTogglePin).toHaveBeenCalledWith(MAYA);
+      expect(onOpenProfile).toHaveBeenCalledWith("maya");
+      expect(onSelect).not.toHaveBeenCalled();
+    });
+
+    it(`offers Unpin in the menu of a pinned agent's face (${PIN_ISSUE})`, () => {
+      const { onTogglePin } = renderRoster({ agents: [pinned(COCO, 1), MAYA] });
+
+      fireEvent.contextMenu(screen.getByRole("button", { name: "Coco" }));
+      fireEvent.click(screen.getByRole("menuitem", { name: "Unpin" }));
+
+      expect(onTogglePin).toHaveBeenCalledWith(pinned(COCO, 1));
+    });
+
+    it(`picks an agent, with no menu, when its face is clicked or chosen with Enter or Space (${PIN_ISSUE})`, () => {
+      const { onSelect } = renderRoster();
+      const maya = screen.getByRole("button", { name: "Maya" });
+
+      fireEvent.pointerDown(maya, { button: 0, ctrlKey: false });
+      fireEvent.click(maya);
+      fireEvent.keyDown(maya, { key: "Enter" });
+      fireEvent.keyDown(maya, { key: " " });
+
+      expect(screen.queryByRole("menu")).toBeNull();
+      expect(onSelect.mock.calls).toEqual([["maya"], ["maya"], ["maya"]]);
+    });
+
+    it(`opens no menu on a right-click while teammates are locked, since a locked teammate can't be pinned (${LOCKED_AGENTS_ISSUE})`, () => {
+      renderRoster({ locked: { onOpen: jest.fn(), note: "Locked" } });
+
+      fireEvent.contextMenu(screen.getByRole("button", { name: "Maya · Supporter preview" }));
+
+      expect(screen.queryByRole("menu")).toBeNull();
     });
 
     it(`puts pinned agents right after Copilot and a divider between them and the other agents (${PIN_ISSUE})`, () => {

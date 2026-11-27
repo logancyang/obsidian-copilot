@@ -197,18 +197,18 @@ export const PinnedTeammatesBeforeDivider: StoryObj<AgentRosterProps> = {
   },
 };
 
-function RightClickedProfileFace(args: Partial<AgentRosterProps>) {
+function RightClickedRowFace(args: Partial<AgentRosterProps>) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    ref.current
-      ?.querySelector<HTMLButtonElement>('button[aria-label$="profile"]')
+    Array.from(ref.current?.querySelectorAll<HTMLButtonElement>('[role="group"] button') ?? [])
+      .find((button) => button.textContent === "Maya")
       ?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, button: 2 }));
   }, []);
   return <div ref={ref}>{render(args)}</div>;
 }
 
-export const PickedFaceMenuOnRightClick: StoryObj<AgentRosterProps> = {
-  render: (args) => <RightClickedProfileFace {...args} />,
+export const RowFaceMenuOnRightClick: StoryObj<AgentRosterProps> = {
+  render: (args) => <RightClickedRowFace {...args} />,
   args: {
     agents: [{ ...LEO, pinnedAt: 1 }, MAYA, COCO],
     selectedSlug: "leo",

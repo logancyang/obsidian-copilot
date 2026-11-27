@@ -26,7 +26,7 @@ A teammate's page in the sidebar: its face, name, and title, how many chats it h
 ## How to get to it
 
 - The [teammate identity bar](teammate-identity-bar.md) at the top of a teammate's chat.
-- The selected teammate's large face above the row of faces on the [start screen](start-screen.md) (`Open <name>'s profile`), or `Edit profile` in the menu right-clicking it opens.
+- The selected teammate's large face above the row of faces on the [start screen](start-screen.md) (`Open <name>'s profile`), or `Edit profile` in the menu that right-clicking a teammate's face in the row opens.
 
 Without a Supporter license, the locked profile opens from a greyed face on the start screen.
 

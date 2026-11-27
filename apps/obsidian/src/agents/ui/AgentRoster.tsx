@@ -99,6 +99,8 @@ export function AgentRoster({
       onSelect={select}
       onChoose={choose}
       lockOf={lockOf}
+      onTogglePin={onTogglePin}
+      onOpenProfile={onOpenProfile}
       newAgentButton={newAgentButton}
       labelledBy={labelId}
     />
@@ -119,7 +121,7 @@ export function AgentRoster({
 
   return (
     <div className="tw-flex tw-min-w-0 tw-flex-col tw-items-center">
-      <PickedAgent agent={selected} onOpenProfile={onOpenProfile} onTogglePin={onTogglePin} />
+      <PickedAgent agent={selected} onOpenProfile={onOpenProfile} />
       {row}
       {/* The picked agent above already says who the chat is with, so only screen readers get the question, through a
       hidden label: an aria-label would make Obsidian show it as the whole row's tooltip.
@@ -139,19 +141,14 @@ export function AgentRoster({
 interface PickedAgentProps {
   agent: RosterAgent | null;
   onOpenProfile?: (slug: string) => void;
-  onTogglePin: (agent: RosterAgent) => void;
 }
 
-function PickedAgent({ agent, onOpenProfile, onTogglePin }: PickedAgentProps) {
+function PickedAgent({ agent, onOpenProfile }: PickedAgentProps) {
   const title = agent ? agentTitle(agent) : COPILOT_TITLE;
   return (
     <div className="tw-flex tw-w-full tw-min-w-0 tw-flex-col tw-items-center tw-text-center">
       {agent && onOpenProfile ? (
-        <ProfileFaceButton
-          agent={agent}
-          onOpen={() => onOpenProfile(agent.slug)}
-          onTogglePin={() => onTogglePin(agent)}
-        />
+        <ProfileFaceButton agent={agent} onOpen={() => onOpenProfile(agent.slug)} />
       ) : agent ? (
         <AgentFace src={agent.faceSrc} size="xxl" className={SHORT_WINDOW_PICKED_FACE_CLASS} />
       ) : (
@@ -183,7 +180,6 @@ function PickedAgent({ agent, onOpenProfile, onTogglePin }: PickedAgentProps) {
 interface ProfileFaceButtonProps {
   agent: RosterAgent;
   onOpen: () => void;
-  onTogglePin: () => void;
 }
 
 const GEAR_BRIGHTER_ON_HOVER_OR_FOCUS =
@@ -193,61 +189,28 @@ const GEAR_BRIGHTER_ON_HOVER_OR_FOCUS =
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/588
 const ROUND_CORNERS = "[corner-shape:round]";
 
-function ProfileFaceButton({ agent, onOpen, onTogglePin }: ProfileFaceButtonProps) {
-  const [menuOpen, setMenuOpen] = useState(false);
+function ProfileFaceButton({ agent, onOpen }: ProfileFaceButtonProps) {
   return (
-    <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen} modal={false}>
-      <Tooltip open={menuOpen ? false : undefined}>
-        <TooltipTrigger asChild>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              aria-label={`Open ${agent.name}'s profile`}
-              onClick={onOpen}
-              // A click or Enter opens the profile; only a right-click opens the menu.
-              // https://github.com/Brevilabs/obsidian-copilot-private/issues/1041
-              onPointerDown={(event) => {
-                if (event.button !== 2) event.preventDefault();
-              }}
-              onKeyDown={(event) => {
-                if (event.key !== "Enter" && event.key !== " ") return;
-                event.preventDefault();
-                onOpen();
-              }}
-              onContextMenu={(event) => {
-                event.preventDefault();
-                setMenuOpen(true);
-              }}
-              className={cn(
-                "clickable-icon tw-relative tw-h-auto tw-cursor-pointer tw-rounded-full tw-bg-transparent tw-p-0 tw-shadow-none hover:tw-bg-transparent motion-safe:tw-transition-transform motion-safe:tw-duration-150 motion-safe:tw-ease-out motion-safe:hover:tw-scale-105",
-                ROUND_CORNERS,
-                NO_OBSIDIAN_TOOLTIP
-              )}
-            >
-              <AgentFace
-                src={agent.faceSrc}
-                size="xxl"
-                className={SHORT_WINDOW_PICKED_FACE_CLASS}
-              />
-              <span className={cn(FACE_BADGE_CLASS, "tw-size-6", GEAR_BRIGHTER_ON_HOVER_OR_FOCUS)}>
-                <Settings className="tw-size-3.5" />
-              </span>
-            </button>
-          </DropdownMenuTrigger>
-        </TooltipTrigger>
-        <TooltipContent side="right">Open profile</TooltipContent>
-      </Tooltip>
-      <DropdownMenuContent align="center">
-        <DropdownMenuItem onSelect={onTogglePin}>
-          {agent.pinnedAt === null ? <Pin /> : <PinOff />}
-          {agent.pinnedAt === null ? "Pin" : "Unpin"}
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={onOpen}>
-          <Pencil />
-          Edit profile
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          aria-label={`Open ${agent.name}'s profile`}
+          onClick={onOpen}
+          className={cn(
+            "clickable-icon tw-relative tw-h-auto tw-cursor-pointer tw-rounded-full tw-bg-transparent tw-p-0 tw-shadow-none hover:tw-bg-transparent motion-safe:tw-transition-transform motion-safe:tw-duration-150 motion-safe:tw-ease-out motion-safe:hover:tw-scale-105",
+            ROUND_CORNERS,
+            NO_OBSIDIAN_TOOLTIP
+          )}
+        >
+          <AgentFace src={agent.faceSrc} size="xxl" className={SHORT_WINDOW_PICKED_FACE_CLASS} />
+          <span className={cn(FACE_BADGE_CLASS, "tw-size-6", GEAR_BRIGHTER_ON_HOVER_OR_FOCUS)}>
+            <Settings className="tw-size-3.5" />
+          </span>
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="right">Open profile</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -264,6 +227,8 @@ interface FaceRowProps {
   onSelect: (slug: string | null) => void;
   onChoose: (slug: string) => void;
   lockOf: (slug: string) => AgentLock | undefined;
+  onTogglePin: (agent: RosterAgent) => void;
+  onOpenProfile?: (slug: string) => void;
   newAgentButton?: React.ReactNode;
   labelledBy: string;
 }
@@ -274,6 +239,8 @@ function FaceRow({
   onSelect,
   onChoose,
   lockOf,
+  onTogglePin,
+  onOpenProfile,
   newAgentButton,
   labelledBy,
 }: FaceRowProps) {
@@ -333,6 +300,8 @@ function FaceRow({
             selected={agents[index] === selected}
             lock={lockOf(agents[index].slug)}
             onSelect={onChoose}
+            onTogglePin={onTogglePin}
+            onOpenProfile={onOpenProfile}
           />
         </React.Fragment>
       ))}
@@ -386,27 +355,69 @@ interface AgentCellProps {
   selected: boolean;
   lock: AgentLock | undefined;
   onSelect: (slug: string) => void;
+  onTogglePin: (agent: RosterAgent) => void;
+  onOpenProfile?: (slug: string) => void;
 }
 
-function AgentCell({ agent, selected, lock, onSelect }: AgentCellProps) {
+function AgentCell({
+  agent,
+  selected,
+  lock,
+  onSelect,
+  onTogglePin,
+  onOpenProfile,
+}: AgentCellProps) {
   const title = agentTitle(agent);
+  const [menuOpen, setMenuOpen] = useState(false);
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <RosterCell
-          label={agent.name}
-          aria-label={lock ? `${agent.name} · ${LOCK_LABEL[lock]}` : undefined}
-          selected={lock ? undefined : selected}
-          onClick={() => onSelect(agent.slug)}
-        >
-          <AgentFace src={agent.faceSrc} size="roster" selected={selected} locked={!!lock} />
-        </RosterCell>
-      </TooltipTrigger>
-      <TooltipContent side="bottom" className="tw-max-w-64 tw-text-center">
-        <div className="tw-font-semibold">{agent.name}</div>
-        {title && <div className="tw-text-muted">{title}</div>}
-      </TooltipContent>
-    </Tooltip>
+    <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen} modal={false}>
+      <Tooltip open={menuOpen ? false : undefined}>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger asChild>
+            <RosterCell
+              label={agent.name}
+              aria-label={lock ? `${agent.name} · ${LOCK_LABEL[lock]}` : undefined}
+              selected={lock ? undefined : selected}
+              onClick={() => onSelect(agent.slug)}
+              // A click or Enter picks the face; only a right-click opens its Pin and Edit profile menu.
+              // https://github.com/Brevilabs/obsidian-copilot-private/issues/1041
+              onPointerDown={(event) => {
+                if (event.button !== 2) event.preventDefault();
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" && event.key !== " ") return;
+                event.preventDefault();
+                onSelect(agent.slug);
+              }}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                // A license-locked teammate's files can't change, so it has nothing to pin.
+                // https://github.com/Brevilabs/obsidian-copilot-private/issues/950
+                if (lock !== "license") setMenuOpen(true);
+              }}
+            >
+              <AgentFace src={agent.faceSrc} size="roster" selected={selected} locked={!!lock} />
+            </RosterCell>
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="tw-max-w-64 tw-text-center">
+          <div className="tw-font-semibold">{agent.name}</div>
+          {title && <div className="tw-text-muted">{title}</div>}
+        </TooltipContent>
+      </Tooltip>
+      <DropdownMenuContent align="center">
+        <DropdownMenuItem onSelect={() => onTogglePin(agent)}>
+          {agent.pinnedAt === null ? <Pin /> : <PinOff />}
+          {agent.pinnedAt === null ? "Pin" : "Unpin"}
+        </DropdownMenuItem>
+        {onOpenProfile && (
+          <DropdownMenuItem onSelect={() => onOpenProfile(agent.slug)}>
+            <Pencil />
+            Edit profile
+          </DropdownMenuItem>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
