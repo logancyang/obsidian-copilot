@@ -20,7 +20,7 @@ Copilot Chat can combine three kinds of search:
 
 You can ask naturally, such as “Find everything I have written about memory consolidation,” or say “Use Miyo” when you want semantic search explicitly. Search results become context for the model you selected, so the model still receives the excerpts Copilot Chat uses in its answer.
 
-With **Semantic search for agents** on, agents search your notes with Miyo and file search for any question your notes might answer before turning to the web.
+With **Semantic search for agents** on, agents run a Miyo search only when you ask about your notes, or what you wrote, saved, decided, or planned, such as “What did I write about closures?” or “Find my notes on the trip.” Each Miyo search runs alongside file search for exact names and terms. Agents answer general, coding, and outside questions without a Miyo search, and work on a note you attached or named directly.
 
 Each Miyo search appears in the chat as a card with the query and, when available, how many notes it found, or why the search failed.
 
