@@ -55,7 +55,20 @@ export const ClaudeSettingsPanel: React.FC<Props> = ({ app, manifest }) => {
       <SettingItem
         type="switch"
         title="Claude in Chrome"
-        description="Let Claude use your Chrome browser through the Claude in Chrome extension. Applies to new chats."
+        description={
+          <>
+            Let Claude use your Chrome browser. Requires the{" "}
+            <a
+              href="https://claude.com/chrome"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="tw-text-accent"
+            >
+              Claude in Chrome extension
+            </a>
+            . Applies to new chats.
+          </>
+        }
         checked={Boolean(settings.agentMode?.backends?.claude?.enableChrome)}
         onCheckedChange={(checked) => updateClaudeFields({ enableChrome: checked })}
       />
