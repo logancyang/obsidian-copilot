@@ -524,7 +524,6 @@ function buildCopilotMcpServer({
 }: { connect?: jest.Mock } = {}) {
   return {
     connect,
-    readOnlyToolNames: jest.fn(async () => []),
     disconnect: jest.fn(),
     notifyToolsChanged: jest.fn(),
     dispose: jest.fn(),
@@ -1213,8 +1212,9 @@ describe("AgentSessionManager", () => {
         expect(findChat(null)).toBe(session);
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/987 names the agent an agent's own chat runs as when it attaches the Copilot MCP server, and none on a folder's shared connection, which serves every chat in the folder", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/987 names the agent an agent's own chat runs as when it attaches the Copilot MCP server", async () => {
         const copilotMcpServer = buildCopilotMcpServer();
+
         await buildManager({ copilotMcpServer }).createSession(
           undefined,
           GLOBAL_SCOPE,
@@ -1222,15 +1222,25 @@ describe("AgentSessionManager", () => {
           undefined,
           "coco"
         );
-        await buildManager({
-          copilotMcpServer,
-          descriptor: buildDescriptor({ sharesMcpServersAcrossSessions: true }),
-        }).createSession(undefined, GLOBAL_SCOPE, undefined, undefined, "coco");
 
         expect(copilotMcpServer.connect.mock.calls.map((call) => call.slice(3))).toEqual([
           [false, "coco"],
-          [true, undefined],
         ]);
+      });
+
+      it("https://github.com/logancyang/obsidian-copilot/issues/4688 gives no chat its own Copilot MCP server on a backend that gets it when the backend starts", async () => {
+        const copilotMcpServer = buildCopilotMcpServer();
+        const mgr = buildManager({
+          copilotMcpServer,
+          descriptor: buildDescriptor({ connectsCopilotMcpServerAtSpawn: true }),
+        });
+
+        await mgr.createSession();
+
+        expect(copilotMcpServer.connect).not.toHaveBeenCalled();
+        expect(sessionCreateSpy).toHaveBeenLastCalledWith(
+          expect.objectContaining({ mcpServers: [] })
+        );
       });
 
       it("hands every new chat the chat extensions it was given", async () => {
@@ -1243,75 +1253,6 @@ describe("AgentSessionManager", () => {
           expect.objectContaining({ chatExtensions })
         );
       });
-
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 gives a folder's chats one feedback key when the agent shares MCP servers across sessions", async () => {
-        const copilotMcpServer = buildCopilotMcpServer();
-        const mgr = buildManager({
-          copilotMcpServer,
-          descriptor: buildDescriptor({ sharesMcpServersAcrossSessions: true }),
-        });
-
-        const a = await mgr.createSession();
-        const b = await mgr.createSession();
-
-        const keys = copilotMcpServer.connect.mock.calls.map(([key]) => key);
-        expect(keys).toEqual([`opencode:${a.cwd}`, `opencode:${b.cwd}`]);
-        expect(keys[0]).toBe(keys[1]);
-      });
-
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 finds the chat whose backend session the agent stamped on a shared connection's call", async () => {
-        const copilotMcpServer = buildCopilotMcpServer();
-        const mgr = buildManager({
-          copilotMcpServer,
-          descriptor: buildDescriptor({ sharesMcpServersAcrossSessions: true }),
-        });
-        const caller = await mgr.createSession();
-        await mgr.createSession();
-        const findChat = copilotMcpServer.connect.mock.calls[1][2] as FindCallingChat;
-
-        expect(findChat(caller.getBackendSessionId())).toBe(caller);
-      });
-
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/945 finds an asked agent's chat, which no list shows, as the caller on a shared connection", async () => {
-        const copilotMcpServer = buildCopilotMcpServer();
-        const mgr = buildManager({
-          copilotMcpServer,
-          descriptor: buildDescriptor({ sharesMcpServersAcrossSessions: true }),
-        });
-        const asked = await mgr.startUnlistedSession({
-          projectId: GLOBAL_SCOPE,
-          mode: null,
-          agent: { slug: "maya", prompt: "Maya" },
-          observeSessionEvent: jest.fn(),
-        });
-        const [, , findChat, shared] = copilotMcpServer.connect.mock.calls[0] as [
-          string,
-          string,
-          FindCallingChat,
-          boolean,
-        ];
-
-        expect(shared).toBe(true);
-        expect(findChat(asked.getBackendSessionId())).toBe(asked);
-      });
-
-      it.each([
-        ["carries no caller session", null],
-        ["names a session outside the folder's chats", "backend-elsewhere"],
-      ])(
-        "https://github.com/Brevilabs/obsidian-copilot-private/issues/672 finds no chat when a shared connection's call %s",
-        async (_label, callerSessionId) => {
-          const copilotMcpServer = buildCopilotMcpServer();
-          const mgr = buildManager({
-            copilotMcpServer,
-            descriptor: buildDescriptor({ sharesMcpServersAcrossSessions: true }),
-          });
-          await mgr.createSession();
-          const findChat = copilotMcpServer.connect.mock.calls[0][2] as FindCallingChat;
-
-          expect(findChat(callerSessionId)).toBeNull();
-        }
-      );
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 still starts the chat when the feedback server cannot start", async () => {
         const copilotMcpServer = buildCopilotMcpServer({
@@ -1924,6 +1865,52 @@ describe("AgentSessionManager", () => {
       });
     });
 
+    describe("findCallingChat()", () => {
+      it("https://github.com/logancyang/obsidian-copilot/issues/4688 finds the chat whose backend session the agent stamped on a call, in the vault root or a project folder", async () => {
+        seedProjects("proj-call");
+        const mgr = buildManager();
+        const rootChat = await mgr.createSession();
+        const projectChat = await mgr.createSession(undefined, "proj-call");
+
+        expect(rootChat.cwd).not.toBe(projectChat.cwd);
+        expect(mgr.findCallingChat("opencode", rootChat.getBackendSessionId())).toBe(rootChat);
+        expect(mgr.findCallingChat("opencode", projectChat.getBackendSessionId())).toBe(
+          projectChat
+        );
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/945 finds an asked agent's chat, which no list shows, as the caller", async () => {
+        const mgr = buildManager();
+        const asked = await mgr.startUnlistedSession({
+          projectId: GLOBAL_SCOPE,
+          mode: null,
+          agent: { slug: "maya", prompt: "Maya" },
+          observeSessionEvent: jest.fn(),
+        });
+
+        expect(mgr.findCallingChat("opencode", asked.getBackendSessionId())).toBe(asked);
+      });
+
+      it.each([
+        ["carries no caller session", "opencode", null],
+        ["names a session no chat runs", "opencode", "backend-elsewhere"],
+        ["names a chat's session on another backend", "codex", undefined],
+      ])(
+        "https://github.com/Brevilabs/obsidian-copilot-private/issues/672 finds no chat when a call %s",
+        async (_label, backendId, callerSessionId) => {
+          const mgr = buildManager();
+          const chat = await mgr.createSession();
+
+          expect(
+            mgr.findCallingChat(
+              backendId,
+              callerSessionId === undefined ? chat.getBackendSessionId() : callerSessionId
+            )
+          ).toBeNull();
+        }
+      );
+    });
+
     describe("isUnlistedSession()", () => {
       it("names an asked agent's chat as unlisted from before it starts and never a chat the user sees (https://github.com/Brevilabs/obsidian-copilot-private/issues/944)", async () => {
         const copilotMcpServer = buildCopilotMcpServer();
@@ -2310,22 +2297,6 @@ describe("AgentSessionManager", () => {
 
         expect(mgr.getSessions()).toEqual([]);
         expect(mockSessionDispose).toHaveBeenCalled();
-      });
-
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 keeps a folder's shared feedback key when one of its chats closes", async () => {
-        const copilotMcpServer = buildCopilotMcpServer();
-        const mgr = buildManager({
-          copilotMcpServer,
-          descriptor: buildDescriptor({ sharesMcpServersAcrossSessions: true }),
-        });
-        await mgr.createSession();
-        const newest = await mgr.createSession();
-
-        await mgr.closeSession(newest.internalId);
-
-        expect(copilotMcpServer.disconnect).not.toHaveBeenCalledWith(
-          copilotMcpServer.connect.mock.calls[0][0]
-        );
       });
 
       it("when the active session is closed, picks the right neighbor as active", async () => {
