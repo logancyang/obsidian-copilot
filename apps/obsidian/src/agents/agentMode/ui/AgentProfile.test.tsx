@@ -1,6 +1,10 @@
 import type { AgentSetupProblem } from "@/agents/agentMode/agentChats";
 import type { HiddenAgentChats } from "@/agents/agentMode/hiddenAgentChats";
-import { AgentProfile, agentDeleteNotice } from "@/agents/agentMode/ui/AgentProfile";
+import {
+  AgentProfile,
+  agentDeleteNotice,
+  toggleAgentPin,
+} from "@/agents/agentMode/ui/AgentProfile";
 import { CustomAgentStore, type CustomAgent } from "@/agents/CustomAgentStore";
 import { PRESET_FACES_URL } from "@/agents/presetFaces";
 import { setCustomAgentsAccess } from "@/agents/testing/customAgentsAccess";
@@ -398,6 +402,41 @@ describe("AgentProfile", () => {
 
       expect(hiddenChats.workingIn).toHaveBeenCalledWith("coco");
       expect(jest.mocked(AgentDeleteModal).mock.calls[0][1]).toMatchObject({ workingIn: "Maya" });
+    });
+  });
+
+  describe("toggleAgentPin()", () => {
+    const PIN_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/1041";
+
+    function fakeStore(updateAgent: jest.Mock): CustomAgentStore {
+      return { updateAgent } as unknown as CustomAgentStore;
+    }
+
+    it(`pins an unpinned agent at the current time and unpins a pinned one (${PIN_ISSUE})`, async () => {
+      const now = jest.spyOn(Date, "now").mockReturnValue(1_700);
+      const updateAgent = jest.fn().mockResolvedValue(undefined);
+
+      await toggleAgentPin(fakeStore(updateAgent), { slug: "coco", name: "Coco", pinnedAt: null });
+      await toggleAgentPin(fakeStore(updateAgent), { slug: "maya", name: "Maya", pinnedAt: 900 });
+
+      now.mockRestore();
+
+      expect(updateAgent.mock.calls).toEqual([
+        ["coco", { pinnedAt: 1_700 }],
+        ["maya", { pinnedAt: null }],
+      ]);
+    });
+
+    it(`says the agent couldn't be pinned or unpinned when its instructions.md can't be written (${PIN_ISSUE})`, async () => {
+      const updateAgent = jest.fn().mockRejectedValue(new Error("No agent at coco."));
+
+      await toggleAgentPin(fakeStore(updateAgent), { slug: "coco", name: "Coco", pinnedAt: null });
+      await toggleAgentPin(fakeStore(updateAgent), { slug: "coco", name: "Coco", pinnedAt: 900 });
+
+      expect(jest.mocked(obsidian.Notice).mock.calls.slice(-2)).toEqual([
+        ["Couldn't pin Coco."],
+        ["Couldn't unpin Coco."],
+      ]);
     });
   });
 

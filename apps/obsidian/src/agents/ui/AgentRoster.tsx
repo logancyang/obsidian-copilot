@@ -19,7 +19,7 @@ import { computeVisibleTabIndices } from "@/components/ui/tabOverflow";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { Lock, Plus, Settings } from "lucide-react";
+import { Lock, Pencil, Pin, PinOff, Plus, Settings } from "lucide-react";
 import React, { useId, useLayoutEffect, useRef, useState } from "react";
 
 export type RosterAgent = Pick<
@@ -34,6 +34,7 @@ export interface AgentRosterProps {
   emptyHero: React.ReactNode;
   newAgentButton?: React.ReactNode;
   onOpenProfile?: (slug: string) => void;
+  onTogglePin: (agent: RosterAgent) => void;
   locked?: LockedRoster;
   needsSetup?: Pick<ReadonlySet<string>, "has">;
 }
@@ -69,6 +70,7 @@ export function AgentRoster({
   emptyHero,
   newAgentButton,
   onOpenProfile,
+  onTogglePin,
   locked,
   needsSetup,
 }: AgentRosterProps): React.ReactElement {
@@ -117,7 +119,7 @@ export function AgentRoster({
 
   return (
     <div className="tw-flex tw-min-w-0 tw-flex-col tw-items-center">
-      <PickedAgent agent={selected} onOpenProfile={onOpenProfile} />
+      <PickedAgent agent={selected} onOpenProfile={onOpenProfile} onTogglePin={onTogglePin} />
       {row}
       {/* The picked agent above already says who the chat is with, so only screen readers get the question, through a
       hidden label: an aria-label would make Obsidian show it as the whole row's tooltip.
@@ -137,14 +139,19 @@ export function AgentRoster({
 interface PickedAgentProps {
   agent: RosterAgent | null;
   onOpenProfile?: (slug: string) => void;
+  onTogglePin: (agent: RosterAgent) => void;
 }
 
-function PickedAgent({ agent, onOpenProfile }: PickedAgentProps) {
+function PickedAgent({ agent, onOpenProfile, onTogglePin }: PickedAgentProps) {
   const title = agent ? agentTitle(agent) : COPILOT_TITLE;
   return (
     <div className="tw-flex tw-w-full tw-min-w-0 tw-flex-col tw-items-center tw-text-center">
       {agent && onOpenProfile ? (
-        <ProfileFaceButton agent={agent} onOpen={() => onOpenProfile(agent.slug)} />
+        <ProfileFaceButton
+          agent={agent}
+          onOpen={() => onOpenProfile(agent.slug)}
+          onTogglePin={() => onTogglePin(agent)}
+        />
       ) : agent ? (
         <AgentFace src={agent.faceSrc} size="xxl" className={SHORT_WINDOW_PICKED_FACE_CLASS} />
       ) : (
@@ -176,6 +183,7 @@ function PickedAgent({ agent, onOpenProfile }: PickedAgentProps) {
 interface ProfileFaceButtonProps {
   agent: RosterAgent;
   onOpen: () => void;
+  onTogglePin: () => void;
 }
 
 const GEAR_BRIGHTER_ON_HOVER_OR_FOCUS =
@@ -185,28 +193,61 @@ const GEAR_BRIGHTER_ON_HOVER_OR_FOCUS =
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/588
 const ROUND_CORNERS = "[corner-shape:round]";
 
-function ProfileFaceButton({ agent, onOpen }: ProfileFaceButtonProps) {
+function ProfileFaceButton({ agent, onOpen, onTogglePin }: ProfileFaceButtonProps) {
+  const [menuOpen, setMenuOpen] = useState(false);
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          aria-label={`Open ${agent.name}'s profile`}
-          onClick={onOpen}
-          className={cn(
-            "clickable-icon tw-relative tw-h-auto tw-cursor-pointer tw-rounded-full tw-bg-transparent tw-p-0 tw-shadow-none hover:tw-bg-transparent motion-safe:tw-transition-transform motion-safe:tw-duration-150 motion-safe:tw-ease-out motion-safe:hover:tw-scale-105",
-            ROUND_CORNERS,
-            NO_OBSIDIAN_TOOLTIP
-          )}
-        >
-          <AgentFace src={agent.faceSrc} size="xxl" className={SHORT_WINDOW_PICKED_FACE_CLASS} />
-          <span className={cn(FACE_BADGE_CLASS, "tw-size-6", GEAR_BRIGHTER_ON_HOVER_OR_FOCUS)}>
-            <Settings className="tw-size-3.5" />
-          </span>
-        </button>
-      </TooltipTrigger>
-      <TooltipContent side="right">Open profile</TooltipContent>
-    </Tooltip>
+    <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen} modal={false}>
+      <Tooltip open={menuOpen ? false : undefined}>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              aria-label={`Open ${agent.name}'s profile`}
+              onClick={onOpen}
+              // A click or Enter opens the profile; only a right-click opens the menu.
+              // https://github.com/Brevilabs/obsidian-copilot-private/issues/1041
+              onPointerDown={(event) => {
+                if (event.button !== 2) event.preventDefault();
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" && event.key !== " ") return;
+                event.preventDefault();
+                onOpen();
+              }}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                setMenuOpen(true);
+              }}
+              className={cn(
+                "clickable-icon tw-relative tw-h-auto tw-cursor-pointer tw-rounded-full tw-bg-transparent tw-p-0 tw-shadow-none hover:tw-bg-transparent motion-safe:tw-transition-transform motion-safe:tw-duration-150 motion-safe:tw-ease-out motion-safe:hover:tw-scale-105",
+                ROUND_CORNERS,
+                NO_OBSIDIAN_TOOLTIP
+              )}
+            >
+              <AgentFace
+                src={agent.faceSrc}
+                size="xxl"
+                className={SHORT_WINDOW_PICKED_FACE_CLASS}
+              />
+              <span className={cn(FACE_BADGE_CLASS, "tw-size-6", GEAR_BRIGHTER_ON_HOVER_OR_FOCUS)}>
+                <Settings className="tw-size-3.5" />
+              </span>
+            </button>
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent side="right">Open profile</TooltipContent>
+      </Tooltip>
+      <DropdownMenuContent align="center">
+        <DropdownMenuItem onSelect={onTogglePin}>
+          {agent.pinnedAt === null ? <Pin /> : <PinOff />}
+          {agent.pinnedAt === null ? "Pin" : "Unpin"}
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={onOpen}>
+          <Pencil />
+          Edit profile
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

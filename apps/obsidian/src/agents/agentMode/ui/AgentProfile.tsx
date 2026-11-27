@@ -47,6 +47,17 @@ export function agentDeleteNotice(
   return `Deleted ${name}${archivedChats > 0 ? ` and archived ${countOf(archivedChats, "chat")}` : ""}.`;
 }
 
+export function toggleAgentPin(
+  store: CustomAgentStore,
+  { slug, name, pinnedAt }: Pick<CustomAgent, "slug" | "name" | "pinnedAt">
+): Promise<void> {
+  const pin = pinnedAt === null;
+  return store.updateAgent(slug, { pinnedAt: pin ? Date.now() : null }).catch((error: unknown) => {
+    logError(`[Custom agents] ${pin ? "Pinning" : "Unpinning"} ${slug} failed`, error);
+    new Notice(`Couldn't ${pin ? "pin" : "unpin"} ${name}.`);
+  });
+}
+
 export function AgentProfile({
   agent,
   app,
@@ -118,14 +129,7 @@ export function AgentProfile({
       onRetitle={(title) => store.updateAgent(slug, { title })}
       onChangeFace={(face) => void store.saveFace(slug, face).catch(failed("face"))}
       onChangeModel={(model) => void store.updateAgent(slug, { model }).catch(failed("model"))}
-      onTogglePin={() =>
-        void store
-          .updateAgent(slug, { pinnedAt: agent.pinnedAt === null ? Date.now() : null })
-          .catch((error: unknown) => {
-            logError(`[Custom agents] Pinning ${slug} failed`, error);
-            new Notice(`Couldn't ${agent.pinnedAt === null ? "pin" : "unpin"} ${name}.`);
-          })
-      }
+      onTogglePin={() => void toggleAgentPin(store, agent)}
       onDelete={() =>
         void confirmDelete().catch((error: unknown) =>
           logError(`[Custom agents] Could not list ${slug}'s chats`, error)
