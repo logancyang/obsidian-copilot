@@ -23,4 +23,3 @@ export class AgentReportedError extends Error {
 }
 
 export const JSONRPC_METHOD_NOT_FOUND = -32601;
-export const ACP_AUTH_REQUIRED = -32000;

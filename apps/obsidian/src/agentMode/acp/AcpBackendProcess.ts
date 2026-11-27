@@ -22,7 +22,6 @@ import { App, FileSystemAdapter } from "obsidian";
 import { AcpProcessManager, AcpProcessManagerOptions } from "./AcpProcessManager";
 import { VaultClient } from "./VaultClient";
 import {
-  ACP_AUTH_REQUIRED,
   AgentReportedError,
   AuthRequiredError,
   JSONRPC_METHOD_NOT_FOUND,
@@ -101,6 +100,7 @@ function isMethodNotFoundError(err: unknown): boolean {
 
 const COPILOT_CLIENT_NAME = "obsidian-copilot";
 const JSONRPC_INTERNAL_ERROR = -32603;
+const ACP_AUTH_REQUIRED = -32000;
 const MALFORMED_REQUEST_CODES: ReadonlySet<number> = new Set([
   -32700,
   -32600,
