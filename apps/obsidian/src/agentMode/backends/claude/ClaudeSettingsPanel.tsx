@@ -52,6 +52,14 @@ export const ClaudeSettingsPanel: React.FC<Props> = ({ app, manifest }) => {
         onCheckedChange={(checked) => updateClaudeFields({ enableThinking: checked })}
       />
 
+      <SettingItem
+        type="switch"
+        title="Claude in Chrome"
+        description="Let Claude use your Chrome browser through the Claude in Chrome extension. Applies to new chats."
+        checked={Boolean(settings.agentMode?.backends?.claude?.enableChrome)}
+        onCheckedChange={(checked) => updateClaudeFields({ enableChrome: checked })}
+      />
+
       <ClaudeAutoMemorySetting
         value={autoMemory}
         onChange={(next) => updateClaudeFields({ autoMemory: next })}
