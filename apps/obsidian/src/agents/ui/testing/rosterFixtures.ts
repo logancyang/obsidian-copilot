@@ -15,7 +15,14 @@ function faceSrc(index: number): string {
 
 function fixtureAgent(name: string, title: string, index: number): CustomAgent {
   const slug = name.toLowerCase().replace(/[^a-z]+/g, "-");
-  return { slug, name, title, instruction: "", faceSrc: faceSrc(index) } as CustomAgent;
+  return {
+    slug,
+    name,
+    title,
+    instruction: "",
+    pinnedAt: null,
+    faceSrc: faceSrc(index),
+  } as CustomAgent;
 }
 
 export const COCO = fixtureAgent("Coco", "Keeps the whole vault in view", 0);

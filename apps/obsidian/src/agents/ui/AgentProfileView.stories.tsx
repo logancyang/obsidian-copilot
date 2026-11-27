@@ -111,6 +111,7 @@ const meta = {
     onRetitle: async () => {},
     onChangeFace: () => {},
     onChangeModel: () => {},
+    onTogglePin: () => {},
     onDelete: () => {},
   },
   parameters: { gallery: { host: "leaf", layout: "fullscreen" } },
@@ -220,5 +221,17 @@ export const NeedsSetupModelGone: StoryObj<StoryProps> = {
       ...paths("coco"),
     },
     setupLocked: { reason: "Coco's model, gpt-6, isn't available on this device." },
+  },
+};
+
+export const PinnedTeammate: StoryObj<StoryProps> = {
+  args: {
+    agent: {
+      ...COCO,
+      instruction: COCO_INSTRUCTION,
+      model: { baseModelId: "opus", effort: "high" },
+      pinnedAt: NOW,
+      ...paths("coco"),
+    },
   },
 };

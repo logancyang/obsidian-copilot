@@ -118,6 +118,14 @@ export function AgentProfile({
       onRetitle={(title) => store.updateAgent(slug, { title })}
       onChangeFace={(face) => void store.saveFace(slug, face).catch(failed("face"))}
       onChangeModel={(model) => void store.updateAgent(slug, { model }).catch(failed("model"))}
+      onTogglePin={() =>
+        void store
+          .setPinned(slug, agent.pinnedAt === null ? Date.now() : null)
+          .catch((error: unknown) => {
+            logError(`[Custom agents] Pinning ${slug} failed`, error);
+            new Notice(`Couldn't ${agent.pinnedAt === null ? "pin" : "unpin"} ${name}.`);
+          })
+      }
       onDelete={() =>
         void confirmDelete().catch((error: unknown) =>
           logError(`[Custom agents] Could not list ${slug}'s chats`, error)

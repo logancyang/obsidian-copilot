@@ -38,6 +38,7 @@ interface CustomAgentPaths {
 export interface CustomAgent extends CustomAgentProfile, CustomAgentPaths {
   slug: string;
   instruction: string;
+  pinnedAt: number | null;
   faceSrc: string;
 }
 
@@ -138,6 +139,17 @@ export class CustomAgentStore {
     await this.refresh();
   }
 
+  async setPinned(slug: string, pinnedAt: number | null): Promise<void> {
+    assertNotLocked();
+    const file = this.app.vault.getAbstractFileByPath(this.pathsFor(slug).instructionsPath);
+    if (!(file instanceof TFile)) throw new Error(`No agent at ${slug}.`);
+    await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
+      if (pinnedAt === null) delete frontmatter.pinned;
+      else frontmatter.pinned = new Date(pinnedAt).toISOString();
+    });
+    await this.refresh();
+  }
+
   async saveFace(slug: string, face: FaceImage): Promise<void> {
     const bytes = await encodeFace(face);
     assertNotLocked();
@@ -188,9 +200,7 @@ export class CustomAgentStore {
         .filter((child): child is TFolder => child instanceof TFolder)
         .map((child) => this.readAgent(child.name))
     );
-    return agents
-      .filter((agent): agent is CustomAgent => agent !== null)
-      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+    return agents.filter((agent): agent is CustomAgent => agent !== null).sort(rosterOrder);
   }
 
   private async readAgent(slug: string): Promise<CustomAgent | null> {
@@ -250,6 +260,17 @@ export class CustomAgentStore {
       facePath: `${folderPath}/${FACE_FILE_NAME}`,
     };
   }
+}
+
+// Pinned teammates lead in the order they were pinned, so a new pin never jumps ahead of older ones.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/1041
+function rosterOrder(a: CustomAgent, b: CustomAgent): number {
+  if (a.pinnedAt !== b.pinnedAt) {
+    if (a.pinnedAt === null) return 1;
+    if (b.pinnedAt === null) return -1;
+    return a.pinnedAt - b.pinnedAt;
+  }
+  return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
 }
 
 // A vault whose license isn't valid for custom agents shows its agents, and only Delete may change their files.

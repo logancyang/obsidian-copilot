@@ -1,10 +1,11 @@
 # Teammate profile
 
-A teammate's page in the sidebar: its face, name, and title, how many chats it has had, the two files that make it, its model, a way to start a new chat with it, and Delete.
+A teammate's page in the sidebar: its face, name, and title, how many chats it has had, the two files that make it, its model, a way to start a new chat with it, Pin, and Delete.
 
 ## Sub-features
 
 - profile-page: the profile covers the current chat inside its tab, under the [chat tabs](chat-tabs.md), with `Back to chat` at the top. It slides in from the right, the same way as the conversation with a teammate you asked in [asking a teammate](asking-a-teammate.md), and stays still when the system asks for reduced motion; it does not slide again while it stays open. `Back to chat`, Esc, or clicking the chat's tab returns at once to the same chat, or the same new chat page, with its draft and scroll as they were. Switching to another tab leaves the profile.
+- profile-pin: `Pin` at the right of the `Back to chat` bar pins the teammate to the front of the start screen's row of faces, right after Copilot and after teammates pinned earlier; a pinned teammate shows `Unpin` instead. The pin is the `pinned` property in the teammate's instructions file, so it syncs with the vault. A teammate's locked profile has no `Pin`.
 - profile-head: the teammate's face, with no ring around it, its name, and title, with how many chats it has had and since when, such as "23 chats · since Oct 3". A teammate with no title shows the first sentence of its instructions.
 - profile-edit-icons: hovering the head of the profile shows a pencil on the face, name, and title; moving the keyboard onto one of them shows its pencil.
 - profile-rename: choosing the name turns it into a box: Enter or a click elsewhere saves, Esc cancels, and "Enter to save · Esc to cancel" shows under it. A name already on the team, in any case, shows "Maya is already on your team. Pick another name." and is not saved. The new name shows on the start screen, the tab, and the identity bar, also for chats from before; the teammate's folder keeps its name.
@@ -32,6 +33,7 @@ Without a Supporter license, the locked profile opens from a greyed face on the 
 ## Driving it
 
 - Page: type a draft in a teammate's chat, scroll up, and click the identity bar. The profile slides in from the right over the chat. Rename the teammate and change its face and model: the profile stays in place. Choose `Back to chat`: the same chat shows, at the same scroll position, with the draft. Open the profile again and press Esc, then once more and click the chat's tab: the chat shows again each time.
+- Pin: open a teammate's profile and choose `Pin`. It reads `Unpin`, the teammate's instructions file has a `pinned` property, and on the start screen the teammate sits right after Copilot, before the divider. Choose `Unpin`: the property is gone and the teammate returns to its place by name.
 - Head: open the profile of a teammate with chats. The face, name, title, and "<n> chats · since <date>" show.
 - Edit icons: hover the head of the profile. Pencils show on the face, name, and title; move away and they go. Click the face twice, or click the name, type a new one and press Enter, then move away: no pencil shows. Press Tab from `Back to chat`: the face's pencil shows, and Tab again moves it to the name.
 - Rename: choose the name, type a new one, and press Enter. The profile, the start screen, the tab, and the identity bar show the new name; the teammate's folder name on disk is unchanged. Type another teammate's name in lowercase: the red note names that teammate and nothing is saved. Press Esc: the old name returns and the profile stays open.

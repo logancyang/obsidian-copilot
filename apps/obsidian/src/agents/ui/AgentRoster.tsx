@@ -16,12 +16,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { computeVisibleTabIndices } from "@/components/ui/tabOverflow";
+import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { Lock, Plus, Settings } from "lucide-react";
 import React, { useId, useLayoutEffect, useRef, useState } from "react";
 
-export type RosterAgent = Pick<CustomAgent, "slug" | "name" | "title" | "instruction" | "faceSrc">;
+export type RosterAgent = Pick<
+  CustomAgent,
+  "slug" | "name" | "title" | "instruction" | "faceSrc" | "pinnedAt"
+>;
 
 export interface AgentRosterProps {
   agents: readonly RosterAgent[];
@@ -44,6 +48,7 @@ export interface LockedRoster {
 const CELL_PX = 50;
 const CELL_WIDTH_CLASS = "tw-w-[50px]";
 const GAP_PX = 6;
+const DIVIDER_PX = 1;
 const ROW_GAP_CLASS = "tw-gap-1.5";
 
 const COPILOT_NAME = "Copilot";
@@ -248,14 +253,18 @@ function FaceRow({
   // Copilot and the new-agent button never move into the menu, and the selected agent always stays in the row.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/588
   const fixedCells = newAgentButton ? 2 : 1;
+  // Copilot counts as pinned, so a divider sits before the first unpinned agent, or before More once they all move there.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/1041
+  const hasUnpinned = agents.some((agent) => agent.pinnedAt === null);
   const visibleIndices = computeVisibleTabIndices({
     widths: agents.map(() => CELL_PX),
     selectedIndex: selected ? agents.indexOf(selected) : -1,
-    available: width - fixedCells * (CELL_PX + GAP_PX),
+    available: width - fixedCells * (CELL_PX + GAP_PX) - (hasUnpinned ? DIVIDER_PX + GAP_PX : 0),
     gap: GAP_PX,
     overflowWidth: CELL_PX,
   });
   const overflow = agents.filter((_, index) => !visibleIndices.includes(index));
+  const firstUnpinned = visibleIndices.find((index) => agents[index].pinnedAt === null);
 
   return (
     <div
@@ -276,20 +285,27 @@ function FaceRow({
         </span>
       </RosterCell>
       {visibleIndices.map((index) => (
-        <AgentCell
-          key={agents[index].slug}
-          agent={agents[index]}
-          selected={agents[index] === selected}
-          lock={lockOf(agents[index].slug)}
-          onSelect={onChoose}
-        />
+        <React.Fragment key={agents[index].slug}>
+          {index === firstUnpinned && <PinnedDivider />}
+          <AgentCell
+            agent={agents[index]}
+            selected={agents[index] === selected}
+            lock={lockOf(agents[index].slug)}
+            onSelect={onChoose}
+          />
+        </React.Fragment>
       ))}
+      {firstUnpinned === undefined && hasUnpinned && <PinnedDivider />}
       {overflow.length > 0 && (
         <MoreAgentsMenu agents={overflow} lockOf={lockOf} onSelect={onChoose} />
       )}
       {newAgentButton}
     </div>
   );
+}
+
+function PinnedDivider() {
+  return <Separator orientation="vertical" className="tw-mt-2.5 tw-h-[30px]" />;
 }
 
 interface RosterCellProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {

@@ -242,6 +242,23 @@ describe("AgentProfile", () => {
       );
     });
 
+    it(`pins the agent from Pin, writing the pin time to its instructions.md, and unpins it from Unpin (https://github.com/Brevilabs/obsidian-copilot-private/issues/1041)`, async () => {
+      const { vault, store } = await setup();
+
+      fireEvent.click(screen.getByRole("button", { name: "Pin" }));
+
+      const unpin = await screen.findByRole("button", { name: "Unpin" });
+      expect(vault.readText(`${FOLDER}/instructions.md`)).toMatch(/\npinned: \S+/);
+      expect(store.getAgents().find((agent) => agent.slug === "coco")?.pinnedAt).toEqual(
+        expect.any(Number)
+      );
+
+      fireEvent.click(unpin);
+
+      expect(await screen.findByRole("button", { name: "Pin" })).not.toBeNull();
+      expect(vault.readText(`${FOLDER}/instructions.md`)).not.toContain("pinned:");
+    });
+
     it(`downloads the preset faces only once the face picker opens, shows the face worn as chosen, and saves a picked preset byte for byte (${ISSUE})`, async () => {
       const requestUrl = jest.fn(async ({ url }: { url: string }) =>
         url === PRESET_FACES_URL

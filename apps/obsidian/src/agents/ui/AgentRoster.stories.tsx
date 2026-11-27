@@ -185,3 +185,13 @@ export const OneAgentNeedsSetupOnThisDevice: StoryObj<AgentRosterProps> = {
     newAgentButton: <NewAgentButton onClick={() => {}} />,
   },
 };
+
+export const PinnedTeammatesBeforeDivider: StoryObj<AgentRosterProps> = {
+  render,
+  args: {
+    agents: [{ ...LEO, pinnedAt: 1 }, { ...MAYA, pinnedAt: 2 }, COCO],
+    selectedSlug: "maya",
+    onOpenProfile: () => {},
+    newAgentButton: <NewAgentButton onClick={() => {}} />,
+  },
+};

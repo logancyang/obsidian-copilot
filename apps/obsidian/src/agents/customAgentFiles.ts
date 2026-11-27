@@ -29,6 +29,7 @@ export interface CustomAgentProfile {
 
 export interface InstructionsFile extends CustomAgentProfile {
   instruction: string;
+  pinnedAt: number | null;
 }
 
 export function deriveAgentSlug(name: string): string {
@@ -95,6 +96,7 @@ export function parseInstructionsFile(content: string): InstructionsFile {
     name: readString(properties.name),
     title: readString(properties.title),
     model: parseModel(properties.model),
+    pinnedAt: parsePinnedAt(properties.pinned),
     instruction: content.slice(info.contentStart),
   };
 }
@@ -113,6 +115,13 @@ function parseProperties(frontmatter: string): Record<string, unknown> {
 
 function readString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function parsePinnedAt(value: unknown): number | null {
+  // YAML reads an unquoted timestamp typed by hand as a date, and anything that isn't a time means not pinned.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/1041
+  const at = value instanceof Date ? value.getTime() : Date.parse(readString(value));
+  return Number.isNaN(at) ? null : at;
 }
 
 function parseModel(value: unknown): ModelSelection | null {

@@ -13,6 +13,7 @@ const CREATE_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issu
 const LOCKED_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/582";
 const LOCKED_AGENTS_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/950";
 const SETUP_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/962";
+const PIN_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/1041";
 const HEADING_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/978";
 
 function agent(name: string, title = `${name}'s job`): RosterAgent {
@@ -21,6 +22,7 @@ function agent(name: string, title = `${name}'s job`): RosterAgent {
     name,
     title,
     instruction: "",
+    pinnedAt: null,
     faceSrc: `data:image/svg+xml,${name}`,
   };
 }
@@ -95,6 +97,19 @@ function rowNames(): string[] {
   return within(screen.getByRole("group", { name: "Who do you want to talk to?" }))
     .getAllByRole("button")
     .map((button) => button.getAttribute("aria-label") ?? button.textContent ?? "");
+}
+
+function pinned(agentToPin: RosterAgent, pinnedAt: number): RosterAgent {
+  return { ...agentToPin, pinnedAt };
+}
+
+function rowLayout(): string[] {
+  const row = screen.getByRole("group", { name: "Who do you want to talk to?" });
+  return Array.from(row.children).map((cell) =>
+    cell.getAttribute("data-orientation") === "vertical"
+      ? "|"
+      : (cell.getAttribute("aria-label") ?? cell.textContent ?? "")
+  );
 }
 
 function openMoreMenu(count: number) {
@@ -386,6 +401,33 @@ describe("AgentRoster", () => {
       renderRoster({ agents: TWELVE, selectedSlug: "gus", width: 260, newAgentButton: NEW_BUTTON });
 
       expect(rowNames()).toEqual(["Copilot", "Gus", "Show 11 more teammates", "New"]);
+    });
+
+    it(`puts pinned agents right after Copilot and a divider between them and the other agents (${PIN_ISSUE})`, () => {
+      renderRoster({ agents: [pinned(LEO, 1), pinned(COCO, 2), MAYA], newAgentButton: NEW_BUTTON });
+
+      expect(rowLayout()).toEqual(["Copilot", "Leo", "Coco", "|", "Maya", "New"]);
+    });
+
+    it(`draws the divider right after Copilot, which always counts as pinned, while no agent is pinned (${PIN_ISSUE})`, () => {
+      renderRoster();
+
+      expect(rowLayout()).toEqual(["Copilot", "|", "Coco", "Maya", "Leo"]);
+    });
+
+    it(`draws no divider while every agent is pinned (${PIN_ISSUE})`, () => {
+      renderRoster({ agents: [pinned(COCO, 1), pinned(MAYA, 2)] });
+
+      expect(rowLayout()).toEqual(["Copilot", "Coco", "Maya"]);
+    });
+
+    it(`draws the divider before the More menu when only pinned agents fit in the row (${PIN_ISSUE})`, () => {
+      renderRoster({
+        agents: [pinned(COCO, 1), pinned(MAYA, 2), pinned(LEO, 3), ...TWELVE.slice(3)],
+        width: 300,
+      });
+
+      expect(rowLayout()).toEqual(["Copilot", "Coco", "Maya", "Leo", "|", "Show 9 more teammates"]);
     });
 
     it("selects an agent picked from the More menu, which lists each agent's name and title", () => {

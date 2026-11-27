@@ -139,6 +139,7 @@ describe("customAgentFiles", () => {
         name: "Leo",
         title: "",
         model: null,
+        pinnedAt: null,
         instruction: "Books.",
       });
     });
@@ -162,6 +163,7 @@ describe("customAgentFiles", () => {
         name: "Kai",
         title: "Writes launch posts",
         model: { baseModelId: "claude-sonnet-4-5", effort: "medium" },
+        pinnedAt: null,
         instruction:
           "You handle marketing for Obsidian Copilot.\n\nPlain words, short sentences.\n",
       });
@@ -178,6 +180,7 @@ describe("customAgentFiles", () => {
         name: "",
         title: "",
         model: null,
+        pinnedAt: null,
         instruction: "Just an instruction.",
       });
     });
@@ -201,8 +204,29 @@ describe("customAgentFiles", () => {
         name: "",
         title: "",
         model: null,
+        pinnedAt: null,
         instruction: "Body",
       });
+    });
+
+    it.each([
+      { case: "a quoted timestamp", pinned: "'2026-11-20T09:30:00.000Z'" },
+      { case: "a bare timestamp YAML reads as a date", pinned: "2026-11-20T09:30:00.000Z" },
+    ])(
+      `reads $case under pinned as the time the teammate was pinned (https://github.com/Brevilabs/obsidian-copilot-private/issues/1041)`,
+      ({ pinned }) => {
+        const content = `---\nname: Kai\npinned: ${pinned}\n---\nBody`;
+
+        expect(parseInstructionsFile(content).pinnedAt).toBe(
+          Date.parse("2026-11-20T09:30:00.000Z")
+        );
+      }
+    );
+
+    it(`reads a pinned value that is not a date as not pinned, so a hand edit never breaks the roster (https://github.com/Brevilabs/obsidian-copilot-private/issues/1041)`, () => {
+      const content = "---\nname: Kai\npinned: soon\n---\nBody";
+
+      expect(parseInstructionsFile(content).pinnedAt).toBeNull();
     });
   });
 
