@@ -63,7 +63,7 @@ import {
   agentToSetUpBeforeChat,
   startCustomAgentChat,
 } from "@/agents/agentMode/agentChats";
-import { AgentProfile } from "@/agents/agentMode/ui/AgentProfile";
+import { AgentProfile, toggleAgentPin } from "@/agents/agentMode/ui/AgentProfile";
 import { findRun } from "@/agents/agentMode/agentRelays";
 import { ChatAskedAgentView } from "@/agents/agentMode/ui/AskedAgentView";
 import { chatRunningAgents } from "@/agents/agentMode/ui/RunningAgents";
@@ -843,6 +843,9 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       onSelect={(slug) => void agentHome.select(slug)}
       newAgentButton={newAgentButton}
       onOpenProfile={profile.open}
+      onTogglePin={(agent) => {
+        if (customAgents) void toggleAgentPin(customAgents, agent);
+      }}
       needsSetup={needsSetup}
       locked={
         customAgentsGate === "locked"

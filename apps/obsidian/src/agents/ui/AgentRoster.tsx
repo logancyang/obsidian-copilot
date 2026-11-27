@@ -16,12 +16,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { computeVisibleTabIndices } from "@/components/ui/tabOverflow";
+import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { Lock, Plus, Settings } from "lucide-react";
+import { Lock, Pencil, Pin, PinOff, Plus, Settings } from "lucide-react";
 import React, { useId, useLayoutEffect, useRef, useState } from "react";
 
-export type RosterAgent = Pick<CustomAgent, "slug" | "name" | "title" | "instruction" | "faceSrc">;
+export type RosterAgent = Pick<
+  CustomAgent,
+  "slug" | "name" | "title" | "instruction" | "faceSrc" | "pinnedAt"
+>;
 
 export interface AgentRosterProps {
   agents: readonly RosterAgent[];
@@ -30,6 +34,7 @@ export interface AgentRosterProps {
   emptyHero: React.ReactNode;
   newAgentButton?: React.ReactNode;
   onOpenProfile?: (slug: string) => void;
+  onTogglePin: (agent: RosterAgent) => void;
   locked?: LockedRoster;
   needsSetup?: Pick<ReadonlySet<string>, "has">;
 }
@@ -44,6 +49,7 @@ export interface LockedRoster {
 const CELL_PX = 50;
 const CELL_WIDTH_CLASS = "tw-w-[50px]";
 const GAP_PX = 6;
+const DIVIDER_PX = 1;
 const ROW_GAP_CLASS = "tw-gap-1.5";
 
 const COPILOT_NAME = "Copilot";
@@ -64,6 +70,7 @@ export function AgentRoster({
   emptyHero,
   newAgentButton,
   onOpenProfile,
+  onTogglePin,
   locked,
   needsSetup,
 }: AgentRosterProps): React.ReactElement {
@@ -92,6 +99,8 @@ export function AgentRoster({
       onSelect={select}
       onChoose={choose}
       lockOf={lockOf}
+      onTogglePin={onTogglePin}
+      onOpenProfile={onOpenProfile}
       newAgentButton={newAgentButton}
       labelledBy={labelId}
     />
@@ -218,6 +227,8 @@ interface FaceRowProps {
   onSelect: (slug: string | null) => void;
   onChoose: (slug: string) => void;
   lockOf: (slug: string) => AgentLock | undefined;
+  onTogglePin: (agent: RosterAgent) => void;
+  onOpenProfile?: (slug: string) => void;
   newAgentButton?: React.ReactNode;
   labelledBy: string;
 }
@@ -228,6 +239,8 @@ function FaceRow({
   onSelect,
   onChoose,
   lockOf,
+  onTogglePin,
+  onOpenProfile,
   newAgentButton,
   labelledBy,
 }: FaceRowProps) {
@@ -248,14 +261,18 @@ function FaceRow({
   // Copilot and the new-agent button never move into the menu, and the selected agent always stays in the row.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/588
   const fixedCells = newAgentButton ? 2 : 1;
+  // Copilot counts as pinned, so a divider sits before the first unpinned agent, or before More once they all move there.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/1041
+  const hasUnpinned = agents.some((agent) => agent.pinnedAt === null);
   const visibleIndices = computeVisibleTabIndices({
     widths: agents.map(() => CELL_PX),
     selectedIndex: selected ? agents.indexOf(selected) : -1,
-    available: width - fixedCells * (CELL_PX + GAP_PX),
+    available: width - fixedCells * (CELL_PX + GAP_PX) - (hasUnpinned ? DIVIDER_PX + GAP_PX : 0),
     gap: GAP_PX,
     overflowWidth: CELL_PX,
   });
   const overflow = agents.filter((_, index) => !visibleIndices.includes(index));
+  const firstUnpinned = visibleIndices.find((index) => agents[index].pinnedAt === null);
 
   return (
     <div
@@ -276,20 +293,29 @@ function FaceRow({
         </span>
       </RosterCell>
       {visibleIndices.map((index) => (
-        <AgentCell
-          key={agents[index].slug}
-          agent={agents[index]}
-          selected={agents[index] === selected}
-          lock={lockOf(agents[index].slug)}
-          onSelect={onChoose}
-        />
+        <React.Fragment key={agents[index].slug}>
+          {index === firstUnpinned && <PinnedDivider />}
+          <AgentCell
+            agent={agents[index]}
+            selected={agents[index] === selected}
+            lock={lockOf(agents[index].slug)}
+            onSelect={onChoose}
+            onTogglePin={onTogglePin}
+            onOpenProfile={onOpenProfile}
+          />
+        </React.Fragment>
       ))}
+      {firstUnpinned === undefined && hasUnpinned && <PinnedDivider />}
       {overflow.length > 0 && (
         <MoreAgentsMenu agents={overflow} lockOf={lockOf} onSelect={onChoose} />
       )}
       {newAgentButton}
     </div>
   );
+}
+
+function PinnedDivider() {
+  return <Separator orientation="vertical" className="tw-mt-2.5 tw-h-[30px]" />;
 }
 
 interface RosterCellProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -329,27 +355,69 @@ interface AgentCellProps {
   selected: boolean;
   lock: AgentLock | undefined;
   onSelect: (slug: string) => void;
+  onTogglePin: (agent: RosterAgent) => void;
+  onOpenProfile?: (slug: string) => void;
 }
 
-function AgentCell({ agent, selected, lock, onSelect }: AgentCellProps) {
+function AgentCell({
+  agent,
+  selected,
+  lock,
+  onSelect,
+  onTogglePin,
+  onOpenProfile,
+}: AgentCellProps) {
   const title = agentTitle(agent);
+  const [menuOpen, setMenuOpen] = useState(false);
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <RosterCell
-          label={agent.name}
-          aria-label={lock ? `${agent.name} · ${LOCK_LABEL[lock]}` : undefined}
-          selected={lock ? undefined : selected}
-          onClick={() => onSelect(agent.slug)}
-        >
-          <AgentFace src={agent.faceSrc} size="roster" selected={selected} locked={!!lock} />
-        </RosterCell>
-      </TooltipTrigger>
-      <TooltipContent side="bottom" className="tw-max-w-64 tw-text-center">
-        <div className="tw-font-semibold">{agent.name}</div>
-        {title && <div className="tw-text-muted">{title}</div>}
-      </TooltipContent>
-    </Tooltip>
+    <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen} modal={false}>
+      <Tooltip open={menuOpen ? false : undefined}>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger asChild>
+            <RosterCell
+              label={agent.name}
+              aria-label={lock ? `${agent.name} · ${LOCK_LABEL[lock]}` : undefined}
+              selected={lock ? undefined : selected}
+              onClick={() => onSelect(agent.slug)}
+              // A click or Enter picks the face; only a right-click opens its Pin and Edit profile menu.
+              // https://github.com/Brevilabs/obsidian-copilot-private/issues/1041
+              onPointerDown={(event) => {
+                if (event.button !== 2) event.preventDefault();
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" && event.key !== " ") return;
+                event.preventDefault();
+                onSelect(agent.slug);
+              }}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                // A license-locked teammate's files can't change, so it has nothing to pin.
+                // https://github.com/Brevilabs/obsidian-copilot-private/issues/950
+                if (lock !== "license") setMenuOpen(true);
+              }}
+            >
+              <AgentFace src={agent.faceSrc} size="roster" selected={selected} locked={!!lock} />
+            </RosterCell>
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="tw-max-w-64 tw-text-center">
+          <div className="tw-font-semibold">{agent.name}</div>
+          {title && <div className="tw-text-muted">{title}</div>}
+        </TooltipContent>
+      </Tooltip>
+      <DropdownMenuContent align="center">
+        <DropdownMenuItem onSelect={() => onTogglePin(agent)}>
+          {agent.pinnedAt === null ? <Pin /> : <PinOff />}
+          {agent.pinnedAt === null ? "Pin" : "Unpin"}
+        </DropdownMenuItem>
+        {onOpenProfile && (
+          <DropdownMenuItem onSelect={() => onOpenProfile(agent.slug)}>
+            <Pencil />
+            Edit profile
+          </DropdownMenuItem>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

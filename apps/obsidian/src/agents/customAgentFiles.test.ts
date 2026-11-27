@@ -139,6 +139,7 @@ describe("customAgentFiles", () => {
         name: "Leo",
         title: "",
         model: null,
+        pinnedAt: null,
         instruction: "Books.",
       });
     });
@@ -162,6 +163,7 @@ describe("customAgentFiles", () => {
         name: "Kai",
         title: "Writes launch posts",
         model: { baseModelId: "claude-sonnet-4-5", effort: "medium" },
+        pinnedAt: null,
         instruction:
           "You handle marketing for Obsidian Copilot.\n\nPlain words, short sentences.\n",
       });
@@ -178,6 +180,7 @@ describe("customAgentFiles", () => {
         name: "",
         title: "",
         model: null,
+        pinnedAt: null,
         instruction: "Just an instruction.",
       });
     });
@@ -201,8 +204,21 @@ describe("customAgentFiles", () => {
         name: "",
         title: "",
         model: null,
+        pinnedAt: null,
         instruction: "Body",
       });
+    });
+
+    it(`reads pinnedAt as the time the teammate was pinned (https://github.com/Brevilabs/obsidian-copilot-private/issues/1041)`, () => {
+      const content = "---\nname: Kai\npinnedAt: 1763717400000\n---\nBody";
+
+      expect(parseInstructionsFile(content).pinnedAt).toBe(1763717400000);
+    });
+
+    it("reads a pinnedAt that is not a number as not pinned, so a hand edit never breaks the roster", () => {
+      const content = "---\nname: Kai\npinnedAt: soon\n---\nBody";
+
+      expect(parseInstructionsFile(content).pinnedAt).toBeNull();
     });
   });
 

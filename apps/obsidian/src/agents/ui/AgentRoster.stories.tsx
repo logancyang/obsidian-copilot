@@ -21,6 +21,7 @@ const meta = {
     agents: THREE_AGENTS,
     selectedSlug: null,
     onSelect: () => {},
+    onTogglePin: () => {},
     emptyHero: (
       <div className="tw-flex tw-min-w-0 tw-items-center tw-justify-center tw-gap-3">
         <CopilotBrandIcon className="tw-size-6 tw-shrink-0 tw-text-normal" />
@@ -183,5 +184,34 @@ export const OneAgentNeedsSetupOnThisDevice: StoryObj<AgentRosterProps> = {
     onOpenProfile: () => {},
     needsSetup: new Set([LEO.slug]),
     newAgentButton: <NewAgentButton onClick={() => {}} />,
+  },
+};
+
+export const PinnedTeammatesBeforeDivider: StoryObj<AgentRosterProps> = {
+  render,
+  args: {
+    agents: [{ ...LEO, pinnedAt: 1 }, { ...MAYA, pinnedAt: 2 }, COCO],
+    selectedSlug: "maya",
+    onOpenProfile: () => {},
+    newAgentButton: <NewAgentButton onClick={() => {}} />,
+  },
+};
+
+function RightClickedRowFace(args: Partial<AgentRosterProps>) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    Array.from(ref.current?.querySelectorAll<HTMLButtonElement>('[role="group"] button') ?? [])
+      .find((button) => button.textContent === "Maya")
+      ?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, button: 2 }));
+  }, []);
+  return <div ref={ref}>{render(args)}</div>;
+}
+
+export const RowFaceMenuOnRightClick: StoryObj<AgentRosterProps> = {
+  render: (args) => <RightClickedRowFace {...args} />,
+  args: {
+    agents: [{ ...LEO, pinnedAt: 1 }, MAYA, COCO],
+    selectedSlug: "leo",
+    onOpenProfile: () => {},
   },
 };
