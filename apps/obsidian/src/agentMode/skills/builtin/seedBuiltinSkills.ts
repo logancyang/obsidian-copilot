@@ -1,6 +1,6 @@
 import { logError, logInfo } from "@/logger";
 import { joinPosix, parentDir } from "@/utils/pathUtils";
-import { getBuiltinSkillVersion } from "./builtinOwnership";
+import { getBuiltinEnabledAgents, getBuiltinSkillVersion } from "./builtinOwnership";
 import { BUILTIN_SKILLS, type BuiltinSkill } from "@/builtinSkills/builtinSkills";
 
 export interface BuiltinSeedFs {
@@ -96,7 +96,11 @@ export async function seedBuiltinSkills(
         ENABLED_AGENTS_RE,
         `$1${effectiveAgents.join(", ") || '""'}`
       );
-      if (next !== existingContent) await fs.write(skillMdPath, next);
+      // A synced copy listing the same agents in another order is not a change to write back.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/1031
+      const reordered =
+        getBuiltinEnabledAgents(existingContent)?.join() === [...effectiveAgents].sort().join();
+      if (next !== existingContent && !reordered) await fs.write(skillMdPath, next);
     }
     if (!current) {
       try {
