@@ -29,6 +29,7 @@ export interface CustomAgentProfile {
 
 export interface InstructionsFile extends CustomAgentProfile {
   instruction: string;
+  pinnedAt: number | null;
 }
 
 export function deriveAgentSlug(name: string): string {
@@ -95,6 +96,7 @@ export function parseInstructionsFile(content: string): InstructionsFile {
     name: readString(properties.name),
     title: readString(properties.title),
     model: parseModel(properties.model),
+    pinnedAt: parsePinnedAt(properties.pinnedAt),
     instruction: content.slice(info.contentStart),
   };
 }
@@ -113,6 +115,10 @@ function parseProperties(frontmatter: string): Record<string, unknown> {
 
 function readString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function parsePinnedAt(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 function parseModel(value: unknown): ModelSelection | null {

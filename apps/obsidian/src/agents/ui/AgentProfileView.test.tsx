@@ -15,6 +15,8 @@ const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/940"
 const LOCKED_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/950";
 const SETUP_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/962";
 
+const PIN_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/1041";
+
 const NOW = new Date(2026, 10, 16, 15, 20).getTime();
 
 function agent(overrides: Partial<CustomAgent> = {}): CustomAgent {
@@ -24,6 +26,7 @@ function agent(overrides: Partial<CustomAgent> = {}): CustomAgent {
     title: "Keeps the whole vault in view",
     instruction: "You keep the whole vault in view. Answer briefly.",
     faceSrc: "face:coco",
+    pinnedAt: null,
     instructionsPath: "copilot/teammates/coco/instructions.md",
     memoryPath: "copilot/teammates/coco/MEMORY.md",
     ...overrides,
@@ -80,6 +83,7 @@ function renderProfile(props: Partial<AgentProfileViewProps> = {}) {
     onRetitle: jest.fn().mockResolvedValue(undefined),
     onChangeFace: jest.fn(),
     onChangeModel: jest.fn(),
+    onTogglePin: jest.fn(),
     onDelete: jest.fn(),
   };
   render(
@@ -267,6 +271,23 @@ describe("AgentProfileView", () => {
       fireEvent.click(screen.getByRole("button", { name: "New chat with Coco" }));
 
       expect(onNewChat).toHaveBeenCalledTimes(1);
+    });
+
+    it(`pins an unpinned agent from Pin beside Back (${PIN_ISSUE})`, () => {
+      const { onTogglePin } = renderProfile();
+
+      fireEvent.click(screen.getByRole("button", { name: "Pin" }));
+
+      expect(onTogglePin).toHaveBeenCalledTimes(1);
+    });
+
+    it(`unpins a pinned agent from Unpin, offered in place of Pin (${PIN_ISSUE})`, () => {
+      const { onTogglePin } = renderProfile({ agent: agent({ pinnedAt: NOW }) });
+
+      fireEvent.click(screen.getByRole("button", { name: "Unpin" }));
+
+      expect(screen.queryByRole("button", { name: "Pin" })).toBeNull();
+      expect(onTogglePin).toHaveBeenCalledTimes(1);
     });
 
     it(`goes back to the chat from Back or Esc (${ISSUE})`, () => {
