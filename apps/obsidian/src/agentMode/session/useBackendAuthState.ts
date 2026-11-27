@@ -77,6 +77,8 @@ const publishAuthProbeStatus = (
 // A login the account check accepted can still be rejected mid-chat, and the chat must then offer Sign in.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/1029
 export function markBackendSignedOut(auth: BackendAuth): void {
+  const { signingIn, signingOut } = getAuthSnapshot(auth);
+  if (signingIn || signingOut) return;
   publishAuthProbeStatus(auth, { signedIn: false }, beginAuthProbe(auth));
 }
 

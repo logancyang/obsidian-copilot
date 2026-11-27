@@ -430,9 +430,12 @@ describe("useBackendAuthState", () => {
       expect(result.current.checking).toBe(false);
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/1029 leaves a sign-in in progress showing its progress", async () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/1029 leaves a sign-in in progress showing its progress and publishes its result", async () => {
       const descriptor = makeDescriptor();
-      jest.mocked(descriptor.auth!.signIn).mockReturnValue(new Promise(() => undefined));
+      let finishSignIn!: (status: { signedIn: boolean; label?: string }) => void;
+      jest
+        .mocked(descriptor.auth!.signIn)
+        .mockReturnValue(new Promise((resolve) => (finishSignIn = resolve)));
       const { result } = renderHook(() => useBackendAuthState(descriptor));
       await waitFor(() => expect(result.current.status).toEqual({ signedIn: false }));
       act(() => result.current.signIn());
@@ -440,6 +443,9 @@ describe("useBackendAuthState", () => {
       act(() => markBackendSignedOut(descriptor.auth!));
 
       expect(result.current.signingIn).toBe(true);
+      await act(async () => finishSignIn({ signedIn: true, label: "a" }));
+      expect(result.current.status).toEqual({ signedIn: true, label: "a" });
+      expect(result.current.signingIn).toBe(false);
     });
   });
 });
