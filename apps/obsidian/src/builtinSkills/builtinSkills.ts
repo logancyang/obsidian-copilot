@@ -384,13 +384,18 @@ const FETCH_X = relaySkill({
   scriptFile: "fetch-x.sh",
 });
 
-export const BUILTIN_SKILLS: readonly BuiltinSkill[] = [
-  WEB_SEARCH,
-  WEB_FETCH,
-  YOUTUBE_TRANSCRIPT,
-  FETCH_X,
-  ...OBSIDIAN_SKILLS,
-];
+const RELAY_SKILLS: readonly BuiltinSkill[] = [WEB_SEARCH, WEB_FETCH, YOUTUBE_TRANSCRIPT, FETCH_X];
+
+export const BUILTIN_SKILLS: readonly BuiltinSkill[] = [...RELAY_SKILLS, ...OBSIDIAN_SKILLS];
+
+const RELAY_SCRIPT_PATHS: readonly string[] = RELAY_SKILLS.flatMap(({ name, files }) =>
+  files.flatMap(({ path }) => [`${name}/${path}`, `${name}\\${path}`])
+);
+
+export function runsRelaySkillScript(toolInput: unknown): boolean {
+  const command = (toolInput as { command?: unknown } | null | undefined)?.command;
+  return typeof command === "string" && RELAY_SCRIPT_PATHS.some((path) => command.includes(path));
+}
 
 // Default-off is stored as an opt-out because older releases drop every other record,
 // which would erase opt-ins synced from newer devices:

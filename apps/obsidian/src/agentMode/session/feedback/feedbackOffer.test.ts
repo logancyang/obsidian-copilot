@@ -1,3 +1,4 @@
+import { SEND_FEEDBACK_TOOL_NAME } from "@/agentMode/session/copilotMcpServer";
 import { AgentReportedError, AuthRequiredError } from "@/agentMode/session/errors";
 import { fakeChat, fakeChatView, FAKE_EVIDENCE } from "@/agentMode/session/testing/fakeChat";
 import type { AgentChatMessage, AgentMessagePart } from "@/agentMode/session/types";
@@ -25,6 +26,7 @@ const TRANSCRIPT: readonly AgentChatMessage[] = [
 ];
 
 const ISSUE_4483 = "https://github.com/logancyang/obsidian-copilot/issues/4483";
+const ISSUE_1026 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/1026";
 
 function toolCall(
   id: string,
@@ -44,10 +46,21 @@ function failedTool(id: string, copilotToolName?: string): AgentMessagePart {
   return toolCall(id, "failed", copilotToolName);
 }
 
+const RUNS_NO_SCRIPT = (): boolean => false;
+
+const OWN_REPORT = toolCall("own-report", "in_progress", SEND_FEEDBACK_TOOL_NAME);
+
 function transcriptEndingWith(...parts: AgentMessagePart[]): AgentChatMessage[] {
   return [
     ...TRANSCRIPT,
-    { id: "a2", sender: AI_SENDER, message: "", isVisible: true, timestamp: null, parts },
+    {
+      id: "a2",
+      sender: AI_SENDER,
+      message: "",
+      isVisible: true,
+      timestamp: null,
+      parts: [...parts, OWN_REPORT],
+    },
   ];
 }
 
@@ -140,7 +153,7 @@ describe("feedbackOffer", () => {
     it("opens a card with the draft, the chat's evidence and its latest user message as the anchor", () => {
       const chat = fakeChat(fakeChatView(TRANSCRIPT));
 
-      expect(offerFeedback(chat, DRAFT)).toBe("shown");
+      expect(offerFeedback(chat, DRAFT, RUNS_NO_SCRIPT)).toBe("shown");
 
       expect(chat.readChatState(FEEDBACK_OFFER)).toEqual({
         trigger: "agent",
@@ -154,7 +167,7 @@ describe("feedbackOffer", () => {
     it("anchors to nothing when the chat has no user message yet", () => {
       const chat = fakeChat();
 
-      offerFeedback(chat, DRAFT);
+      offerFeedback(chat, DRAFT, RUNS_NO_SCRIPT);
 
       expect(chat.readChatState(FEEDBACK_OFFER)?.afterUserMessageId).toBeNull();
     });
@@ -165,8 +178,23 @@ describe("feedbackOffer", () => {
     ])(`${ISSUE_4483} shows no card when the latest failed tool is %s`, (_label, failure) => {
       const chat = fakeChat(fakeChatView(transcriptEndingWith(failure)));
 
-      expect(offerFeedback(chat, DRAFT)).toBe("not_copilot");
+      expect(offerFeedback(chat, DRAFT, RUNS_NO_SCRIPT)).toBe("not_copilot");
       expect(chat.readChatState(FEEDBACK_OFFER)).toBeNull();
+    });
+
+    it(`${ISSUE_1026} shows no card when a shell command failed and the only Copilot tool after it is the agent's own still-running send_feedback call`, () => {
+      const chat = fakeChat(fakeChatView(transcriptEndingWith(failedTool("shell"))));
+
+      expect(offerFeedback(chat, DRAFT, RUNS_NO_SCRIPT)).toBe("not_copilot");
+    });
+
+    it(`${ISSUE_1026} opens a card when the latest failed tool is a shell command running one of Copilot's own scripts`, () => {
+      const script = { ...failedTool("web-search"), input: { command: "sh web-search.sh" } };
+      const runsWebSearch = (input: unknown) =>
+        (input as { command?: string } | undefined)?.command === "sh web-search.sh";
+      const chat = fakeChat(fakeChatView(transcriptEndingWith(failedTool("shell"), script)));
+
+      expect(offerFeedback(chat, DRAFT, runsWebSearch)).toBe("shown");
     });
 
     it(`${ISSUE_4483} opens a card when the latest failed tool is one Copilot runs, even after another party's tool failed`, () => {
@@ -176,7 +204,7 @@ describe("feedbackOffer", () => {
         )
       );
 
-      expect(offerFeedback(chat, DRAFT)).toBe("shown");
+      expect(offerFeedback(chat, DRAFT, RUNS_NO_SCRIPT)).toBe("shown");
     });
 
     it.each([
@@ -194,7 +222,7 @@ describe("feedbackOffer", () => {
           )
         );
 
-        expect(offerFeedback(chat, DRAFT)).toBe("shown");
+        expect(offerFeedback(chat, DRAFT, RUNS_NO_SCRIPT)).toBe("shown");
       }
     );
 
@@ -205,7 +233,7 @@ describe("feedbackOffer", () => {
         )
       );
 
-      expect(offerFeedback(chat, DRAFT)).toBe("not_copilot");
+      expect(offerFeedback(chat, DRAFT, RUNS_NO_SCRIPT)).toBe("not_copilot");
     });
 
     it(`${ISSUE_4483} ignores tool failures from before the latest user message`, () => {
@@ -217,17 +245,19 @@ describe("feedbackOffer", () => {
         ])
       );
 
-      expect(offerFeedback(chat, DRAFT)).toBe("shown");
+      expect(offerFeedback(chat, DRAFT, RUNS_NO_SCRIPT)).toBe("shown");
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 refuses a second card in the same chat whether the first is open, dismissed or sent", () => {
       const chat = fakeChat();
-      offerFeedback(chat, DRAFT);
+      offerFeedback(chat, DRAFT, RUNS_NO_SCRIPT);
       const first = chat.readChatState(FEEDBACK_OFFER);
 
-      expect(offerFeedback(chat, { ...DRAFT, title: "Another problem" })).toBe("already_offered");
+      expect(offerFeedback(chat, { ...DRAFT, title: "Another problem" }, RUNS_NO_SCRIPT)).toBe(
+        "already_offered"
+      );
       chat.updateChatState(FEEDBACK_OFFER, dismissFeedbackOffer);
-      expect(offerFeedback(chat, DRAFT)).toBe("already_offered");
+      expect(offerFeedback(chat, DRAFT, RUNS_NO_SCRIPT)).toBe("already_offered");
       expect(chat.readChatState(FEEDBACK_OFFER)?.draft).toBe(first?.draft);
     });
   });

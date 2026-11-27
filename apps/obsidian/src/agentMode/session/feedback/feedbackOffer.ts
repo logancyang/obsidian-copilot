@@ -4,7 +4,11 @@ import {
   type ChatStateKey,
   type ChatView,
 } from "@/agentMode/session/chatExtension";
-import type { FeedbackDraft, FeedbackOfferResult } from "@/agentMode/session/copilotMcpServer";
+import {
+  SEND_FEEDBACK_TOOL_NAME,
+  type FeedbackDraft,
+  type FeedbackOfferResult,
+} from "@/agentMode/session/copilotMcpServer";
 import { AgentReportedError, AuthRequiredError } from "@/agentMode/session/errors";
 import type { AgentChatMessage, AgentMessagePart } from "@/agentMode/session/types";
 import { USER_SENDER } from "@/constants";
@@ -61,6 +65,8 @@ function formatEvidence(evidence: FeedbackEvidence): string {
   return `Evidence: backend ${evidence.backendId} · model ${evidence.model ?? "unknown"} · session ${evidence.sessionId ?? "unknown"} · ${evidence.raisedAt}`;
 }
 
+export type RunsCopilotScript = (toolInput: unknown) => boolean;
+
 export const FEEDBACK_OFFER: ChatStateKey<FeedbackOffer | null> = Object.freeze({
   id: "feedback-offer",
   initial: null,
@@ -68,11 +74,15 @@ export const FEEDBACK_OFFER: ChatStateKey<FeedbackOffer | null> = Object.freeze(
 
 // One card per session, whatever became of it, so a frustrated user is never nagged.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
-export function offerFeedback(chat: ChatStateHost, draft: FeedbackDraft): FeedbackOfferResult {
+export function offerFeedback(
+  chat: ChatStateHost,
+  draft: FeedbackDraft,
+  runsCopilotScript: RunsCopilotScript
+): FeedbackOfferResult {
   if (chat.readChatState(FEEDBACK_OFFER)) return "already_offered";
   let result: FeedbackOfferResult = "shown";
   chat.updateChatState(FEEDBACK_OFFER, (offer, view) => {
-    if (!latestFailureIsNotCopilots(view.getDisplayMessages())) {
+    if (!latestFailureIsNotCopilots(view.getDisplayMessages(), runsCopilotScript)) {
       return openFeedbackOffer(view, "agent", draft);
     }
     result = "not_copilot";
@@ -84,22 +94,32 @@ export function offerFeedback(chat: ChatStateHost, draft: FeedbackDraft): Feedba
 // Agents report any failing tool as a Copilot failure, but a tool Copilot doesn't run, a connected service included, fails for reasons Copilot cannot fix.
 // A Copilot tool used after that failure can still be the problem without failing itself, such as one that hangs.
 // https://github.com/logancyang/obsidian-copilot/issues/4483
-function latestFailureIsNotCopilots(messages: readonly AgentChatMessage[]): boolean {
+function latestFailureIsNotCopilots(
+  messages: readonly AgentChatMessage[],
+  runsCopilotScript: RunsCopilotScript
+): boolean {
   const lastUserIndex = messages.map(({ sender }) => sender).lastIndexOf(USER_SENDER);
   const relevant = messages
     .slice(lastUserIndex + 1)
     .flatMap(({ parts }) => parts ?? [])
     .filter(
-      (part) => part.kind === "tool_call" && (part.status === "failed" || ranCopilotTool(part))
+      (part) =>
+        part.kind === "tool_call" &&
+        (part.status === "failed" || ranCopilotTool(part, runsCopilotScript))
     );
   const latest = relevant[relevant.length - 1];
-  return latest !== undefined && !ranCopilotTool(latest);
+  return latest !== undefined && !ranCopilotTool(latest, runsCopilotScript);
 }
 
-function ranCopilotTool(part: AgentMessagePart): boolean {
+// The agent's own send_feedback call is in the transcript while it runs, so counting it would open every card.
+// Copilot's relay skills run as the agent's shell commands, so only the script they run marks them as Copilot's.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/1026
+function ranCopilotTool(part: AgentMessagePart, runsCopilotScript: RunsCopilotScript): boolean {
+  if (part.kind !== "tool_call") return false;
+  const calls = part.copilotTools?.calls ?? [];
   return (
-    part.kind === "tool_call" &&
-    (part.copilotTools?.calls.some(({ name }) => !describeConnectorTool(name)) ?? false)
+    calls.some(({ name }) => name !== SEND_FEEDBACK_TOOL_NAME && !describeConnectorTool(name)) ||
+    runsCopilotScript(part.input)
   );
 }
 
