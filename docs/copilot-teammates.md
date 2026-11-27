@@ -41,6 +41,15 @@ The chat shows the teammate's face, name, and title at the top, so you always kn
 
 ![Coco's chat with her name and title at the top](https://images.brevilabs.com/newsletters/copilot-docs/copilot-teammates/teammates-chat-header-84f5769c.png)
 
+## Pin a teammate
+
+Pin the teammates you talk to most to keep them at the front of the row of faces on the start screen.
+
+- Open the teammate's profile and click **Pin** at the right of the **Back to chat** bar. Click **Unpin** to undo it.
+- Or right-click the teammate's face in the row and choose **Pin** or **Unpin**. The same menu has **Edit profile**, which opens the profile. Right-clicking needs a valid Supporter license.
+
+Pinned teammates sit right after Copilot, in the order you pinned them. A thin line separates them from the rest, which follow by name. The `@` menu lists teammates in the same order. The pin is saved as a `pinnedAt` property in the teammate's `instructions.md`, so it syncs with your vault.
+
 ## Get a second opinion
 
 Type `@` and a teammate's name in any chat to ask that teammate, for example `@Maya does the launch email sound like us?`. Teammates are listed under **Teammates** in the `@` menu.
@@ -89,4 +98,4 @@ The instruction is the description the teammate reads at the start of every chat
 
 New chats use the new instruction; chats already open keep the one they started with. If you ask a teammate to change its own instruction, it replies with an **Open instruction** link instead. Keep the instruction under 4,000 characters; the profile shows it in orange when it's longer than the teammate follows well.
 
-On the profile you can also rename the teammate, change its title, face, and model, start a **New chat with _name_**, or delete it. Deleting archives the teammate's chats; you can find them under **View archived**.
+On the profile you can also rename the teammate, change its title, face, and model, **Pin** it, start a **New chat with _name_**, or delete it. Deleting archives the teammate's chats; you can find them under **View archived**.
