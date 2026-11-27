@@ -26,11 +26,13 @@ export const COPILOT_WEB_RESEARCH_STEERING = `For vault questions, search locall
 
 export const COPILOT_MIYO_DOCUMENT_STEERING = `Read PDFs/EPUBs with the obsidian-copilot miyo_parse tool first. If it is unavailable or fails, say so, then read the file with any other tool you have.`;
 
-// Running miyo_search and grep for every request that may be answered from notes, even external-sounding ones, keeps the agent from skipping the vault; merging by path and opening matches keeps it from trusting a list it never read; naming the tool over the CLI keeps agents off a Miyo skill outside Copilot.
+// Searching on every request that notes might answer pulled unrelated notes into general, coding and external answers, so the search waits for the user to ask about their vault.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/1028
+// Merging by path and opening matches keeps it from trusting a list it never read; naming the tool over the CLI keeps agents off a Miyo skill outside Copilot.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/736
 // Codex searched before every publish, rename or edit of a note it already had, so file operations on known notes skip the search.
 // https://github.com/logancyang/obsidian-copilot/issues/3816
-export const COPILOT_MIYO_SEARCH_STEERING = `Miyo local semantic search is enabled. For any request that may be answered from the user's notes, even one that sounds external or current, call the obsidian-copilot miyo_search tool and also grep/glob for any exact names, terms, tags or quoted phrases in the request. To read or act on a note already attached, named or found in this conversation, or to create, move or rename notes by name or path, work on them directly instead of searching. Merge the results by note path and open the strongest matches before answering. Search the vault with miyo_search, not the miyo CLI or another Miyo skill. If neither finds support, say the vault does not cover it; for external topics, then search the web.`;
+export const COPILOT_MIYO_SEARCH_STEERING = `Miyo local semantic search is enabled. Call the obsidian-copilot miyo_search tool only when the user asks about or for their notes, or what they wrote, saved, decided or planned; skip it for general, coding or external questions. When you search, also grep/glob for any exact names, terms, tags or quoted phrases in the request. To read or act on a note already attached, named or found in this conversation, or to create, move or rename notes by name or path, work on them directly instead of searching. Merge the results by note path and open the strongest matches before answering. Search the vault with miyo_search, not the miyo CLI or another Miyo skill. If neither finds support, say the vault does not cover it; for external topics, then search the web.`;
 
 // Asked for a diagram, agents drew Excalidraw drawings with the tools but never embedded them in the note; naming
 // Mermaid and canvas keeps a format the user asks for. The line rides only while the Excalidraw tools are available.
