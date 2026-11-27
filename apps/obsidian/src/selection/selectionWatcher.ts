@@ -111,6 +111,11 @@ export function watchSelections(
     plugin.registerDomEvent(doc, "pointerup", readInputSources);
     plugin.registerDomEvent(doc, "keyup", readInputSources);
   };
-  watchDocument(activeDocument);
-  plugin.registerEvent(plugin.app.workspace.on("window-open", (win) => watchDocument(win.doc)));
+  // Loading while a popout such as Settings had focus left the main window unwatched until an app reload.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/1017
+  const { workspace } = plugin.app;
+  const openDocs = new Set([workspace.rootSplit.doc]);
+  workspace.iterateAllLeaves((leaf) => openDocs.add(leaf.getContainer().doc));
+  openDocs.forEach(watchDocument);
+  plugin.registerEvent(workspace.on("window-open", (win) => watchDocument(win.doc)));
 }

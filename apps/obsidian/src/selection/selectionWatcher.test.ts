@@ -25,16 +25,45 @@ import { editorInfoField, type App, type MarkdownFileInfo, type Plugin } from "o
 
 const ISSUE_597 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/597";
 const ISSUE_794 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/794";
+const ISSUE_1017 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/1017";
 
 const research = { path: "Research.md", basename: "Research" };
 
-function readingNote(text: string) {
+function mainWindowWorkspace(popoutDocs: Document[] = []) {
+  return {
+    on: jest.fn(),
+    rootSplit: { doc: document },
+    iterateAllLeaves: (visit: (leaf: unknown) => void) =>
+      [document, ...popoutDocs].forEach((doc) => visit({ getContainer: () => ({ doc }) })),
+  };
+}
+
+function readingNote(text: string, popoutDocs: Document[] = []) {
   const preview = document.createElement("div");
   preview.textContent = text;
   document.body.append(preview);
   const view = { file: research, getMode: () => "preview", previewMode: { containerEl: preview } };
-  const app = { workspace: { getActiveViewOfType: () => view, on: jest.fn() } } as unknown as App;
+  const app = {
+    workspace: { ...mainWindowWorkspace(popoutDocs), getActiveViewOfType: () => view },
+  } as unknown as App;
   return { preview, app };
+}
+
+function drawingSource(shapes: string) {
+  const drawing = { path: "Flow.excalidraw.md", basename: "Flow.excalidraw" };
+  return (): SelectionReport => ({
+    location: drawing.path,
+    key: `excalidraw:${drawing.path}:${shapes}`,
+    context: {
+      id: shapes,
+      content: shapes,
+      sourceType: "note",
+      noteTitle: drawing.basename,
+      notePath: drawing.path,
+      startLine: 0,
+      endLine: 0,
+    },
+  });
 }
 
 function selectText(node: Node, end: number): void {
@@ -162,7 +191,7 @@ describe("selectionWatcher", () => {
 
     it(`attaches and clears a note excerpt from the focused editor's own note after the debounce (${ISSUE_597})`, () => {
       const { plugin, extension, unload } = fakePlugin({
-        workspace: { on: jest.fn() },
+        workspace: mainWindowWorkspace(),
       } as unknown as App);
       watchSelections(plugin);
       const noteInfo = {
@@ -239,6 +268,35 @@ describe("selectionWatcher", () => {
       jest.advanceTimersByTime(500);
       expect(getSelectedTextContexts()).toEqual([]);
       expect(source).toHaveBeenCalledWith(app);
+      unload();
+    });
+
+    it(`reads clicks in the main window and in already-open popouts when another window was focused at load (${ISSUE_1017})`, () => {
+      const settingsWindow = document.implementation.createHTMLDocument("Settings");
+      const popout = document.implementation.createHTMLDocument("Popout");
+      const { app } = readingNote("Unrelated", [popout]);
+      const { plugin, unload } = fakePlugin(app);
+      let source = drawingSource("box1 rectangle");
+      const focusedAtLoad = window.activeDocument;
+      window.activeDocument = settingsWindow;
+
+      try {
+        watchSelections(plugin, [() => source]);
+      } finally {
+        window.activeDocument = focusedAtLoad;
+      }
+      document.dispatchEvent(new Event("pointerup"));
+      jest.advanceTimersByTime(500);
+      expect(getSelectedTextContexts()).toEqual([
+        expect.objectContaining({ content: "box1 rectangle" }),
+      ]);
+
+      source = drawingSource("box2 ellipse");
+      popout.dispatchEvent(new Event("pointerup"));
+      jest.advanceTimersByTime(500);
+      expect(getSelectedTextContexts()).toEqual([
+        expect.objectContaining({ content: "box2 ellipse" }),
+      ]);
       unload();
     });
 
