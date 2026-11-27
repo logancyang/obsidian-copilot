@@ -6,8 +6,11 @@ export class MethodUnsupportedError extends Error {
 }
 
 export class AuthRequiredError extends Error {
-  constructor(message = "Not signed in. Use the Sign in button above to continue.") {
-    super(message);
+  constructor(
+    message = "Not signed in. Use the Sign in button above to continue.",
+    options?: { cause?: unknown }
+  ) {
+    super(message, options);
     this.name = "AuthRequiredError";
   }
 }

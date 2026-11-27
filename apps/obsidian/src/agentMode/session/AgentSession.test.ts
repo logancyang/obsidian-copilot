@@ -4,7 +4,7 @@ import { OpencodeBackendDescriptor } from "@/agentMode/backends/opencode/descrip
 import { logWarn } from "@/logger";
 import { AI_SENDER, USER_SENDER } from "@/constants";
 import { ClaudeBackendDescriptor } from "@/agentMode/backends/claude/descriptor";
-import { waitFor } from "@testing-library/react";
+import { renderHook, waitFor } from "@testing-library/react";
 import { FileSystemAdapter, Notice, type App } from "obsidian";
 import {
   AgentSession,
@@ -20,6 +20,7 @@ import { writePermissionRequest } from "./testing/permissionPrompts";
 import { OUTPUT_LIMIT_CONTINUATION_PROMPT } from "./promptEnvelope";
 import { __resetVaultBaseCache } from "@/utils/vaultPath";
 import { AuthRequiredError, MethodUnsupportedError } from "./errors";
+import { useBackendAuthState } from "./useBackendAuthState";
 import type {
   AgentChatMessage,
   AgentToolCallOutput,
@@ -42,6 +43,7 @@ jest.mock("@/logger", () => ({
 }));
 jest.mock("@/settings/model", () => ({
   getSettings: jest.fn().mockReturnValue({ agentMode: {} }),
+  useSettingsValue: () => ({}),
 }));
 
 interface MockBackend {
@@ -1549,6 +1551,22 @@ describe("AgentSession", () => {
           error: expect.any(Error),
         });
         expect(session.readChatState(COUNTER)).toBe(1);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/1029 shows the agent signed out once a reply fails because the agent rejected a login its account check accepted", async () => {
+        const mock = makeMockBackend();
+        mock.prompt.mockRejectedValue(new AuthRequiredError("Authentication required"));
+        const descriptor = {
+          ...ClaudeBackendDescriptor,
+          auth: { getStatus: jest.fn().mockResolvedValue({ signedIn: true }), signIn: jest.fn() },
+        };
+        const auth = renderHook(() => useBackendAuthState(descriptor));
+        await waitFor(() => expect(auth.result.current.status).toEqual({ signedIn: true }));
+        const session = makeSession(mock, { getDescriptor: () => descriptor });
+
+        await expect(session.sendPrompt("hi").turn).rejects.toThrow("Authentication required");
+
+        await waitFor(() => expect(auth.result.current.status).toEqual({ signedIn: false }));
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 refuses to run a turn, and says why, while the agent is on a model the user has not enabled", async () => {

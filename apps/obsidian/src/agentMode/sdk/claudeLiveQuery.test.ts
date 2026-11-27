@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import type { Query, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
-import { AgentReportedError } from "@/agentMode/session/errors";
+import { AgentReportedError, AuthRequiredError } from "@/agentMode/session/errors";
 import type { SessionUpdate } from "@/agentMode/session/types";
 
 jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError: jest.fn() }));
@@ -434,6 +434,57 @@ describe("claudeLiveQuery", () => {
 
         expect(end.error).toBeInstanceOf(AgentReportedError);
         expect(end.error?.message).toBe("a; b");
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/1029 ends the turn signed out, keeping Claude's message, when Claude reports its login was rejected", async () => {
+        const { live, fake, recorder } = startLive();
+
+        live.push("prompt-1", "hi");
+        fake.echo(await fake.nextInput());
+        fake.emit(
+          {
+            type: "assistant",
+            uuid: "assistant-1",
+            session_id: SESSION_ID,
+            parent_tool_use_id: null,
+            error: "authentication_failed",
+            message: {
+              id: "msg-1",
+              role: "assistant",
+              content: [{ type: "text", text: "Failed to authenticate. API Error: 401" }],
+            },
+          } as unknown as SDKMessage,
+          resultFrame({ is_error: true, result: "Failed to authenticate. API Error: 401" })
+        );
+        const end = await recorder.waitFor("turn_ended");
+
+        expect(end.error).toEqual(new AuthRequiredError("Failed to authenticate. API Error: 401"));
+        expect(end.error).toBeInstanceOf(AuthRequiredError);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/1029 ends the next turn as Claude's own report once a rejected login is followed by a turn that fails another way", async () => {
+        const { live, fake, recorder } = startLive();
+
+        live.push("prompt-1", "hi");
+        fake.echo(await fake.nextInput());
+        fake.emit(
+          {
+            type: "assistant",
+            uuid: "assistant-1",
+            session_id: SESSION_ID,
+            parent_tool_use_id: null,
+            error: "authentication_failed",
+            message: { id: "msg-1", role: "assistant", content: [] },
+          } as unknown as SDKMessage,
+          resultFrame({ is_error: true, result: "Failed to authenticate." })
+        );
+        await recorder.waitFor("turn_ended");
+        live.push("prompt-2", "again");
+        fake.echo(await fake.nextInput(1));
+        fake.emit(resultFrame({ is_error: true, result: "You've hit your session limit" }));
+        const end = await recorder.waitFor("turn_ended", () => true, 1);
+
+        expect(end.error).toBeInstanceOf(AgentReportedError);
       });
 
       it("reports a sign-out when a turn fails without naming an error", async () => {

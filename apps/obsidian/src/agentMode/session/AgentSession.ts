@@ -40,7 +40,8 @@ import {
 import { MessageContext } from "@/types/message";
 import { err2String, formatDateTime } from "@/utils";
 import { Notice, type App, type DataAdapter } from "obsidian";
-import { MethodUnsupportedError } from "@/agentMode/session/errors";
+import { AuthRequiredError, MethodUnsupportedError } from "@/agentMode/session/errors";
+import { markBackendSignedOut } from "@/agentMode/session/useBackendAuthState";
 import {
   diffTargetPaths,
   editTargetPaths,
@@ -1127,6 +1128,10 @@ export class AgentSession implements ChatStateHost, ChatView {
   }
 
   private applyTurnFailure(failure: TurnFailure): void {
+    const auth = this.getDescriptor?.()?.auth;
+    // A login the account check accepted can still be rejected mid-chat, and the chat must then offer Sign in.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/1029
+    if (auth && failure.error instanceof AuthRequiredError) markBackendSignedOut(auth);
     for (const extension of this.chatExtensions) {
       if (!extension.onTurnFailed) continue;
       const state = extension.onTurnFailed(this.readChatState(extension.key), this, failure);

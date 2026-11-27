@@ -9,7 +9,11 @@ import { AcpBackendProcess } from "./AcpBackendProcess";
 import { AcpProcessManager } from "./AcpProcessManager";
 import type { AcpBackend } from "./types";
 import type { VaultClient } from "./VaultClient";
-import { AgentReportedError, MethodUnsupportedError } from "@/agentMode/session/errors";
+import {
+  AgentReportedError,
+  AuthRequiredError,
+  MethodUnsupportedError,
+} from "@/agentMode/session/errors";
 import { RequestError, type SessionConfigOption } from "@agentclientprotocol/sdk";
 
 jest.mock("@/logger", () => ({
@@ -2268,20 +2272,29 @@ describe("AcpBackendProcess", () => {
         expect(recover).not.toHaveBeenCalled();
       });
 
-      it.each([
-        ["an internal error", new RequestError(-32603, "Internal error: Provider offline")],
-        ["an authentication error", new RequestError(-32000, "Authentication required")],
-      ])(
-        "https://github.com/logancyang/obsidian-copilot/issues/4483 marks %s the agent answers a prompt with as the agent's own report",
-        async (_label, failure) => {
-          const backend = await makeBackend();
-          promptMock(backend).mockRejectedValue(failure);
+      it("https://github.com/logancyang/obsidian-copilot/issues/4483 marks an internal error the agent answers a prompt with as the agent's own report", async () => {
+        const backend = await makeBackend();
+        promptMock(backend).mockRejectedValue(
+          new RequestError(-32603, "Internal error: Provider offline")
+        );
 
-          expect(await promptTurn(backend)).toMatchObject({
-            error: expect.any(AgentReportedError),
-          });
-        }
-      );
+        expect(await promptTurn(backend)).toMatchObject({
+          error: expect.any(AgentReportedError),
+        });
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/1029 ends the turn signed out, keeping the agent's own text, when the agent answers a prompt with ACP's authentication-required error", async () => {
+        const backend = await makeBackend();
+        const failure = new RequestError(-32000, "Authentication required");
+        promptMock(backend).mockRejectedValue(failure);
+
+        const end = await promptTurn(backend);
+
+        expect(end).toMatchObject({
+          error: expect.objectContaining({ message: "Authentication required", cause: failure }),
+        });
+        expect(end).toMatchObject({ error: expect.any(AuthRequiredError) });
+      });
 
       it.each([
         ["parse error", -32700],

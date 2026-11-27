@@ -1,5 +1,5 @@
 import type { BackendDescriptor } from "@/agentMode/session/types";
-import { useBackendAuthState } from "@/agentMode/session/useBackendAuthState";
+import { markBackendSignedOut, useBackendAuthState } from "@/agentMode/session/useBackendAuthState";
 import { act, renderHook, waitFor } from "@testing-library/react";
 
 jest.mock("@/logger", () => ({ logError: jest.fn() }));
@@ -395,6 +395,57 @@ describe("useBackendAuthState", () => {
       act(() => hook.result.current.signOut());
       expect(hook.result.current.signingOut).toBe(false);
       expect(hook.result.current.failed).toBe(false);
+    });
+  });
+
+  describe("markBackendSignedOut()", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/1029 shows every surface signed out after the account check had accepted the login", async () => {
+      const descriptor = makeDescriptor();
+      jest.mocked(descriptor.auth!.getStatus).mockResolvedValue({ signedIn: true, label: "a" });
+      const first = renderHook(() => useBackendAuthState(descriptor));
+      const second = renderHook(() => useBackendAuthState(descriptor));
+      await waitFor(() =>
+        expect(first.result.current.status).toEqual({ signedIn: true, label: "a" })
+      );
+
+      act(() => markBackendSignedOut(descriptor.auth!));
+
+      expect(first.result.current.status).toEqual({ signedIn: false });
+      expect(second.result.current.status).toEqual({ signedIn: false });
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/1029 keeps the signed-out state when an account check started earlier answers afterwards", async () => {
+      const descriptor = makeDescriptor();
+      let answer!: (status: { signedIn: boolean }) => void;
+      jest
+        .mocked(descriptor.auth!.getStatus)
+        .mockReturnValue(new Promise((resolve) => (answer = resolve)));
+      const { result } = renderHook(() => useBackendAuthState(descriptor));
+      await waitFor(() => expect(descriptor.auth!.getStatus).toHaveBeenCalledTimes(1));
+
+      act(() => markBackendSignedOut(descriptor.auth!));
+      await act(async () => answer({ signedIn: true }));
+
+      expect(result.current.status).toEqual({ signedIn: false });
+      expect(result.current.checking).toBe(false);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/1029 leaves a sign-in in progress showing its progress and publishes its result", async () => {
+      const descriptor = makeDescriptor();
+      let finishSignIn!: (status: { signedIn: boolean; label?: string }) => void;
+      jest
+        .mocked(descriptor.auth!.signIn)
+        .mockReturnValue(new Promise((resolve) => (finishSignIn = resolve)));
+      const { result } = renderHook(() => useBackendAuthState(descriptor));
+      await waitFor(() => expect(result.current.status).toEqual({ signedIn: false }));
+      act(() => result.current.signIn());
+
+      act(() => markBackendSignedOut(descriptor.auth!));
+
+      expect(result.current.signingIn).toBe(true);
+      await act(async () => finishSignIn({ signedIn: true, label: "a" }));
+      expect(result.current.status).toEqual({ signedIn: true, label: "a" });
+      expect(result.current.signingIn).toBe(false);
     });
   });
 });
