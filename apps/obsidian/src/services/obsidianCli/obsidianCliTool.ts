@@ -72,12 +72,9 @@ export function createObsidianCliCall(
       return { text: `The Obsidian CLI could not run: ${err2String(error)}`, isError: true };
     }
     const output = [result.stdout.trim(), result.stderr.trim()].filter(Boolean).join("\n");
-    if (result.ok) return { text: withinBudget(output || "(no output)"), isError: false };
+    if (result.ok) return withinBudget(output || "(no output)", false);
     const status = result.exitCode ?? result.signal ?? result.errorCode;
-    return {
-      text: withinBudget(`The Obsidian CLI failed (${String(status)}). ${output}`.trim()),
-      isError: true,
-    };
+    return withinBudget(`The Obsidian CLI failed (${String(status)}). ${output}`.trim(), true);
   };
 }
 
@@ -120,9 +117,14 @@ function endsHostSession([command, ...params]: string[], hostPluginId: string): 
   }
 }
 
-function withinBudget(text: string): string {
+function withinBudget(text: string, isError: boolean): ObsidianCliToolResult {
   const bytes = new TextEncoder().encode(text);
-  if (bytes.length <= OUTPUT_BUDGET_BYTES) return text;
+  if (bytes.length <= OUTPUT_BUDGET_BYTES) return { text, isError };
   const cut = new TextDecoder().decode(bytes.slice(0, OUTPUT_BUDGET_BYTES)).replace(/�$/, "");
-  return `${cut}\n\n[Output cut at ${OUTPUT_BUDGET_BYTES} bytes. Narrow the command, e.g. with folder=, path= or total.]`;
+  // Agents parsed a cut JSON listing returned as a success and hit a parse error mid-string.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/1032
+  return {
+    text: `${cut}\n\n[Output cut at ${OUTPUT_BUDGET_BYTES} bytes. Narrow the command, e.g. with folder=, path= or total.]`,
+    isError: true,
+  };
 }

@@ -30,11 +30,15 @@ function execError(code: string | number, message = "spawn failed"): ExecError {
   return Object.assign(new Error(message), { code });
 }
 
+interface MockChild {
+  killed: boolean;
+}
+
 function installExecFile(
-  implementation: (binary: string, callback: MockExecCallback) => void
-): jest.Mock<void, MockExecArgs> {
-  const execFileMock = jest.fn<void, MockExecArgs>((binary, _args, _options, callback) =>
-    implementation(binary, callback)
+  implementation: (binary: string, callback: MockExecCallback) => MockChild | void
+): jest.Mock<MockChild, MockExecArgs> {
+  const execFileMock = jest.fn<MockChild, MockExecArgs>(
+    (binary, _args, _options, callback) => implementation(binary, callback) ?? { killed: false }
   );
   (window as unknown as TestRequireContainer).require = jest.fn((id: string) =>
     id === "child_process" ? { execFile: execFileMock } : {}
@@ -217,6 +221,38 @@ describe("ObsidianCliClient", () => {
         "/Apps/Obsidian.app/Contents/MacOS/obsidian-cli",
         ["vault=My Vault", "tabs", "ids"],
       ]);
+    });
+
+    it("reports a call killed by its timeout as stopped by SIGTERM, keeping the output so far", async () => {
+      installExecFile((_binary, callback) => {
+        callback(
+          Object.assign(execError("", "Command failed"), { code: null, signal: "SIGTERM" }),
+          "partial",
+          ""
+        );
+        return { killed: true };
+      });
+
+      await expect(runObsidianCliArgs("search", ["search", "query=6747"])).resolves.toMatchObject({
+        ok: false,
+        stdout: "partial",
+        exitCode: null,
+        signal: "SIGTERM",
+      });
+    });
+
+    it("reports a call killed by its timeout as stopped by SIGTERM even when the CLI exits 0 after the kill, as it does on macOS (https://github.com/Brevilabs/obsidian-copilot-private/issues/1032)", async () => {
+      installExecFile((_binary, callback) => {
+        callback(null, "", "");
+        return { killed: true };
+      });
+
+      await expect(runObsidianCliArgs("eval", ["eval", "code=wait()"])).resolves.toMatchObject({
+        ok: false,
+        exitCode: null,
+        errorCode: null,
+        signal: "SIGTERM",
+      });
     });
 
     it("rejects on a non-desktop runtime", async () => {

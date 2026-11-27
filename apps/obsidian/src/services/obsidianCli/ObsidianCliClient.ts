@@ -49,12 +49,16 @@ interface ExecFileOptions {
   windowsHide?: boolean;
 }
 
+interface ExecFileChild {
+  killed: boolean;
+}
+
 type ExecFileFn = (
   file: string,
   args: string[],
   options: ExecFileOptions,
   callback: ExecFileCallback
-) => void;
+) => ExecFileChild;
 
 interface ChildProcessModule {
   execFile?: ExecFileFn;
@@ -181,51 +185,39 @@ async function executeOnce(
   attemptedBinaries: string[]
 ): Promise<ObsidianCliProcessResult> {
   const startedAt = Date.now();
-
-  return await new Promise<ObsidianCliProcessResult>((resolve) => {
-    execFile(
+  let child!: ExecFileChild;
+  const [error, stdout, stderr] = await new Promise<Parameters<ExecFileCallback>>((resolve) => {
+    child = execFile(
       binary,
       args,
-      {
-        timeout: timeoutMs,
-        maxBuffer: maxBufferBytes,
-        windowsHide: true,
-      },
-      (error, stdout, stderr) => {
-        const durationMs = Date.now() - startedAt;
-        if (error) {
-          resolve({
-            command,
-            args,
-            binary,
-            attemptedBinaries: [...attemptedBinaries],
-            ok: false,
-            stdout: stdout || "",
-            stderr: stderr || "",
-            exitCode: toExitCode(error.code),
-            errorCode: error.code ?? null,
-            signal: error.signal ?? null,
-            durationMs,
-          });
-          return;
-        }
-
-        resolve({
-          command,
-          args,
-          binary,
-          attemptedBinaries: [...attemptedBinaries],
-          ok: true,
-          stdout: stdout || "",
-          stderr: stderr || "",
-          exitCode: 0,
-          errorCode: null,
-          signal: null,
-          durationMs,
-        });
-      }
+      { timeout: timeoutMs, maxBuffer: maxBufferBytes, windowsHide: true },
+      (...outcome) => resolve(outcome)
     );
   });
+  const outcome = {
+    command,
+    args,
+    binary,
+    attemptedBinaries: [...attemptedBinaries],
+    stdout: stdout || "",
+    stderr: stderr || "",
+    durationMs: Date.now() - startedAt,
+  };
+  if (error) {
+    return {
+      ...outcome,
+      ok: false,
+      exitCode: toExitCode(error.code),
+      errorCode: error.code ?? null,
+      signal: error.signal ?? null,
+    };
+  }
+  // On macOS the CLI exits 0 when the timeout's SIGTERM stops it, so execFile reports a killed call as a success.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/1032
+  if (child.killed) {
+    return { ...outcome, ok: false, exitCode: null, errorCode: null, signal: "SIGTERM" };
+  }
+  return { ...outcome, ok: true, exitCode: 0, errorCode: null, signal: null };
 }
 
 export async function runObsidianCliCommand(
