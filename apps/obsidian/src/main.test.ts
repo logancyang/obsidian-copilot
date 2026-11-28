@@ -78,6 +78,7 @@ jest.mock("@/agentMode", () => ({
   createAgentSessionManager: jest.fn(() => ({
     manager: {},
     hiddenAgentChats: mockHiddenAgentChats,
+    sessionClient: {},
   })),
   CopilotAgentView: jest.fn(),
   SessionsSidebarView: jest.fn(),

@@ -1168,7 +1168,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                         openChatIds={openChatIds}
                         runningChatIds={runningChatIds}
                         onOpenSourceFile={handleOpenSourceFile}
-                        usageMeter={<AgentContextMeter backend={backend} />}
+                        usageMeter={<AgentContextMeter liveChatId={sessionId} />}
                         tasksIndicator={
                           <RunningTasksIndicator
                             tasks={tasks}
