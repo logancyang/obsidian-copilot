@@ -3,25 +3,25 @@ import { Notice } from "obsidian";
 import { logError } from "@/logger";
 import type { ModelCapability } from "@/constants";
 import type { ModelSelectorEntry } from "@/components/ui/ModelSelector";
-import { lockedCopilotEntries, shouldPreviewCopilotModels } from "@/lib/lockedCopilotEntries";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { AgentChatUIState } from "@/agentMode/session/AgentChatUIState";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { MethodUnsupportedError } from "@/agentMode/session/errors";
-import { backendNeedsSelfHostWarning, backendRegistry } from "@/agentMode/backends/registry";
-import { getModelKeyFromModel } from "@/settings/model";
-import type { CopilotSettings } from "@/settings/model";
+import { getModelKeyFromModel } from "@/lib/model-key";
 import type {
-  BackendDescriptor,
   BackendId,
-  BlockedModels,
   EffortOption,
   EnabledModelCredentialState,
   EnabledModelEntry,
-  InstallState,
   ModelEntry,
   ModelState,
 } from "@/agentMode/session/types";
+import type {
+  InstallKind,
+  PickerAgent,
+  PickerCatalog,
+  ReportedModel,
+} from "@copilot/protocol/pickerCatalog";
 import type { AgentModelPickerOverride } from "./useAgentModelPicker";
 import type { AgentModelChoices } from "@/agents/ui/CreateAgentForm";
 
@@ -40,41 +40,34 @@ export function handlePickerSwitchError(err: unknown, action: "model" | "effort"
 
 const AGENT_PROVIDER = "agent";
 
+type AgentLabel = Pick<PickerAgent, "id" | "displayName">;
+
 export function appendBackendSection(
   entries: ModelSelectorEntry[],
-  descriptor: BackendDescriptor,
-  ctx: {
-    backendModels: ReadonlyArray<ModelEntry> | null;
-    settings: CopilotSettings;
-    useEnabledFallback?: boolean;
-  }
+  agent: PickerAgent,
+  ctx: { useEnabledFallback?: boolean } = {}
 ): void {
-  const enabledEntries = descriptor.getEnabledModelEntries?.(ctx.settings) ?? null;
+  const enabledEntries = agent.enabledModels;
   if (!enabledEntries) return;
-  if (!ctx.backendModels) {
+  const backendModels = agent.modelCatalog?.availableModels ?? null;
+  if (!backendModels) {
     if (!ctx.useEnabledFallback) return;
-    appendEnabledFallbackEntries(entries, descriptor, enabledEntries);
+    appendEnabledFallbackEntries(entries, agent, enabledEntries);
     return;
   }
-  appendFromEnabledEntries(
-    entries,
-    descriptor,
-    enabledEntries,
-    ctx.backendModels,
-    descriptor.getBlockedModels?.(ctx.settings, ctx.backendModels) ?? null
-  );
+  appendFromEnabledEntries(entries, agent, enabledEntries, backendModels);
 }
 
 function appendEnabledFallbackEntries(
   entries: ModelSelectorEntry[],
-  descriptor: BackendDescriptor,
+  agent: AgentLabel,
   enabledEntries: ReadonlyArray<EnabledModelEntry>
 ): void {
   for (const enabled of enabledEntries) {
     const entry = synthesizeAgentEntry(
       enabled.baseModelId,
       enabled.label || enabled.name,
-      descriptor,
+      agent,
       enabled.description,
       enabled.isFree,
       enabled.capabilities
@@ -86,11 +79,11 @@ function appendEnabledFallbackEntries(
 
 function appendFromEnabledEntries(
   entries: ModelSelectorEntry[],
-  descriptor: BackendDescriptor,
+  agent: PickerAgent,
   enabledEntries: ReadonlyArray<EnabledModelEntry>,
-  backendModels: ReadonlyArray<ModelEntry>,
-  blocked: BlockedModels | null
+  backendModels: ReadonlyArray<ReportedModel>
 ): void {
+  const blocked = agent.blockedModels;
   const reportedById = new Map(backendModels.map((m) => [m.baseModelId, m]));
   for (const enabled of enabledEntries) {
     const reported = reportedById.get(enabled.baseModelId);
@@ -100,7 +93,7 @@ function appendFromEnabledEntries(
     const entry = synthesizeAgentEntry(
       enabled.baseModelId,
       name,
-      descriptor,
+      agent,
       subtitle,
       enabled.isFree,
       capabilities
@@ -108,7 +101,7 @@ function appendFromEnabledEntries(
     const reason = credentialDisabledReason(enabled.credentialState, !!reported);
     // An agent's own config can drop a provider Copilot added, which reads as a bug unless the picker names the cause.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/835
-    if (enabled.credentialState === "ok" && blocked?.baseModelIds.has(enabled.baseModelId)) {
+    if (enabled.credentialState === "ok" && blocked?.baseModelIds.includes(enabled.baseModelId)) {
       entry._disabledReason = blocked.reason;
       entry._disabledHint = blocked.hint;
     } else if (reason) {
@@ -128,8 +121,8 @@ function credentialDisabledReason(
   return undefined;
 }
 
-export function backendReadinessReason(state: InstallState): string | undefined {
-  switch (state.kind) {
+export function backendReadinessReason(kind: InstallKind): string | undefined {
+  switch (kind) {
     case "absent":
       return "Not set up";
     case "incompatible":
@@ -145,7 +138,7 @@ export function backendReadinessReason(state: InstallState): string | undefined 
 export function synthesizeAgentEntry(
   baseModelId: string,
   humanName: string,
-  descriptor: BackendDescriptor,
+  agent: AgentLabel,
   subtitle?: string,
   isFree?: boolean,
   capabilities?: ModelCapability[]
@@ -156,15 +149,15 @@ export function synthesizeAgentEntry(
     enabled: true,
     displayName: humanName || baseModelId,
     capabilities,
-    _group: descriptor.displayName,
-    _backendId: descriptor.id,
+    _group: agent.displayName,
+    _backendId: agent.id,
     _subtitle: subtitle,
     _isFree: isFree,
   };
 }
 
 function synthesizePreloadPlaceholder(
-  descriptor: BackendDescriptor,
+  agent: AgentLabel,
   status: "pending" | "error"
 ): ModelSelectorEntry {
   const pending = status === "pending";
@@ -172,7 +165,7 @@ function synthesizePreloadPlaceholder(
     ...synthesizeAgentEntry(
       `__preload_${status}__`,
       pending ? "Loading models…" : "Failed to load",
-      descriptor
+      agent
     ),
     _disabledReason: pending ? "Loading…" : "Unavailable",
   };
@@ -186,7 +179,6 @@ export interface ModelActiveContext {
   activeSession: AgentSession | null;
   activeChatUIState: AgentChatUIState | null;
   activeBackendId: BackendId | null;
-  activeDescriptor: BackendDescriptor | undefined;
   activeChatTiedToAgent: boolean;
   activeModelState: ModelState | null;
   activeCurrentEntry: ModelEntry | undefined;
@@ -196,7 +188,6 @@ export function collectModelActiveContext(manager: AgentSessionManager): ModelAc
   const activeSession = manager.getActiveSession();
   const activeChatUIState = manager.getActiveChatUIState();
   const activeBackendId = activeSession?.backendId ?? null;
-  const activeDescriptor = activeBackendId ? backendRegistry[activeBackendId] : undefined;
   const activeChatTiedToAgent = activeSession
     ? manager.isTiedToAgent(activeSession.internalId)
     : false;
@@ -209,7 +200,6 @@ export function collectModelActiveContext(manager: AgentSessionManager): ModelAc
     activeSession,
     activeChatUIState,
     activeBackendId,
-    activeDescriptor,
     activeChatTiedToAgent,
     activeModelState,
     activeCurrentEntry,
@@ -217,66 +207,66 @@ export function collectModelActiveContext(manager: AgentSessionManager): ModelAc
 }
 
 export function buildPickerEntries(
-  manager: AgentSessionManager,
-  descriptors: BackendDescriptor[],
-  ctx: ModelActiveContext,
-  settings: CopilotSettings
+  catalog: PickerCatalog,
+  ctx: ModelActiveContext
 ): { entries: ModelSelectorEntry[]; valueKey: string } {
   const entries: ModelSelectorEntry[] = [];
-  for (const descriptor of descriptors) {
-    const isActiveBackend = descriptor.id === ctx.activeBackendId;
+  for (const agent of catalog.agents) {
+    const isActiveBackend = agent.id === ctx.activeBackendId;
     if (!isActiveBackend && ctx.activeChatTiedToAgent) continue;
-    const catalog = manager.getCachedModelCatalog(descriptor.id);
-    const backendModels = catalog?.availableModels ?? null;
-    const hasNoCatalog = catalog === null;
-    const preloadStatus = manager.getPreloadStatus(descriptor.id);
-    if (descriptor.routesCopilotModels && shouldPreviewCopilotModels(settings.providers)) {
-      entries.push(
-        ...lockedCopilotEntries(settings.copilotPlusCatalog, {
-          group: descriptor.displayName,
-          backendId: descriptor.id,
-        })
-      );
+    const hasNoCatalog = agent.modelCatalog === null;
+    const preloadStatus = agent.preload;
+    for (const locked of agent.lockedPreview) {
+      entries.push({
+        name: locked.name,
+        provider: locked.provider,
+        displayName: locked.displayName,
+        enabled: true,
+        _disabledReason: locked.disabledReason,
+        _needsLicense: true,
+        _subtitle: locked.subtitle,
+        _group: agent.displayName,
+        _backendId: agent.id,
+      });
     }
     // An agent the user never installed must not promote its models, least of all to a licensed user.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/765
-    if (!isActiveBackend && descriptor.getInstallState(settings).kind === "absent") continue;
+    if (!isActiveBackend && agent.installKind === "absent") continue;
     const sectionStart = entries.length;
-    appendBackendSection(entries, descriptor, {
-      backendModels,
-      settings,
+    appendBackendSection(entries, agent, {
       useEnabledFallback: hasNoCatalog && (preloadStatus === "ready" || preloadStatus === "error"),
     });
     if (hasNoCatalog && entries.length === sectionStart) {
       if (preloadStatus === "pending") {
-        entries.push(synthesizePreloadPlaceholder(descriptor, "pending"));
+        entries.push(synthesizePreloadPlaceholder(agent, "pending"));
       } else if (preloadStatus === "ready" || preloadStatus === "error") {
-        entries.push(synthesizePreloadPlaceholder(descriptor, "error"));
+        entries.push(synthesizePreloadPlaceholder(agent, "error"));
       }
     }
     if (!isActiveBackend) {
-      const readiness = backendReadinessReason(descriptor.getInstallState(settings));
+      const readiness = backendReadinessReason(agent.installKind);
       if (readiness) {
         for (let i = sectionStart; i < entries.length; i++) {
           entries[i]._disabledReason = readiness;
         }
       }
     }
-    if (backendNeedsSelfHostWarning(descriptor, settings)) {
+    if (agent.selfHostWarning) {
       for (let i = sectionStart; i < entries.length; i++) {
         entries[i]._needsSelfHostWarning = true;
       }
     }
   }
 
+  const activeAgent = catalog.agents.find((agent) => agent.id === ctx.activeBackendId);
   let valueKey = "";
-  if (ctx.activeDescriptor && ctx.activeSession?.getStatus() === "starting") {
+  if (activeAgent && ctx.activeSession?.getStatus() === "starting") {
     // While starting, the agent still reports its own model, not the chat's, so show "Loading models…".
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/630
-    const loading = synthesizePreloadPlaceholder(ctx.activeDescriptor, "pending");
+    const loading = synthesizePreloadPlaceholder(activeAgent, "pending");
     valueKey = getModelKeyFromModel(loading);
     if (!entries.some((e) => getModelKeyFromModel(e) === valueKey)) entries.unshift(loading);
-  } else if (ctx.activeBackendId && ctx.activeDescriptor && ctx.activeModelState) {
+  } else if (ctx.activeBackendId && activeAgent && ctx.activeModelState) {
     const baseId = ctx.activeModelState.current.baseModelId;
     const match = entries.find(
       (e) => e._backendId === ctx.activeBackendId && resolveBaseModelId(e) === baseId
@@ -287,17 +277,17 @@ export function buildPickerEntries(
       ctx.activeCurrentEntry &&
       // A backend that may only run enabled models must never show any other model.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/625
-      !ctx.activeDescriptor.routesCopilotModels
+      !activeAgent.routesCopilotModels
     ) {
       const synth = synthesizeAgentEntry(
         baseId,
         ctx.activeCurrentEntry.name,
-        ctx.activeDescriptor,
+        activeAgent,
         ctx.activeCurrentEntry.description,
         undefined,
         undefined
       );
-      if (backendNeedsSelfHostWarning(ctx.activeDescriptor, settings)) {
+      if (activeAgent.selfHostWarning) {
         synth._needsSelfHostWarning = true;
       }
       entries.unshift(synth);
@@ -333,8 +323,7 @@ export function buildEffortSibling(
 function runCrossBackendPick(
   manager: AgentSessionManager,
   oldSessionId: string | undefined,
-  targetBackendId: BackendId,
-  targetDescriptor: BackendDescriptor,
+  targetAgent: AgentLabel,
   baseModelId: string,
   effort: string | null
 ): void {
@@ -342,22 +331,21 @@ function runCrossBackendPick(
     try {
       const seedSelection = { baseModelId, effort };
       if (oldSessionId) {
-        await manager.replaceSessionInPlace(oldSessionId, targetBackendId, { seedSelection });
+        await manager.replaceSessionInPlace(oldSessionId, targetAgent.id, { seedSelection });
       } else {
-        await manager.createSession(targetBackendId, undefined, seedSelection);
+        await manager.createSession(targetAgent.id, undefined, seedSelection);
       }
-      manager.setDefaultBackend(targetBackendId);
+      manager.setDefaultBackend(targetAgent.id);
     } catch (err) {
       logError("[AgentMode] cross-backend pick failed", err);
-      new Notice(
-        `Failed to start ${targetDescriptor.displayName}. Check the Copilot log for details.`
-      );
+      new Notice(`Failed to start ${targetAgent.displayName}. Check the Copilot log for details.`);
     }
   })();
 }
 
 export function buildModelOnChange(
   manager: AgentSessionManager,
+  catalog: PickerCatalog,
   ctx: ModelActiveContext,
   entries: ModelSelectorEntry[]
 ): (modelKey: string) => void {
@@ -370,8 +358,8 @@ export function buildModelOnChange(
       logError("[AgentMode] picker entry missing _backendId", entry);
       return;
     }
-    const targetDescriptor = backendRegistry[targetBackendId];
-    if (!targetDescriptor) {
+    const targetAgent = findAgent(catalog, targetBackendId);
+    if (!targetAgent) {
       logError("[AgentMode] picker entry references unknown backend", targetBackendId);
       return;
     }
@@ -382,12 +370,11 @@ export function buildModelOnChange(
     }
 
     if (!activeSession || activeSession.backendId !== targetBackendId) {
-      const persistedEffort = manager.getDefaultSelection(targetBackendId)?.effort ?? null;
+      const persistedEffort = targetAgent.defaultSelection?.effort ?? null;
       runCrossBackendPick(
         manager,
         activeSession?.internalId,
-        targetBackendId,
-        targetDescriptor,
+        targetAgent,
         baseModelId,
         persistedEffort
       );
@@ -405,7 +392,7 @@ export function buildModelOnChange(
 }
 
 export function buildEffortOptionsByModelKey(
-  manager: AgentSessionManager,
+  catalog: PickerCatalog,
   entries: ModelSelectorEntry[]
 ): Record<string, EffortOption[]> {
   const out: Record<string, EffortOption[]> = {};
@@ -413,27 +400,37 @@ export function buildEffortOptionsByModelKey(
     const backendId = entry._backendId;
     const baseModelId = resolveBaseModelId(entry);
     if (!backendId || !baseModelId) continue;
-    out[getModelKeyFromModel(entry)] = resolveEffortOptions(manager, backendId, baseModelId);
+    out[getModelKeyFromModel(entry)] = resolveEffortOptions(
+      findAgent(catalog, backendId),
+      baseModelId
+    );
   }
   return out;
 }
 
+export interface EffortSource {
+  modelCatalog: { availableModels: readonly ReportedModel[] | null } | null;
+  effortCatalog: Record<string, EffortOption[]> | null;
+}
+
 export function resolveEffortOptions(
-  manager: AgentSessionManager,
-  backendId: BackendId,
+  source: EffortSource | undefined,
   baseModelId: string
 ): EffortOption[] {
-  const models = manager.getCachedModelCatalog(backendId)?.availableModels ?? null;
+  const models = source?.modelCatalog?.availableModels ?? null;
   const found = models?.find((m) => m.baseModelId === baseModelId);
   const reported = found?.effortOptions ?? [];
   if (reported.length > 0) return sortEffortOptions(reported);
-  return sortEffortOptions(
-    manager.getEffortCatalog(backendId)?.[baseModelId] ?? EMPTY_EFFORT_OPTIONS
-  );
+  return sortEffortOptions(source?.effortCatalog?.[baseModelId] ?? EMPTY_EFFORT_OPTIONS);
+}
+
+function findAgent(catalog: PickerCatalog, backendId: BackendId): PickerAgent | undefined {
+  return catalog.agents.find((agent) => agent.id === backendId);
 }
 
 function buildCommitSelection(
   manager: AgentSessionManager,
+  catalog: PickerCatalog,
   ctx: ModelActiveContext,
   entries: ModelSelectorEntry[],
   modelOnChange: (modelKey: string) => void
@@ -448,20 +445,13 @@ function buildCommitSelection(
       modelOnChange(modelKey);
       return;
     }
-    const targetDescriptor = backendRegistry[targetBackendId];
-    if (!targetDescriptor) {
+    const targetAgent = findAgent(catalog, targetBackendId);
+    if (!targetAgent) {
       logError("[AgentMode] commitSelection references unknown backend", targetBackendId);
       return;
     }
     if (!activeSession || activeSession.backendId !== targetBackendId) {
-      runCrossBackendPick(
-        manager,
-        activeSession?.internalId,
-        targetBackendId,
-        targetDescriptor,
-        baseModelId,
-        effort
-      );
+      runCrossBackendPick(manager, activeSession?.internalId, targetAgent, baseModelId, effort);
       return;
     }
     if (activeChatUIState?.canSwitchModel() === false) {
@@ -476,49 +466,42 @@ function buildCommitSelection(
 
 export function buildAgentModelPicker(args: {
   manager: AgentSessionManager | null;
-  descriptors: BackendDescriptor[];
-  settings: CopilotSettings;
+  catalog: PickerCatalog;
 }): AgentModelPickerOverride | null {
-  const { manager, descriptors, settings } = args;
+  const { manager, catalog } = args;
   if (!manager) return null;
   const ctx = collectModelActiveContext(manager);
-  const { entries, valueKey } = buildPickerEntries(manager, descriptors, ctx, settings);
-  const onChange = buildModelOnChange(manager, ctx, entries);
+  const { entries, valueKey } = buildPickerEntries(catalog, ctx);
+  const onChange = buildModelOnChange(manager, catalog, ctx, entries);
   return {
     models: entries,
     value: valueKey,
     disabled: false,
     effort: buildEffortSibling(manager, ctx),
-    effortOptionsByModelKey: buildEffortOptionsByModelKey(manager, entries),
+    effortOptionsByModelKey: buildEffortOptionsByModelKey(catalog, entries),
     onChange,
-    commitSelection: buildCommitSelection(manager, ctx, entries, onChange),
+    commitSelection: buildCommitSelection(manager, catalog, ctx, entries, onChange),
   };
 }
 
-export function buildAgentModelChoices(args: {
-  manager: AgentSessionManager;
-  descriptors: BackendDescriptor[];
-  settings: CopilotSettings;
-}): AgentModelChoices {
-  const { manager, descriptors, settings } = args;
+export function buildAgentModelChoices(catalog: PickerCatalog): AgentModelChoices {
   const noChat: ModelActiveContext = {
     activeSession: null,
     activeChatUIState: null,
     activeBackendId: null,
-    activeDescriptor: undefined,
     activeChatTiedToAgent: false,
     activeModelState: null,
     activeCurrentEntry: undefined,
   };
-  const { entries } = buildPickerEntries(manager, descriptors, noChat, settings);
+  const { entries } = buildPickerEntries(catalog, noChat);
   const runnable = entries.filter((entry) => !entry._disabledReason && !entry._needsLicense);
-  const backendId = settings.agentMode.activeBackend;
-  const saved = manager.getDefaultSelection(backendId);
+  const backendId = catalog.defaultAgent;
+  const saved = catalog.agents.find((agent) => agent.id === backendId)?.defaultSelection ?? null;
   const savedEntry =
     saved && runnable.find((e) => e._backendId === backendId && e.name === saved.baseModelId);
   const initial =
     savedEntry || runnable.find((entry) => entry._backendId === backendId) || runnable[0];
-  const effortOptionsByModelKey = buildEffortOptionsByModelKey(manager, entries);
+  const effortOptionsByModelKey = buildEffortOptionsByModelKey(catalog, entries);
   // A model saved without an effort runs at the level a chat resolves it to, so the field shows that level as the composer does.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/939
   const initialEffort =

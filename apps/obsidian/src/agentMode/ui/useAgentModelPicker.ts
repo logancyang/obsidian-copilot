@@ -1,11 +1,8 @@
 import { useCallback, useMemo, useSyncExternalStore } from "react";
 import type { ModelSelectorEntry } from "@/components/ui/ModelSelector";
-import { useSettingsValue } from "@/settings/model";
-import { listBackendDescriptors } from "@/agentMode/backends/registry";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { modelStateSignature } from "@/agentMode/session/translateBackendState";
-import type { BackendDescriptor } from "@/agentMode/session/types";
-import { useBackendInstallStates } from "@/agentMode/ui/useBackendDescriptor";
+import { useHostSlice } from "@/agentMode/ui/hooks/useSessionSlice";
 import { buildAgentModelPicker } from "./agentModelPickerHelpers";
 import { useManagerSubscribe } from "./useManagerSubscribe";
 
@@ -24,27 +21,20 @@ export interface AgentModelPickerOverride {
   commitSelection?: (modelKey: string, effort: string | null) => void;
 }
 
-function useAgentModelSignal(
-  manager: AgentSessionManager | null,
-  descriptors: BackendDescriptor[]
-): string {
+function useActiveChatModelSignal(manager: AgentSessionManager | null): string {
   const subscribe = useManagerSubscribe(manager);
 
   const getSnapshot = useCallback((): string => {
     if (!manager) return "";
     const session = manager.getActiveSession();
-    const parts: string[] = [
+    return [
       session?.internalId ?? "",
       session?.backendId ?? "",
       session?.getStatus() ?? "",
       session && manager.isTiedToAgent(session.internalId) ? "1" : "0",
       modelStateSignature(session?.getState() ?? null),
-    ];
-    for (const d of descriptors) {
-      parts.push(`${d.id}:${manager.getModelCacheSignature(d.id)}`);
-    }
-    return parts.join("|");
-  }, [manager, descriptors]);
+    ].join("|");
+  }, [manager]);
 
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
@@ -52,13 +42,10 @@ function useAgentModelSignal(
 export function useAgentModelPicker(
   manager: AgentSessionManager | null
 ): AgentModelPickerOverride | null {
-  const settings = useSettingsValue();
-  const descriptors = useMemo(() => listBackendDescriptors(), []);
-  const installStates = useBackendInstallStates();
-  const signal = useAgentModelSignal(manager, descriptors);
+  const catalog = useHostSlice("pickerCatalog");
+  const signal = useActiveChatModelSignal(manager);
   return useMemo(() => {
     void signal;
-    void installStates;
-    return buildAgentModelPicker({ manager, descriptors, settings });
-  }, [manager, descriptors, settings, signal, installStates]);
+    return buildAgentModelPicker({ manager, catalog });
+  }, [manager, catalog, signal]);
 }

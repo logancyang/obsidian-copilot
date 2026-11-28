@@ -1,6 +1,9 @@
 import type { PlanUsage } from "@copilot/protocol/planUsage";
+import { EMPTY_HOST_STATE } from "@copilot/protocol/host";
+import type { PickerCatalog } from "@copilot/protocol/pickerCatalog";
 import {
   applySessionOp,
+  applySliceOp,
   EMPTY_SESSION_STATE,
   type SessionOp,
   type SessionState,
@@ -14,6 +17,23 @@ const PLAN_USAGE: PlanUsage = {
 };
 
 describe("session", () => {
+  describe("applySliceOp()", () => {
+    it("replaces the named slice of any state made of slices, and returns the same state when the value is unchanged", () => {
+      const catalog: PickerCatalog = { defaultAgent: "claude", agents: [] };
+
+      const next = applySliceOp(EMPTY_HOST_STATE, {
+        type: "slice",
+        key: "pickerCatalog",
+        value: catalog,
+      });
+
+      expect(next).toEqual({ pickerCatalog: catalog });
+      expect(applySliceOp(next, { type: "slice", key: "pickerCatalog", value: catalog })).toBe(
+        next
+      );
+    });
+  });
+
   describe("applySessionOp()", () => {
     it("replaces the usage slice and keeps the plan usage slice", () => {
       const state: SessionState = { usage: null, planUsage: PLAN_USAGE };

@@ -1,11 +1,28 @@
 import { SessionClient } from "@copilot/protocol/client";
 import type { ClientFrame, HostFrame } from "@copilot/protocol/frames";
+import type { PickerCatalog } from "@copilot/protocol/pickerCatalog";
 import type { SessionState } from "@copilot/protocol/session";
 import type { SessionUsage } from "@copilot/protocol/sessionUsage";
 
 const USAGE: SessionUsage = { usedTokens: 1_000, contextWindow: 200_000, updatedAt: 1 };
 const LATER_USAGE: SessionUsage = { usedTokens: 9_000, contextWindow: 200_000, updatedAt: 2 };
 const STATE: SessionState = { usage: USAGE, planUsage: null };
+
+const CATALOG: PickerCatalog = { defaultAgent: "claude", agents: [] };
+const LATER_CATALOG: PickerCatalog = { defaultAgent: "codex", agents: [] };
+
+function hostSnapshot(seq: number, pickerCatalog: PickerCatalog = CATALOG): HostFrame {
+  return { type: "snapshot", feed: "host", seq, state: { pickerCatalog } };
+}
+
+function catalogOps(from: number, pickerCatalog: PickerCatalog): HostFrame {
+  return {
+    type: "ops",
+    feed: "host",
+    from,
+    ops: [{ type: "slice", key: "pickerCatalog", value: pickerCatalog }],
+  };
+}
 
 function connectedClient(): { client: SessionClient; sent: ClientFrame[] } {
   const sent: ClientFrame[] = [];
@@ -14,12 +31,13 @@ function connectedClient(): { client: SessionClient; sent: ClientFrame[] } {
 }
 
 function snapshot(seq: number, state: SessionState = STATE): HostFrame {
-  return { type: "snapshot", liveChatId: "chat-1", seq, state };
+  return { type: "snapshot", feed: "chat", liveChatId: "chat-1", seq, state };
 }
 
 function usageOps(from: number, usage: SessionUsage): HostFrame {
   return {
     type: "ops",
+    feed: "chat",
     liveChatId: "chat-1",
     from,
     ops: [{ type: "slice", key: "usage", value: usage }],
@@ -35,7 +53,7 @@ describe("client", () => {
         client.watch("chat-1");
         client.watch("chat-1");
 
-        expect(sent).toEqual([{ type: "subscribe", liveChatId: "chat-1" }]);
+        expect(sent).toEqual([{ type: "subscribe", feed: "chat", liveChatId: "chat-1" }]);
       });
 
       it("unsubscribes and drops the replica once the last watcher releases the live chat", () => {
@@ -46,11 +64,52 @@ describe("client", () => {
 
         releaseFirst();
         expect(client.getState("chat-1")).toEqual(STATE);
-        expect(sent).not.toContainEqual({ type: "unsubscribe", liveChatId: "chat-1" });
+        expect(sent).not.toContainEqual({
+          type: "unsubscribe",
+          feed: "chat",
+          liveChatId: "chat-1",
+        });
 
         releaseSecond();
         expect(client.getState("chat-1")).toBeNull();
-        expect(sent).toContainEqual({ type: "unsubscribe", liveChatId: "chat-1" });
+        expect(sent).toContainEqual({ type: "unsubscribe", feed: "chat", liveChatId: "chat-1" });
+      });
+    });
+
+    describe("watchHost()", () => {
+      it("subscribes to the host feed for its first watcher only, and unsubscribes and drops the replica after the last one releases it", () => {
+        const { client, sent } = connectedClient();
+        const releaseFirst = client.watchHost();
+        const releaseSecond = client.watchHost();
+        client.receive(hostSnapshot(0));
+
+        releaseFirst();
+        expect(client.getHostState()).toEqual({ pickerCatalog: CATALOG });
+        releaseSecond();
+
+        expect(sent).toEqual([
+          { type: "subscribe", feed: "host" },
+          { type: "unsubscribe", feed: "host" },
+        ]);
+        expect(client.getHostState()).toBeNull();
+      });
+
+      it("keeps the host feed apart from a live chat it also watches", () => {
+        const { client, sent } = connectedClient();
+        client.watch("chat-1");
+        const releaseHost = client.watchHost();
+        client.receive(snapshot(0));
+        client.receive(hostSnapshot(7));
+
+        releaseHost();
+
+        expect(client.getState("chat-1")).toEqual(STATE);
+        expect(client.getHostState()).toBeNull();
+        expect(sent).not.toContainEqual({
+          type: "unsubscribe",
+          feed: "chat",
+          liveChatId: "chat-1",
+        });
       });
     });
 
@@ -74,6 +133,7 @@ describe("client", () => {
 
         client.receive({
           type: "ops",
+          feed: "chat",
           liveChatId: "chat-1",
           from: 4,
           ops: [
@@ -94,7 +154,7 @@ describe("client", () => {
 
         client.receive(usageOps(5, LATER_USAGE));
 
-        expect(sent).toEqual([{ type: "subscribe", liveChatId: "chat-1" }]);
+        expect(sent).toEqual([{ type: "subscribe", feed: "chat", liveChatId: "chat-1" }]);
         expect(client.getState("chat-1")).toEqual(STATE);
       });
 
@@ -122,8 +182,29 @@ describe("client", () => {
 
         client.receive(usageOps(3, LATER_USAGE));
 
-        expect(sent).toEqual([{ type: "subscribe", liveChatId: "chat-1" }]);
+        expect(sent).toEqual([{ type: "subscribe", feed: "chat", liveChatId: "chat-1" }]);
         expect(client.getState("chat-1")).toEqual(STATE);
+      });
+
+      it("applies host ops that continue the host feed's sequence, and asks the host feed for a fresh snapshot on a gap", () => {
+        const { client, sent } = connectedClient();
+        client.watchHost();
+        client.receive(hostSnapshot(2));
+        client.receive(catalogOps(3, LATER_CATALOG));
+        sent.length = 0;
+
+        client.receive(catalogOps(5, CATALOG));
+
+        expect(client.getHostState()).toEqual({ pickerCatalog: LATER_CATALOG });
+        expect(sent).toEqual([{ type: "subscribe", feed: "host" }]);
+      });
+
+      it("ignores a host snapshot while nobody watches the host feed", () => {
+        const { client } = connectedClient();
+
+        client.receive(hostSnapshot(0));
+
+        expect(client.getHostState()).toBeNull();
       });
 
       it("ignores snapshots and ops for a live chat nobody watches", () => {
@@ -150,6 +231,15 @@ describe("client", () => {
         client.receive(snapshot(0));
 
         expect(listener).not.toHaveBeenCalled();
+      });
+    });
+
+    describe("getHostState()", () => {
+      it("returns null while the host feed is watched but its snapshot has not arrived", () => {
+        const { client } = connectedClient();
+        client.watchHost();
+
+        expect(client.getHostState()).toBeNull();
       });
     });
 

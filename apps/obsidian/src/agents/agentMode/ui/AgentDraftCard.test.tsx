@@ -1,4 +1,6 @@
 import { fakeChat } from "@/agentMode/session/testing/fakeChat";
+import { SessionClientContext } from "@/agentMode/ui/hooks/useSessionSlice";
+import { fakeSessionClient } from "@/agentMode/ui/testing/fakeSessionClient";
 import type { AgentChatMessage } from "@/agentMode/session/types";
 import { startCustomAgentChat } from "@/agents/agentMode/agentChats";
 import {
@@ -26,7 +28,6 @@ jest.mock("obsidian", () => ({
 }));
 jest.mock("@/entitlement");
 jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError: jest.fn() }));
-jest.mock("@/agentMode/backends/registry", () => ({ listBackendDescriptors: () => [] }));
 jest.mock("@/agentMode/ui/agentModelPickerHelpers", () => ({
   buildAgentModelChoices: () => ({
     models: [{ name: "opus", displayName: "Opus 5.5", provider: "agent", enabled: true }],
@@ -89,12 +90,14 @@ function renderSlot(card: AgentDraftCardState, { plugin, store } = fakeAgentChat
   const focusComposer = jest.fn();
   chat.updateChatState(AGENT_DRAFT_CARD, () => card);
   render(
-    <CustomAgentStoreContext.Provider value={store}>
-      <ChatInputProvider>
-        <ComposerFocus onFocus={focusComposer} />
-        {agentDraftCardSlot.render(card, "draft", { plugin, chat })}
-      </ChatInputProvider>
-    </CustomAgentStoreContext.Provider>
+    <SessionClientContext.Provider value={fakeSessionClient().client}>
+      <CustomAgentStoreContext.Provider value={store}>
+        <ChatInputProvider>
+          <ComposerFocus onFocus={focusComposer} />
+          {agentDraftCardSlot.render(card, "draft", { plugin, chat })}
+        </ChatInputProvider>
+      </CustomAgentStoreContext.Provider>
+    </SessionClientContext.Provider>
   );
   return { chat, focusComposer };
 }

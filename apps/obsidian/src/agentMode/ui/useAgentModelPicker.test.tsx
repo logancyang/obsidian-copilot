@@ -2,58 +2,35 @@ import { act, renderHook } from "@testing-library/react";
 import type { AgentChatUIState } from "@/agentMode/session/AgentChatUIState";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
-import type { BackendDescriptor, BackendState } from "@/agentMode/session/types";
+import type { BackendState } from "@/agentMode/session/types";
+import { SessionClientContext } from "@/agentMode/ui/hooks/useSessionSlice";
+import { fakeSessionClient } from "@/agentMode/ui/testing/fakeSessionClient";
+import type { PickerAgent, PickerCatalog } from "@copilot/protocol/pickerCatalog";
+import React from "react";
 import { useAgentModelPicker } from "./useAgentModelPicker";
-
-let mockInstallKind: "ready" | "incompatible" = "ready";
-let mockInstallListener: (() => void) | null = null;
-const mockDescriptors = [
-  {
-    id: "opencode",
-    getInstallState: () =>
-      mockInstallKind === "ready"
-        ? ({ kind: "ready", source: "managed" } as const)
-        : ({
-            kind: "incompatible",
-            source: "managed",
-            currentVersion: "1.15.0",
-            minVersion: "1.16.0",
-            message: "Update required",
-          } as const),
-    subscribeInstallState: (listener: () => void) => {
-      mockInstallListener = listener;
-      return () => {
-        mockInstallListener = null;
-      };
-    },
-  },
-] as unknown as BackendDescriptor[];
-
-jest.mock("@/settings/model", () => ({
-  useSettingsValue: jest.fn().mockReturnValue({}),
-}));
-
-jest.mock("@/agentMode/backends/registry", () => ({
-  listBackendDescriptors: () => mockDescriptors,
-}));
 
 jest.mock("./agentModelPickerHelpers", () => ({
   buildAgentModelPicker: ({
     manager,
-    descriptors,
+    catalog,
   }: {
     manager: AgentSessionManager;
-    descriptors: BackendDescriptor[];
+    catalog: PickerCatalog;
   }) => ({
     models: [],
-    value: `${
-      manager.getActiveSession()?.getState()?.model?.current.baseModelId ?? ""
-    }:${manager.getModelCacheSignature("opencode")}:${descriptors[0].getInstallState({} as never).kind}:${
-      manager.isTiedToAgent("active") ? "tied" : "free"
-    }`,
+    value: `${manager.getActiveSession()?.getState()?.model?.current.baseModelId ?? ""}:${catalog.agents
+      .map((agent) => agent.installKind)
+      .join(",")}:${manager.isTiedToAgent("active") ? "tied" : "free"}`,
     onChange: jest.fn(),
   }),
 }));
+
+function catalogWith(installKind: PickerAgent["installKind"]): PickerCatalog {
+  return {
+    defaultAgent: "opencode",
+    agents: [{ id: "opencode", installKind } as PickerAgent],
+  };
+}
 
 function stateWithModel(baseModelId: string): BackendState {
   return {
@@ -67,18 +44,11 @@ function stateWithModel(baseModelId: string): BackendState {
 }
 
 describe("useAgentModelPicker", () => {
-  beforeEach(() => {
-    mockInstallKind = "ready";
-    mockInstallListener = null;
-  });
-
   describe("useAgentModelPicker()", () => {
-    it("rerenders from session, catalog, backend readiness, and whether the chat is tied to its agent", () => {
+    it("rerenders from the active chat's model, whether the chat is tied to its agent, and the host's picker catalog", () => {
       let state = stateWithModel("first");
-      let catalogSignal = "catalog-one";
       let tied = false;
       let activeListener: (() => void) | null = null;
-      let cacheListener: (() => void) | null = null;
       const activeUI = {
         subscribe: (listener: () => void) => {
           activeListener = listener;
@@ -97,34 +67,29 @@ describe("useAgentModelPicker", () => {
         getActiveSession: () => session,
         getActiveChatUIState: () => activeUI,
         subscribe: () => jest.fn(),
-        subscribeModelCache: (listener: () => void) => {
-          cacheListener = listener;
-          return () => {
-            cacheListener = null;
-          };
-        },
-        getModelCacheSignature: () => catalogSignal,
+        subscribeModelCache: () => jest.fn(),
         isTiedToAgent: () => tied,
       } as unknown as AgentSessionManager;
+      const fake = fakeSessionClient({}, { pickerCatalog: catalogWith("ready") });
+      const wrapper = ({ children }: { children: React.ReactNode }) => (
+        <SessionClientContext.Provider value={fake.client}>
+          {children}
+        </SessionClientContext.Provider>
+      );
 
-      const { result } = renderHook(() => useAgentModelPicker(manager));
-      expect(result.current?.value).toBe("first:catalog-one:ready:free");
+      const { result } = renderHook(() => useAgentModelPicker(manager), { wrapper });
+      expect(result.current?.value).toBe("first:ready:free");
 
       state = stateWithModel("second");
       act(() => activeListener?.());
-      expect(result.current?.value).toBe("second:catalog-one:ready:free");
+      expect(result.current?.value).toBe("second:ready:free");
 
-      catalogSignal = "catalog-two";
-      act(() => cacheListener?.());
-      expect(result.current?.value).toBe("second:catalog-two:ready:free");
-
-      mockInstallKind = "incompatible";
-      act(() => mockInstallListener?.());
-      expect(result.current?.value).toBe("second:catalog-two:incompatible:free");
+      act(() => fake.setHostState({ pickerCatalog: catalogWith("incompatible") }));
+      expect(result.current?.value).toBe("second:incompatible:free");
 
       tied = true;
       act(() => activeListener?.());
-      expect(result.current?.value).toBe("second:catalog-two:incompatible:tied");
+      expect(result.current?.value).toBe("second:incompatible:tied");
     });
   });
 });

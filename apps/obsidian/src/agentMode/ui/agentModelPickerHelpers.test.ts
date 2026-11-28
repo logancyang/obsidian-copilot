@@ -26,6 +26,8 @@ import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManage
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { AgentChatUIState } from "@/agentMode/session/AgentChatUIState";
 import type { CopilotSettings } from "@/settings/model";
+import { buildPickerCatalog } from "@/agentMode/session/host/pickerCatalog";
+import type { PickerAgent, PickerCatalog } from "@copilot/protocol/pickerCatalog";
 
 type ModelCatalog = NonNullable<ReturnType<AgentSessionManager["getCachedModelCatalog"]>>;
 
@@ -34,31 +36,6 @@ jest.mock("obsidian", () => ({
   Modal: class {},
   App: class {},
 }));
-
-const mockSelfHostWarnIds = new Set<string>();
-jest.mock("@/agentMode/backends/registry", () => {
-  const stub = (id: string) => ({
-    id,
-    displayName: id,
-    wire: {
-      encode: () => "",
-      decode: () => ({ selection: { baseModelId: "", effort: null }, provider: null }),
-    },
-  });
-  return {
-    backendRegistry: {
-      codex: stub("codex"),
-      claude: stub("claude"),
-      opencode: stub("opencode"),
-    },
-    listBackendDescriptors: () => [stub("codex"), stub("claude"), stub("opencode")],
-    getActiveBackendDescriptor: () => stub("opencode"),
-    backendNeedsSelfHostWarning: (descriptor: { id: string }) =>
-      mockSelfHostWarnIds.has(descriptor.id),
-  };
-});
-
-afterEach(() => mockSelfHostWarnIds.clear());
 
 function makeState(modelId: string): BackendState {
   const entry = {
@@ -162,6 +139,8 @@ const emptySettings = {
   },
 } as unknown as CopilotSettings;
 
+const selfHostSettings = { ...emptySettings, enableSelfHostMode: true } as CopilotSettings;
+
 const copilotPlusSettings = {
   ...emptySettings,
   providers: { plus: { origin: { kind: "copilot-plus" } } },
@@ -184,12 +163,30 @@ const OUTDATED_INSTALL: InstallState = {
   message: "too old",
 };
 
+function catalogOf(
+  manager: AgentSessionManager,
+  descriptors: BackendDescriptor[],
+  settings: CopilotSettings = emptySettings
+): PickerCatalog {
+  return buildPickerCatalog(descriptors, manager, settings);
+}
+
+function agentOf(descriptor: BackendDescriptor, backendModels: ModelEntry[] | null): PickerAgent {
+  const manager = makeManager({
+    catalogById: { [descriptor.id]: backendModels && makeCatalog(backendModels) },
+  });
+  return catalogOf(manager, [descriptor]).agents[0];
+}
+
+function everyAgent(): BackendDescriptor[] {
+  return [makeDescriptor("codex"), makeDescriptor("claude"), makeDescriptor("opencode")];
+}
+
 function noSessionContext(): ModelActiveContext {
   return {
     activeSession: null,
     activeChatUIState: null,
     activeBackendId: null,
-    activeDescriptor: undefined,
     activeChatTiedToAgent: false,
     activeModelState: null,
     activeCurrentEntry: undefined,
@@ -264,11 +261,15 @@ describe("agentModelPickerHelpers", () => {
         getCachedModelCatalog: () => ({ availableModels: [entry] }),
         getPreloadStatus: () => "ready",
         getDefaultSelection: () => null,
+        getEffortCatalog: () => null,
       } as unknown as AgentSessionManager;
 
-      const { entries } = buildPickerEntries(manager, [descriptor], {} as ModelActiveContext, {
-        ...emptySettings,
-      });
+      const { entries } = buildPickerEntries(
+        catalogOf(manager, [descriptor], {
+          ...emptySettings,
+        }),
+        {} as ModelActiveContext
+      );
 
       const locked = entries.filter((model) => model._needsLicense);
       expect(locked.length).toBeGreaterThan(0);
@@ -290,9 +291,12 @@ describe("agentModelPickerHelpers", () => {
         preloadStatusById: { claude: "ready" },
       });
 
-      const { entries } = buildPickerEntries(manager, [claude], {} as ModelActiveContext, {
-        ...emptySettings,
-      });
+      const { entries } = buildPickerEntries(
+        catalogOf(manager, [claude], {
+          ...emptySettings,
+        }),
+        {} as ModelActiveContext
+      );
 
       expect(entries.some((entry) => entry._needsLicense)).toBe(false);
     });
@@ -310,20 +314,24 @@ describe("agentModelPickerHelpers", () => {
         getCachedModelCatalog: () => ({ availableModels: [entry] }),
         getPreloadStatus: () => "ready",
         getDefaultSelection: () => null,
+        getEffortCatalog: () => null,
       } as unknown as AgentSessionManager;
 
-      const { entries } = buildPickerEntries(manager, [descriptor], {} as ModelActiveContext, {
-        ...emptySettings,
-        providers: {
-          "plus-1": {
-            providerId: "plus-1",
-            providerType: "openai-compatible",
-            displayName: "Copilot",
-            origin: { kind: "copilot-plus" },
-            addedAt: 0,
+      const { entries } = buildPickerEntries(
+        catalogOf(manager, [descriptor], {
+          ...emptySettings,
+          providers: {
+            "plus-1": {
+              providerId: "plus-1",
+              providerType: "openai-compatible",
+              displayName: "Copilot",
+              origin: { kind: "copilot-plus" },
+              addedAt: 0,
+            },
           },
-        },
-      });
+        }),
+        {} as ModelActiveContext
+      );
 
       expect(entries.map((model) => model.name)).toEqual(["catalog-model"]);
     });
@@ -338,11 +346,15 @@ describe("agentModelPickerHelpers", () => {
         getCachedModelCatalog: () => null,
         getPreloadStatus: () => "pending",
         getDefaultSelection: () => null,
+        getEffortCatalog: () => null,
       } as unknown as AgentSessionManager;
 
-      const { entries } = buildPickerEntries(manager, [descriptor], {} as ModelActiveContext, {
-        ...emptySettings,
-      });
+      const { entries } = buildPickerEntries(
+        catalogOf(manager, [descriptor], {
+          ...emptySettings,
+        }),
+        {} as ModelActiveContext
+      );
 
       expect(entries.some((entry) => entry._disabledReason === "Loading…")).toBe(true);
     });
@@ -359,12 +371,11 @@ describe("agentModelPickerHelpers", () => {
         getCachedModelCatalog: () => ({ availableModels: [entry] }),
         getPreloadStatus: () => "ready",
         getDefaultSelection: () => null,
+        getEffortCatalog: () => null,
       } as unknown as AgentSessionManager;
       const { entries } = buildPickerEntries(
-        manager,
-        [descriptor],
-        {} as ModelActiveContext,
-        emptySettings
+        catalogOf(manager, [descriptor]),
+        {} as ModelActiveContext
       );
       expect(entries.map((model) => model.name)).toEqual(["catalog-model"]);
     });
@@ -383,7 +394,7 @@ describe("agentModelPickerHelpers", () => {
       });
       const ctx = noSessionContext();
 
-      const { entries } = buildPickerEntries(manager, [claude], ctx, emptySettings);
+      const { entries } = buildPickerEntries(catalogOf(manager, [claude]), ctx);
 
       expect(entries.map((entry) => entry.name)).toEqual(["default", "sonnet"]);
       expect(entries.every((entry) => entry._disabledReason === undefined)).toBe(true);
@@ -402,7 +413,7 @@ describe("agentModelPickerHelpers", () => {
       });
       const ctx = noSessionContext();
 
-      const { entries } = buildPickerEntries(manager, [descriptor], ctx, emptySettings);
+      const { entries } = buildPickerEntries(catalogOf(manager, [descriptor]), ctx);
 
       expect(entries).toHaveLength(0);
     });
@@ -422,12 +433,11 @@ describe("agentModelPickerHelpers", () => {
         activeSession: { backendId: "codex", getStatus: () => "idle" } as unknown as AgentSession,
         activeChatUIState: null,
         activeBackendId: "codex",
-        activeDescriptor: codex,
         activeChatTiedToAgent: true,
         activeModelState: makeModelState("gpt-5", [codexEntry]),
         activeCurrentEntry: codexEntry,
       };
-      const { entries } = buildPickerEntries(manager, [codex, claude], ctx, emptySettings);
+      const { entries } = buildPickerEntries(catalogOf(manager, [codex, claude]), ctx);
       const ids = entries.map((e) => e._backendId);
       expect(ids).toEqual(["codex"]);
     });
@@ -445,12 +455,11 @@ describe("agentModelPickerHelpers", () => {
         activeSession: { backendId: "codex", getStatus: () => "idle" } as unknown as AgentSession,
         activeChatUIState: null,
         activeBackendId: "codex",
-        activeDescriptor: codex,
         activeChatTiedToAgent: false,
         activeModelState: makeModelState("ghost-model", [stranded]),
         activeCurrentEntry: stranded,
       };
-      const { entries, valueKey } = buildPickerEntries(manager, [codex], ctx, emptySettings);
+      const { entries, valueKey } = buildPickerEntries(catalogOf(manager, [codex]), ctx);
       expect(entries[0].name).toBe("ghost-model");
       expect(entries[0]._backendId).toBe("codex");
       expect(valueKey).toBe("codex:ghost-model|agent");
@@ -468,12 +477,11 @@ describe("agentModelPickerHelpers", () => {
         activeSession: { backendId: "codex", getStatus: () => "idle" } as unknown as AgentSession,
         activeChatUIState: null,
         activeBackendId: "codex",
-        activeDescriptor: codex,
         activeChatTiedToAgent: false,
         activeModelState: makeModelState("gpt-5", [entry]),
         activeCurrentEntry: entry,
       };
-      const { entries } = buildPickerEntries(manager, [codex], ctx, emptySettings);
+      const { entries } = buildPickerEntries(catalogOf(manager, [codex]), ctx);
       expect(entries).toHaveLength(1);
       expect(entries[0].name).toBe("gpt-5");
     });
@@ -497,7 +505,7 @@ describe("agentModelPickerHelpers", () => {
         },
       });
       const ctx = noSessionContext();
-      const { entries } = buildPickerEntries(manager, [opencode], ctx, emptySettings);
+      const { entries } = buildPickerEntries(catalogOf(manager, [opencode]), ctx);
       expect(entries.map((e) => e.name)).toEqual(["anthropic/claude-sonnet-4-6"]);
     });
 
@@ -521,17 +529,14 @@ describe("agentModelPickerHelpers", () => {
         } as unknown as AgentSession,
         activeChatUIState: null,
         activeBackendId: "opencode",
-        activeDescriptor: opencode,
         activeChatTiedToAgent: false,
         activeModelState: makeModelState(pushed.baseModelId, [pushed, enabled]),
         activeCurrentEntry: pushed,
       };
 
       const { entries, valueKey } = buildPickerEntries(
-        manager,
-        [opencode],
-        ctx,
-        copilotPlusSettings
+        catalogOf(manager, [opencode], copilotPlusSettings),
+        ctx
       );
 
       expect(entries.map((e) => e.name)).toEqual([enabled.baseModelId]);
@@ -560,17 +565,14 @@ describe("agentModelPickerHelpers", () => {
         } as unknown as AgentSession,
         activeChatUIState: null,
         activeBackendId: "opencode",
-        activeDescriptor: opencode,
         activeChatTiedToAgent: false,
         activeModelState: makeModelState(agentDefault.baseModelId, [agentDefault]),
         activeCurrentEntry: agentDefault,
       };
 
       const { entries, valueKey } = buildPickerEntries(
-        manager,
-        [opencode],
-        ctx,
-        copilotPlusSettings
+        catalogOf(manager, [opencode], copilotPlusSettings),
+        ctx
       );
 
       const selected = entries.find((e) => getModelKeyFromModel(e) === valueKey);
@@ -593,13 +595,12 @@ describe("agentModelPickerHelpers", () => {
         } as unknown as AgentSession,
         activeChatUIState: null,
         activeBackendId: "codex",
-        activeDescriptor: codex,
         activeChatTiedToAgent: false,
         activeModelState: makeModelState(agentDefault.baseModelId, [agentDefault]),
         activeCurrentEntry: agentDefault,
       };
 
-      const { entries, valueKey } = buildPickerEntries(manager, [codex], ctx, emptySettings);
+      const { entries, valueKey } = buildPickerEntries(catalogOf(manager, [codex]), ctx);
 
       const selected = entries.find((e) => getModelKeyFromModel(e) === valueKey);
       expect(selected?.displayName).toBe("Loading models…");
@@ -628,12 +629,11 @@ describe("agentModelPickerHelpers", () => {
         activeSession: { backendId: "codex", getStatus: () => "idle" } as unknown as AgentSession,
         activeChatUIState: null,
         activeBackendId: "codex",
-        activeDescriptor: codex,
         activeChatTiedToAgent: false,
         activeModelState: makeModelState("gpt-5", [entry]),
         activeCurrentEntry: entry,
       };
-      const { entries } = buildPickerEntries(manager, [codex], ctx, emptySettings);
+      const { entries } = buildPickerEntries(catalogOf(manager, [codex]), ctx);
       expect(entries[0]._subtitle).toBe("Frontier model for complex coding");
     });
 
@@ -656,17 +656,15 @@ describe("agentModelPickerHelpers", () => {
         activeSession: { backendId: "codex", getStatus: () => "idle" } as unknown as AgentSession,
         activeChatUIState: null,
         activeBackendId: "codex",
-        activeDescriptor: codex,
         activeChatTiedToAgent: false,
         activeModelState: makeModelState("ghost", [stranded]),
         activeCurrentEntry: stranded,
       };
-      const { entries } = buildPickerEntries(manager, [codex], ctx, emptySettings);
+      const { entries } = buildPickerEntries(catalogOf(manager, [codex]), ctx);
       expect(entries[0]._subtitle).toBe("Opus 4.7 with 1M context");
     });
 
     it("flags every catalog row of a cloud backend the section marks under Self-Host Mode", () => {
-      mockSelfHostWarnIds.add("claude");
       const claude = {
         ...makeDescriptor("claude"),
         getEnabledModelEntries: () => [
@@ -679,13 +677,12 @@ describe("agentModelPickerHelpers", () => {
         },
       });
       const ctx = noSessionContext();
-      const { entries } = buildPickerEntries(manager, [claude], ctx, emptySettings);
+      const { entries } = buildPickerEntries(catalogOf(manager, [claude], selfHostSettings), ctx);
       expect(entries.length).toBeGreaterThan(0);
       expect(entries.every((e) => e._needsSelfHostWarning === true)).toBe(true);
     });
 
     it("flags a warned cloud backend's preload placeholder row", () => {
-      mockSelfHostWarnIds.add("claude");
       const claude = {
         ...makeDescriptor("claude"),
         getEnabledModelEntries: () => [
@@ -697,13 +694,12 @@ describe("agentModelPickerHelpers", () => {
         preloadStatusById: { claude: "pending" },
       });
       const ctx = noSessionContext();
-      const { entries } = buildPickerEntries(manager, [claude], ctx, emptySettings);
+      const { entries } = buildPickerEntries(catalogOf(manager, [claude], selfHostSettings), ctx);
       expect(entries).toHaveLength(1);
       expect(entries[0]._needsSelfHostWarning).toBe(true);
     });
 
     it("flags the stranded active row when its cloud backend is warned", () => {
-      mockSelfHostWarnIds.add("codex");
       const codex = makeDescriptor("codex");
       const stranded = makeModelEntry("ghost-model", "Ghost");
       const visible = makeModelEntry("real-model");
@@ -716,22 +712,19 @@ describe("agentModelPickerHelpers", () => {
         activeSession: { backendId: "codex", getStatus: () => "idle" } as unknown as AgentSession,
         activeChatUIState: null,
         activeBackendId: "codex",
-        activeDescriptor: codex,
         activeChatTiedToAgent: false,
         activeModelState: makeModelState("ghost-model", [stranded]),
         activeCurrentEntry: stranded,
       };
-      const { entries } = buildPickerEntries(manager, [codex], ctx, emptySettings);
+      const { entries } = buildPickerEntries(catalogOf(manager, [codex], selfHostSettings), ctx);
       expect(entries[0].name).toBe("ghost-model");
       expect(entries[0]._needsSelfHostWarning).toBe(true);
     });
 
     it("marks rows of an installed backend that needs an update so the pick can't be made", () => {
       const { entries } = buildPickerEntries(
-        managerWithSonnet(),
-        [claudeWithInstallState(OUTDATED_INSTALL)],
-        noSessionContext(),
-        emptySettings
+        catalogOf(managerWithSonnet(), [claudeWithInstallState(OUTDATED_INSTALL)]),
+        noSessionContext()
       );
       expect(entries.map((entry) => entry._disabledReason)).toEqual(["Update required"]);
     });
@@ -745,10 +738,8 @@ describe("agentModelPickerHelpers", () => {
       } as unknown as BackendDescriptor;
 
       const { entries } = buildPickerEntries(
-        managerWithSonnet(),
-        [claude],
-        noSessionContext(),
-        emptySettings
+        catalogOf(managerWithSonnet(), [claude]),
+        noSessionContext()
       );
 
       expect(entries[0]._disabledReason).toBe("Update required");
@@ -764,7 +755,7 @@ describe("agentModelPickerHelpers", () => {
         preloadStatusById: { codex: "ready" },
       });
 
-      const { entries } = buildPickerEntries(manager, [codex], noSessionContext(), emptySettings);
+      const { entries } = buildPickerEntries(catalogOf(manager, [codex]), noSessionContext());
 
       expect(entries).toEqual([]);
     });
@@ -784,10 +775,8 @@ describe("agentModelPickerHelpers", () => {
       });
 
       const { entries } = buildPickerEntries(
-        manager,
-        [opencode],
-        noSessionContext(),
-        copilotPlusSettings
+        catalogOf(manager, [opencode], copilotPlusSettings),
+        noSessionContext()
       );
 
       expect(entries).toEqual([]);
@@ -804,12 +793,7 @@ describe("agentModelPickerHelpers", () => {
         preloadStatusById: { opencode: "ready" },
       });
 
-      const { entries } = buildPickerEntries(
-        manager,
-        [opencode],
-        noSessionContext(),
-        emptySettings
-      );
+      const { entries } = buildPickerEntries(catalogOf(manager, [opencode]), noSessionContext());
 
       expect(entries.map((entry) => [entry.displayName, entry._disabledReason])).toEqual([
         ["Copilot Plus Flash", "Copilot license required"],
@@ -822,10 +806,9 @@ describe("agentModelPickerHelpers", () => {
         ...noSessionContext(),
         activeSession: { backendId: "claude", getStatus: () => "idle" } as unknown as AgentSession,
         activeBackendId: "claude",
-        activeDescriptor: claude,
       };
 
-      const { entries } = buildPickerEntries(managerWithSonnet(), [claude], ctx, emptySettings);
+      const { entries } = buildPickerEntries(catalogOf(managerWithSonnet(), [claude]), ctx);
 
       expect(entries.map((entry) => entry._disabledReason)).toEqual([undefined]);
     });
@@ -839,7 +822,6 @@ describe("agentModelPickerHelpers", () => {
         activeSession: { backendId, getStatus: () => "idle" } as unknown as AgentSession,
         activeChatUIState: null,
         activeBackendId: backendId,
-        activeDescriptor: makeDescriptor(backendId),
         activeChatTiedToAgent: false,
         activeModelState: null,
         activeCurrentEntry: undefined,
@@ -863,7 +845,7 @@ describe("agentModelPickerHelpers", () => {
           claude: makeCatalog([reported("claude-sonnet-4-5", "anthropic")]),
         },
       });
-      const { entries } = buildPickerEntries(manager, [claude], ctxFor("claude"), emptySettings);
+      const { entries } = buildPickerEntries(catalogOf(manager, [claude]), ctxFor("claude"));
       const entry = entries.find((e) => e.name === "claude-sonnet-4-5");
       expect(entry?.capabilities).toEqual([ModelCapability.VISION, ModelCapability.REASONING]);
     });
@@ -880,7 +862,7 @@ describe("agentModelPickerHelpers", () => {
           claude: makeCatalog([reported("claude-sonnet-4-5", "anthropic")]),
         },
       });
-      const { entries } = buildPickerEntries(manager, [claude], ctxFor("claude"), emptySettings);
+      const { entries } = buildPickerEntries(catalogOf(manager, [claude]), ctxFor("claude"));
       const entry = entries.find((e) => e.name === "claude-sonnet-4-5");
       expect(entry?.capabilities).toBeUndefined();
     });
@@ -901,10 +883,10 @@ describe("agentModelPickerHelpers", () => {
         { baseModelId: "openrouter/d", name: "D", credentialState: "ok" },
       ];
       const entries: ModelSelectorEntry[] = [];
-      appendBackendSection(entries, opencodeWithEntries(enabled), {
-        backendModels: [makeModelEntry("openrouter/c", "Reported C")],
-        settings: emptySettings,
-      });
+      appendBackendSection(
+        entries,
+        agentOf(opencodeWithEntries(enabled), [makeModelEntry("openrouter/c", "Reported C")])
+      );
       const byId = Object.fromEntries(entries.map((e) => [e.name, e]));
       expect(byId["openrouter/a"]._disabledReason).toBe("Add API key");
       expect(byId["openrouter/c"]._disabledReason).toBeUndefined();
@@ -928,8 +910,7 @@ describe("agentModelPickerHelpers", () => {
       const entries: ModelSelectorEntry[] = [];
       appendBackendSection(
         entries,
-        { ...opencodeWithEntries(enabled), getBlockedModels },
-        { backendModels, settings: emptySettings }
+        agentOf({ ...opencodeWithEntries(enabled), getBlockedModels }, backendModels)
       );
       const byId = Object.fromEntries(entries.map((e) => [e.name, e]));
       expect(byId["openrouter/a"]._disabledReason).toBe("Blocked by your OpenCode settings");
@@ -952,13 +933,13 @@ describe("agentModelPickerHelpers", () => {
         { baseModelId: "copilot-plus/flash", name: "Flash", credentialState: "ok" },
       ];
       const entries: ModelSelectorEntry[] = [];
-      appendBackendSection(entries, opencodeWithEntries(enabled), {
-        backendModels: [
+      appendBackendSection(
+        entries,
+        agentOf(opencodeWithEntries(enabled), [
           makeModelEntry("d5df8680/auto", "d5df8680/auto"),
           makeModelEntry("copilot-plus/flash", "copilot-plus/flash"),
-        ],
-        settings: emptySettings,
-      });
+        ])
+      );
       const byId = Object.fromEntries(entries.map((e) => [e.name, e]));
       expect(byId["d5df8680/auto"].displayName).toBe("custom-provider/custom-model");
       expect(byId["copilot-plus/flash"].displayName).toBe("copilot-plus/flash");
@@ -975,9 +956,7 @@ describe("agentModelPickerHelpers", () => {
         { baseModelId: "copilot-plus/flash", name: "Flash", credentialState: "ok" },
       ];
       const entries: ModelSelectorEntry[] = [];
-      appendBackendSection(entries, opencodeWithEntries(enabled), {
-        backendModels: null,
-        settings: emptySettings,
+      appendBackendSection(entries, agentOf(opencodeWithEntries(enabled), null), {
         useEnabledFallback: true,
       });
       const byId = Object.fromEntries(entries.map((e) => [e.name, e]));
@@ -1001,13 +980,13 @@ describe("agentModelPickerHelpers", () => {
         },
       ];
       const entries: ModelSelectorEntry[] = [];
-      appendBackendSection(entries, opencodeWithEntries(enabled), {
-        backendModels: [
+      appendBackendSection(
+        entries,
+        agentOf(opencodeWithEntries(enabled), [
           makeModelEntry("opencode/big-pickle", "Big Pickle"),
           makeModelEntry("lmstudio/gpt-oss-20b", "GPT OSS 20B"),
-        ],
-        settings: emptySettings,
-      });
+        ])
+      );
       const byId = Object.fromEntries(entries.map((e) => [e.name, e]));
       expect(byId["opencode/big-pickle"]._isFree).toBe(true);
       expect(byId["lmstudio/gpt-oss-20b"]._isFree).toBe(false);
@@ -1017,8 +996,10 @@ describe("agentModelPickerHelpers", () => {
       const entries: ModelSelectorEntry[] = [];
       appendBackendSection(
         entries,
-        opencodeWithEntries([{ baseModelId: "openrouter/a", name: "A", credentialState: "ok" }]),
-        { backendModels: null, settings: emptySettings }
+        agentOf(
+          opencodeWithEntries([{ baseModelId: "openrouter/a", name: "A", credentialState: "ok" }]),
+          null
+        )
       );
       expect(entries).toHaveLength(0);
     });
@@ -1039,7 +1020,6 @@ describe("agentModelPickerHelpers", () => {
         activeSession: { backendId: "codex", getStatus: () => "idle" } as unknown as AgentSession,
         activeChatUIState: makeUIState({ canSwitchEffort: opts.canSwitchEffort }),
         activeBackendId: "codex",
-        activeDescriptor: makeDescriptor("codex"),
         activeChatTiedToAgent: false,
         activeModelState: makeModelState("m", [entry]),
         activeCurrentEntry: entry,
@@ -1098,7 +1078,6 @@ describe("agentModelPickerHelpers", () => {
         activeSession: session,
         activeChatUIState: makeUIState({ canSwitchModel: true }),
         activeBackendId,
-        activeDescriptor: activeBackendId ? makeDescriptor("codex") : undefined,
         activeChatTiedToAgent: false,
         activeModelState: null,
         activeCurrentEntry: undefined,
@@ -1110,7 +1089,12 @@ describe("agentModelPickerHelpers", () => {
       const applySelection = jest.fn().mockResolvedValue(undefined);
       const manager = makeManager({ setDefaultBackend, applySelection });
       const entries = [pickerEntry("codex", "gpt-5")];
-      const onChange = buildModelOnChange(manager, ctxFor("codex"), entries);
+      const onChange = buildModelOnChange(
+        manager,
+        catalogOf(manager, everyAgent()),
+        ctxFor("codex"),
+        entries
+      );
       onChange("codex:gpt-5|agent");
       expect(setDefaultBackend).toHaveBeenCalledWith("codex");
       expect(applySelection).toHaveBeenCalledWith({ baseModelId: "gpt-5" });
@@ -1122,7 +1106,7 @@ describe("agentModelPickerHelpers", () => {
       ctx.activeChatUIState = makeUIState({ canSwitchModel: false });
       const manager = makeManager({ applySelection });
       const entries = [pickerEntry("codex", "gpt-5")];
-      const onChange = buildModelOnChange(manager, ctx, entries);
+      const onChange = buildModelOnChange(manager, catalogOf(manager, everyAgent()), ctx, entries);
       onChange("codex:gpt-5|agent");
       expect(applySelection).not.toHaveBeenCalled();
     });
@@ -1140,7 +1124,12 @@ describe("agentModelPickerHelpers", () => {
         defaultSelectionById: { claude: { baseModelId: "old", effort: "low" } },
       });
       const entries = [pickerEntry("claude", "opus")];
-      const onChange = buildModelOnChange(manager, ctxFor("codex"), entries);
+      const onChange = buildModelOnChange(
+        manager,
+        catalogOf(manager, everyAgent()),
+        ctxFor("codex"),
+        entries
+      );
       onChange("claude:opus|agent");
       await new Promise((r) => window.setTimeout(r, 0));
       expect(persistDefaultSelection).not.toHaveBeenCalled();
@@ -1163,7 +1152,12 @@ describe("agentModelPickerHelpers", () => {
           displayName: "x",
         },
       ];
-      const onChange = buildModelOnChange(manager, ctxFor("codex"), entries);
+      const onChange = buildModelOnChange(
+        manager,
+        catalogOf(manager, everyAgent()),
+        ctxFor("codex"),
+        entries
+      );
       onChange("no-backend|agent");
       expect(setDefaultBackend).not.toHaveBeenCalled();
       expect(applySelection).not.toHaveBeenCalled();
@@ -1210,7 +1204,7 @@ describe("agentModelPickerHelpers", () => {
         synthesizeAgentEntry(ACTIVE, ACTIVE, opencode),
         synthesizeAgentEntry(OTHER, OTHER, opencode),
       ];
-      const out = buildEffortOptionsByModelKey(manager, entries);
+      const out = buildEffortOptionsByModelKey(catalogOf(manager, [opencode]), entries);
       expect(out[getModelKeyFromModel(entries[0])]).toEqual([{ value: "high", label: "high" }]);
       expect(out[getModelKeyFromModel(entries[1])]).toEqual([
         { value: "minimal", label: "minimal" },
@@ -1227,7 +1221,7 @@ describe("agentModelPickerHelpers", () => {
         effortCatalogById: { opencode: {} },
       });
       const entries = [synthesizeAgentEntry(OTHER, OTHER, opencode)];
-      const out = buildEffortOptionsByModelKey(manager, entries);
+      const out = buildEffortOptionsByModelKey(catalogOf(manager, [opencode]), entries);
       expect(out[getModelKeyFromModel(entries[0])]).toEqual([]);
     });
   });
@@ -1260,14 +1254,16 @@ describe("agentModelPickerHelpers", () => {
         },
         defaultSelectionById,
       });
-      return buildAgentModelChoices({
-        manager,
-        descriptors: [
-          enabledDescriptor("claude", ["opus", "sonnet"]),
-          enabledDescriptor("codex", ["gpt-5.5"]),
-        ],
-        settings: { ...emptySettings, agentMode: { activeBackend } } as CopilotSettings,
-      });
+      return buildAgentModelChoices(
+        catalogOf(
+          manager,
+          [
+            enabledDescriptor("claude", ["opus", "sonnet"]),
+            enabledDescriptor("codex", ["gpt-5.5"]),
+          ],
+          { ...emptySettings, agentMode: { activeBackend } } as CopilotSettings
+        )
+      );
     }
 
     it("offers every agent's enabled models with their effort levels, starting on the default agent's saved model and effort (https://github.com/Brevilabs/obsidian-copilot-private/issues/939)", () => {
@@ -1296,11 +1292,12 @@ describe("agentModelPickerHelpers", () => {
     });
 
     it("starts on no model when no agent offers one", () => {
-      const choices = buildAgentModelChoices({
-        manager: makeManager({}),
-        descriptors: [],
-        settings: { ...emptySettings, agentMode: { activeBackend: "claude" } } as CopilotSettings,
-      });
+      const choices = buildAgentModelChoices(
+        catalogOf(makeManager({}), [], {
+          ...emptySettings,
+          agentMode: { activeBackend: "claude" },
+        } as CopilotSettings)
+      );
 
       expect(choices).toEqual({ models: [], effortOptionsByModelKey: {}, initial: null });
     });
@@ -1308,22 +1305,14 @@ describe("agentModelPickerHelpers", () => {
 
   describe("backendReadinessReason()", () => {
     it("labels each state a user must fix before the backend can run", () => {
-      expect(backendReadinessReason({ kind: "absent" })).toBe("Not set up");
-      expect(
-        backendReadinessReason({
-          kind: "incompatible",
-          source: "custom",
-          currentVersion: "1.0.0",
-          minVersion: "2.0.0",
-          message: "too old",
-        })
-      ).toBe("Update required");
-      expect(backendReadinessReason({ kind: "error", message: "boom" })).toBe("Setup error");
+      expect(backendReadinessReason("absent")).toBe("Not set up");
+      expect(backendReadinessReason("incompatible")).toBe("Update required");
+      expect(backendReadinessReason("error")).toBe("Setup error");
     });
 
     it("leaves rows selectable while the backend is ready or still being checked", () => {
-      expect(backendReadinessReason({ kind: "ready", source: "custom" })).toBeUndefined();
-      expect(backendReadinessReason({ kind: "checking", source: "custom" })).toBeUndefined();
+      expect(backendReadinessReason("ready")).toBeUndefined();
+      expect(backendReadinessReason("checking")).toBeUndefined();
     });
   });
 });

@@ -105,6 +105,7 @@ jest.mock("./ui/CopilotAgentView", () => ({}));
 jest.mock("./navigator/openSessionsSidebar", () => ({}));
 jest.mock("./navigator/ui/SessionsSidebarView", () => ({}));
 jest.mock("./ui/useBackendDescriptor", () => ({}));
+jest.mock("./session/host/pickerCatalog", () => ({ pickerCatalogSource: jest.fn() }));
 jest.mock("./ui/trackTabStripShown", () => ({ trackTabStripShown: jest.fn() }));
 jest.mock("./backends/opencode/opencodeProbePartition", () => ({}));
 jest.mock("./backends/opencode/opencodeModelResolve", () => ({}));

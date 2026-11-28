@@ -1,9 +1,9 @@
 import type { AgentMention } from "@/agents/agentMentions";
 import type { MemorySave } from "@/agents/memorySaves";
 import type React from "react";
-import type { ModelCapability } from "@/constants";
 import type { MessageContext } from "@/types/message";
 import type {
+  BackendId,
   BackendState,
   CopilotMode,
   ModelEntry,
@@ -50,6 +50,7 @@ export type {
   ModelSelectionSession,
 } from "./descriptor";
 export type {
+  BackendId,
   BackendState,
   CopilotMode,
   ModeApplySpec,
@@ -59,6 +60,10 @@ export type {
   ModelState,
   ModeOption,
 } from "@copilot/protocol/backendState";
+export type {
+  EnabledModelCredentialState,
+  EnabledModelEntry,
+} from "@copilot/protocol/pickerCatalog";
 export type {
   AgentCancelCause,
   AgentMessagePart,
@@ -93,8 +98,6 @@ export type {
   ToolCallSnapshot,
 } from "@copilot/protocol/toolCalls";
 
-export type BackendId = string;
-
 export interface AgentBrand {
   readonly id: BackendId;
   readonly displayName: string;
@@ -114,19 +117,6 @@ export { EFFORT_LEVELS_ASCENDING } from "@/lib/model-effort";
 
 export interface BackendModelCatalog {
   availableModels: readonly ModelEntry[] | null;
-}
-
-export type EnabledModelCredentialState = "ok" | "missing_key";
-
-export interface EnabledModelEntry {
-  baseModelId: string;
-  name: string;
-  label?: string;
-  description?: string;
-  credentialState: EnabledModelCredentialState;
-  capabilities?: ModelCapability[];
-  isFree?: boolean;
-  needsSelfHostWarning?: boolean;
 }
 
 export interface BlockedModels {

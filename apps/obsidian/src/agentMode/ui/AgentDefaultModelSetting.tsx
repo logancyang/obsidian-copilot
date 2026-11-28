@@ -39,8 +39,12 @@ export const AgentDefaultModelSetting: React.FC<Props> = ({ descriptor, manager 
   if ((!enabled || enabled.length === 0) && !hasExplicitDefault) return null;
 
   const selectedBaseId = current?.baseModelId ?? AGENT_DEFAULT_VALUE;
+  const effortSource = {
+    modelCatalog: manager.getCachedModelCatalog(descriptor.id),
+    effortCatalog: manager.getEffortCatalog(descriptor.id),
+  };
   const rawEffortOptions = hasExplicitDefault
-    ? resolveEffortOptions(manager, descriptor.id, selectedBaseId)
+    ? resolveEffortOptions(effortSource, selectedBaseId)
     : EMPTY_EFFORT_OPTIONS;
   const effortOptions = rawEffortOptions;
   const onModelChange = (baseModelId: string): void => {
@@ -50,10 +54,7 @@ export const AgentDefaultModelSetting: React.FC<Props> = ({ descriptor, manager 
         .catch((e) => logError(`[AgentMode] clear default model for ${descriptor.id} failed`, e));
       return;
     }
-    const effort = resolveEffort(
-      current?.effort,
-      resolveEffortOptions(manager, descriptor.id, baseModelId)
-    );
+    const effort = resolveEffort(current?.effort, resolveEffortOptions(effortSource, baseModelId));
     manager
       .persistDefaultSelection(descriptor.id, { baseModelId, effort })
       .catch((e) => logError(`[AgentMode] persist default model for ${descriptor.id} failed`, e));

@@ -225,3 +225,10 @@ export interface BackendDescriptor {
     isAborted: () => boolean;
   }): Promise<Record<string, EffortOption[]>>;
 }
+
+export function backendNeedsSelfHostWarning(
+  descriptor: BackendDescriptor,
+  settings: CopilotSettings
+): boolean {
+  return settings.enableSelfHostMode && !descriptor.selfHostable;
+}

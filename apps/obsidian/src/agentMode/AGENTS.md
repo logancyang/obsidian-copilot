@@ -117,21 +117,25 @@ Then in either case:
   helpers), and `session/AgentMessageStore.ts` builds the op with the
   host's ids and times and commits it. A feature's own message fields
   change through `patchExtension`, never a feature-named op
-- "The chat protocol: frames, a chat's state, the ops that change it,
-  `applySessionOp`, the client replica (`SessionClient`) and the plain-data
-  check" → `packages/protocol/src/` (`frames.ts`, `session.ts`, `client.ts`,
+- "The chat protocol: frames, a chat's state, the host-wide state (the
+  picker catalog), the ops that change them, the client replica
+  (`SessionClient`) and the plain-data check" → `packages/protocol/src/`
+  (`frames.ts`, `session.ts`, `host.ts`, `pickerCatalog.ts`, `client.ts`,
   `plainData.ts`)
-- "Turning a chat's changes into numbered ops, and the
-  in-process transport to the desktop panel's client" → `session/host/`
-- "A chat UI component that shows chat state the protocol carries" → read it
-  with `useSessionSlice(liveChatId, key)` (`ui/hooks/useSessionSlice.ts`)
-  from the client replica, never from `AgentChatBackend` or a session; tests
-  give it `fakeSessionClient` (`ui/testing/`)
+- "Turning a chat's changes and host-wide changes into numbered ops, building
+  the picker catalog from settings and descriptors, and the in-process
+  transport to the desktop panel's client" → `session/host/`
+- "A chat UI component that shows state the protocol carries" → read a chat's
+  state with `useSessionSlice(liveChatId, key)` and host-wide state with
+  `useHostSlice(key)` (`ui/hooks/useSessionSlice.ts`) from the client
+  replica, never from `AgentChatBackend`, a session, settings or a backend
+  descriptor; tests give it `fakeSessionClient` (`ui/testing/`)
 - "Which chat id is which" → `SessionId` is the agent's own session id
   (`backendSessionId`, on backend events and permission prompts);
   `LiveChatId` is `AgentSession.internalId`, one per chat while it is live on
-  the host, and the id the protocol subscribes to; a chat-history id is the
-  chat note's path or `buildNativeChatId(...)` and outlives reopening
+  the host, and the id a `feed: "chat"` subscription names; the
+  `feed: "host"` subscription names no id; a chat-history id is the chat
+  note's path or `buildNativeChatId(...)` and outlives reopening
 - "ACP wire types, JSON-RPC subprocess plumbing, vault-backed ACP client,
   ACP↔domain translators" → `acp/` (the **only** layer that imports
   `@agentclientprotocol/sdk`)
