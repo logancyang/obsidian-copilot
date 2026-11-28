@@ -1,6 +1,6 @@
 import type { PromptContent } from "@/agentMode/session/types";
 import { getSettings } from "@/settings/model";
-import type { MessageContext } from "@/types/message";
+import type { ChatSelectedTextContext, MessageContext } from "@/types/message";
 import type { App, TFile } from "obsidian";
 
 export interface QueuedAgentMessage {
@@ -16,6 +16,7 @@ export interface AgentInputDraft {
   images: File[];
   contextNotes: TFile[];
   contextFolders: string[];
+  quotes: ChatSelectedTextContext[];
   includeActiveNote: boolean;
   includeActiveWebTab: boolean;
   loading: boolean;
@@ -82,6 +83,7 @@ const createDraft = (): AgentInputDraft => ({
   images: [],
   contextNotes: [],
   contextFolders: [],
+  quotes: [],
   includeActiveNote: getSettings().autoAttachActiveNote,
   includeActiveWebTab: true,
   loading: false,

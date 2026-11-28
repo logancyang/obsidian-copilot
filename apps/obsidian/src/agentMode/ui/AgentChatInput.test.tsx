@@ -10,6 +10,7 @@ import { useAgentInputDrafts } from "@/agentMode/ui/hooks/useAgentInputDrafts";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Notice, TFile, type App } from "obsidian";
 import type {
+  ChatSelectedTextContext,
   NoteSelectedTextContext,
   SelectedTextContext,
   WebSelectedTextContext,
@@ -33,6 +34,8 @@ jest.mock("@/components/chat-components/ChatInput", () => ({
         onStopGenerating?: () => void;
         isGenerating?: boolean;
         placeholder?: string;
+        selectedTextContexts?: SelectedTextContext[];
+        onRemoveSelectedText?: (id: string) => void;
       },
       ref: React.ForwardedRef<import("@/components/chat-components/ChatInput").ChatInputHandle>
     ) => {
@@ -66,6 +69,15 @@ jest.mock("@/components/chat-components/ChatInput", () => ({
           <button type="button" onClick={() => props.onStopGenerating?.()}>
             stop
           </button>
+          {props.selectedTextContexts?.map((selection) => (
+            <button
+              key={selection.id}
+              type="button"
+              onClick={() => props.onRemoveSelectedText?.(selection.id)}
+            >
+              remove {selection.content}
+            </button>
+          ))}
         </>
       );
     }
@@ -125,11 +137,20 @@ const imageBlock = { type: "image", mimeType: "image/png", data: "AQID" };
 
 const NEVER_MOVED = () => false;
 
+const QUOTE: ChatSelectedTextContext = { id: "q1", sourceType: "chat", content: "Use Postgres" };
+const COMMENT: ChatSelectedTextContext = {
+  id: "q2",
+  sourceType: "chat",
+  content: "Ship on Friday",
+  comment: "Too soon",
+};
+
 const makeDraft = (overrides: Partial<AgentInputDraftControls> = {}): AgentInputDraftControls => ({
   input: "hello",
   images: [],
   contextNotes: [],
   contextFolders: [],
+  quotes: [],
   includeActiveNote: false,
   includeActiveWebTab: false,
   loading: false,
@@ -137,6 +158,7 @@ const makeDraft = (overrides: Partial<AgentInputDraftControls> = {}): AgentInput
   setInput: jest.fn(),
   setContextNotes: jest.fn(),
   setContextFolders: jest.fn(),
+  setQuotes: jest.fn(),
   setSelectedImages: jest.fn(),
   addImages: jest.fn(),
   setIncludeActiveNote: jest.fn(),
@@ -519,6 +541,53 @@ describe("AgentChatInput", () => {
         await act(async () => settleCancel());
       }
     );
+
+    it("sends the chat's quotes and comments as the message's selected text and empties them from the draft https://github.com/Brevilabs/obsidian-copilot-private/issues/1045", async () => {
+      const { backend, getDraft, settleCancel } = setupCancellation();
+      act(() => {
+        getDraft().setInput("");
+        getDraft().setQuotes([QUOTE, COMMENT]);
+      });
+
+      fireEvent.click(screen.getByText("send"));
+
+      await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
+      expect(jest.mocked(backend.sendMessage).mock.calls[0][1]?.selectedTextContexts).toEqual([
+        QUOTE,
+        COMMENT,
+      ]);
+      expect(getDraft().quotes).toEqual([]);
+      await act(async () => settleCancel());
+    });
+
+    it("takes a quote off the draft when its badge is removed, keeping the others https://github.com/Brevilabs/obsidian-copilot-private/issues/1045", async () => {
+      const { getDraft, settleCancel } = setupCancellation();
+      act(() => getDraft().setQuotes([QUOTE, COMMENT]));
+
+      fireEvent.click(screen.getByText(`remove ${QUOTE.content}`));
+
+      expect(getDraft().quotes).toEqual([COMMENT]);
+      await act(async () => settleCancel());
+    });
+
+    it("returns a queued follow-up's quotes and comments to the composer, unlike note selections https://github.com/Brevilabs/obsidian-copilot-private/issues/1045", async () => {
+      const { backend, getDraft, settleCancel } = setupCancellation();
+      act(() => getDraft().setInput("first turn"));
+      fireEvent.click(screen.getByText("send"));
+      await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
+      act(() => {
+        getDraft().setInput("and these");
+        getDraft().setQuotes([COMMENT]);
+      });
+      fireEvent.click(screen.getByText("send"));
+      await waitFor(() => expect(getDraft().queue).toHaveLength(1));
+      expect(getDraft().quotes).toEqual([]);
+
+      await act(async () => fireEvent.click(screen.getByText("stop")));
+
+      expect(getDraft().quotes).toEqual([COMMENT]);
+      await act(async () => settleCancel());
+    });
 
     it("returns a queued follow-up's notes and images to the composer https://github.com/Brevilabs/obsidian-copilot-private/issues/485", async () => {
       const note = makeFile("Queued.md");
