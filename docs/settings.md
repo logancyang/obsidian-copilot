@@ -185,13 +185,13 @@ The configuration dialog contains:
 
 ### Manage providers and models
 
-| Control                     | What it does                                                                                                                  |
-| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| **Search providers**        | Filters by provider name, model name, or model ID.                                                                            |
-| **Provider card**           | Expand it to see configured models. The status reads **Running** for keyless local providers, **API key set**, or **No key**. |
-| **More actions → Edit key** | Reopens the full configuration dialog, where you can change the name, key, Base URL, CORS behavior, and selected models.      |
-| **More actions → Remove**   | Removes the provider and all of its models from every model picker after confirmation.                                        |
-| **Remove model**            | The remove button on an expanded model row removes that model from the provider and all model pickers after confirmation.     |
+| Control                   | What it does                                                                                                                  |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| **Search providers**      | Filters by provider name, model name, or model ID.                                                                            |
+| **Provider card**         | Expand it to see configured models. The status reads **Running** for keyless local providers, **API key set**, or **No key**. |
+| **More actions → Edit**   | Reopens the full configuration dialog, where you can change the name, key, Base URL, CORS behavior, and selected models.      |
+| **More actions → Remove** | Removes the provider and all of its models from every model picker after confirmation.                                        |
+| **Remove model**          | The remove button on an expanded model row removes that model from the provider and all model pickers after confirmation.     |
 
 When Self-Host Mode is on, local and self-hosted endpoints sort first. Cloud providers remain usable but receive a cloud-egress warning. See [Model Sources and BYOK](llm-providers.md) for routing details and local-server setup.
 
