@@ -43,8 +43,9 @@ file disagree, the file wins.
 ## Why two adapters under one session
 
 The contract lives in `session/types.ts` (`BackendProcess`,
-`BackendDescriptor`, the full session-domain type set) and
-`session/errors.ts` (`MethodUnsupportedError`). `acp/AcpBackendProcess`
+`BackendDescriptor`, the full session-domain type set; the plain data
+types among them come from `@copilot/protocol/...`) and
+`@copilot/protocol/errors` (`MethodUnsupportedError`). `acp/AcpBackendProcess`
 wraps a JSON-RPC subprocess and translates ACP wire ↔ session-domain
 at its public boundary (via `acp/wireTranslate.ts`);
 `sdk/ClaudeSdkBackendProcess` wraps an in-process async generator and

@@ -2,6 +2,8 @@ import { AI_SENDER } from "@/constants";
 import { logInfo, logWarn } from "@/logger";
 import { AgentMessageStore } from "@/agentMode/session/AgentMessageStore";
 import { GLOBAL_SCOPE, type ProjectScopeId } from "@copilot/protocol/scope";
+import type { AgentSessionStatus } from "@copilot/protocol/session";
+import type { AgentTask } from "@copilot/protocol/tasks";
 import {
   AgentChatMessage,
   AgentMcpServer,
@@ -111,6 +113,9 @@ import {
   type TurnFailure,
 } from "@/agentMode/session/chatExtension";
 
+export type { AgentSessionStatus } from "@copilot/protocol/session";
+export type { AgentTask } from "@copilot/protocol/tasks";
+
 const DEFAULT_TITLE_PREFIX = "New session";
 const EMPTY_TASKS: readonly AgentTask[] = Object.freeze([]);
 const EMPTY_MESSAGES: readonly AgentChatMessage[] = Object.freeze([]);
@@ -126,13 +131,6 @@ const UNSTARTED_TASK_END: Partial<Record<AgentToolStatus, TaskEndStatus>> = {
   failed: "failed",
   cancelled: "stopped",
 };
-
-export interface AgentTask extends TaskStart {
-  status: "running" | TaskEndStatus;
-  model?: string;
-  outputFile?: string;
-  summary?: string;
-}
 
 function isTaskLifecycleUpdate(update: SessionEvent["update"]): boolean {
   return (
@@ -157,14 +155,6 @@ async function readVaultText(adapter: DataAdapter, path: string): Promise<string
     return null;
   }
 }
-
-export type AgentSessionStatus =
-  | "starting"
-  | "idle"
-  | "running"
-  | "awaiting_permission"
-  | "error"
-  | "closed";
 
 export const ATTENTION_TRIGGER_STATUSES: ReadonlySet<AgentSessionStatus> = new Set([
   "idle",

@@ -1,4 +1,4 @@
-import type { AgentTask } from "@/agentMode/session/AgentSession";
+import type { AgentTask } from "@copilot/protocol/tasks";
 import type { AgentToolStatus, PermissionPrompt } from "@/agentMode/session/types";
 
 export type TaskDisplayStatus = AgentTask["status"] | "needs_approval";

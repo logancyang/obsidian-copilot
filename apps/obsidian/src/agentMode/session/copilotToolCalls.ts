@@ -1,16 +1,9 @@
 import { describeConnectorTool } from "@/connectors/connectorTools";
 import { humanizeToolName, serviceToolName } from "@/lib/toolName";
 import { COPILOT_MCP_SERVER_NAME } from "@/agentMode/session/copilotMcpServer";
+import type { CopilotToolUse } from "@copilot/protocol/toolCalls";
 
-export type CopilotToolCall = { name: string } & (
-  | { args: Record<string, unknown> }
-  | { code: string }
-);
-
-export interface CopilotToolUse {
-  wrapper?: string;
-  calls: readonly CopilotToolCall[];
-}
+export type { CopilotToolCall, CopilotToolUse } from "@copilot/protocol/toolCalls";
 
 export function toolInputRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : {};

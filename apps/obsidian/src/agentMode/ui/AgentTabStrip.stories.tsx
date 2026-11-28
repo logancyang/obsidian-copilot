@@ -1,5 +1,5 @@
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
-import type { AgentSessionStatus } from "@/agentMode/session/AgentSession";
+import type { AgentSessionStatus } from "@copilot/protocol/session";
 import type { AgentChatMessage } from "@/agentMode/session/types";
 import { AgentTabStrip } from "@/agentMode/ui/AgentTabStrip";
 import { COCO, LEO, MAYA, NORA } from "@/agents/ui/testing/rosterFixtures";

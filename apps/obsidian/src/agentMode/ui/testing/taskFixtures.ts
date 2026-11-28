@@ -1,4 +1,4 @@
-import type { AgentTask } from "@/agentMode/session/AgentSession";
+import type { AgentTask } from "@copilot/protocol/tasks";
 import type { TaskOutputReader } from "@/agentMode/session/taskOutputTail";
 
 export function makeTask(overrides: Partial<AgentTask> = {}): AgentTask {

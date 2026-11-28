@@ -19,7 +19,6 @@
       "box": "protocol",
       "files": [
         "apps/obsidian/src/agentMode/session/types.ts",
-        "apps/obsidian/src/agentMode/session/errors.ts",
         "apps/obsidian/src/types/**",
         "packages/protocol/**"
       ]
