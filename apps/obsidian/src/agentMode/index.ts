@@ -453,9 +453,7 @@ export function createAgentSessionManager(
   managerRef = manager;
   const sessionHost = new SessionHost(manager);
   plugin.register(() => sessionHost.dispose());
-  const sessionClient = connectInProcess(sessionHost, {
-    checkFrames: process.env.NODE_ENV !== "production",
-  });
+  const sessionClient = connectInProcess(sessionHost);
   // Agents read Copilot's tool list once per session, so a connected or disconnected service reaches open chats through Reload.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/857
   connectorTools?.subscribeToToolSetChange((affectsBackend) => {

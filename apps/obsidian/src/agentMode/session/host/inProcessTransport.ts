@@ -2,17 +2,14 @@ import type { SessionHost } from "@/agentMode/session/host/SessionHost";
 import { SessionClient } from "@copilot/protocol/client";
 import { findNonPlainField } from "@copilot/protocol/plainData";
 
-export function connectInProcess(
-  host: Pick<SessionHost, "connect">,
-  options: { checkFrames: boolean }
-): SessionClient {
-  const carry = options.checkFrames ? checkedFrame : <F>(frame: F): F => frame;
+export function connectInProcess(host: Pick<SessionHost, "connect">): SessionClient {
+  // The in-process path hands objects over uncopied, so outside production it refuses what JSON could not carry and freezes what it hands over; the bundler folds this test so production ships neither. https://github.com/Brevilabs/obsidian-copilot-private/issues/1003
+  const carry = process.env.NODE_ENV === "production" ? <F>(frame: F): F => frame : checkedFrame;
   const client = new SessionClient((frame) => toHost(carry(frame)));
   const toHost = host.connect((frame) => client.receive(carry(frame)));
   return client;
 }
 
-// The in-process path hands objects over uncopied, so outside production it refuses what JSON could not carry and freezes what it hands over. https://github.com/Brevilabs/obsidian-copilot-private/issues/1003
 function checkedFrame<F>(frame: F): F {
   const nonPlain = findNonPlainField(frame);
   if (nonPlain) {
