@@ -140,7 +140,7 @@ async function main() {
     `Tracked files under Obsidian review source roots are hidden by the base ESLint config:\n${ignoredSources.join("\n")}\nMove non-source fixtures outside the review roots instead of ignoring them.`
   );
 
-  for (const target of ["manifest.json", "package.json", "LICENSE"]) {
+  for (const target of ["manifest.json", "package.json", "apps/obsidian/package.json", "LICENSE"]) {
     await expectOutsideTypeAwareScope(target);
   }
 

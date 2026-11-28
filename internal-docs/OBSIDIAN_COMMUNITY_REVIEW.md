@@ -20,7 +20,7 @@ The safety rule is simple: review compliance must not change plugin behavior, pe
 | Stage                      | Responsibility                                                                                   |
 | -------------------------- | ------------------------------------------------------------------------------------------------ |
 | `review:obsidian:package`  | Validate metadata, release invariants, and runtime-only dependency replacement guidance          |
-| `review:obsidian:source`   | Scan source, gallery code, `package.json`, and `LICENSE` with the upstream Obsidian ESLint rules |
+| `review:obsidian:source`   | Scan source, gallery code, both `package.json` files, and `LICENSE` with upstream Obsidian rules |
 | `review:obsidian:styles`   | Scan all source/gallery CSS and generated `styles.css`                                           |
 | `review:obsidian:audit`    | Report production advisories and block critical ones                                             |
 | `review:obsidian:fixtures` | Prove blockers are rejected and no tracked source is ignored                                     |
@@ -37,7 +37,7 @@ The same command runs in pull-request CI and in the release workflow before pack
 
 ## Dependency policy
 
-The package stage applies the upstream `depend/ban-dependencies` guidance to a virtual `package.json` containing production dependencies only. This catches runtime package replacement recommendations without falsely reporting packages used only by tests or development tooling. These findings remain warnings; production audit failures follow the separate audit policy below.
+The plugin's libraries are listed in `apps/obsidian/package.json`; the root `package.json` lists only repo-wide tools. The package stage applies the upstream `depend/ban-dependencies` guidance to a virtual `package.json` containing the app's production dependencies only. This catches runtime package replacement recommendations without falsely reporting packages used only by tests or development tooling. These findings remain warnings; production audit failures follow the separate audit policy below.
 
 ## Audit policy
 

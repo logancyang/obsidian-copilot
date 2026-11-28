@@ -222,6 +222,26 @@ export default [
 
   ...obsidianmd.configs.recommended,
 
+  // Obsidian's dependency review configures only the root manifest, and the plugin's libraries live in the app's: https://github.com/Brevilabs/obsidian-copilot-private/issues/1010
+  ...obsidianmd.configs.recommended
+    .filter((config) => config.files?.length === 1 && config.files[0] === "package.json")
+    .map((config) => ({ ...config, files: ["apps/*/package.json", "packages/*/package.json"] })),
+
+  // These files sit between the root's tools and the app's libraries, so both manifests list what they import: https://github.com/Brevilabs/obsidian-copilot-private/issues/1010
+  {
+    files: [
+      "dev/gallery/**/*.{ts,tsx}",
+      "scripts/pr-size.test.mjs",
+      "apps/obsidian/esbuild.config.mjs",
+    ],
+    rules: {
+      "import/no-extraneous-dependencies": [
+        "warn",
+        { packageDir: [import.meta.dirname, `${import.meta.dirname}/apps/obsidian`] },
+      ],
+    },
+  },
+
   {
     files: ["**/*.{jsx,tsx}"],
     ...eslintReact.configs.recommended,
@@ -501,6 +521,7 @@ export default [
       "scripts/architecture.js",
       "scripts/architecture.test.js",
       "scripts/workspacePackages.test.js",
+      "scripts/testing/lintWithRepoConfig.js",
     ],
     rules: {
       "@typescript-eslint/no-require-imports": "off",

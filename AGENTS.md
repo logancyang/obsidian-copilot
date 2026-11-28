@@ -8,6 +8,8 @@ Copilot for Obsidian is an AI-powered assistant plugin that integrates various L
 
 The repo is an npm workspaces monorepo. The plugin lives in `apps/obsidian` (`src/`, its build config); `@/` imports resolve to `apps/obsidian/src`. `packages/core`, `packages/protocol` and `packages/client` are the shared packages, imported by package name (`@copilot/core/...`); they have no `obsidian` dependency and no Node types, and `npm run lint` rejects any Node, Electron or Obsidian access in them. Run every command from the repo root; `manifest.json`, `versions.json` and the built `main.js` / `styles.css` stay there.
 
+Each library is listed in exactly one `package.json`. A library that plugin source, tests, stories or the plugin's build config import goes in `apps/obsidian/package.json` (`npm install <library> -w apps/obsidian`). A repo-wide tool (ESLint, Jest, Prettier, TypeScript, esbuild, Tailwind) goes in the root `package.json`, which otherwise holds only the name, version, license, workspace list and scripts. A library a package uses goes in that package's `package.json`.
+
 ## Commands
 
 - **NEVER RUN `npm run dev`**.
