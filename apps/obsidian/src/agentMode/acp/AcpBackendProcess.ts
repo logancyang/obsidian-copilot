@@ -25,7 +25,7 @@ import {
   AgentReportedError,
   JSONRPC_METHOD_NOT_FOUND,
   MethodUnsupportedError,
-} from "@copilot/protocol/errors";
+} from "@/agentMode/session/errors";
 import type {
   AgentMcpServer,
   BackendDescriptor,

@@ -52,7 +52,7 @@ import {
   mergeChatHistoryItems,
   type MarkdownChatEntry,
 } from "./chatHistoryMerge";
-import { MethodUnsupportedError } from "@copilot/protocol/errors";
+import { MethodUnsupportedError } from "./errors";
 import { replayPersistedMode } from "./replayPersistedMode";
 import { applyModeSpec } from "./modeApply";
 import { modelCatalogSignature } from "./translateBackendState";

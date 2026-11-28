@@ -46,7 +46,7 @@ import type {
 } from "@/agentMode/session/types";
 import type { ProjectScopeId } from "@copilot/protocol/scope";
 import { COPILOT_CHAT_PROMPT } from "@/agentMode/session/copilotChatPrompt";
-import { AuthRequiredError, MethodUnsupportedError } from "@copilot/protocol/errors";
+import { AuthRequiredError, MethodUnsupportedError } from "@/agentMode/session/errors";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { agentShellPath } from "@/utils/loginShellPath";
 import { createClaudeTaskPlanState, type ClaudeTaskPlanState } from "./claudeTodoPlan";

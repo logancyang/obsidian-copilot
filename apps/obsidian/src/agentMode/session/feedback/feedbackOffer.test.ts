@@ -1,4 +1,4 @@
-import { AgentReportedError, AuthRequiredError } from "@copilot/protocol/errors";
+import { AgentReportedError, AuthRequiredError } from "@/agentMode/session/errors";
 import { fakeChat, fakeChatView, FAKE_EVIDENCE } from "@/agentMode/session/testing/fakeChat";
 import type { AgentChatMessage, AgentMessagePart } from "@/agentMode/session/types";
 import { AI_SENDER, USER_SENDER } from "@/constants";

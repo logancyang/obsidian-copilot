@@ -42,7 +42,7 @@ import {
 import { MessageContext } from "@/types/message";
 import { err2String, formatDateTime } from "@/utils";
 import { Notice, type App, type DataAdapter } from "obsidian";
-import { MethodUnsupportedError } from "@copilot/protocol/errors";
+import { MethodUnsupportedError } from "@/agentMode/session/errors";
 import {
   diffTargetPaths,
   editTargetPaths,

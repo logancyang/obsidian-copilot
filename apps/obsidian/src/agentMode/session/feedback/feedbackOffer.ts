@@ -5,7 +5,7 @@ import {
   type ChatView,
 } from "@/agentMode/session/chatExtension";
 import type { FeedbackDraft, FeedbackOfferResult } from "@/agentMode/session/copilotMcpServer";
-import { AgentReportedError, AuthRequiredError } from "@copilot/protocol/errors";
+import { AgentReportedError, AuthRequiredError } from "@/agentMode/session/errors";
 import type { AgentChatMessage, AgentMessagePart } from "@/agentMode/session/types";
 import { USER_SENDER } from "@/constants";
 import { describeConnectorTool } from "@/connectors/connectorTools";

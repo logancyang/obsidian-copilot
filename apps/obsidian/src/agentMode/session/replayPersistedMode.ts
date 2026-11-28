@@ -1,6 +1,6 @@
 import { logWarn } from "@/logger";
 import type { AgentSession } from "./AgentSession";
-import { MethodUnsupportedError } from "@copilot/protocol/errors";
+import { MethodUnsupportedError } from "./errors";
 import { applyModeSpec } from "./modeApply";
 import type { CopilotMode } from "./types";
 

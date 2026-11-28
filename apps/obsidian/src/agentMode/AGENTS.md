@@ -45,7 +45,7 @@ file disagree, the file wins.
 The contract lives in `session/types.ts` (`BackendProcess`,
 `BackendDescriptor`, the full session-domain type set; the plain data
 types among them come from `@copilot/protocol/...`) and
-`@copilot/protocol/errors` (`MethodUnsupportedError`). `acp/AcpBackendProcess`
+`session/errors.ts` (`MethodUnsupportedError`). `acp/AcpBackendProcess`
 wraps a JSON-RPC subprocess and translates ACP wire ↔ session-domain
 at its public boundary (via `acp/wireTranslate.ts`);
 `sdk/ClaudeSdkBackendProcess` wraps an in-process async generator and
@@ -105,6 +105,11 @@ Then in either case:
 - "Backend-agnostic contract — `BackendProcess`, `BackendDescriptor`,
   the session-domain types, `MethodUnsupportedError`, debug sink,
   `translateBackendState` helper" → `session/`
+- "Plain, serializable chat data a chat UI also reads (message parts, tool
+  calls, permission and question prompts, tasks, usage, plan, scope, model
+  and mode state)" → `packages/protocol/src/`, imported as
+  `@copilot/protocol/...`; no `Error`, `AbortSignal`, `Map`/`Set`,
+  functions or class instances in those types
 - "ACP wire types, JSON-RPC subprocess plumbing, vault-backed ACP client,
   ACP↔domain translators" → `acp/` (the **only** layer that imports
   `@agentclientprotocol/sdk`)

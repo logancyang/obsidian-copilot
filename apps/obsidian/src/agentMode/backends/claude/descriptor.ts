@@ -13,7 +13,7 @@ import {
   type CopilotSettings,
 } from "@/settings/model";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
-import { MethodUnsupportedError } from "@copilot/protocol/errors";
+import { MethodUnsupportedError } from "@/agentMode/session/errors";
 import { claudeBinarySearchDirs, resolveClaudeBinary } from "./claudeBinaryResolver";
 import { CLAUDE_INSTALL_COMMAND } from "./cliSetup";
 import { getClaudeAuthStatus, signInToClaude, signOutFromClaude } from "./claudeAuth";

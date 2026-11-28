@@ -19,7 +19,7 @@ import { defineChatExtension, type ChatStateKey } from "./chatExtension";
 import { writePermissionRequest } from "./testing/permissionPrompts";
 import { OUTPUT_LIMIT_CONTINUATION_PROMPT } from "./promptEnvelope";
 import { __resetVaultBaseCache } from "@/utils/vaultPath";
-import { AuthRequiredError, MethodUnsupportedError } from "@copilot/protocol/errors";
+import { AuthRequiredError, MethodUnsupportedError } from "./errors";
 import type {
   AgentChatMessage,
   AgentToolCallOutput,
