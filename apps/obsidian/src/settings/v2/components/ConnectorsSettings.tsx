@@ -19,8 +19,7 @@ import { CustomConnectorModal } from "@/connectors/ui/CustomConnectorModal";
 import { useConnectorsSnapshot } from "@/connectors/ui/useConnectorsSnapshot";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { useApp } from "@/context";
-import { usePlugin } from "@/contexts/PluginContext";
-import { useTab } from "@/contexts/TabContext";
+import { useTab } from "@/settings/v2/TabContext";
 import { navigateToPlusPage } from "@/plusUtils";
 import { err2String } from "@/utils";
 import { Notice } from "obsidian";
@@ -28,8 +27,17 @@ import { useSettingsSubPage } from "@/settings/v2/SettingsSubPage";
 import React, { useEffect, useRef, useSyncExternalStore } from "react";
 import { DesktopOnlySettingsPanel } from "./DesktopOnlySettingsPanel";
 
-export const ConnectorsSettings: React.FC = () => {
-  const { connectionManager, connectorTools, customConnectors } = usePlugin();
+interface ConnectorsSettingsProps {
+  connectionManager: ConnectionManager | undefined;
+  connectorTools: ConnectorTools | undefined;
+  customConnectors: CustomConnectors | undefined;
+}
+
+export const ConnectorsSettings: React.FC<ConnectorsSettingsProps> = ({
+  connectionManager,
+  connectorTools,
+  customConnectors,
+}) => {
   if (!connectionManager || !connectorTools || !customConnectors) {
     return <DesktopOnlySettingsPanel message="Connectors are available on desktop." />;
   }

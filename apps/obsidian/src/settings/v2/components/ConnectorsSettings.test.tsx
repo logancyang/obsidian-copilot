@@ -22,9 +22,7 @@ import type { ServiceToolInfo } from "@/connectors/connectorTools";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { TabContent } from "@/components/ui/setting-tabs";
 import { AppContext } from "@/context";
-import { PluginProvider } from "@/contexts/PluginContext";
-import { TabProvider, useTab } from "@/contexts/TabContext";
-import type CopilotPlugin from "@/main";
+import { TabProvider, useTab } from "@/settings/v2/TabContext";
 import { ConnectorsSettings } from "@/settings/v2/components/ConnectorsSettings";
 import { SettingsSubPageHost } from "@/settings/v2/SettingsSubPage";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
@@ -145,12 +143,12 @@ function waitingLogin(connectionId: string, serviceId: string, cancel: () => voi
   return { connectionId, serviceId, loginUrl: () => null, cancel };
 }
 
-function SettingsTabs(): React.ReactElement {
+function SettingsTabs(props: React.ComponentProps<typeof ConnectorsSettings>): React.ReactElement {
   const { selectedTab, setSelectedTab } = useTab();
   return (
     <>
       <TabContent id="connectors" isSelected={selectedTab === "connectors"}>
-        <ConnectorsSettings />
+        <ConnectorsSettings {...props} />
       </TabContent>
       <output aria-label="Selected tab">{selectedTab}</output>
       <button type="button" onClick={() => setSelectedTab("command")}>
@@ -165,22 +163,18 @@ function renderSettings(
   connectorTools = manager && fakeConnectorTools(),
   customConnectors = manager && fakeCustomConnectors()
 ) {
-  const app = new App();
-  const plugin = {
-    app,
+  const services = {
     connectionManager: manager,
     connectorTools,
     customConnectors,
-  } as unknown as CopilotPlugin;
+  } as unknown as React.ComponentProps<typeof ConnectorsSettings>;
   return render(
-    <AppContext.Provider value={app}>
-      <PluginProvider plugin={plugin}>
-        <TabProvider initialTab="connectors">
-          <SettingsSubPageHost>
-            <SettingsTabs />
-          </SettingsSubPageHost>
-        </TabProvider>
-      </PluginProvider>
+    <AppContext.Provider value={new App()}>
+      <TabProvider initialTab="connectors">
+        <SettingsSubPageHost>
+          <SettingsTabs {...services} />
+        </SettingsSubPageHost>
+      </TabProvider>
     </AppContext.Provider>
   );
 }

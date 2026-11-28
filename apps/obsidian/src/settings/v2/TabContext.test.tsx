@@ -1,4 +1,4 @@
-import { TabProvider, useTab } from "@/contexts/TabContext";
+import { TabProvider, useTab } from "@/settings/v2/TabContext";
 import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 

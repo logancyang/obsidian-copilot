@@ -9,10 +9,8 @@
         "apps/obsidian/src/agentMode/agentModelDiscovery.ts",
         "apps/obsidian/src/commands/index.ts",
         "apps/obsidian/src/settings/SettingsPage.tsx",
-        "apps/obsidian/src/settings/settingsTabs.ts",
         "apps/obsidian/src/settings/v2/SettingsMainV2.tsx",
-        "apps/obsidian/src/components/StartupLoadingView.ts",
-        "apps/obsidian/src/contexts/**"
+        "apps/obsidian/src/components/StartupLoadingView.ts"
       ]
     },
     {

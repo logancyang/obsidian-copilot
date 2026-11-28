@@ -1,6 +1,5 @@
 import { DebuggingSupportSection } from "@/settings/v2/components/DebuggingSupportSection";
 import { LegacyChatPromptsNotice } from "@/settings/v2/components/LegacyChatPromptsNotice";
-import { usePlugin } from "@/contexts/PluginContext";
 import { setSettings, updateSetting, useSettingsValue } from "@/settings/model";
 import { Notice } from "obsidian";
 import React, { useCallback, useEffect, useState } from "react";
@@ -9,8 +8,11 @@ import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
 const DESKTOP_UNAVAILABLE_FRAME_LOG_PATH = "(the agent activity log is desktop-only)";
 
-export const AdvancedSettings: React.FC = () => {
-  const plugin = usePlugin();
+interface AdvancedSettingsProps {
+  onReportIssue: () => void;
+}
+
+export const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({ onReportIssue }) => {
   const settings = useSettingsValue();
   const [frameLogPath, setFrameLogPath] = useState(DESKTOP_UNAVAILABLE_FRAME_LOG_PATH);
 
@@ -34,15 +36,8 @@ export const AdvancedSettings: React.FC = () => {
       new Notice("Reporting an issue is available on desktop only.");
       return;
     }
-    void (async () => {
-      const { openReportIssueModal } = await import("@/agentMode");
-      openReportIssueModal(plugin, {
-        activeBackend:
-          plugin.agentSessionManager?.getActiveSession()?.backendId ??
-          settings.agentMode.activeBackend,
-      });
-    })();
-  }, [plugin, settings.agentMode.activeBackend]);
+    onReportIssue();
+  }, [onReportIssue]);
 
   const handleOpenFrameLog = useCallback(async () => {
     if (!isDesktopRuntime()) {

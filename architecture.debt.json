@@ -1,6 +1,6 @@
 {
   "counts": {
-    "imports": 709,
+    "imports": 699,
     "clientAccess": 151
   },
   "imports": {
@@ -156,7 +156,6 @@
       "@/agentMode/skills/skillRepairPrompt",
       "@/agentMode/skills/types",
       "@/builtinSkills/builtinSkills",
-      "@/contexts/PluginContext",
       "@/settings/copilotFolder",
       "@/settings/model"
     ],
@@ -468,7 +467,6 @@
       "@/agentMode/backends/registry",
       "@/agentMode/session/AgentSessionManager",
       "@/agentMode/session/useBackendInstallStates",
-      "@/main",
       "@/settings/model"
     ],
     "apps/obsidian/src/agentMode/ui/useManagerSubscribe.ts": [
@@ -955,7 +953,6 @@
       "@/settings/v2/components/CapabilityRow"
     ],
     "apps/obsidian/src/miyo/settings/MiyoSettings.tsx": [
-      "@/contexts/PluginContext",
       "@/miyo/MiyoClient",
       "@/miyo/MiyoServiceDiscovery",
       "@/miyo/miyoIndex",
@@ -1048,17 +1045,13 @@
       "@/connectors/connectionManager",
       "@/connectors/custom/customConnectorConfig"
     ],
-    "apps/obsidian/src/settings/openSettings.ts": ["@/settings/settingsTabs"],
-    "apps/obsidian/src/settings/v2/SettingsSubPage.tsx": ["@/contexts/TabContext"],
     "apps/obsidian/src/settings/v2/components/AdvancedSettings.tsx": [
       "@/agentMode",
-      "@/contexts/PluginContext",
       "@/settings/v2/components/LegacyChatPromptsNotice"
     ],
     "apps/obsidian/src/settings/v2/components/AgentSettings.tsx": [
       "./QuickChatPanel",
-      "@/agentMode",
-      "@/contexts/PluginContext"
+      "@/agentMode"
     ],
     "apps/obsidian/src/settings/v2/components/BasicSettings.tsx": [
       "@/instructions/agentsFile",
@@ -1071,11 +1064,6 @@
       "@/types"
     ],
     "apps/obsidian/src/settings/v2/components/ConfiguredModelEnableList.tsx": ["@/agentMode"],
-    "apps/obsidian/src/settings/v2/components/ConnectorsSettings.tsx": [
-      "@/contexts/PluginContext",
-      "@/contexts/TabContext"
-    ],
-    "apps/obsidian/src/settings/v2/components/SelfHostSettings.tsx": ["@/contexts/TabContext"],
     "apps/obsidian/src/settings/v2/components/VaultInstructionsSetting.tsx": [
       "@/instructions/InstructionsTextarea"
     ],

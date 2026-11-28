@@ -39,7 +39,7 @@ export const AgentModeChat: React.FC<Props> = ({
     installState.kind === "ready" && descriptor.auth && (auth.checking || auth.status === null)
   );
   const signedOut = Boolean(descriptor.auth && auth.status?.signedIn === false);
-  const managedInstall = useManagedInstallActionState(descriptor, plugin);
+  const managedInstall = useManagedInstallActionState(descriptor, plugin.app, plugin.manifest);
   const [tick, setTick] = React.useState(0);
 
   React.useEffect(() => {

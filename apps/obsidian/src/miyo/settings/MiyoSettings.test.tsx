@@ -118,13 +118,10 @@ const mockAppInstance = {
   },
 };
 let mockLifecycleActive = true;
+const isPluginLifecycleActive = () => mockLifecycleActive;
 jest.mock("@/context", () => ({
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
   useApp: () => mockAppInstance,
-}));
-jest.mock("@/contexts/PluginContext", () => ({
-  // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
-  usePlugin: () => ({ isPluginLifecycleActive: () => mockLifecycleActive }),
 }));
 jest.mock("@/utils/vaultPath", () => ({ getVaultBase: () => "/vault" }));
 
@@ -201,7 +198,7 @@ describe("MiyoSettings", () => {
         miyoConnectionMode: "remote",
         miyoServerUrl: "http://home:8742",
       };
-      render(<MiyoSettings />);
+      render(<MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />);
       await act(async () => {});
       expect(screen.getByRole("status").textContent).toBe("Offline");
       expect(screen.getByRole("status").closest("label")?.textContent).toContain("Remote server");
@@ -216,7 +213,7 @@ describe("MiyoSettings", () => {
         enableMiyo: false,
         enableMiyoDocumentProcessing: true,
       };
-      render(<MiyoSettings />);
+      render(<MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />);
       await act(async () => {});
       const documentSwitch = screen.getByRole("switch", {
         name: "Enable Miyo document processing",
@@ -230,7 +227,7 @@ describe("MiyoSettings", () => {
 
     it("describes Miyo document processing as local PDF and EPUB parsing and shows its switch off when disabled — https://github.com/Brevilabs/obsidian-copilot-private/issues/654", async () => {
       currentSettings.enableMiyoDocumentProcessing = false;
-      render(<MiyoSettings />);
+      render(<MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />);
       await act(async () => {});
       expect(screen.getByText("Miyo parses PDF and EPUB files on your computer.")).toBeTruthy();
       expect(
@@ -242,14 +239,16 @@ describe("MiyoSettings", () => {
 
     it("shows Search scope only while Semantic search is enabled — https://github.com/Brevilabs/obsidian-copilot-private/issues/466", async () => {
       currentSettings = { ...currentSettings, enableMiyo: true };
-      const { rerender } = render(<MiyoSettings />);
+      const { rerender } = render(
+        <MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />
+      );
       await act(async () => {});
       expect(screen.queryByLabelText("Search scope")).toBeNull();
       fireEvent.click(toggle());
-      rerender(<MiyoSettings />);
+      rerender(<MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />);
       expect(screen.getByLabelText("Search scope")).toBeTruthy();
       fireEvent.click(toggle());
-      rerender(<MiyoSettings />);
+      rerender(<MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />);
       expect(screen.queryByLabelText("Search scope")).toBeNull();
     });
 
@@ -260,13 +259,15 @@ describe("MiyoSettings", () => {
         miyoSearchMaxResults: 7,
         miyoSearchMaxVariants: 1,
       };
-      const { rerender } = render(<MiyoSettings />);
+      const { rerender } = render(
+        <MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />
+      );
       await act(async () => {});
       expect(screen.queryByText("Maximum results")).toBeNull();
       expect(screen.queryByText("Search variants")).toBeNull();
 
       fireEvent.click(toggle());
-      rerender(<MiyoSettings />);
+      rerender(<MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />);
 
       expect(screen.getByText("Maximum results")).toBeTruthy();
       expect(screen.getByText("Search variants")).toBeTruthy();
@@ -277,7 +278,7 @@ describe("MiyoSettings", () => {
 
     it("saves the result cap and variant count the user sets — https://github.com/logancyang/obsidian-copilot/issues/3825", async () => {
       currentSettings = { ...currentSettings, enableMiyo: true, enableMiyoSearchSkill: true };
-      render(<MiyoSettings />);
+      render(<MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />);
       await act(async () => {});
       const [maxResults, variants] = screen.getAllByRole("slider");
 
@@ -301,7 +302,7 @@ describe("MiyoSettings", () => {
         { path: "Research", origin: "user" },
         { path: "ChatGPT", origin: "chat_sync" },
       ];
-      render(<MiyoSettings />);
+      render(<MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />);
 
       const research = await screen.findByRole("checkbox", { name: "Research" });
       expect(research.getAttribute("aria-checked")).toBe("true");
@@ -320,7 +321,7 @@ describe("MiyoSettings", () => {
         miyoExtraSearchFolders: ["Research"],
       };
       mockFolders = [{ path: "Research" }, { path: "ChatGPT", origin: "chat_sync" }];
-      render(<MiyoSettings />);
+      render(<MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />);
 
       fireEvent.click(await screen.findByRole("checkbox", { name: "ChatGPT" }));
 
@@ -335,7 +336,7 @@ describe("MiyoSettings", () => {
         miyoSearchAll: true,
       };
       mockFolders = [{ path: "Research" }];
-      render(<MiyoSettings />);
+      render(<MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />);
       await act(async () => {});
 
       expect(screen.getByLabelText("Search scope")).toBeTruthy();
@@ -346,7 +347,7 @@ describe("MiyoSettings", () => {
     it("shows no folder list and fetches none while Miyo is unavailable — https://github.com/logancyang/obsidian-copilot/issues/3508", async () => {
       mockMiyoBackend = "unavailable";
       currentSettings = { ...currentSettings, enableMiyo: true, enableMiyoSearchSkill: true };
-      render(<MiyoSettings />);
+      render(<MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />);
       await act(async () => {});
 
       expect(screen.queryByText("Also search these Miyo folders")).toBeNull();
@@ -356,7 +357,7 @@ describe("MiyoSettings", () => {
     it("says the folder list could not be loaded when Miyo rejects the request — https://github.com/logancyang/obsidian-copilot/issues/3508", async () => {
       currentSettings = { ...currentSettings, enableMiyo: true, enableMiyoSearchSkill: true };
       mockListFoldersError = new Error("Miyo request failed with status 500");
-      render(<MiyoSettings />);
+      render(<MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />);
 
       expect(await screen.findByText("Couldn't load your Miyo folders.")).toBeTruthy();
     });
@@ -364,7 +365,7 @@ describe("MiyoSettings", () => {
     it("hides the agent search row on mobile, where Agent mode cannot run — https://github.com/Brevilabs/obsidian-copilot-private/issues/471", async () => {
       mockOnDesktop.mockReturnValue(false);
       currentSettings = { ...currentSettings, enableMiyoSearchSkill: true };
-      render(<MiyoSettings />);
+      render(<MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />);
       await act(async () => {});
       expect(screen.queryByLabelText("Enable Miyo semantic search for agents")).toBeNull();
       expect(screen.queryByText("Semantic search for agents")).toBeNull();
@@ -373,7 +374,7 @@ describe("MiyoSettings", () => {
     it("offers only a remote connection on mobile without persisting the fallback over the synced mode — https://github.com/Brevilabs/obsidian-copilot-private/issues/471", async () => {
       mockOnDesktop.mockReturnValue(false);
       currentSettings = { ...currentSettings, miyoConnectionMode: "local", miyoServerUrl: "" };
-      render(<MiyoSettings />);
+      render(<MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />);
       await act(async () => {});
       const local = screen.getByRole<HTMLInputElement>("radio", { name: /^Local/ });
       expect(local.disabled).toBe(true);
@@ -390,7 +391,7 @@ describe("MiyoSettings", () => {
       "keeps an external disconnect when a retry's %s check completes — https://github.com/Brevilabs/obsidian-copilot-private/issues/466",
       async (phase) => {
         mockReachable = false;
-        render(<MiyoSettings />);
+        render(<MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />);
         fireEvent.click(await screen.findByText("Connect"));
         await waitFor(() => expect(lastModalOptions?.onRetry).toBeDefined());
         currentSettings = { ...currentSettings, enableMiyo: true };
@@ -417,7 +418,7 @@ describe("MiyoSettings", () => {
 
     it("attributes the settings Download link and connection guide separately", async () => {
       mockReachable = false;
-      render(<MiyoSettings />);
+      render(<MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />);
 
       expect(screen.getByRole("link", { name: "Download" }).getAttribute("href")).toBe(
         "https://www.miyo.md/?utm_source=obsidian_copilot&utm_medium=miyo_settings"
@@ -435,7 +436,7 @@ describe("MiyoSettings", () => {
       addFolderError = new Error(
         "Miyo add-folder failed with status 409: Folder overlaps with existing registration"
       );
-      render(<MiyoSettings />);
+      render(<MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />);
       fireEvent.click(await screen.findByText("Connect"));
       await waitFor(() => expect(lastModalOptions?.onAddVault).toBeDefined());
       jest.mocked(refreshMiyoStatus).mockClear();
@@ -454,7 +455,7 @@ describe("MiyoSettings", () => {
         miyoServerUrl: "http://127.0.0.1:8742",
       };
       mockRegistration = "unregistered";
-      render(<MiyoSettings />);
+      render(<MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />);
       fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
       await waitFor(() => expect(updateSetting).toHaveBeenCalledWith("enableMiyo", true));
       expect(mockProbeUrls).toContain("http://127.0.0.1:8742");
@@ -473,7 +474,7 @@ describe("MiyoSettings", () => {
         miyoServerUrl: "http://remote:8742",
       };
       mockReachable = false;
-      render(<MiyoSettings />);
+      render(<MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />);
       fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
       expect((await screen.findByRole("alert")).textContent).toContain(
         "Couldn't connect to this server"
@@ -492,7 +493,7 @@ describe("MiyoSettings", () => {
         miyoSearchAll: true,
         enableMiyoDocumentProcessing: true,
       };
-      render(<MiyoSettings />);
+      render(<MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />);
       fireEvent.click(screen.getByRole("radio", { name: /Local/ }));
       expect(currentSettings.enableMiyo).toBe(true);
       expect(currentSettings.miyoConnectionMode).not.toBe("local");
@@ -523,7 +524,7 @@ describe("MiyoSettings", () => {
 
     it("preserves local capabilities while drafting remote and changes the endpoint only on Connect — https://github.com/Brevilabs/obsidian-copilot-private/issues/466", async () => {
       currentSettings = { ...currentSettings, enableMiyo: true, miyoConnectionMode: "local" };
-      render(<MiyoSettings />);
+      render(<MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />);
       await screen.findByText("Connected");
       fireEvent.click(screen.getByRole("radio", { name: /Remote server/ }));
       fireEvent.change(screen.getByLabelText("Server address"), {
@@ -551,7 +552,7 @@ describe("MiyoSettings", () => {
 
     it("shows only Connect for a changed remote address while keeping the badge on the active remote option — https://github.com/Brevilabs/obsidian-copilot-private/issues/466", async () => {
       currentSettings = { ...currentSettings, enableMiyo: true, miyoServerUrl: "http://old:8742" };
-      render(<MiyoSettings />);
+      render(<MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />);
       await screen.findByText("Connected");
       fireEvent.change(screen.getByLabelText("Server address"), {
         target: { value: "http://new:8742" },
@@ -569,7 +570,7 @@ describe("MiyoSettings", () => {
 
     it("rejects an empty remote draft before any local discovery request — https://github.com/Brevilabs/obsidian-copilot-private/issues/466", async () => {
       currentSettings.enableMiyo = false;
-      render(<MiyoSettings />);
+      render(<MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />);
       fireEvent.click(screen.getByRole("radio", { name: /Remote server/ }));
       fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
       expect((await screen.findByRole("alert")).textContent).toContain(
@@ -581,7 +582,9 @@ describe("MiyoSettings", () => {
 
     it("shows externally synced settings instead of applying a stale draft on connect — https://github.com/Brevilabs/obsidian-copilot-private/issues/466", async () => {
       currentSettings = { ...currentSettings, enableMiyo: false, miyoServerUrl: "http://old:8742" };
-      const { rerender } = render(<MiyoSettings />);
+      const { rerender } = render(
+        <MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />
+      );
       fireEvent.change(screen.getByLabelText("Server address"), {
         target: { value: "http://draft:8742" },
       });
@@ -590,7 +593,7 @@ describe("MiyoSettings", () => {
         miyoServerUrl: "http://synced:8742",
         miyoConnectionMode: "remote",
       };
-      rerender(<MiyoSettings />);
+      rerender(<MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />);
       expect(screen.getByLabelText<HTMLInputElement>("Server address").value).toBe(
         "http://synced:8742"
       );
@@ -601,7 +604,9 @@ describe("MiyoSettings", () => {
 
     it("preserves a synced connection when an old enable check finishes late — https://github.com/Brevilabs/obsidian-copilot-private/issues/466", async () => {
       currentSettings = { ...currentSettings, enableMiyo: false, miyoServerUrl: "http://old:8742" };
-      const { rerender } = render(<MiyoSettings />);
+      const { rerender } = render(
+        <MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />
+      );
       const connect = await screen.findByRole("button", { name: "Connect" });
       const gate = deferred<{ backend: string }>();
       mockRefreshGate = gate.promise;
@@ -612,7 +617,7 @@ describe("MiyoSettings", () => {
         enableMiyo: true,
         miyoServerUrl: "http://synced:8742",
       };
-      rerender(<MiyoSettings />);
+      rerender(<MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />);
       await act(async () => gate.resolve({ backend: "available" }));
       expect(currentSettings.enableMiyo).toBe(true);
       expect(currentSettings.miyoServerUrl).toBe("http://synced:8742");
@@ -627,7 +632,9 @@ describe("MiyoSettings", () => {
       };
       const gate = deferred<boolean>();
       mockProbeGate = gate.promise;
-      const { rerender } = render(<MiyoSettings />);
+      const { rerender } = render(
+        <MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />
+      );
       fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
       await waitFor(() => expect(mockProbeUrls).toHaveLength(1));
       fireEvent.click(screen.getByRole("radio", { name: /Local/ }));
@@ -635,7 +642,7 @@ describe("MiyoSettings", () => {
       expect(updateSetting).toHaveBeenCalledWith("enableMiyo", true);
       expect(currentSettings.miyoConnectionMode).toBe("remote");
       expect(screen.getByRole<HTMLInputElement>("radio", { name: /Local/ }).checked).toBe(true);
-      rerender(<MiyoSettings />);
+      rerender(<MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />);
       expect(await screen.findByText("Connected")).toBeTruthy();
       expect(lastModalOptions).toBeNull();
     });
@@ -643,7 +650,7 @@ describe("MiyoSettings", () => {
     it("registers the vault with system roots and Obsidian ignores, but no user QA rules — https://github.com/Brevilabs/obsidian-copilot-private/issues/284", async () => {
       mockRegistration = "unregistered";
       mockIgnoreFilters = ["private/", ".", "./", "..", "./notes", "/pattern/", "nested//ignored/"];
-      render(<MiyoSettings />);
+      render(<MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />);
 
       fireEvent.click(await screen.findByText("Connect"));
       await waitFor(() => expect(lastModalOptions).not.toBeNull());
@@ -665,7 +672,7 @@ describe("MiyoSettings", () => {
 
     it("registers with the roots configured when the user confirms, not the ones open on the modal (https://github.com/Brevilabs/obsidian-copilot-private/issues/284)", async () => {
       mockRegistration = "unregistered";
-      render(<MiyoSettings />);
+      render(<MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />);
 
       fireEvent.click(await screen.findByText("Connect"));
       await waitFor(() => expect(lastModalOptions?.onAddVault).toBeDefined());
@@ -688,7 +695,7 @@ describe("MiyoSettings", () => {
     it("does not register or enable from an expired plugin lifecycle (https://github.com/Brevilabs/obsidian-copilot-private/issues/284)", async () => {
       mockRegistration = "unregistered";
       expireLifecycleBeforeAddRequest = true;
-      render(<MiyoSettings />);
+      render(<MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />);
 
       fireEvent.click(await screen.findByText("Connect"));
       await waitFor(() => expect(lastModalOptions?.onAddVault).toBeDefined());
@@ -702,7 +709,7 @@ describe("MiyoSettings", () => {
     });
 
     it("saves the switch on when the user turns Semantic search for agents on https://github.com/Brevilabs/obsidian-copilot-private/issues/736", () => {
-      render(<MiyoSettings />);
+      render(<MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />);
       fireEvent.click(toggle());
 
       expect(updateSetting).toHaveBeenCalledWith("enableMiyoSearchSkill", true);
@@ -711,7 +718,7 @@ describe("MiyoSettings", () => {
 
     it("saves the switch off when the user turns Semantic search for agents off https://github.com/Brevilabs/obsidian-copilot-private/issues/736", () => {
       currentSettings = { ...DEFAULT_SETTINGS, enableMiyoSearchSkill: true };
-      render(<MiyoSettings />);
+      render(<MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />);
       fireEvent.click(toggle());
 
       expect(updateSetting).toHaveBeenCalledWith("enableMiyoSearchSkill", false);
@@ -719,7 +726,7 @@ describe("MiyoSettings", () => {
     });
 
     it("describes the switch as a Miyo search tool for agents https://github.com/Brevilabs/obsidian-copilot-private/issues/736", () => {
-      render(<MiyoSettings />);
+      render(<MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />);
 
       expect(
         screen.getByText(
@@ -731,7 +738,7 @@ describe("MiyoSettings", () => {
     it("blocks ENABLING agent search while Miyo is disconnected (switch off)", async () => {
       mockMiyoBackend = "unavailable";
       currentSettings = { ...DEFAULT_SETTINGS, enableMiyoSearchSkill: false };
-      render(<MiyoSettings />);
+      render(<MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />);
 
       const control = toggle();
       expect(control.getAttribute("aria-disabled")).toBe("true");
@@ -743,7 +750,7 @@ describe("MiyoSettings", () => {
     it("ALLOWS disabling agent search while the connected Miyo is offline", async () => {
       mockMiyoBackend = "unavailable";
       currentSettings = { ...DEFAULT_SETTINGS, enableMiyo: true, enableMiyoSearchSkill: true };
-      render(<MiyoSettings />);
+      render(<MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />);
 
       const control = toggle();
       expect(control.getAttribute("aria-disabled")).toBe("false");
@@ -755,7 +762,7 @@ describe("MiyoSettings", () => {
     it("locks the default-on toggle and hides the search scope until Miyo is connected (https://github.com/Brevilabs/obsidian-copilot-private/issues/716)", () => {
       mockMiyoBackend = "unavailable";
       currentSettings = { ...DEFAULT_SETTINGS, enableMiyo: false, enableMiyoSearchSkill: true };
-      render(<MiyoSettings />);
+      render(<MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />);
 
       expect(toggle().getAttribute("aria-disabled")).toBe("true");
       expect(screen.queryByText("Search scope")).toBeNull();
@@ -764,7 +771,7 @@ describe("MiyoSettings", () => {
     it("keeps the agent search switch operable while the status snapshot is stale", () => {
       mockMiyoBackend = "stale";
       currentSettings = { ...DEFAULT_SETTINGS, enableMiyoSearchSkill: true };
-      render(<MiyoSettings />);
+      render(<MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />);
 
       const control = toggle();
       expect(control.getAttribute("aria-disabled")).toBe("false");
@@ -775,7 +782,7 @@ describe("MiyoSettings", () => {
     it("shows Offline with Check connection and Disconnect when enabled Miyo is unavailable (https://github.com/Brevilabs/obsidian-copilot-private/issues/356)", async () => {
       mockMiyoBackend = "unavailable";
       currentSettings = { ...DEFAULT_SETTINGS, enableMiyo: true };
-      render(<MiyoSettings />);
+      render(<MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />);
 
       expect(await screen.findByRole("button", { name: "Check connection" })).toBeTruthy();
       expect(screen.getByRole("button", { name: "Disconnect" })).toBeTruthy();
@@ -789,7 +796,7 @@ describe("MiyoSettings", () => {
     it("shows Connect when Miyo is not enabled (https://github.com/Brevilabs/obsidian-copilot-private/issues/356)", async () => {
       mockMiyoBackend = "unavailable";
       currentSettings = { ...DEFAULT_SETTINGS, enableMiyo: false };
-      render(<MiyoSettings />);
+      render(<MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />);
 
       expect(await screen.findByText("Connect")).toBeTruthy();
       expect(screen.queryByRole("button", { name: "Disconnect" })).toBeNull();
@@ -800,7 +807,7 @@ describe("MiyoSettings", () => {
       mockRefreshGate = gate.promise;
       mockMiyoBackend = "stale";
       currentSettings = { ...DEFAULT_SETTINGS, enableMiyo: true };
-      render(<MiyoSettings />);
+      render(<MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />);
 
       expect(screen.getByRole("status").textContent).toContain("Checking…");
       expect(screen.queryByText(/Connected/)).toBeNull();
@@ -819,7 +826,7 @@ describe("MiyoSettings", () => {
       mockMiyoBackend = "unavailable";
       mockRefreshBackend = "available";
       currentSettings = { ...DEFAULT_SETTINGS, enableMiyo: true };
-      render(<MiyoSettings />);
+      render(<MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />);
       await waitFor(() => expect(refreshMiyoStatus).toHaveBeenCalledWith({ force: false }));
       jest.mocked(refreshMiyoStatus).mockClear();
       updateSetting.mockClear();
@@ -835,7 +842,7 @@ describe("MiyoSettings", () => {
       mockReachable = true;
       mockRegistration = "registered";
       mockRefreshBackend = "unavailable";
-      render(<MiyoSettings />);
+      render(<MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />);
 
       fireEvent.click(await screen.findByText("Connect"));
 
@@ -849,7 +856,7 @@ describe("MiyoSettings", () => {
       mockReachable = true;
       mockRegistration = "registered";
       mockRefreshBackend = "available";
-      render(<MiyoSettings />);
+      render(<MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />);
 
       fireEvent.click(await screen.findByText("Connect"));
 
@@ -861,7 +868,9 @@ describe("MiyoSettings", () => {
       disconnectedMiyo();
       mockReachable = true;
       mockRegistration = "registered";
-      const { unmount } = render(<MiyoSettings />);
+      const { unmount } = render(
+        <MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />
+      );
 
       const connectBtn = await screen.findByText("Connect");
       let resolveRefresh!: (v: { backend: string }) => void;
@@ -880,7 +889,7 @@ describe("MiyoSettings", () => {
     it("does NOT let an older enable's revert clobber a newer concurrent enable that committed", async () => {
       disconnectedMiyo();
       mockRefreshBackend = "unavailable";
-      render(<MiyoSettings />);
+      render(<MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />);
       fireEvent.click(await screen.findByText("Connect"));
       await waitFor(() => expect(lastModalOptions).not.toBeNull());
 

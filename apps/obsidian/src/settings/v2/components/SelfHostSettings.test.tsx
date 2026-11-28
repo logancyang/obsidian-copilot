@@ -16,7 +16,7 @@ jest.mock("@/plusUtils", () => ({
   useIsSelfHostEligible: () => mockEligible,
 }));
 
-jest.mock("@/contexts/TabContext", () => ({
+jest.mock("@/settings/v2/TabContext", () => ({
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook
   useTab: () => ({ setSelectedTab: jest.fn() }),
 }));

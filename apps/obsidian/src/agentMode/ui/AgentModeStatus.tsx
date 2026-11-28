@@ -20,7 +20,7 @@ interface Props {
 export const AgentModeStatus: React.FC<Props> = ({ manager, plugin, onInstallClick }) => {
   const descriptor = useSessionBackendDescriptor(manager);
   const installState = useBackendInstallState(descriptor);
-  const managedInstall = useManagedInstallActionState(descriptor, plugin);
+  const managedInstall = useManagedInstallActionState(descriptor, plugin.app, plugin.manifest);
   const auth = useBackendAuthState(descriptor);
 
   const [, setTick] = React.useState(0);

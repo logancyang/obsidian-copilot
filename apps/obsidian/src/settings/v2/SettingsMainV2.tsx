@@ -6,19 +6,17 @@ import {
   TabContent,
   type TabItem as TabItemType,
 } from "@/components/ui/setting-tabs";
-import { PluginProvider } from "@/contexts/PluginContext";
-import { TabProvider, useTab } from "@/contexts/TabContext";
+import { TabProvider, useTab } from "@/settings/v2/TabContext";
 import { useLatestVersion } from "@/hooks/useLatestVersion";
 import CopilotPlugin from "@/main";
 import { ByokPanel, ModelManagementProvider } from "@/modelManagement";
-import { resetSettings } from "@/settings/model";
+import { getSettings, resetSettings } from "@/settings/model";
 import { COPILOT_SETTINGS_TAB_IDS, type CopilotSettingsTabId } from "@/settings/settingsTabs";
 import { useSkillLoadErrorCount } from "@/settings/skillLoadErrorState";
 import { CommandSettings } from "@/settings/v2/components/CommandSettings";
 import { ConnectorsSettings } from "@/settings/v2/components/ConnectorsSettings";
 import { useIsConnectorsEnabled } from "@/connectors/connectorsEntitlement";
 import { useConnectorsSnapshot } from "@/connectors/ui/useConnectorsSnapshot";
-import { usePlugin } from "@/contexts/PluginContext";
 import { Cog, Command, Cpu, Plug, ShieldCheck, Sparkle, Wrench } from "lucide-react";
 import React from "react";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
@@ -33,13 +31,13 @@ const LazySkillsSettings = React.lazy(() =>
   import("@/agentMode").then((module) => ({ default: module.SkillsSettings }))
 );
 
-const SkillsSettingsPanel: React.FC = () => {
+const SkillsSettingsPanel: React.FC<React.ComponentProps<typeof LazySkillsSettings>> = (props) => {
   if (!isDesktopRuntime()) {
     return <DesktopOnlySettingsPanel message="Skills are available on desktop." />;
   }
   return (
     <React.Suspense fallback={null}>
-      <LazySkillsSettings />
+      <LazySkillsSettings {...props} />
     </React.Suspense>
   );
 };
@@ -53,17 +51,6 @@ const icons: Record<CopilotSettingsTabId, JSX.Element> = {
   skills: <Sparkle className="tw-size-5" />,
   connectors: <Plug className="tw-size-5" />,
   advanced: <Wrench className="tw-size-5" />,
-};
-
-const components: Record<CopilotSettingsTabId, React.FC> = {
-  basic: () => <BasicSettings />,
-  byok: () => <ByokPanel />,
-  miyo: () => <MiyoSettings />,
-  selfhost: () => <SelfHostSettings />,
-  command: () => <CommandSettings />,
-  skills: SkillsSettingsPanel,
-  connectors: ConnectorsSettings,
-  advanced: () => <AdvancedSettings />,
 };
 
 const TAB_LABELS: Record<CopilotSettingsTabId, string> = {
@@ -83,13 +70,59 @@ const tabs = COPILOT_SETTINGS_TAB_IDS.map((id) => ({
   label: TAB_LABELS[id],
 })) satisfies TabItemType[];
 
-const SettingsContent: React.FC = () => {
+interface SettingsContentProps {
+  plugin: CopilotPlugin;
+}
+
+const SettingsContent: React.FC<SettingsContentProps> = ({ plugin }) => {
   const { selectedTab, setSelectedTab } = useTab();
   const skillLoadErrorCount = useSkillLoadErrorCount();
-  const connectorsSnapshot = useConnectorsSnapshot(usePlugin().connectionManager);
+  const connectorsSnapshot = useConnectorsSnapshot(plugin.connectionManager);
   const connectorsEnabled = useIsConnectorsEnabled();
   const connectorsNeedAttention =
     connectorsSnapshot?.needsAttention === true && connectorsEnabled !== false;
+
+  const isPluginLifecycleActive = React.useCallback(
+    () => plugin.isPluginLifecycleActive(),
+    [plugin]
+  );
+  const newAgentChatWithDraft = React.useCallback(
+    (draft: string) => void plugin.newAgentChatWithDraft(draft),
+    [plugin]
+  );
+  const openReportIssue = React.useCallback(() => {
+    void import("@/agentMode").then(({ openReportIssueModal }) => {
+      openReportIssueModal(plugin, {
+        activeBackend:
+          plugin.agentSessionManager?.getActiveSession()?.backendId ??
+          getSettings().agentMode.activeBackend,
+      });
+    });
+  }, [plugin]);
+
+  const panels: Record<CopilotSettingsTabId, React.ReactNode> = {
+    basic: (
+      <BasicSettings
+        agentSettings={{
+          agentSessionManager: plugin.agentSessionManager,
+          manifest: plugin.manifest,
+        }}
+      />
+    ),
+    byok: <ByokPanel />,
+    miyo: <MiyoSettings isPluginLifecycleActive={isPluginLifecycleActive} />,
+    selfhost: <SelfHostSettings />,
+    command: <CommandSettings />,
+    skills: <SkillsSettingsPanel newAgentChatWithDraft={newAgentChatWithDraft} />,
+    connectors: (
+      <ConnectorsSettings
+        connectionManager={plugin.connectionManager}
+        connectorTools={plugin.connectorTools}
+        customConnectors={plugin.customConnectors}
+      />
+    ),
+    advanced: <AdvancedSettings onReportIssue={openReportIssue} />,
+  };
 
   return (
     <div className="tw-flex tw-flex-col">
@@ -112,14 +145,11 @@ const SettingsContent: React.FC = () => {
       <div className="tw-w-full tw-border tw-border-solid" />
 
       <div>
-        {COPILOT_SETTINGS_TAB_IDS.map((id) => {
-          const Component = components[id];
-          return (
-            <TabContent key={id} id={id} isSelected={selectedTab === id}>
-              <Component />
-            </TabContent>
-          );
-        })}
+        {COPILOT_SETTINGS_TAB_IDS.map((id) => (
+          <TabContent key={id} id={id} isSelected={selectedTab === id}>
+            {panels[id]}
+          </TabContent>
+        ))}
       </div>
     </div>
   );
@@ -151,55 +181,53 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin, initialTab = "b
   };
 
   return (
-    <PluginProvider plugin={plugin}>
-      <ModelManagementProvider api={plugin.modelManagement}>
-        <TabProvider initialTab={initialTab}>
-          <SettingsSubPageHost className="tw-mx-auto tw-max-w-[860px]">
-            <div className="tw-mb-4 tw-flex tw-flex-col tw-gap-2">
-              <div
-                role="heading"
-                aria-level={1}
-                className="tw-flex tw-flex-col tw-gap-2 tw-text-base tw-font-semibold sm:tw-flex-row sm:tw-items-center sm:tw-justify-between"
-              >
-                <div className="tw-flex tw-items-center tw-gap-2">
-                  <span>Copilot settings</span>
-                  <div className="tw-flex tw-items-center tw-gap-1">
-                    <span className="tw-text-xs tw-font-normal tw-text-muted">
-                      v{plugin.manifest.version}
-                    </span>
-                    {latestVersion && (
-                      <>
-                        {hasUpdate ? (
-                          <a
-                            href="obsidian://show-plugin?id=copilot"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="tw-text-xs tw-font-normal tw-text-accent hover:tw-underline"
-                          >
-                            (Update to v{latestVersion})
-                          </a>
-                        ) : (
-                          <span className="tw-text-xs tw-font-normal tw-text-normal">
-                            {" "}
-                            (up to date)
-                          </span>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </div>
-                <div className="tw-self-end sm:tw-self-auto">
-                  <Button variant="secondary" size="sm" onClick={handleReset}>
-                    Reset settings
-                  </Button>
+    <ModelManagementProvider api={plugin.modelManagement}>
+      <TabProvider initialTab={initialTab}>
+        <SettingsSubPageHost className="tw-mx-auto tw-max-w-[860px]">
+          <div className="tw-mb-4 tw-flex tw-flex-col tw-gap-2">
+            <div
+              role="heading"
+              aria-level={1}
+              className="tw-flex tw-flex-col tw-gap-2 tw-text-base tw-font-semibold sm:tw-flex-row sm:tw-items-center sm:tw-justify-between"
+            >
+              <div className="tw-flex tw-items-center tw-gap-2">
+                <span>Copilot settings</span>
+                <div className="tw-flex tw-items-center tw-gap-1">
+                  <span className="tw-text-xs tw-font-normal tw-text-muted">
+                    v{plugin.manifest.version}
+                  </span>
+                  {latestVersion && (
+                    <>
+                      {hasUpdate ? (
+                        <a
+                          href="obsidian://show-plugin?id=copilot"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="tw-text-xs tw-font-normal tw-text-accent hover:tw-underline"
+                        >
+                          (Update to v{latestVersion})
+                        </a>
+                      ) : (
+                        <span className="tw-text-xs tw-font-normal tw-text-normal">
+                          {" "}
+                          (up to date)
+                        </span>
+                      )}
+                    </>
+                  )}
                 </div>
               </div>
+              <div className="tw-self-end sm:tw-self-auto">
+                <Button variant="secondary" size="sm" onClick={handleReset}>
+                  Reset settings
+                </Button>
+              </div>
             </div>
-            <SettingsContent key={resetKey} />
-          </SettingsSubPageHost>
-        </TabProvider>
-      </ModelManagementProvider>
-    </PluginProvider>
+          </div>
+          <SettingsContent key={resetKey} plugin={plugin} />
+        </SettingsSubPageHost>
+      </TabProvider>
+    </ModelManagementProvider>
   );
 };
 

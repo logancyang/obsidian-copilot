@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { SettingItem } from "@/components/ui/setting-item";
 import { SettingSection } from "@/components/ui/setting-section";
-import { useTab } from "@/contexts/TabContext";
+import { useTab } from "@/settings/v2/TabContext";
 import { cn } from "@/lib/utils";
 import { useIsSelfHostEligible } from "@/plusUtils";
 import { updateSetting, useSettingsValue, type SelfHostSearchProvider } from "@/settings/model";

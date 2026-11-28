@@ -1,7 +1,6 @@
 import type { AgentBrand, InstallState } from "@/agentMode/session/types";
 import { Bot } from "lucide-react";
 import { AppContext } from "@/context";
-import { PluginProvider } from "@/contexts/PluginContext";
 import { DEFAULT_SETTINGS } from "@/constants";
 import type { RejectedSkill, Skill } from "@/agentMode/skills/types";
 import { settingsAtom, settingsStore, updateSetting } from "@/settings/model";
@@ -11,7 +10,6 @@ import { __resetVaultBaseCache } from "@/utils/vaultPath";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { FileSystemAdapter, TFile, TFolder, type App } from "obsidian";
 import React from "react";
-import type CopilotPlugin from "@/main";
 import type { SkillLoadIssue } from "./SkillLoadIssues";
 import { SkillsSettings } from "./SkillsSettings";
 
@@ -73,16 +71,10 @@ jest.mock("@/agentMode/backends/registry", () => ({
 }));
 
 function renderSettings(app: App = makeApp()) {
-  const plugin = {
-    app,
-    newAgentChatWithDraft: mockNewAgentChatWithDraft,
-  } as unknown as CopilotPlugin;
   return render(
-    <PluginProvider plugin={plugin}>
-      <AppContext.Provider value={app}>
-        <SkillsSettings />
-      </AppContext.Provider>
-    </PluginProvider>
+    <AppContext.Provider value={app}>
+      <SkillsSettings newAgentChatWithDraft={mockNewAgentChatWithDraft} />
+    </AppContext.Provider>
   );
 }
 
