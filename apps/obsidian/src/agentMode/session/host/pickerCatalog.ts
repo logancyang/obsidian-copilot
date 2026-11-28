@@ -4,7 +4,7 @@ import {
   type BackendDescriptor,
 } from "@/agentMode/session/descriptor";
 import type { HostSliceSource } from "@/agentMode/session/host/SessionHost";
-import type { EnabledModelEntry, ModelEntry } from "@/agentMode/session/types";
+import type { EffortOption, EnabledModelEntry, ModelEntry } from "@/agentMode/session/types";
 import type { ModelSelectorEntry } from "@/components/ui/ModelSelector";
 import { lockedCopilotEntries, shouldPreviewCopilotModels } from "@/lib/lockedCopilotEntries";
 import { getSettings, subscribeToSettingsChange, type CopilotSettings } from "@/settings/model";
@@ -86,7 +86,7 @@ function pickerAgent(
       reason: blocked.reason,
       hint: blocked.hint,
     },
-    effortCatalog: models.getEffortCatalog(descriptor.id),
+    effortCatalog: toEffortCatalog(models.getEffortCatalog(descriptor.id)),
     defaultSelection: selection && { baseModelId: selection.baseModelId, effort: selection.effort },
     lockedPreview:
       descriptor.routesCopilotModels && shouldPreviewCopilotModels(settings.providers)
@@ -95,7 +95,7 @@ function pickerAgent(
   };
 }
 
-// The rows are built from settings that also hold API keys and provider URLs, so only the named display fields cross to a client, never a spread of the row. https://github.com/Brevilabs/obsidian-copilot-private/issues/612
+// The rows are built from settings that also hold API keys and provider URLs, so only the named display fields cross to a client, never a spread of the row, and as new objects, so nothing the client holds is the host's own cache. https://github.com/Brevilabs/obsidian-copilot-private/issues/612
 function toEnabledModel(entry: EnabledModelEntry): EnabledModelEntry {
   return {
     baseModelId: entry.baseModelId,
@@ -114,7 +114,7 @@ function toReportedModel(entry: ModelEntry): ReportedModel {
     baseModelId: entry.baseModelId,
     name: entry.name,
     description: entry.description,
-    effortOptions: entry.effortOptions,
+    effortOptions: entry.effortOptions.map(toEffortOption),
   };
 }
 
@@ -126,4 +126,20 @@ function toLockedPreview(entry: ModelSelectorEntry): LockedPreviewModel {
     subtitle: entry._subtitle,
     disabledReason: entry._disabledReason,
   };
+}
+
+function toEffortCatalog(
+  catalog: Record<string, EffortOption[]> | null
+): Record<string, EffortOption[]> | null {
+  if (!catalog) return null;
+  return Object.fromEntries(
+    Object.entries(catalog).map(([baseModelId, options]) => [
+      baseModelId,
+      options.map(toEffortOption),
+    ])
+  );
+}
+
+function toEffortOption(option: EffortOption): EffortOption {
+  return { value: option.value, label: option.label };
 }

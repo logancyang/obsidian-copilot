@@ -2,7 +2,10 @@ import { ClaudeBackendDescriptor } from "@/agentMode/backends/claude/descriptor"
 import { CodexBackendDescriptor } from "@/agentMode/backends/codex/descriptor";
 import { OpencodeBackendDescriptor } from "@/agentMode/backends/opencode/descriptor";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
+import { connectInProcess } from "@/agentMode/session/host/inProcessTransport";
 import { buildPickerCatalog, pickerCatalogSource } from "@/agentMode/session/host/pickerCatalog";
+import { SessionHost } from "@/agentMode/session/host/SessionHost";
+import { FakeHostChats } from "@/agentMode/session/host/testing/fakeHostChats";
 import type {
   BackendDescriptor,
   EffortOption,
@@ -369,6 +372,29 @@ describe("pickerCatalog", () => {
         expect(JSON.stringify(catalog)).not.toContain(SECRET);
       }
     );
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/612 copies only the named fields of the models and effort levels an agent reports, so a field added to them never crosses", () => {
+      const level = { value: "high", label: "High", token: SECRET } as EffortOption;
+      const reported = {
+        baseModelId: "a",
+        name: "A",
+        provider: SECRET,
+        effortOptions: [level],
+        apiKey: SECRET,
+      } as ModelEntry;
+      const { models } = fakeModels({
+        catalogById: { opencode: [reported] },
+        effortById: { opencode: { a: [level] } },
+      });
+
+      const [agent] = buildPickerCatalog([descriptor()], models, SETTINGS).agents;
+
+      expect(agent.modelCatalog?.availableModels?.[0].effortOptions).toEqual([
+        { value: "high", label: "High" },
+      ]);
+      expect(agent.effortCatalog).toEqual({ a: [{ value: "high", label: "High" }] });
+      expect(JSON.stringify(agent)).not.toContain(SECRET);
+    });
   });
 
   describe("pickerCatalogSource()", () => {
@@ -428,6 +454,35 @@ describe("pickerCatalog", () => {
       expect(
         [managerListeners, cacheListeners, ...installListeners].map((set) => set.size)
       ).toEqual([0, 0, 0, 0]);
+    });
+
+    it("publishes no object the host still owns, so the host can change its model cache and effort levels after a client holds the catalog, and the client's copy stays as it was", () => {
+      const reported: ModelEntry = {
+        baseModelId: "a",
+        name: "A",
+        provider: null,
+        effortOptions: [{ value: "high", label: "High" }],
+      };
+      const efforts: Record<string, EffortOption[]> = { a: [{ value: "low", label: "Low" }] };
+      const { models } = fakeModels({
+        catalogById: { opencode: [reported] },
+        effortById: { opencode: efforts },
+      });
+      const client = connectInProcess(
+        new SessionHost(new FakeHostChats({}), pickerCatalogSource([descriptor()], models))
+      );
+      client.watchHost();
+      const published = JSON.stringify(client.getHostState());
+
+      const changeHostInputs = () => {
+        reported.effortOptions.push({ value: "max", label: "Max" });
+        reported.effortOptions[0].label = "Changed";
+        efforts.a[0].label = "Changed";
+        efforts.b = [];
+      };
+
+      expect(changeHostInputs).not.toThrow();
+      expect(JSON.stringify(client.getHostState())).toBe(published);
     });
   });
 });
