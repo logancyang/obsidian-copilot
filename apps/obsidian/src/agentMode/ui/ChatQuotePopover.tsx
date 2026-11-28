@@ -66,8 +66,11 @@ export function ChatQuoteMenu({ onAdd, startCommenting = false }: ChatQuoteMenuP
   );
 }
 
+export const QUOTED_PASSAGE_HIGHLIGHT = "copilot-quoted-passage";
+
 interface SelectedPassage {
   text: string;
+  range: Range;
   anchor: React.RefObject<{ getBoundingClientRect: () => DOMRect; contextElement?: Element }>;
 }
 
@@ -79,6 +82,7 @@ function selectedPassage(scopeEl: HTMLElement): SelectedPassage | null {
   if (!text || !scopeEl.contains(range.commonAncestorContainer)) return null;
   return {
     text,
+    range,
     anchor: {
       current: {
         getBoundingClientRect: () => range.getBoundingClientRect(),
@@ -106,6 +110,17 @@ export function ChatQuotePopover({ scopeEl, container, onAdd }: ChatQuotePopover
     scopeEl.addEventListener("pointerup", read);
     return () => scopeEl.removeEventListener("pointerup", read);
   }, [scopeEl]);
+
+  // The comment box takes focus, which clears the selection, so the passage stays marked as a named highlight; a popout's registry only takes its own window's Highlight.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/1045
+  useEffect(() => {
+    if (!passage || !scopeEl) return;
+    const view = scopeEl.ownerDocument.defaultView as typeof window;
+    view.CSS.highlights.set(QUOTED_PASSAGE_HIGHLIGHT, new view.Highlight(passage.range));
+    return () => {
+      view.CSS.highlights.delete(QUOTED_PASSAGE_HIGHLIGHT);
+    };
+  }, [passage, scopeEl]);
 
   if (!passage) return null;
   const add = (comment?: string) => {

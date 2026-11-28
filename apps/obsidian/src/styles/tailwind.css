@@ -1070,3 +1070,11 @@ If your plugin does not need CSS, delete this file.
 .copilot-fade-mask-bottom {
   background: linear-gradient(to top, var(--background-primary), transparent);
 }
+
+/* A chat passage being commented on loses the browser selection when the
+   comment box takes focus, so it is drawn as a named highlight, which only
+   ::highlight() can style.
+   https://github.com/Brevilabs/obsidian-copilot-private/issues/1045 */
+::highlight(copilot-quoted-passage) {
+  background-color: var(--text-selection);
+}
