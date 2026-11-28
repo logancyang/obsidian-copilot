@@ -24,7 +24,6 @@ const PLAN_USAGE: PlanUsage = {
 interface Wired {
   client: SessionClient;
   received: HostFrame[];
-  send: (frame: ClientFrame) => void;
 }
 
 function wire(host: SessionHost, deliver: (frame: HostFrame) => boolean = () => true): Wired {
@@ -34,7 +33,7 @@ function wire(host: SessionHost, deliver: (frame: HostFrame) => boolean = () => 
     received.push(frame);
     if (deliver(frame)) client.receive(frame);
   });
-  return { client, received, send };
+  return { client, received };
 }
 
 function rawConnection(host: SessionHost): {
@@ -99,6 +98,22 @@ describe("SessionHost", () => {
 
         expect(client.getState("chat-1")).toEqual(late.client.getState("chat-1"));
         expect(client.getState("chat-1")).toEqual({ usage: usage(20_000), planUsage: null });
+      });
+
+      it("keeps a replica fed through JSON equal to one fed directly, reading a field set to undefined as a missing one", () => {
+        const chat = new FakeHostChat(usage(1_000), PLAN_USAGE);
+        const host = new SessionHost(new FakeHostChats({ "chat-1": chat }));
+        const direct = wire(host).client;
+        const overJson = new SessionClient((frame) => toHost(JSON.parse(JSON.stringify(frame))));
+        const toHost = host.connect((frame) => overJson.receive(JSON.parse(JSON.stringify(frame))));
+        direct.watch("chat-1");
+        overJson.watch("chat-1");
+
+        chat.change({ usage: { ...usage(2_000), contextWindow: undefined } });
+
+        expect(direct.getState("chat-1")?.usage).toHaveProperty("contextWindow", undefined);
+        expect(overJson.getState("chat-1")?.usage).not.toHaveProperty("contextWindow");
+        expect(overJson.getState("chat-1")).toEqual(direct.getState("chat-1"));
       });
 
       it("gives a late subscriber a snapshot numbered at the host's latest op", () => {
