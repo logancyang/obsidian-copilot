@@ -129,6 +129,21 @@ export const WebSelectionWithActiveWebTab: StoryObj<Props> = {
   },
 };
 
+export const ChatQuotesAndComments: StoryObj<Props> = {
+  args: {
+    includeActiveNote: false,
+    selectedTextContexts: [
+      { id: "quote", sourceType: "chat", content: "Run the migration before the deploy." },
+      {
+        id: "comment",
+        sourceType: "chat",
+        content: "Ship it on Friday afternoon.",
+        comment: "Too late in the week. Can we do Tuesday?",
+      },
+    ],
+  },
+};
+
 function attachedFile(path: string): TFile {
   const file: unknown = Object.create(TFile.prototype);
   if (!(file instanceof TFile)) throw new Error("Expected a TFile fixture");

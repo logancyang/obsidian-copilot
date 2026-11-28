@@ -24,6 +24,7 @@ import { useMentionableAgents } from "@/agents/ui/chatAgents";
 import { logError, logWarn } from "@/logger";
 import { buildWebTabsWithActiveSnapshot } from "@/services/webViewerService/activeWebTabSnapshot";
 import {
+  isChatSelectedTextContext,
   isNoteSelectedTextContext,
   type MessageContext,
   type SelectedTextContext,
@@ -34,7 +35,7 @@ import { modelSupportsVision } from "@/utils";
 import { arrayBufferToBase64, base64ToArrayBuffer } from "@/utils/base64";
 import { mergeWebTabContexts } from "@/utils/urlNormalization";
 import { App, Notice, TFile } from "obsidian";
-import React, { memo, useCallback, useContext, useEffect, useRef } from "react";
+import React, { memo, useCallback, useContext, useEffect, useMemo, useRef } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
@@ -184,12 +185,14 @@ export const AgentChatInput = memo(function AgentChatInput({
     images: selectedImages,
     contextNotes,
     contextFolders,
+    quotes,
     includeActiveNote,
     includeActiveWebTab,
     queue: queuedMessages,
     setInput: setInputMessage,
     setContextNotes,
     setContextFolders,
+    setQuotes,
     setSelectedImages,
     addImages,
     setIncludeActiveNote,
@@ -205,6 +208,18 @@ export const AgentChatInput = memo(function AgentChatInput({
     Array.isArray(activeModelEntry?.capabilities) && !modelSupportsVision(activeModelEntry)
       ? activeModelEntry.displayName || activeModelEntry.name
       : null;
+
+  const attachedSelections = useMemo(
+    () => (quotes.length === 0 ? selectedTextContexts : [...selectedTextContexts, ...quotes]),
+    [selectedTextContexts, quotes]
+  );
+  const removeSelection = useCallback(
+    (id: string) => {
+      dismissSelection(id);
+      setQuotes((previous) => previous.filter((quote) => quote.id !== id));
+    },
+    [setQuotes]
+  );
 
   useEffect(() => {
     if (previousChatInputIdRef.current === chatInputId) return;
@@ -242,6 +257,12 @@ export const AgentChatInput = memo(function AgentChatInput({
       if (folders.length > 0) {
         setContextFolders((previous) => dedupeBy([...folders, ...previous], (folder) => folder));
       }
+      // A comment is the user's own writing, so unlike a selection it comes back with its message.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/1045
+      const restoredQuotes = (restored.context?.selectedTextContexts ?? []).filter(
+        isChatSelectedTextContext
+      );
+      if (restoredQuotes.length > 0) setQuotes((previous) => [...restoredQuotes, ...previous]);
       const images = (restored.promptContent ?? [])
         .map(imageBlockToFile)
         .filter((file): file is File => file !== null);
@@ -252,6 +273,7 @@ export const AgentChatInput = memo(function AgentChatInput({
       app,
       setContextNotes,
       setContextFolders,
+      setQuotes,
       setIncludeActiveNote,
       setIncludeActiveWebTab,
       setSelectedImages,
@@ -321,7 +343,7 @@ export const AgentChatInput = memo(function AgentChatInput({
       // Attached notes, folders, or selections alone make a message; web tabs, like the active note, need text.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/1044
       const hasAttachedContext =
-        contextNotes.length > 0 || contextFolders.length > 0 || selectedTextContexts.length > 0;
+        contextNotes.length > 0 || contextFolders.length > 0 || attachedSelections.length > 0;
       if (!text && selectedImages.length === 0 && !hasAttachedContext) return;
       const rawInput = inputMessage;
 
@@ -389,7 +411,7 @@ export const AgentChatInput = memo(function AgentChatInput({
         rawInput,
         context: buildMessageContext(
           notes,
-          selectedTextContexts,
+          attachedSelections,
           resolvedWebTabs,
           folders,
           mentionedAgentNames(resolvedText, mentionableAgents)
@@ -408,6 +430,7 @@ export const AgentChatInput = memo(function AgentChatInput({
           dedupeBy([...contextFolders, ...previous], (folder) => folder)
         );
         setSelectedImages((previous) => [...selectedImages, ...previous]);
+        setQuotes((previous) => [...quotes, ...previous]);
         return;
       }
 
@@ -432,6 +455,8 @@ export const AgentChatInput = memo(function AgentChatInput({
       includeActiveNote,
       includeActiveWebTab,
       selectedTextContexts,
+      attachedSelections,
+      quotes,
       loading,
       isStarting,
       queuedPrompts.length,
@@ -449,6 +474,7 @@ export const AgentChatInput = memo(function AgentChatInput({
       setContextNotes,
       setContextFolders,
       setSelectedImages,
+      setQuotes,
     ]
   );
 
@@ -533,8 +559,8 @@ export const AgentChatInput = memo(function AgentChatInput({
           disableModelSwitch={!modelPickerOverride}
           modelPickerOverride={modelPickerOverride ?? undefined}
           modePickerOverride={modePickerOverride ?? undefined}
-          selectedTextContexts={selectedTextContexts}
-          onRemoveSelectedText={dismissSelection}
+          selectedTextContexts={attachedSelections}
+          onRemoveSelectedText={removeSelection}
           projectFolderPath={projectFolderPath}
         />
       </div>

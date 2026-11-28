@@ -3232,6 +3232,24 @@ describe("AgentSessionManager", () => {
         expect(mgr.drafts.get(drafted.chatInputId)?.contextFolders).toEqual(["Research"]);
       });
 
+      it("keeps a chat without a sent message open while its composer holds a quoted passage, which closing would discard, for https://github.com/Brevilabs/obsidian-copilot-private/issues/1045", async () => {
+        const mgr = buildManager();
+        const drafted = await mgr.createSession();
+        const quote = {
+          id: "q1",
+          sourceType: "chat" as const,
+          content: "Use Postgres",
+          comment: "Why?",
+        };
+        mgr.drafts.update(drafted.chatInputId, (draft) => ({ ...draft, quotes: [quote] }));
+        await mgr.createSession();
+
+        mgr.detachSessionFromTab(drafted.internalId);
+
+        expect(closedSessions()).toEqual([]);
+        expect(mgr.drafts.get(drafted.chatInputId)?.quotes).toEqual([quote]);
+      });
+
       it("keeps an empty chat holding unsent text when a saved chat is opened from it, which would otherwise take its place and discard the text, for https://github.com/Brevilabs/obsidian-copilot-private/issues/812", async () => {
         const loadFile = jest.fn().mockResolvedValue({
           backendId: "opencode",

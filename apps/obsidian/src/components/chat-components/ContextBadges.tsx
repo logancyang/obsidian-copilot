@@ -6,6 +6,8 @@ import {
   Globe,
   Hash,
   CircleDashed,
+  MessageSquareText,
+  TextQuote,
   TextSelect,
 } from "lucide-react";
 import { TFile } from "obsidian";
@@ -13,7 +15,13 @@ import { TruncatedText } from "@/components/TruncatedText";
 import { getDomainFromUrl } from "@/utils";
 import { cn } from "@/lib/utils";
 import { ContextBadgeWrapper } from "./ContextBadgeWrapper";
-import { SelectedTextContext, WebTabContext, isWebSelectedTextContext } from "@/types/message";
+import {
+  type ChatSelectedTextContext,
+  SelectedTextContext,
+  WebTabContext,
+  isChatSelectedTextContext,
+  isWebSelectedTextContext,
+} from "@/types/message";
 
 interface BaseContextBadgeProps {
   onRemove?: () => void;
@@ -227,10 +235,49 @@ export function ContextFolderBadge({ folder, onRemove }: ContextFolderBadgeProps
   );
 }
 
+export function QuotedPassage({ text, className }: { text: string; className?: string }) {
+  return (
+    <div
+      className={cn(
+        "tw-whitespace-pre-wrap tw-border-0 tw-border-l tw-border-solid tw-border-border tw-pl-2 tw-text-muted",
+        className
+      )}
+    >
+      {text}
+    </div>
+  );
+}
+
+function ChatQuoteBadge({
+  quote,
+  onRemove,
+}: BaseContextBadgeProps & { quote: ChatSelectedTextContext }) {
+  const Icon = quote.comment ? MessageSquareText : TextQuote;
+  const tooltipContent = (
+    <div className="tw-max-h-60 tw-overflow-y-auto tw-text-left">
+      <QuotedPassage text={quote.content} />
+      {quote.comment ? <div className="tw-mt-1 tw-whitespace-pre-wrap">{quote.comment}</div> : null}
+    </div>
+  );
+  return (
+    <ContextBadgeWrapper
+      icon={<Icon aria-hidden="true" className="tw-size-3" />}
+      onRemove={onRemove}
+    >
+      <TruncatedText className="tw-max-w-40" tooltipContent={tooltipContent} alwaysShowTooltip>
+        {(quote.comment ?? quote.content).replace(/\s+/g, " ").trim()}
+      </TruncatedText>
+    </ContextBadgeWrapper>
+  );
+}
+
 export function ContextSelectedTextBadge({
   selectedText,
   onRemove,
 }: ContextSelectedTextBadgeProps) {
+  if (isChatSelectedTextContext(selectedText)) {
+    return <ChatQuoteBadge quote={selectedText} onRemove={onRemove} />;
+  }
   // Excerpts need their own identity when shown beside the full source note.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/465
   const normalizedContent = selectedText.content.replace(/\s+/g, " ").trim();
