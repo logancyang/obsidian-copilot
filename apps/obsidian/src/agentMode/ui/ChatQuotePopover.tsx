@@ -55,6 +55,7 @@ export function ChatQuoteMenu({ passage, onAdd, startCommenting = false }: ChatQ
         value={comment}
         onChange={(event) => setComment(event.target.value)}
         onKeyDown={(event) => {
+          // Shift+Enter starts a new line and Enter during IME composition picks a candidate, so neither adds the comment. https://github.com/Brevilabs/obsidian-copilot-private/issues/1045
           if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
           event.preventDefault();
           submit();
@@ -74,12 +75,19 @@ interface SelectedPassage {
   anchor: React.RefObject<{ getBoundingClientRect: () => DOMRect; contextElement?: Element }>;
 }
 
+const EDITABLE_SELECTOR = "[contenteditable]:not([contenteditable='false']), textarea, input";
+
 function selectedPassage(scopeEl: HTMLElement): SelectedPassage | null {
   const selection = scopeEl.ownerDocument.getSelection();
   if (!selection || selection.isCollapsed || selection.rangeCount === 0) return null;
   const range = selection.getRangeAt(0).cloneRange();
   const text = selection.toString().trim();
   if (!text || !scopeEl.contains(range.commonAncestorContainer)) return null;
+  // Text selected in the composer is the user's unsent draft, not a passage from the conversation. https://github.com/Brevilabs/obsidian-copilot-private/issues/1045
+  const ancestor = range.commonAncestorContainer;
+  const ancestorEl =
+    ancestor.nodeType === Node.ELEMENT_NODE ? (ancestor as Element) : ancestor.parentElement;
+  if (ancestorEl?.closest(EDITABLE_SELECTOR)) return null;
   return {
     text,
     anchor: {
@@ -106,8 +114,17 @@ export function ChatQuotePopover({ scopeEl, container, onAdd }: ChatQuotePopover
       const next = selectedPassage(scopeEl);
       if (next) setPassage(next);
     };
+    // A selection made or resized with Shift+Arrow ends on a keyup, which reaches the document rather than the chat. https://github.com/Brevilabs/obsidian-copilot-private/issues/1045
+    const readAfterShift = (event: KeyboardEvent) => {
+      if (event.shiftKey || event.key === "Shift") read();
+    };
+    const doc = scopeEl.ownerDocument;
     scopeEl.addEventListener("pointerup", read);
-    return () => scopeEl.removeEventListener("pointerup", read);
+    doc.addEventListener("keyup", readAfterShift);
+    return () => {
+      scopeEl.removeEventListener("pointerup", read);
+      doc.removeEventListener("keyup", readAfterShift);
+    };
   }, [scopeEl]);
 
   if (!passage) return null;
