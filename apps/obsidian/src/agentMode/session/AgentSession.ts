@@ -1,7 +1,7 @@
 import { AI_SENDER } from "@/constants";
 import { logInfo, logWarn } from "@/logger";
 import { AgentMessageStore } from "@/agentMode/session/AgentMessageStore";
-import { GLOBAL_SCOPE, type ProjectScopeId } from "@/agentMode/session/scope";
+import { GLOBAL_SCOPE, type ProjectScopeId } from "@copilot/protocol/scope";
 import {
   AgentChatMessage,
   AgentMcpServer,
@@ -40,7 +40,7 @@ import {
 import { MessageContext } from "@/types/message";
 import { err2String, formatDateTime } from "@/utils";
 import { Notice, type App, type DataAdapter } from "obsidian";
-import { MethodUnsupportedError } from "@/agentMode/session/errors";
+import { MethodUnsupportedError } from "@copilot/protocol/errors";
 import {
   diffTargetPaths,
   editTargetPaths,

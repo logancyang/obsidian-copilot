@@ -25,7 +25,7 @@ import {
   AgentReportedError,
   JSONRPC_METHOD_NOT_FOUND,
   MethodUnsupportedError,
-} from "@/agentMode/session/errors";
+} from "@copilot/protocol/errors";
 import type {
   AgentMcpServer,
   BackendDescriptor,
@@ -64,7 +64,7 @@ import {
   withoutExpiredWindows,
   type PlanUsage,
   type PlanUsageReading,
-} from "@/agentMode/session/planUsage";
+} from "@copilot/protocol/planUsage";
 import {
   acpNotificationToEvents,
   acpPermissionRequestToPrompt,

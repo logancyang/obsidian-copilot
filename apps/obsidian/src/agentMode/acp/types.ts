@@ -5,7 +5,7 @@ import type {
   SessionAgent,
   TurnDiff,
 } from "@/agentMode/session/types";
-import type { PlanUsageReading } from "@/agentMode/session/planUsage";
+import type { PlanUsageReading } from "@copilot/protocol/planUsage";
 import type { CopilotToolUse } from "@/agentMode/session/copilotToolCalls";
 
 export interface AcpSpawnDescriptor {

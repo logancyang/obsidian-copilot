@@ -4,11 +4,11 @@ import type { EffortOption } from "@/lib/model-effort";
 import type React from "react";
 import type { ModelCapability } from "@/constants";
 import type { FormattedDateTime, MessageContext } from "@/types/message";
-import type { PlanUsage } from "@/agentMode/session/planUsage";
+import type { PlanUsage } from "@copilot/protocol/planUsage";
 import type { CopilotToolUse } from "@/agentMode/session/copilotToolCalls";
 
-export type { PlanUsage, UsageWindow } from "@/agentMode/session/planUsage";
-import type { ProjectScopeId } from "./scope";
+export type { PlanUsage, UsageWindow } from "@copilot/protocol/planUsage";
+import type { ProjectScopeId } from "@copilot/protocol/scope";
 
 export type {
   ApprovedRule,
@@ -23,7 +23,7 @@ export type {
   ManagedInstallActionState,
   ModelSelectionSession,
 } from "./descriptor";
-export type { CurrentPlan, PlanDecisionAction, PlanProposalDecision } from "./plan";
+export type { CurrentPlan, PlanDecisionAction, PlanProposalDecision } from "@copilot/protocol/plan";
 
 export type BackendId = string;
 

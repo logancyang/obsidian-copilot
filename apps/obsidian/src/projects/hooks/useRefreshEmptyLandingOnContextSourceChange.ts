@@ -1,4 +1,4 @@
-import { GLOBAL_SCOPE } from "@/agentMode/session/scope";
+import { GLOBAL_SCOPE } from "@copilot/protocol/scope";
 import { useEffect, useRef, useState } from "react";
 
 interface UseRefreshEmptyLandingOnContextSourceChangeParams {

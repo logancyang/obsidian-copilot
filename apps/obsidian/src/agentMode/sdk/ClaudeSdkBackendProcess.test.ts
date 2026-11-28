@@ -82,7 +82,7 @@ import {
 import { CLAUDE_DISCONNECTED_MESSAGE } from "./claudeLiveQuery";
 import { FakeClaudeQuery, SessionEventRecorder } from "./testing/fakeClaudeQuery";
 import { getCachedSdkCatalog } from "./effortOption";
-import { AuthRequiredError } from "@/agentMode/session/errors";
+import { AuthRequiredError } from "@copilot/protocol/errors";
 
 beforeEach(() => {
   (getCachedSdkCatalog as jest.Mock).mockReturnValue(FAKE_CATALOG);

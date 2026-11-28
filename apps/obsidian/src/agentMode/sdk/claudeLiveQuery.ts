@@ -6,7 +6,7 @@ import type {
   SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import { v4 as uuidv4 } from "uuid";
-import { AgentReportedError } from "@/agentMode/session/errors";
+import { AgentReportedError } from "@copilot/protocol/errors";
 import { logWarn } from "@/logger";
 import { err2String } from "@/utils";
 import type { SessionEvent, SessionId, SessionUpdate, TurnEnd } from "@/agentMode/session/types";

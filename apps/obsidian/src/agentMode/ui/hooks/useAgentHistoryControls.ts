@@ -1,7 +1,7 @@
 import { backendRegistry } from "@/agentMode/backends/registry";
 import { formatChatDeleteNotice, formatChatsResultNotice } from "@/lib/chatDeleteText";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
-import { GLOBAL_SCOPE, type ProjectScopeId } from "@/agentMode/session/scope";
+import { GLOBAL_SCOPE, type ProjectScopeId } from "@copilot/protocol/scope";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { logError } from "@/logger";
 import type CopilotPlugin from "@/main";

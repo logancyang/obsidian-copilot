@@ -52,11 +52,11 @@ import {
   mergeChatHistoryItems,
   type MarkdownChatEntry,
 } from "./chatHistoryMerge";
-import { MethodUnsupportedError } from "./errors";
+import { MethodUnsupportedError } from "@copilot/protocol/errors";
 import { replayPersistedMode } from "./replayPersistedMode";
 import { applyModeSpec } from "./modeApply";
 import { modelCatalogSignature } from "./translateBackendState";
-import { GLOBAL_SCOPE, type ProjectScopeId } from "./scope";
+import { GLOBAL_SCOPE, type ProjectScopeId } from "@copilot/protocol/scope";
 import { OrphanedProjectError, pickScopeNeighbor, resolveScopeCwd } from "./sessionScope";
 import {
   getCachedProjectRecordById,

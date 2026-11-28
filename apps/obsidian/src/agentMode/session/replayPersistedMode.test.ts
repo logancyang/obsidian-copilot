@@ -1,5 +1,5 @@
 import type { AgentSession } from "./AgentSession";
-import { MethodUnsupportedError } from "./errors";
+import { MethodUnsupportedError } from "@copilot/protocol/errors";
 import { replayPersistedMode } from "./replayPersistedMode";
 import type { BackendState, CopilotMode } from "./types";
 

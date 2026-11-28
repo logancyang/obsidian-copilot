@@ -10,7 +10,7 @@ import {
   buildBuiltinSkillEnv,
   sanitizeBuiltinSkillEnvOverrides,
 } from "@/agentMode/backends/shared/builtinSkillEnv";
-import type { PlanUsageReading } from "@/agentMode/session/planUsage";
+import type { PlanUsageReading } from "@copilot/protocol/planUsage";
 import type { TurnDiff } from "@/agentMode/session/types";
 import { defaultCodexHome, readCodexPlanUsage } from "./codexPlanUsage";
 import { mergeCodexConfigEnv } from "./codexConfigEnv";

@@ -1,5 +1,5 @@
 import { useAgentHistoryControls } from "@/agentMode/ui/hooks/useAgentHistoryControls";
-import { GLOBAL_SCOPE } from "@/agentMode/session/scope";
+import { GLOBAL_SCOPE } from "@copilot/protocol/scope";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import type CopilotPlugin from "@/main";

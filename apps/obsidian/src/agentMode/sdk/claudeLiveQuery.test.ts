@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import type { Query, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
-import { AgentReportedError } from "@/agentMode/session/errors";
+import { AgentReportedError } from "@copilot/protocol/errors";
 import type { SessionUpdate } from "@/agentMode/session/types";
 
 jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError: jest.fn() }));

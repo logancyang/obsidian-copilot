@@ -1,5 +1,5 @@
-import type { PlanUsageReading, UsageWindow } from "@/agentMode/session/planUsage";
-import { planUsageReading, toUsagePercent } from "@/agentMode/session/planUsage";
+import type { PlanUsageReading, UsageWindow } from "@copilot/protocol/planUsage";
+import { planUsageReading, toUsagePercent } from "@copilot/protocol/planUsage";
 import { logInfo } from "@/logger";
 
 const USAGE_METHOD = "usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET" as const;

@@ -1,5 +1,5 @@
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
-import type { PlanUsage } from "@/agentMode/session/planUsage";
+import type { PlanUsage } from "@copilot/protocol/planUsage";
 import { useEffect, useRef, useState } from "react";
 
 export function usePlanUsage(backend: AgentChatBackend): PlanUsage | null {

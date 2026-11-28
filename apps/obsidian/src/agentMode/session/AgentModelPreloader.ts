@@ -3,7 +3,7 @@ import { getSettings } from "@/settings/model";
 import { App, FileSystemAdapter, Platform } from "obsidian";
 import type { CopilotMcpServer } from "./copilotMcpServer";
 import type { BackendStartServices } from "./descriptor";
-import { MethodUnsupportedError } from "./errors";
+import { MethodUnsupportedError } from "@copilot/protocol/errors";
 import type {
   BackendDescriptor,
   BackendId,

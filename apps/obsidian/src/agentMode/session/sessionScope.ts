@@ -1,5 +1,5 @@
 import { getCachedProjectRecordById } from "@/projects/state";
-import { GLOBAL_SCOPE, type ProjectScopeId } from "@/agentMode/session/scope";
+import { GLOBAL_SCOPE, type ProjectScopeId } from "@copilot/protocol/scope";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 
 export class OrphanedProjectError extends Error {

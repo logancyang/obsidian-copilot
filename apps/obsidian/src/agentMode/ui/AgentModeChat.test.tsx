@@ -1,5 +1,5 @@
 import { AgentModeChat } from "@/agentMode/ui/AgentModeChat";
-import { GLOBAL_SCOPE } from "@/agentMode/session/scope";
+import { GLOBAL_SCOPE } from "@copilot/protocol/scope";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import type { InstallState } from "@/agentMode/session/types";

@@ -100,7 +100,7 @@ import { useAgentSetupProblems } from "@/agents/agentMode/useAgentSetupProblems"
 import { useAgentRecentChats } from "@/agents/ui/useAgentRecentChats";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
-import { GLOBAL_SCOPE } from "@/agentMode/session/scope";
+import { GLOBAL_SCOPE } from "@copilot/protocol/scope";
 import { type ProjectConfig } from "@/aiParams";
 import { createProjectAndEnter } from "@/projects/ui/AgentProjectCreateForm";
 import { TruncatedText } from "@/components/TruncatedText";

@@ -21,7 +21,7 @@ import {
   NO_SAVED_CHAT_STATES,
   type ChatStateKey,
 } from "./chatExtension";
-import { GLOBAL_SCOPE } from "./scope";
+import { GLOBAL_SCOPE } from "@copilot/protocol/scope";
 import {
   getSettings as mockedGetSettings,
   setSettings as mockedSetSettings,
@@ -31,7 +31,7 @@ import { buildProjectContext } from "@/projects/projectContextBlock";
 import { ProjectFileManager } from "@/projects/ProjectFileManager";
 import { type ProjectConfig } from "@/aiParams";
 import type { ProjectFileRecord } from "@/projects/type";
-import { MethodUnsupportedError } from "@/agentMode/session/errors";
+import { MethodUnsupportedError } from "@copilot/protocol/errors";
 import { buildCodexModeMapping } from "@/agentMode/backends/codex/codexModeMapping";
 import type {
   AgentChatMessage,

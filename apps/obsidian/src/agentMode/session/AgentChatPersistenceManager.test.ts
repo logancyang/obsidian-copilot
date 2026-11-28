@@ -2,7 +2,7 @@
 import { formatAgentReply } from "@/agents/agentReply";
 import { AI_SENDER, USER_SENDER } from "@/constants";
 import { AgentChatPersistenceManager } from "./AgentChatPersistenceManager";
-import { GLOBAL_SCOPE } from "./scope";
+import { GLOBAL_SCOPE } from "@copilot/protocol/scope";
 import type { AgentChatMessage } from "./types";
 import { buildConversationHistoryBlock, SAVED_HISTORY_MAX_CHARS } from "./conversationHistory";
 import type { MessageContext } from "@/types/message";

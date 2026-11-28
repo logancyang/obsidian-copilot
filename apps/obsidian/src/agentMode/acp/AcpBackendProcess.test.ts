@@ -9,7 +9,7 @@ import { AcpBackendProcess } from "./AcpBackendProcess";
 import { AcpProcessManager } from "./AcpProcessManager";
 import type { AcpBackend } from "./types";
 import type { VaultClient } from "./VaultClient";
-import { AgentReportedError, MethodUnsupportedError } from "@/agentMode/session/errors";
+import { AgentReportedError, MethodUnsupportedError } from "@copilot/protocol/errors";
 import { RequestError, type SessionConfigOption } from "@agentclientprotocol/sdk";
 
 jest.mock("@/logger", () => ({
