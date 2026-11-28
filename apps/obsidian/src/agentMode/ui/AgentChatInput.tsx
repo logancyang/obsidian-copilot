@@ -318,7 +318,13 @@ export const AgentChatInput = memo(function AgentChatInput({
     }: Parameters<ChatInputProps["handleSendMessage"]>[0] = {}) => {
       if (disabled) return;
       const text = inputMessage.trim();
-      if (!text && selectedImages.length === 0) return;
+      // A message of attached context alone is sendable. https://github.com/Brevilabs/obsidian-copilot-private/issues/1044
+      const hasAttachedContext =
+        contextNotes.length > 0 ||
+        contextFolders.length > 0 ||
+        selectedTextContexts.length > 0 ||
+        (webTabs?.length ?? 0) > 0;
+      if (!text && selectedImages.length === 0 && !hasAttachedContext) return;
       const rawInput = inputMessage;
 
       const activeFile = app.workspace.getActiveFile();

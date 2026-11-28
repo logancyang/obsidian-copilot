@@ -296,6 +296,41 @@ describe("ChatInput", () => {
       expect(screen.getByRole<HTMLButtonElement>("button", { name: "Send" }).disabled).toBe(true);
     });
 
+    it.each([
+      { attached: "a folder", overrides: { contextFolders: ["Research"] }, enabled: true },
+      {
+        attached: "a selection",
+        overrides: {
+          selectedTextContexts: [
+            { id: "s", sourceType: "web", title: "Page", url: "https://example.com", content: "x" },
+          ],
+        },
+        enabled: true,
+      },
+      { attached: "only the active note", overrides: { includeActiveNote: true }, enabled: false },
+    ] as { attached: string; overrides: Partial<ChatInputProps>; enabled: boolean }[])(
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/1044 sets Send enabled=$enabled for an empty chat draft with $attached",
+      ({ overrides, enabled }) => {
+        const { node, send } = composer("", [], overrides);
+        render(node);
+        const button = screen.getByRole<HTMLButtonElement>("button", { name: "Send" });
+        expect(button.disabled).toBe(!enabled);
+        fireEvent.click(button);
+        expect(send).toHaveBeenCalledTimes(enabled ? 1 : 0);
+      }
+    );
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/1044 keeps Send disabled in the legacy chat for an empty draft with a folder", () => {
+      render(composer("", [], { contextFolders: ["Research"], isAgentMode: false }).node);
+      expect(screen.getByRole<HTMLButtonElement>("button", { name: "Send" }).disabled).toBe(true);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/1044 shows only Send while the agent's reply runs and the empty draft has a folder attached", () => {
+      render(composer("", [], { contextFolders: ["Research"], isGenerating: true }).node);
+      expect(screen.queryByRole("button", { name: "Stop generating" })).toBeNull();
+      expect(screen.getByRole("button", { name: "Send" })).toBeTruthy();
+    });
+
     it("routes Enter with an image-only draft to the send handler https://github.com/logancyang/obsidian-copilot/issues/2850", () => {
       const { node, send } = composer("", [image]);
       render(node);

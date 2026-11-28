@@ -562,6 +562,66 @@ describe("AgentChatInput", () => {
       });
     });
 
+    it.each([
+      {
+        attached: "an attached note",
+        draft: { contextNotes: [makeFile("Research.md")] },
+        selections: [] as SelectedTextContext[],
+        context: { notes: [makeFile("Research.md")], urls: [] },
+      },
+      {
+        attached: "a note selection",
+        draft: {},
+        selections: [
+          {
+            id: "excerpt",
+            sourceType: "note",
+            noteTitle: "Research",
+            notePath: "Research.md",
+            content: "Compare the interview findings.",
+            startLine: 3,
+            endLine: 3,
+          },
+        ] as SelectedTextContext[],
+        context: {
+          notes: [],
+          urls: [],
+          selectedTextContexts: [expect.objectContaining({ id: "excerpt" })],
+        },
+      },
+    ])(
+      "sends $attached with no typed text as a message of its own https://github.com/Brevilabs/obsidian-copilot-private/issues/1044",
+      async ({ draft, selections, context }) => {
+        mockSelectedTextContexts = selections;
+        const backend = {
+          sendMessage: jest.fn(() => ({ turn: Promise.resolve() })),
+          takeWithdrawnPrompts: () => [],
+        } as unknown as AgentChatBackend;
+        renderInput(backend, makeDraft({ input: "", ...draft }));
+
+        fireEvent.click(screen.getByText("send"));
+
+        await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
+        expect(jest.mocked(backend.sendMessage).mock.calls[0][0]).toBe("");
+        expect(jest.mocked(backend.sendMessage).mock.calls[0][1]).toEqual(context);
+      }
+    );
+
+    it("sends nothing from an empty draft whose only context is the active note https://github.com/Brevilabs/obsidian-copilot-private/issues/1044", () => {
+      mockActiveFile = makeFile("Open.md");
+      const backend = {
+        sendMessage: jest.fn(() => ({ turn: Promise.resolve() })),
+        takeWithdrawnPrompts: () => [],
+      } as unknown as AgentChatBackend;
+      const draft = makeDraft({ input: "", includeActiveNote: true });
+      renderInput(backend, draft);
+
+      fireEvent.click(screen.getByText("send"));
+
+      expect(backend.sendMessage).not.toHaveBeenCalled();
+      expect(draft.resetCompose).not.toHaveBeenCalled();
+    });
+
     it("sends each agent the text @-mentions, other than the chat's own, as the message's context (https://github.com/Brevilabs/obsidian-copilot-private/issues/947)", async () => {
       const backend = {
         sendMessage: jest.fn(() => ({ turn: Promise.resolve() })),
