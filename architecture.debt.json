@@ -1,6 +1,6 @@
 {
   "counts": {
-    "imports": 709,
+    "imports": 691,
     "clientAccess": 151
   },
   "imports": {
@@ -120,10 +120,6 @@
     "apps/obsidian/src/agentMode/session/sessionScope.ts": ["@/projects/state"],
     "apps/obsidian/src/agentMode/session/types.ts": [
       "./descriptor",
-      "./plan",
-      "./scope",
-      "@/agentMode/session/copilotToolCalls",
-      "@/agentMode/session/planUsage",
       "@/agents/agentMentions",
       "@/agents/memorySaves"
     ],
@@ -197,8 +193,7 @@
       "@/main"
     ],
     "apps/obsidian/src/agentMode/ui/AgentContextMeter.tsx": [
-      "@/agentMode/session/AgentChatBackend",
-      "@/agentMode/session/planUsage"
+      "@/agentMode/session/AgentChatBackend"
     ],
     "apps/obsidian/src/agentMode/ui/AgentDefaultModelSetting.tsx": [
       "@/agentMode/session/AgentSessionManager",
@@ -211,7 +206,6 @@
       "@/agentMode/session/AgentChatBackend",
       "@/agentMode/session/AgentSessionManager",
       "@/agentMode/session/feedback/feedbackOffer",
-      "@/agentMode/session/scope",
       "@/agents/CustomAgentStore",
       "@/agents/agentMode/agentChats",
       "@/agents/agentMode/agentRelays",
@@ -278,7 +272,6 @@
       "@/main"
     ],
     "apps/obsidian/src/agentMode/ui/AgentTabStrip.stories.tsx": [
-      "@/agentMode/session/AgentSession",
       "@/agentMode/session/AgentSessionManager",
       "@/agents/ui/testing/rosterFixtures"
     ],
@@ -291,7 +284,6 @@
       "@/agents/agentMode/tabDot",
       "@/agents/ui/AgentFace"
     ],
-    "apps/obsidian/src/agentMode/ui/AgentTasksContext.tsx": ["@/agentMode/session/AgentSession"],
     "apps/obsidian/src/agentMode/ui/AgentTrailView.tsx": [
       "@/agents/agentMode/memorySaveCards",
       "@/miyo/agentMode/miyoSearchRun"
@@ -341,11 +333,8 @@
       "@/settings/model"
     ],
     "apps/obsidian/src/agentMode/ui/RunningTasksIndicator.tsx": [
-      "@/agentMode/session/AgentSession",
       "@/agentMode/session/taskOutputTail"
     ],
-    "apps/obsidian/src/agentMode/ui/TaskCard.tsx": ["@/agentMode/session/AgentSession"],
-    "apps/obsidian/src/agentMode/ui/TaskDetailView.tsx": ["@/agentMode/session/AgentSession"],
     "apps/obsidian/src/agentMode/ui/ToolPermissionCard.stories.tsx": [
       "@/agents/agentMode/ui/AskedAgentRequester",
       "@/agents/ui/testing/rosterFixtures"
@@ -373,16 +362,13 @@
       "@/connectors/agentMode/connectorCardSlot"
     ],
     "apps/obsidian/src/agentMode/ui/chatCards.tsx": ["@/agentMode/session/chatExtension", "@/main"],
-    "apps/obsidian/src/agentMode/ui/copilotToolCall.ts": ["@/agentMode/session/copilotToolCalls"],
     "apps/obsidian/src/agentMode/ui/hooks/useAgentChatRuntimeState.ts": [
       "@/agentMode/session/AgentChatBackend",
-      "@/agentMode/session/AgentSession",
       "@/agentMode/session/chatExtension"
     ],
     "apps/obsidian/src/agentMode/ui/hooks/useAgentHistoryControls.ts": [
       "@/agentMode/backends/registry",
       "@/agentMode/session/AgentSessionManager",
-      "@/agentMode/session/scope",
       "@/main"
     ],
     "apps/obsidian/src/agentMode/ui/hooks/useAgentInputDrafts.ts": [
@@ -406,8 +392,7 @@
       "@/agentMode/session/AgentSessionManager"
     ],
     "apps/obsidian/src/agentMode/ui/hooks/usePlanUsage.ts": [
-      "@/agentMode/session/AgentChatBackend",
-      "@/agentMode/session/planUsage"
+      "@/agentMode/session/AgentChatBackend"
     ],
     "apps/obsidian/src/agentMode/ui/hooks/useRunningChatIds.ts": [
       "@/agentMode/session/AgentSessionManager"
@@ -423,14 +408,12 @@
       "@/agentMode/session/AgentSessionManager",
       "@/agentMode/session/messageParts"
     ],
-    "apps/obsidian/src/agentMode/ui/taskDisplay.ts": ["@/agentMode/session/AgentSession"],
     "apps/obsidian/src/agentMode/ui/testing/navigatorAccess.ts": [
       "@/entitlement",
       "@/plusUtils",
       "@/settings/model"
     ],
     "apps/obsidian/src/agentMode/ui/testing/taskFixtures.ts": [
-      "@/agentMode/session/AgentSession",
       "@/agentMode/session/taskOutputTail"
     ],
     "apps/obsidian/src/agentMode/ui/toolCardKinds.tsx": [
@@ -980,9 +963,6 @@
       "@/LLMProviders/brevilabsClient"
     ],
     "apps/obsidian/src/plusUtils.ts": ["@/LLMProviders/brevilabsClient", "@/agentMode"],
-    "apps/obsidian/src/projects/hooks/useRefreshEmptyLandingOnContextSourceChange.ts": [
-      "@/agentMode/session/scope"
-    ],
     "apps/obsidian/src/projects/ui/AgentProjectCreateForm.tsx": [
       "@/agentMode/session/AgentSessionManager",
       "@/aiParams",

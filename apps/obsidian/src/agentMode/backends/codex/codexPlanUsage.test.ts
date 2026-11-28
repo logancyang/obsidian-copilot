@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
-import type { PlanUsageReading, UsageWindow } from "@/agentMode/session/planUsage";
+import type { PlanUsageReading, UsageWindow } from "@copilot/protocol/planUsage";
 import { lastRateLimits, planUsageFromCodexRateLimits, readCodexPlanUsage } from "./codexPlanUsage";
 
 jest.mock("@/logger", () => ({ logInfo: jest.fn() }));

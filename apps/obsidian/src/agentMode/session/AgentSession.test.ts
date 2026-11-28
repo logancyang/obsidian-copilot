@@ -14,7 +14,7 @@ import {
 } from "./AgentSession";
 import { getSettings } from "@/settings/model";
 import { ContextProcessor } from "@/contextProcessor";
-import { GLOBAL_SCOPE } from "./scope";
+import { GLOBAL_SCOPE } from "@copilot/protocol/scope";
 import { defineChatExtension, type ChatStateKey } from "./chatExtension";
 import { writePermissionRequest } from "./testing/permissionPrompts";
 import { OUTPUT_LIMIT_CONTINUATION_PROMPT } from "./promptEnvelope";

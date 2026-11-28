@@ -1,7 +1,6 @@
-export interface EffortOption {
-  value: string | null;
-  label: string;
-}
+import type { EffortOption } from "@copilot/core/modelEffort";
+
+export type { EffortOption } from "@copilot/core/modelEffort";
 
 /**
  * Every thinking-effort level our backends speak, ascending. Agents report their levels in

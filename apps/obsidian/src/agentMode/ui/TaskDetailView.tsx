@@ -1,4 +1,4 @@
-import type { AgentTask } from "@/agentMode/session/AgentSession";
+import type { AgentTask } from "@copilot/protocol/tasks";
 import type { AgentChatMessage, AgentMessagePart } from "@/agentMode/session/types";
 import { AgentTrail } from "@/agentMode/ui/AgentTrailView";
 import { FilesChangedCard } from "@/agentMode/ui/FilesChangedCard";

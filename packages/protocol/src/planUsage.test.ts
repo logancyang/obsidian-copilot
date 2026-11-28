@@ -3,7 +3,7 @@ import {
   toUsagePercent,
   withoutExpiredWindows,
   type UsageWindow,
-} from "@/agentMode/session/planUsage";
+} from "@copilot/protocol/planUsage";
 
 const WEEKLY: UsageWindow = { id: "weekly", label: "Weekly", percent: 21, resetsAt: 2_000 };
 const FIVE_HOUR: UsageWindow = { id: "five_hour", label: "5h", percent: 10, resetsAt: 1_500 };

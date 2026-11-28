@@ -7,7 +7,7 @@ import type {
   QueuedPrompt,
 } from "@/agentMode/session/types";
 import type { ChatStates } from "@/agentMode/session/chatExtension";
-import type { AgentTask } from "@/agentMode/session/AgentSession";
+import type { AgentTask } from "@copilot/protocol/tasks";
 import { useEffect, useRef, useState } from "react";
 
 export interface AgentChatRuntimeState {

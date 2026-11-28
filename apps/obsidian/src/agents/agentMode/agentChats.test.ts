@@ -15,7 +15,7 @@ import type { EnabledModelEntry, InstallState } from "@/agentMode/session/types"
 import { CustomAgentStore } from "@/agents/CustomAgentStore";
 import { createFakeAgentVault } from "@/agents/testing/fakeAgentVault";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
-import { GLOBAL_SCOPE } from "@/agentMode/session/scope";
+import { GLOBAL_SCOPE } from "@copilot/protocol/scope";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { updateCachedProjectRecords } from "@/projects/state";
 import { getSettings, resetSettings, setSettings } from "@/settings/model";

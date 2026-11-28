@@ -11,7 +11,7 @@ import {
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import type { BackendId, InstallState, ModelSelection } from "@/agentMode/session/types";
-import { GLOBAL_SCOPE } from "@/agentMode/session/scope";
+import { GLOBAL_SCOPE } from "@copilot/protocol/scope";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { logError, logWarn } from "@/logger";
 import { getCachedProjectRecords } from "@/projects/state";

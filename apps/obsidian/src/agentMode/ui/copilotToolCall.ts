@@ -1,4 +1,4 @@
-import type { CopilotToolCall } from "@/agentMode/session/copilotToolCalls";
+import type { CopilotToolCall } from "@copilot/protocol/toolCalls";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
 
 export function copilotToolCall(part: ToolCallPart, toolName: string): CopilotToolCall | null {

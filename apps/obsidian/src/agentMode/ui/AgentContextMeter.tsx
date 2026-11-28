@@ -1,5 +1,5 @@
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
-import { withoutExpiredWindows } from "@/agentMode/session/planUsage";
+import { withoutExpiredWindows } from "@copilot/protocol/planUsage";
 import type { PlanUsage, SessionUsage } from "@/agentMode/session/types";
 import { usePlanUsage } from "@/agentMode/ui/hooks/usePlanUsage";
 import { useSessionUsage } from "@/agentMode/ui/hooks/useSessionUsage";

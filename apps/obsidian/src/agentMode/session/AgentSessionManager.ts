@@ -56,7 +56,7 @@ import { MethodUnsupportedError } from "./errors";
 import { replayPersistedMode } from "./replayPersistedMode";
 import { applyModeSpec } from "./modeApply";
 import { modelCatalogSignature } from "./translateBackendState";
-import { GLOBAL_SCOPE, type ProjectScopeId } from "./scope";
+import { GLOBAL_SCOPE, type ProjectScopeId } from "@copilot/protocol/scope";
 import { OrphanedProjectError, pickScopeNeighbor, resolveScopeCwd } from "./sessionScope";
 import {
   getCachedProjectRecordById,

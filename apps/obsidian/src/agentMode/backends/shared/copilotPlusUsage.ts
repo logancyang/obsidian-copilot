@@ -1,5 +1,5 @@
-import type { PlanUsageReading, UsageWindow } from "@/agentMode/session/planUsage";
-import { planUsageReading, toUsagePercent } from "@/agentMode/session/planUsage";
+import type { PlanUsageReading, UsageWindow } from "@copilot/protocol/planUsage";
+import { planUsageReading, toUsagePercent } from "@copilot/protocol/planUsage";
 import { BrevilabsClient, type UsageResponse } from "@/LLMProviders/brevilabsClient";
 import { getSettings } from "@/settings/model";
 

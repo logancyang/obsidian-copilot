@@ -1,4 +1,4 @@
-import type { AgentTask } from "@/agentMode/session/AgentSession";
+import type { AgentTask } from "@copilot/protocol/tasks";
 import { StatusBadge } from "@/agentMode/ui/ActionCard";
 import {
   taskBadgeStatus,

@@ -45,7 +45,7 @@ import { sanitizeModel } from "./AgentSessionIndex";
 import { NO_SAVED_CHAT_STATES, type SavedChatStates } from "./chatExtension";
 import type { MemorySave } from "@/agents/memorySaves";
 import { restoreAgentMentions } from "@/agents/agentMentions";
-import { GLOBAL_SCOPE } from "./scope";
+import { GLOBAL_SCOPE } from "@copilot/protocol/scope";
 import type { AgentChatMessage, BackendId, ModelSelection, SessionUsage } from "./types";
 
 const SAFE_FILENAME_BYTE_LIMIT = 100;

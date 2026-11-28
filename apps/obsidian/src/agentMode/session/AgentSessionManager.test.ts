@@ -21,7 +21,7 @@ import {
   NO_SAVED_CHAT_STATES,
   type ChatStateKey,
 } from "./chatExtension";
-import { GLOBAL_SCOPE } from "./scope";
+import { GLOBAL_SCOPE } from "@copilot/protocol/scope";
 import {
   getSettings as mockedGetSettings,
   setSettings as mockedSetSettings,

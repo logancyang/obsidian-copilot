@@ -1,4 +1,4 @@
-import type { AgentTask } from "@/agentMode/session/AgentSession";
+import type { AgentTask } from "@copilot/protocol/tasks";
 import { lastOutputLine } from "@/agentMode/session/taskOutputTail";
 import type { PermissionPrompt } from "@/agentMode/session/types";
 import { TaskStatusMark } from "@/agentMode/ui/TaskCard";

@@ -64,7 +64,7 @@ import {
   withoutExpiredWindows,
   type PlanUsage,
   type PlanUsageReading,
-} from "@/agentMode/session/planUsage";
+} from "@copilot/protocol/planUsage";
 import {
   acpNotificationToEvents,
   acpPermissionRequestToPrompt,

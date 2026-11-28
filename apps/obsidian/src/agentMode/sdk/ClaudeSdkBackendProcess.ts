@@ -15,7 +15,7 @@ import { App } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
 import { translateBackendState } from "@/agentMode/session/translateBackendState";
 import { readClaudePlanUsage } from "./claudePlanUsage";
-import { withoutExpiredWindows } from "@/agentMode/session/planUsage";
+import { withoutExpiredWindows } from "@copilot/protocol/planUsage";
 import type {
   PlanUsage,
   BackendConfigOption,
@@ -44,7 +44,7 @@ import type {
   StopTaskInput,
   WithdrawInput,
 } from "@/agentMode/session/types";
-import type { ProjectScopeId } from "@/agentMode/session/scope";
+import type { ProjectScopeId } from "@copilot/protocol/scope";
 import { COPILOT_CHAT_PROMPT } from "@/agentMode/session/copilotChatPrompt";
 import { AuthRequiredError, MethodUnsupportedError } from "@/agentMode/session/errors";
 import { requireNodeModule } from "@/utils/desktopRuntime";

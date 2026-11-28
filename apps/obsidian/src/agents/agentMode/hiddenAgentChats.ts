@@ -3,7 +3,7 @@ import type { AgentSessionIndex } from "@/agentMode/session/AgentSessionIndex";
 import { AnswerCompletion, type AnswerEnd } from "@/agentMode/session/answerCompletion";
 import type { ChatStateHost } from "@/agentMode/session/chatExtension";
 import { replayPersistedMode } from "@/agentMode/session/replayPersistedMode";
-import type { ProjectScopeId } from "@/agentMode/session/scope";
+import type { ProjectScopeId } from "@copilot/protocol/scope";
 import { buildChatFileChanges } from "@/agentMode/session/turnFileChanges";
 import { PERMISSION_REJECT_KINDS } from "@/agentMode/session/types";
 import type {

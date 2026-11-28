@@ -1,10 +1,10 @@
 import { requireNodeModule } from "@/utils/desktopRuntime";
-import type { PlanUsageReading, UsageWindow } from "@/agentMode/session/planUsage";
+import type { PlanUsageReading, UsageWindow } from "@copilot/protocol/planUsage";
 import {
   planUsageReading,
   toUsagePercent,
   withoutExpiredWindows,
-} from "@/agentMode/session/planUsage";
+} from "@copilot/protocol/planUsage";
 import { logInfo } from "@/logger";
 
 // The rollout file's `rate_limits` is an undocumented internal format and the only structured

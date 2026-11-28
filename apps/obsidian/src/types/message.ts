@@ -1,41 +1,22 @@
 import { PromptContextEnvelope } from "@/context/PromptContextTypes";
 import { TFile } from "obsidian";
+import type {
+  ChatSelectedTextContext,
+  NoteSelectedTextContext,
+  SelectedTextContext,
+  WebSelectedTextContext,
+  WebTabContext,
+} from "@copilot/protocol/messageContext";
+import type { FormattedDateTime } from "@copilot/protocol/messages";
 
-export interface FormattedDateTime {
-  epoch: number;
-  display: string;
-  fileName: string;
-}
-
-interface BaseSelectedTextContext {
-  id: string;
-  content: string;
-}
-
-export interface NoteSelectedTextContext extends BaseSelectedTextContext {
-  sourceType: "note";
-  noteTitle: string;
-  notePath: string;
-  startLine: number;
-  endLine: number;
-}
-
-export interface WebSelectedTextContext extends BaseSelectedTextContext {
-  sourceType: "web";
-  title: string;
-  url: string;
-  faviconUrl?: string;
-}
-
-export interface ChatSelectedTextContext extends BaseSelectedTextContext {
-  sourceType: "chat";
-  comment?: string;
-}
-
-export type SelectedTextContext =
-  | NoteSelectedTextContext
-  | WebSelectedTextContext
-  | ChatSelectedTextContext;
+export type {
+  ChatSelectedTextContext,
+  NoteSelectedTextContext,
+  SelectedTextContext,
+  WebSelectedTextContext,
+  WebTabContext,
+} from "@copilot/protocol/messageContext";
+export type { FormattedDateTime } from "@copilot/protocol/messages";
 
 export function isWebSelectedTextContext(ctx: SelectedTextContext): ctx is WebSelectedTextContext {
   return ctx.sourceType === "web";
@@ -51,14 +32,6 @@ export function isNoteSelectedTextContext(
   ctx: SelectedTextContext
 ): ctx is NoteSelectedTextContext {
   return ctx.sourceType === "note";
-}
-
-export interface WebTabContext {
-  url: string;
-  title?: string;
-  faviconUrl?: string;
-  isLoaded?: boolean;
-  isActive?: boolean;
 }
 
 export interface MessageContext {
