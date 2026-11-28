@@ -1,4 +1,5 @@
 import { AgentMessageStore } from "@/agentMode/session/AgentMessageStore";
+import { TEST_TRANSCRIPT_SOURCES } from "@/agentMode/session/testing/transcriptSources";
 import type { ChatStateHost } from "@/agentMode/session/chatExtension";
 import { fakeChat } from "@/agentMode/session/testing/fakeChat";
 import type { BackendState, CopilotMode } from "@/agentMode/session/types";
@@ -37,7 +38,7 @@ const MEETINGS_CONTEXT = "2026-11-02 · Said while looking for notes";
 const SAVED = "Saved. The chat shows the user each save, so don't announce it in your reply.";
 
 function session(agentSlug: string | null, mode: CopilotMode | null = "default") {
-  const store = new AgentMessageStore();
+  const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
   store.addMessage({
     id: "u1",
     sender: USER_SENDER,

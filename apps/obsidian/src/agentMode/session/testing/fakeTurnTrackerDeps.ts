@@ -1,4 +1,5 @@
 import { AgentMessageStore } from "@/agentMode/session/AgentMessageStore";
+import { TEST_TRANSCRIPT_SOURCES } from "@/agentMode/session/testing/transcriptSources";
 import type { TurnPrompt, TurnTrackerDeps } from "@/agentMode/session/TurnTracker";
 
 export interface FakeTurnTrackerDeps extends TurnTrackerDeps {
@@ -22,7 +23,7 @@ export function fakeTurnTrackerDeps(): FakeTurnTrackerDeps {
   const sentWaiters = new Map<string, () => void>();
   const messagesWaiters: Array<() => void> = [];
   return {
-    store: new AgentMessageStore(),
+    store: new AgentMessageStore(TEST_TRANSCRIPT_SOURCES),
     backendId: "claude",
     sentPrompts,
     prompt: jest.fn(async (input: TurnPrompt) => {
