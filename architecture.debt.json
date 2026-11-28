@@ -1,6 +1,6 @@
 {
   "counts": {
-    "imports": 691,
+    "imports": 688,
     "clientAccess": 151
   },
   "imports": {
@@ -191,9 +191,6 @@
       "@/agents/agentMode/ui/AskedAgentRequester",
       "@/agents/agentReply",
       "@/main"
-    ],
-    "apps/obsidian/src/agentMode/ui/AgentContextMeter.tsx": [
-      "@/agentMode/session/AgentChatBackend"
     ],
     "apps/obsidian/src/agentMode/ui/AgentDefaultModelSetting.tsx": [
       "@/agentMode/session/AgentSessionManager",
@@ -391,14 +388,8 @@
     "apps/obsidian/src/agentMode/ui/hooks/useManagerSetSnapshot.ts": [
       "@/agentMode/session/AgentSessionManager"
     ],
-    "apps/obsidian/src/agentMode/ui/hooks/usePlanUsage.ts": [
-      "@/agentMode/session/AgentChatBackend"
-    ],
     "apps/obsidian/src/agentMode/ui/hooks/useRunningChatIds.ts": [
       "@/agentMode/session/AgentSessionManager"
-    ],
-    "apps/obsidian/src/agentMode/ui/hooks/useSessionUsage.ts": [
-      "@/agentMode/session/AgentChatBackend"
     ],
     "apps/obsidian/src/agentMode/ui/hooks/useTaskOutputTail.ts": [
       "@/agentMode/session/taskOutputTail"

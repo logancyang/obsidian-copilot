@@ -1,0 +1,107 @@
+import { SessionClientContext, useSessionSlice } from "@/agentMode/ui/hooks/useSessionSlice";
+import { fakeSessionClient } from "@/agentMode/ui/testing/fakeSessionClient";
+import type { SessionClient } from "@copilot/protocol/client";
+import type { PlanUsage } from "@copilot/protocol/planUsage";
+import type { SessionUsage } from "@copilot/protocol/sessionUsage";
+import { act, renderHook } from "@testing-library/react";
+import * as React from "react";
+
+const usage = (usedTokens: number): SessionUsage => ({ usedTokens, updatedAt: 1 });
+const PLAN_USAGE: PlanUsage = {
+  windows: [{ id: "weekly", label: "Weekly", percent: 4 }],
+  updatedAt: 1,
+};
+
+function withClient(client: SessionClient) {
+  return function Wrapper({ children }: { children: React.ReactNode }) {
+    return <SessionClientContext.Provider value={client}>{children}</SessionClientContext.Provider>;
+  };
+}
+
+describe("useSessionSlice", () => {
+  describe("useSessionSlice()", () => {
+    it("returns the chat's slice from the client's replica", () => {
+      const fake = fakeSessionClient({ "chat-1": { usage: usage(10), planUsage: PLAN_USAGE } });
+
+      const { result } = renderHook(() => useSessionSlice("chat-1", "planUsage"), {
+        wrapper: withClient(fake.client),
+      });
+
+      expect(result.current).toEqual(PLAN_USAGE);
+    });
+
+    it("returns null for a chat the host holds no value for", () => {
+      const fake = fakeSessionClient();
+
+      const { result } = renderHook(() => useSessionSlice("chat-1", "usage"), {
+        wrapper: withClient(fake.client),
+      });
+
+      expect(result.current).toBeNull();
+    });
+
+    it("returns the new value once an op changes the slice", () => {
+      const fake = fakeSessionClient({ "chat-1": { usage: usage(10) } });
+      const { result } = renderHook(() => useSessionSlice("chat-1", "usage"), {
+        wrapper: withClient(fake.client),
+      });
+
+      act(() => fake.setState("chat-1", { usage: usage(42) }));
+
+      expect(result.current).toEqual(usage(42));
+    });
+
+    it("does not re-render when only another slice of the chat changes", () => {
+      const fake = fakeSessionClient({ "chat-1": { usage: usage(10) } });
+      let renders = 0;
+      renderHook(
+        () => {
+          renders++;
+          return useSessionSlice("chat-1", "usage");
+        },
+        { wrapper: withClient(fake.client) }
+      );
+      const rendersBefore = renders;
+
+      act(() => fake.setState("chat-1", { planUsage: PLAN_USAGE }));
+
+      expect(renders).toBe(rendersBefore);
+    });
+
+    it("follows a new chat and releases the old one when the chat changes", () => {
+      const fake = fakeSessionClient({
+        "chat-1": { usage: usage(1) },
+        "chat-2": { usage: usage(2) },
+      });
+      const { result, rerender } = renderHook(({ chat }) => useSessionSlice(chat, "usage"), {
+        initialProps: { chat: "chat-1" },
+        wrapper: withClient(fake.client),
+      });
+      expect(result.current).toEqual(usage(1));
+
+      rerender({ chat: "chat-2" });
+
+      expect(result.current).toEqual(usage(2));
+      expect(fake.watchedScopes()).toEqual(["chat-2"]);
+    });
+
+    it("releases the chat when the component unmounts", () => {
+      const fake = fakeSessionClient({ "chat-1": { usage: usage(1) } });
+      const { unmount } = renderHook(() => useSessionSlice("chat-1", "usage"), {
+        wrapper: withClient(fake.client),
+      });
+
+      unmount();
+
+      expect(fake.watchedScopes()).toEqual([]);
+    });
+
+    it("throws when no session client is provided", () => {
+      jest.spyOn(console, "error").mockImplementation(() => {});
+
+      expect(() => renderHook(() => useSessionSlice("chat-1", "usage"))).toThrow(
+        "useSessionSlice needs a SessionClientContext provider above it."
+      );
+    });
+  });
+});

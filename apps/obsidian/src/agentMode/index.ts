@@ -33,6 +33,8 @@ import { AgentModelPreloader } from "./session/AgentModelPreloader";
 import { AgentSessionIndex } from "./session/AgentSessionIndex";
 import { createNodeFileStorage } from "./session/nodeFileStorage";
 import { AgentSessionManager } from "./session/AgentSessionManager";
+import { connectInProcess } from "./session/host/inProcessTransport";
+import { SessionHost } from "./session/host/SessionHost";
 import {
   createCopilotMcpServer,
   SEND_FEEDBACK_TOOL_NAME,
@@ -79,6 +81,7 @@ import { createListChatsTool } from "@/agents/agentMode/listChatsTool";
 import { createSaveMemoryTool } from "@/agents/agentMode/saveMemoryTool";
 import { HiddenAgentChats } from "@/agents/agentMode/hiddenAgentChats";
 import type { CustomAgentStore } from "@/agents/CustomAgentStore";
+import type { SessionClient } from "@copilot/protocol/client";
 import { SkillManager } from "./skills";
 import {
   availableBuiltinAgents,
@@ -206,7 +209,11 @@ export function createAgentSessionManager(
   app: App,
   plugin: CopilotPlugin,
   customAgents: CustomAgentStore
-): { manager: AgentSessionManager; hiddenAgentChats: HiddenAgentChats } {
+): {
+  manager: AgentSessionManager;
+  hiddenAgentChats: HiddenAgentChats;
+  sessionClient: SessionClient;
+} {
   const os = requireNodeModule<typeof import("node:os")>("os");
   const path = requireNodeModule<typeof import("node:path")>("path");
   let lastAvailableSkillAgents: readonly string[] = [];
@@ -444,6 +451,11 @@ export function createAgentSessionManager(
     onChatReopened: restoreRelayedRuns,
   });
   managerRef = manager;
+  const sessionHost = new SessionHost(manager);
+  plugin.register(() => sessionHost.dispose());
+  const sessionClient = connectInProcess(sessionHost, {
+    checkFrames: process.env.NODE_ENV !== "production",
+  });
   // Agents read Copilot's tool list once per session, so a connected or disconnected service reaches open chats through Reload.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/857
   connectorTools?.subscribeToToolSetChange((affectsBackend) => {
@@ -621,7 +633,7 @@ export function createAgentSessionManager(
     }
   }
 
-  return { manager, hiddenAgentChats };
+  return { manager, hiddenAgentChats, sessionClient };
 }
 
 export { AgentBackendHeader } from "./backends/shared/ui/AgentBackendHeader";

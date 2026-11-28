@@ -1,4 +1,5 @@
 import { AgentModeChat } from "@/agentMode/ui/AgentModeChat";
+import { SessionClientContext } from "@/agentMode/ui/hooks/useSessionSlice";
 import type { HiddenAgentChats } from "@/agents/agentMode/hiddenAgentChats";
 import type { CustomAgentStore } from "@/agents/CustomAgentStore";
 import { attachChatViewLayoutObservers } from "@/components/chat-components/attachChatViewLayoutObservers";
@@ -7,6 +8,7 @@ import { ChatViewEventTarget, EventTargetContext } from "@/context";
 import CopilotPlugin from "@/main";
 import { registerActiveLeafChangeBridge } from "@/utils/registerActiveLeafChangeBridge";
 import { mountPluginViewRoot, type PluginViewRootHandle } from "@/utils/react/mountPluginViewRoot";
+import type { SessionClient } from "@copilot/protocol/client";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { ItemView, WorkspaceLeaf } from "obsidian";
 import * as React from "react";
@@ -21,7 +23,8 @@ export default class CopilotAgentView extends ItemView {
     leaf: WorkspaceLeaf,
     private plugin: CopilotPlugin,
     private readonly customAgents: CustomAgentStore | undefined,
-    private readonly hiddenAgentChats: HiddenAgentChats | undefined
+    private readonly hiddenAgentChats: HiddenAgentChats | undefined,
+    private readonly sessionClient: SessionClient
   ) {
     super(leaf);
     this.app = plugin.app;
@@ -63,17 +66,19 @@ export default class CopilotAgentView extends ItemView {
   private renderTree(): React.ReactNode {
     return (
       <EventTargetContext.Provider value={this.eventTarget}>
-        <Tooltip.Provider delayDuration={0}>
-          <AgentModeChat
-            plugin={this.plugin}
-            customAgents={this.customAgents}
-            hiddenAgentChats={this.hiddenAgentChats}
-            onSaveChat={(fn) => {
-              this.handleSaveAsNote = fn;
-            }}
-            updateUserMessageHistory={(msg) => this.plugin.updateUserMessageHistory(msg)}
-          />
-        </Tooltip.Provider>
+        <SessionClientContext.Provider value={this.sessionClient}>
+          <Tooltip.Provider delayDuration={0}>
+            <AgentModeChat
+              plugin={this.plugin}
+              customAgents={this.customAgents}
+              hiddenAgentChats={this.hiddenAgentChats}
+              onSaveChat={(fn) => {
+                this.handleSaveAsNote = fn;
+              }}
+              updateUserMessageHistory={(msg) => this.plugin.updateUserMessageHistory(msg)}
+            />
+          </Tooltip.Provider>
+        </SessionClientContext.Provider>
       </EventTargetContext.Provider>
     );
   }
