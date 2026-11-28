@@ -1,5 +1,7 @@
 import type { EffortOption } from "@copilot/core/modelEffort";
 
+export type BackendId = string;
+
 export type CopilotMode = "default" | "plan" | "auto";
 
 export interface ModeOption {

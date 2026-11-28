@@ -4,6 +4,8 @@ import { CodexBackendDescriptor } from "./codex/descriptor";
 import { OpencodeBackendDescriptor } from "./opencode/descriptor";
 import type { BackendDescriptor, BackendId } from "@/agentMode/session/types";
 
+export { backendNeedsSelfHostWarning } from "@/agentMode/session/descriptor";
+
 export const backendRegistry: Record<BackendId, BackendDescriptor> = {
   opencode: OpencodeBackendDescriptor,
   claude: ClaudeBackendDescriptor,
@@ -23,13 +25,6 @@ export function backendDisplayOrder(): BackendDescriptor[] {
     ];
   }
   return displayOrderCache;
-}
-
-export function backendNeedsSelfHostWarning(
-  descriptor: BackendDescriptor,
-  settings: CopilotSettings
-): boolean {
-  return settings.enableSelfHostMode && !descriptor.selfHostable;
 }
 
 export function getActiveBackendDescriptor(settings: CopilotSettings): BackendDescriptor {

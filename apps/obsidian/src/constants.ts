@@ -215,11 +215,7 @@ export enum ChatModelProviders {
   SILICONFLOW = "siliconflow",
 }
 
-export enum ModelCapability {
-  REASONING = "reasoning",
-  VISION = "vision",
-  WEB_SEARCH = "websearch",
-}
+export { ModelCapability } from "@copilot/core/modelCapability";
 
 export type Provider = ChatModelProviders;
 
