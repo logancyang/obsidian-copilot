@@ -1,313 +1,157 @@
 import type { AgentMention } from "@/agents/agentMentions";
 import type { MemorySave } from "@/agents/memorySaves";
 import { logInfo } from "@/logger";
-import {
-  AgentCancelCause,
+import type {
   AgentChatMessage,
   AgentMessagePart,
-  AgentToolCallOutput,
   NewAgentChatMessage,
   StopReason,
   TurnFileChange,
 } from "@/agentMode/session/types";
 import { isCompactCommand } from "@/commands/compactCommand";
 import { USER_SENDER } from "@/constants";
-import { FormattedDateTime, MessageContext } from "@/types/message";
+import type { FormattedDateTime } from "@/types/message";
 import { formatDateTime } from "@/utils";
 import { CHAT_IMAGE_EMBED } from "@/utils/chatImagePersistence";
+import {
+  applyTranscriptOp,
+  type SavedMessageFields,
+  type TranscriptOp,
+} from "@copilot/protocol/transcript";
 
-interface StoredAgentMessage {
-  id: string;
-  displayText: string;
-  sender: string;
-  timestamp: FormattedDateTime | null;
-  isVisible: boolean;
-  isErrorMessage?: boolean;
-  parts?: AgentMessagePart[];
-  context?: MessageContext;
-  content?: unknown[];
-  turnStopReason?: StopReason;
-  declinedPermission?: boolean;
-  agentCancelCause?: AgentCancelCause;
-  turnDurationMs?: number;
-  fileChanges?: TurnFileChange[];
-  toolsUsed?: readonly string[];
-  memorySaves?: readonly MemorySave[];
-  agentMentions?: readonly AgentMention[];
-  version: number;
+export type AgentTranscriptOp = TranscriptOp<AgentChatMessage>;
+
+export interface TranscriptSources {
+  now(): number;
+  newMessageId(): string;
 }
 
-const MAX_COMPARE_JSON_CHARS = 8_000;
-const MAX_COMPARE_EDGE_CHARS = 512;
-const MAX_COMPARE_TEXT_EDGE_CHARS = 128;
+const NO_MESSAGES: readonly AgentChatMessage[] = Object.freeze([]);
+const NOTHING_RESTORED: Pick<AgentChatMessage, "toolsUsed" | "memorySaves" | "agentMentions"> =
+  Object.freeze({});
 
-// A pending tool call never started, while an in-progress one may be a background task that reports after its turn.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/739
-function isOpenPart(part: AgentMessagePart): boolean {
-  if (part.kind === "compaction") return part.status === "in_progress";
-  return part.kind === "tool_call" && part.status === "pending";
-}
-
-function agentPartId(part: AgentMessagePart): string | undefined {
-  if (part.kind === "tool_call") return `tool:${part.id}`;
-  if (part.kind === "plan") return "plan";
-  if (part.kind === "compaction") return `compaction:${part.id}`;
-  return undefined;
-}
-
-function partsEqual(a: AgentMessagePart, b: AgentMessagePart): boolean {
-  if (a === b) return true;
-  if (a.kind !== b.kind) return false;
-
-  switch (a.kind) {
-    case "text":
-      if (b.kind !== "text") return false;
-      return a.text === b.text;
-    case "thought":
-      if (b.kind !== "thought") return false;
-      return a.text === b.text && a.startedAtMs === b.startedAtMs && a.durationMs === b.durationMs;
-    case "plan":
-      if (b.kind !== "plan") return false;
-      return planEntriesEqual(a.entries, b.entries);
-    case "compaction":
-      if (b.kind !== "compaction") return false;
-      return (
-        a.status === b.status &&
-        a.trigger === b.trigger &&
-        a.error === b.error &&
-        a.preTokens === b.preTokens &&
-        a.postTokens === b.postTokens &&
-        a.startedAtMs === b.startedAtMs
-      );
-    case "tool_call":
-      if (b.kind !== "tool_call") return false;
-      return (
-        a.id === b.id &&
-        a.title === b.title &&
-        a.toolKind === b.toolKind &&
-        a.status === b.status &&
-        a.userResponse === b.userResponse &&
-        a.vendorToolName === b.vendorToolName &&
-        a.parentToolCallId === b.parentToolCallId &&
-        toolProgressEqual(a.progress, b.progress) &&
-        boundedValueEqual(a.input, b.input) &&
-        locationsEqual(a.locations, b.locations) &&
-        toolOutputsEqual(a.output, b.output)
-      );
-  }
-}
-
-function toolProgressEqual(
-  a: Extract<AgentMessagePart, { kind: "tool_call" }>["progress"],
-  b: Extract<AgentMessagePart, { kind: "tool_call" }>["progress"]
-): boolean {
-  if (a === b) return true;
-  if (!a || !b) return a === b;
-  return (
-    a.description === b.description &&
-    a.toolName === b.toolName &&
-    a.toolUses === b.toolUses &&
-    a.durationMs === b.durationMs &&
-    a.totalTokens === b.totalTokens
-  );
-}
-
-function planEntriesEqual(
-  a: Extract<AgentMessagePart, { kind: "plan" }>["entries"],
-  b: Extract<AgentMessagePart, { kind: "plan" }>["entries"]
-): boolean {
-  if (a === b) return true;
-  if (a.length !== b.length) return false;
-  return a.every(
-    (entry, index) =>
-      entry.content === b[index].content &&
-      entry.priority === b[index].priority &&
-      entry.status === b[index].status
-  );
-}
-
-function locationsEqual(
-  a: Extract<AgentMessagePart, { kind: "tool_call" }>["locations"],
-  b: Extract<AgentMessagePart, { kind: "tool_call" }>["locations"]
-): boolean {
-  if (a === b) return true;
-  if (!a || !b) return a === b;
-  if (a.length !== b.length) return false;
-  return a.every((loc, index) => loc.path === b[index].path && loc.line === b[index].line);
-}
-
-function toolOutputsEqual(
-  a: AgentToolCallOutput[] | undefined,
-  b: AgentToolCallOutput[] | undefined
-): boolean {
-  if (a === b) return true;
-  if (!a || !b) return a === b;
-  if (a.length !== b.length) return false;
-
-  return a.every((output, index) => {
-    const other = b[index];
-    if (output.type !== other.type) return false;
-    if (output.type === "diff" && other.type === "diff") {
-      return (
-        output.path === other.path &&
-        output.oldText === other.oldText &&
-        output.newText === other.newText
-      );
-    }
-    if (output.type === "text" && other.type === "text") {
-      return textFingerprint(output.text) === textFingerprint(other.text);
-    }
-    return false;
-  });
-}
-
-function boundedValueEqual(a: unknown, b: unknown): boolean {
-  if (a === b) return true;
-  return valueFingerprint(a) === valueFingerprint(b);
-}
-
-function valueFingerprint(value: unknown): string {
-  let json: string;
-  try {
-    json = JSON.stringify(value);
-  } catch {
-    json = String(value);
-  }
-  if (json.length <= MAX_COMPARE_JSON_CHARS) return json;
-  return `${json.length}:${json.slice(0, MAX_COMPARE_EDGE_CHARS)}:${json.slice(
-    -MAX_COMPARE_EDGE_CHARS
-  )}`;
-}
-
-function textFingerprint(text: string): string {
-  if (text.length <= MAX_COMPARE_TEXT_EDGE_CHARS * 2) return text;
-  return `${text.length}:${text.slice(0, MAX_COMPARE_TEXT_EDGE_CHARS)}:${text.slice(
-    -MAX_COMPARE_TEXT_EDGE_CHARS
-  )}`;
+function storedMessage(
+  id: string,
+  timestamp: FormattedDateTime | null,
+  source: NewAgentChatMessage,
+  restored: Pick<AgentChatMessage, "toolsUsed" | "memorySaves" | "agentMentions">
+): AgentChatMessage {
+  return {
+    id,
+    message: source.message,
+    sender: source.sender,
+    timestamp,
+    isVisible: source.isVisible !== false,
+    context: source.context,
+    isErrorMessage: source.isErrorMessage,
+    content: source.content,
+    parts: source.parts,
+    turnStopReason: source.turnStopReason,
+    agentCancelCause: undefined,
+    turnDurationMs: source.turnDurationMs,
+    fileChanges: undefined,
+    toolsUsed: restored.toolsUsed,
+    memorySaves: restored.memorySaves,
+    agentMentions: restored.agentMentions,
+  };
 }
 
 export class AgentMessageStore {
-  private messages: StoredAgentMessage[] = [];
-  private displayCache = new Map<string, { version: number; view: AgentChatMessage }>();
-  private lastDisplay: AgentChatMessage[] | null = null;
+  private messages = NO_MESSAGES;
+  private display: { source: readonly AgentChatMessage[]; visible: AgentChatMessage[] } | null =
+    null;
+  private readonly permissionDeclinedIds = new Set<string>();
+  private readonly opListeners = new Set<(op: AgentTranscriptOp) => void>();
 
-  private generateId(): string {
-    return `msg-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+  constructor(private readonly sources: TranscriptSources) {}
+
+  subscribeToOps(listener: (op: AgentTranscriptOp) => void): () => void {
+    this.opListeners.add(listener);
+    return () => this.opListeners.delete(listener);
   }
 
-  private touch(msg: StoredAgentMessage): void {
-    msg.version += 1;
-    this.lastDisplay = null;
-  }
-
-  /**
-   * Freeze the latest reasoning block at the event that ended it. React can
-   * batch over this transition, so render-time clocks cannot recover it later.
-   * https://github.com/Brevilabs/obsidian-copilot-private/issues/336
-   */
-  private finishTrailingThought(msg: StoredAgentMessage): boolean {
-    const last = msg.parts?.[msg.parts.length - 1];
-    if (
-      !last ||
-      last.kind !== "thought" ||
-      last.startedAtMs === undefined ||
-      (last.durationMs !== undefined && msg.turnStopReason === undefined)
-    ) {
-      return false;
-    }
-    const durationMs = Math.max(last.durationMs ?? 0, Date.now() - last.startedAtMs);
-    if (last.durationMs === durationMs) return false;
-    last.durationMs = durationMs;
+  private commit(op: AgentTranscriptOp): boolean {
+    const next = applyTranscriptOp(this.messages, op);
+    if (next === this.messages) return false;
+    this.messages = next;
+    for (const listener of this.opListeners) listener(op);
     return true;
   }
 
   addMessage(message: NewAgentChatMessage): string {
-    const id = message.id || this.generateId();
+    const id = message.id || this.sources.newMessageId();
     const timestamp =
-      message.timestamp === null ? null : message.timestamp || formatDateTime(new Date());
-    this.messages.push({
-      id,
-      displayText: message.message,
-      sender: message.sender,
-      timestamp,
-      context: message.context,
-      isVisible: message.isVisible !== false,
-      isErrorMessage: message.isErrorMessage,
-      content: message.content,
-      parts: message.parts,
-      turnStopReason: message.turnStopReason,
-      turnDurationMs: message.turnDurationMs,
-      version: 0,
-    });
-    this.lastDisplay = null;
+      message.timestamp === null
+        ? null
+        : message.timestamp || formatDateTime(new Date(this.sources.now()));
+    this.commit({ type: "add", message: storedMessage(id, timestamp, message, NOTHING_RESTORED) });
     return id;
   }
 
   markTurnComplete(id: string, stopReason: StopReason, durationMs: number): boolean {
-    const msg = this.messages.find((m) => m.id === id);
-    if (!msg) return false;
-    if (msg.turnStopReason !== undefined) return false;
-    this.finishTrailingThought(msg);
-    msg.turnStopReason = stopReason;
-    msg.turnDurationMs = Math.max(0, durationMs);
-    this.touch(msg);
-    return true;
+    return this.commit({
+      type: "completeTurn",
+      id,
+      stopReason,
+      durationMs,
+      atMs: this.sources.now(),
+    });
   }
 
   markPermissionDeclined(id: string): void {
-    const msg = this.messages.find((m) => m.id === id);
-    if (msg) msg.declinedPermission = true;
+    if (this.getMessage(id)) this.permissionDeclinedIds.add(id);
   }
 
   markCancelledByAgent(id: string): void {
-    const msg = this.messages.find((m) => m.id === id);
-    if (!msg) return;
-    msg.agentCancelCause = msg.declinedPermission ? "permission_declined" : "unspecified";
-    this.touch(msg);
+    this.commit({
+      type: "setCancelCause",
+      id,
+      cause: this.permissionDeclinedIds.has(id) ? "permission_declined" : "unspecified",
+    });
   }
 
   extendTurnDuration(id: string, durationMs: number): boolean {
-    const msg = this.messages.find((m) => m.id === id);
-    if (!msg || msg.turnDurationMs === undefined) return false;
-    const nextDurationMs = Math.max(0, durationMs);
-    if (nextDurationMs <= msg.turnDurationMs) return false;
-    msg.turnDurationMs = nextDurationMs;
-    this.touch(msg);
-    return true;
+    return this.commit({ type: "extendTurnDuration", id, durationMs });
   }
 
   // A replay has its own times, no pasted images or attached context, and its own tool wording, and autosave rewrites the note from these messages, so each one the note lines up with takes the note's time, image embeds, attached context and tools-used list.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/921
   adoptNoteRows(saved: readonly AgentChatMessage[]): void {
     const visible = this.messages.filter((m) => m.isVisible);
+    const rows: { id: string; fields: SavedMessageFields<AgentChatMessage> }[] = [];
     let next = 0;
     for (const row of saved) {
       // Claude's replay drops a /compact turn, which the note keeps.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/635
       if (row.sender === USER_SENDER && isCompactCommand(row.message)) continue;
       const msg = visible[next];
-      if (!msg) return;
+      if (!msg) break;
       if (msg.sender !== row.sender) {
         // A reply only the note has, such as a failed turn's error, is skipped so the rows after it keep their saved rules, @ runs and times.
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/942
         if (row.sender !== USER_SENDER) continue;
-        return;
+        break;
       }
       const isUser = msg.sender === USER_SENDER;
       // A note can hold a turn the agent never got (a multi-agent turn, a refused message) while the replay holds one sent after the last save, so a user message pairs only with the note's message of the same text and never takes another message's images.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/921
-      if (isUser && row.message.replace(CHAT_IMAGE_EMBED, "").trim() !== msg.displayText.trim()) {
-        return;
+      if (isUser && row.message.replace(CHAT_IMAGE_EMBED, "").trim() !== msg.message.trim()) {
+        break;
       }
       next += 1;
-      if (row.timestamp) msg.timestamp = row.timestamp;
-      if (isUser) msg.displayText = row.message;
-      if (row.context) msg.context = row.context;
-      if (row.toolsUsed) msg.toolsUsed = row.toolsUsed;
-      if (row.memorySaves) msg.memorySaves = row.memorySaves;
-      if (row.agentMentions) msg.agentMentions = row.agentMentions;
-      this.touch(msg);
+      rows.push({
+        id: msg.id,
+        fields: {
+          ...(row.timestamp ? { timestamp: row.timestamp } : {}),
+          ...(isUser ? { message: row.message } : {}),
+          ...(row.context ? { context: row.context } : {}),
+          ...(row.toolsUsed ? { toolsUsed: row.toolsUsed } : {}),
+          ...(row.memorySaves ? { memorySaves: row.memorySaves } : {}),
+          ...(row.agentMentions ? { agentMentions: row.agentMentions } : {}),
+        },
+      });
     }
+    this.commit({ type: "restoreSavedFields", rows });
   }
 
   setFileChanges(
@@ -315,131 +159,33 @@ export class AgentMessageStore {
     changes: TurnFileChange[],
     memorySaves: readonly MemorySave[] = []
   ): boolean {
-    const msg = this.messages.find((m) => m.id === id);
-    if (!msg) return false;
-    msg.fileChanges = changes;
-    if (memorySaves.length > 0) msg.memorySaves = memorySaves;
-    this.touch(msg);
+    if (!this.commit({ type: "setFileChanges", id, changes })) return false;
+    if (memorySaves.length > 0) this.commit({ type: "patchExtension", id, patch: { memorySaves } });
     return true;
   }
 
   setAgentMentions(id: string, mentions: readonly AgentMention[]): boolean {
-    const msg = this.messages.find((m) => m.id === id);
-    if (!msg) return false;
-    msg.agentMentions = mentions;
-    this.touch(msg);
-    return true;
-  }
-
-  appendDisplayText(id: string, chunk: string): boolean {
-    const msg = this.messages.find((m) => m.id === id);
-    if (!msg) return false;
-    msg.displayText += chunk;
-    this.touch(msg);
-    return true;
+    return this.commit({ type: "patchExtension", id, patch: { agentMentions: mentions } });
   }
 
   appendAgentText(id: string, text: string): boolean {
-    const msg = this.messages.find((m) => m.id === id);
-    if (!msg) return false;
-    msg.displayText += text;
-    if (!msg.parts) msg.parts = [];
-    this.finishTrailingThought(msg);
-    const last = msg.parts[msg.parts.length - 1];
-    if (last && last.kind === "text") {
-      last.text += text;
-    } else {
-      msg.parts.push({ kind: "text", text });
-    }
-    this.touch(msg);
-    return true;
+    return this.commit({ type: "appendText", id, text, atMs: this.sources.now() });
   }
 
   appendAgentThought(id: string, text: string): boolean {
-    const msg = this.messages.find((m) => m.id === id);
-    if (!msg) return false;
-    if (!msg.parts) msg.parts = [];
-    const last = msg.parts[msg.parts.length - 1];
-    // A completed message can receive its final thought chunks after the
-    // prompt result. Extend a trailing span when possible; otherwise start a
-    // frozen span because another event may never arrive to finish it.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/336
-    if (
-      last &&
-      last.kind === "thought" &&
-      (last.durationMs === undefined || msg.turnStopReason !== undefined)
-    ) {
-      last.text += text;
-      if (msg.turnStopReason !== undefined && last.startedAtMs !== undefined) {
-        last.durationMs = Math.max(0, Date.now() - last.startedAtMs);
-      }
-    } else {
-      const startedAtMs = Date.now();
-      msg.parts.push({
-        kind: "thought",
-        text,
-        startedAtMs,
-        ...(msg.turnStopReason !== undefined ? { durationMs: 0 } : {}),
-      });
-    }
-    this.touch(msg);
-    return true;
+    return this.commit({ type: "appendThought", id, text, atMs: this.sources.now() });
   }
 
   upsertAgentPart(id: string, part: AgentMessagePart): boolean {
-    const msg = this.messages.find((m) => m.id === id);
-    if (!msg) return false;
-    if (!msg.parts) msg.parts = [];
-    const partId = agentPartId(part);
-    if (partId !== undefined) {
-      const idx = msg.parts.findIndex((p) => agentPartId(p) === partId);
-      if (idx !== -1) {
-        // A fresh plan snapshot can replace its earlier singleton while still
-        // ending the reasoning block at the live edge.
-        // https://github.com/Brevilabs/obsidian-copilot-private/issues/336
-        const finishedThought = part.kind === "plan" && this.finishTrailingThought(msg);
-        if (partsEqual(msg.parts[idx], part)) {
-          if (finishedThought) this.touch(msg);
-          return finishedThought;
-        }
-        msg.parts[idx] = part;
-        this.touch(msg);
-        return true;
-      }
-    }
-    this.finishTrailingThought(msg);
-    msg.parts.push(part);
-    this.touch(msg);
-    return true;
+    return this.commit({ type: "upsertPart", id, part, atMs: this.sources.now() });
   }
 
-  // A spinner must not outlive the turn that started it.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/633
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/739
   settleOpenParts(id: string, status: "cancelled" | "failed" = "cancelled"): boolean {
-    const msg = this.messages.find((m) => m.id === id);
-    if (!msg?.parts?.some(isOpenPart)) return false;
-    msg.parts = msg.parts.map((p) =>
-      !isOpenPart(p)
-        ? p
-        : p.kind === "compaction"
-          ? { ...p, status }
-          : { ...p, status: "failed" as const }
-    );
-    this.touch(msg);
-    return true;
+    return this.commit({ type: "settleOpenParts", id, status });
   }
 
   stopToolCalls(id: string, keepToolCallIds: ReadonlySet<string>): boolean {
-    const msg = this.messages.find((m) => m.id === id);
-    const stops = (p: AgentMessagePart): boolean =>
-      p.kind === "tool_call" &&
-      (p.status === "pending" || p.status === "in_progress") &&
-      !keepToolCallIds.has(p.id);
-    if (!msg?.parts?.some(stops)) return false;
-    msg.parts = msg.parts.map((p) => (stops(p) ? { ...p, status: "cancelled" as const } : p));
-    this.touch(msg);
-    return true;
+    return this.commit({ type: "stopToolCalls", id, keepToolCallIds: [...keepToolCallIds] });
   }
 
   findMessageIdWithToolCall(toolCallId: string): string | undefined {
@@ -451,21 +197,13 @@ export class AgentMessageStore {
   }
 
   markMessageError(id: string, errorText: string, durationMs?: number): boolean {
-    const msg = this.messages.find((m) => m.id === id);
-    if (!msg) return false;
-    this.finishTrailingThought(msg);
-    msg.isErrorMessage = true;
-    if (durationMs !== undefined) msg.turnDurationMs = Math.max(0, durationMs);
-    const suffix = msg.displayText.length > 0 ? "\n\n" : "";
-    msg.displayText += `${suffix}**Error:** ${errorText}`;
-    this.touch(msg);
-    return true;
+    return this.commit({ type: "markError", id, errorText, durationMs, atMs: this.sources.now() });
   }
 
   hasAssistantActivity(id: string): boolean {
-    const msg = this.messages.find((m) => m.id === id);
+    const msg = this.getMessage(id);
     if (!msg) return false;
-    if (msg.displayText.trim().length > 0) return true;
+    if (msg.message.trim().length > 0) return true;
     return (msg.parts ?? []).some((part) => {
       if (part.kind === "text" || part.kind === "thought") {
         return part.text.trim().length > 0;
@@ -475,93 +213,36 @@ export class AgentMessageStore {
   }
 
   deleteMessage(id: string): boolean {
-    const idx = this.messages.findIndex((m) => m.id === id);
-    if (idx === -1) return false;
-    this.messages.splice(idx, 1);
-    this.displayCache.delete(id);
-    this.lastDisplay = null;
-    return true;
+    this.permissionDeclinedIds.delete(id);
+    return this.commit({ type: "remove", id });
   }
 
   clear(): void {
-    this.messages = [];
-    this.displayCache.clear();
-    this.lastDisplay = null;
-  }
-
-  truncateAfterMessageId(messageId: string): void {
-    const idx = this.messages.findIndex((m) => m.id === messageId);
-    if (idx !== -1) {
-      for (const dropped of this.messages.slice(idx + 1)) {
-        this.displayCache.delete(dropped.id);
-      }
-      this.messages = this.messages.slice(0, idx + 1);
-      this.lastDisplay = null;
-    }
+    this.replaceAll(NO_MESSAGES);
   }
 
   getDisplayMessages(): AgentChatMessage[] {
-    if (this.lastDisplay !== null) return this.lastDisplay;
-    const display = this.messages.filter((m) => m.isVisible).map((m) => this.adaptCached(m));
-    this.lastDisplay = display;
-    return display;
+    if (this.display?.source !== this.messages) {
+      this.display = { source: this.messages, visible: this.messages.filter((m) => m.isVisible) };
+    }
+    return this.display.visible;
   }
 
   getMessage(id: string): AgentChatMessage | undefined {
-    const msg = this.messages.find((m) => m.id === id);
-    return msg ? this.adaptCached(msg) : undefined;
-  }
-
-  private adaptCached(m: StoredAgentMessage): AgentChatMessage {
-    const cached = this.displayCache.get(m.id);
-    if (cached && cached.version === m.version) return cached.view;
-    const view = this.toAgentChatMessage(m);
-    this.displayCache.set(m.id, { version: m.version, view });
-    return view;
+    return this.messages.find((m) => m.id === id);
   }
 
   loadMessages(messages: AgentChatMessage[]): void {
-    this.clear();
-    for (const msg of messages) {
-      this.messages.push({
-        id: msg.id || this.generateId(),
-        displayText: msg.message,
-        sender: msg.sender,
-        timestamp: msg.timestamp,
-        context: msg.context,
-        isVisible: msg.isVisible !== false,
-        isErrorMessage: msg.isErrorMessage,
-        content: msg.content,
-        parts: msg.parts,
-        turnStopReason: msg.turnStopReason,
-        turnDurationMs: msg.turnDurationMs,
-        toolsUsed: msg.toolsUsed,
-        memorySaves: msg.memorySaves,
-        agentMentions: msg.agentMentions,
-        version: 0,
-      });
-    }
+    this.replaceAll(
+      messages.map((msg) =>
+        storedMessage(msg.id || this.sources.newMessageId(), msg.timestamp, msg, msg)
+      )
+    );
     logInfo(`[AgentMessageStore] Loaded ${messages.length} messages`);
   }
 
-  private toAgentChatMessage(m: StoredAgentMessage): AgentChatMessage {
-    return {
-      id: m.id,
-      message: m.displayText,
-      sender: m.sender,
-      timestamp: m.timestamp,
-      isVisible: m.isVisible,
-      context: m.context,
-      isErrorMessage: m.isErrorMessage,
-      content: m.content,
-      parts: m.parts,
-      turnStopReason: m.turnStopReason,
-      agentCancelCause: m.agentCancelCause,
-      turnDurationMs: m.turnDurationMs,
-      fileChanges: m.fileChanges,
-      toolsUsed: m.toolsUsed,
-      memorySaves: m.memorySaves,
-      agentMentions: m.agentMentions,
-    };
+  private replaceAll(messages: readonly AgentChatMessage[]): void {
+    this.permissionDeclinedIds.clear();
+    this.commit({ type: "replaceAll", messages });
   }
 }

@@ -1,5 +1,6 @@
 import { AI_SENDER, USER_SENDER } from "@/constants";
 import { AgentMessageStore } from "./AgentMessageStore";
+import { TEST_TRANSCRIPT_SOURCES } from "./testing/transcriptSources";
 import { OUTPUT_LIMIT_CONTINUATION_PROMPT } from "./promptEnvelope";
 import { SessionHistoryReplay } from "./SessionHistoryReplay";
 import type { SessionEvent } from "./types";
@@ -15,7 +16,7 @@ function startReplay(): {
   replay: SessionHistoryReplay;
   scheduleNotifyMessages: jest.Mock;
 } {
-  const store = new AgentMessageStore();
+  const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
   const scheduleNotifyMessages = jest.fn();
   const replay = new SessionHistoryReplay({ store, scheduleNotifyMessages });
   replay.start();
@@ -40,7 +41,7 @@ describe("SessionHistoryReplay", () => {
   describe("SessionHistoryReplay", () => {
     describe("start()", () => {
       it("makes the replay take frames as the chat's past turns", () => {
-        const store = new AgentMessageStore();
+        const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
         const replay = new SessionHistoryReplay({
           store,
           scheduleNotifyMessages: jest.fn(),
@@ -58,7 +59,7 @@ describe("SessionHistoryReplay", () => {
     describe("isOpen()", () => {
       it("reports the replay closed before it starts and after it ends, and open in between", () => {
         const replay = new SessionHistoryReplay({
-          store: new AgentMessageStore(),
+          store: new AgentMessageStore(TEST_TRANSCRIPT_SOURCES),
           scheduleNotifyMessages: jest.fn(),
         });
         expect(replay.isOpen()).toBe(false);
@@ -340,7 +341,7 @@ describe("SessionHistoryReplay", () => {
       });
 
       it("leaves every frame to the caller before the replay starts", () => {
-        const store = new AgentMessageStore();
+        const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
         const replay = new SessionHistoryReplay({
           store,
           scheduleNotifyMessages: jest.fn(),

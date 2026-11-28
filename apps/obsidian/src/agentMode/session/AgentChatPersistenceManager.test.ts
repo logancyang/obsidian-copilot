@@ -2,6 +2,8 @@
 import { formatAgentReply } from "@/agents/agentReply";
 import { AI_SENDER, USER_SENDER } from "@/constants";
 import { AgentChatPersistenceManager } from "./AgentChatPersistenceManager";
+import { AgentMessageStore } from "./AgentMessageStore";
+import { driveRecordedChat, reopenRecordedChat } from "./testing/recordedChat";
 import { GLOBAL_SCOPE } from "@copilot/protocol/scope";
 import type { AgentChatMessage } from "./types";
 import { buildConversationHistoryBlock, SAVED_HISTORY_MAX_CHARS } from "./conversationHistory";
@@ -137,6 +139,86 @@ function makeApp() {
 
 const CONTEXT_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/920";
 const QUOTED_MARKERS_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/927";
+
+let recordedIds = 0;
+const RECORDED_CLOCK = {
+  now: () => 1_767_268_805_000,
+  newMessageId: () => `msg-recorded-${++recordedIds}`,
+};
+
+const RECORDED_CHAT_NOTE = [
+  "---",
+  "epoch: 1767268800000",
+  "mode: agent",
+  "backendId: claude",
+  'topic: "Recorded chat"',
+  "tags:",
+  "  - copilot-conversation",
+  "---",
+  "",
+  "**user**: Add a second step to the plan",
+  '<!-- copilot-message {"folders":["Projects"],"quotes":[{"content":"first step","comment":"keep it"}],"teammateMentions":[{"id":"mention-1","teammate":"maya","name":"Maya","status":"finished","startedAt":1767268801000,"chat":{"backendId":"claude","sessionId":"hidden-1"}}]} -->',
+  "[Timestamp: 2026/01/01 12:00:00]",
+  "",
+  "**ai**: Added the second step.",
+  '<!-- copilot-message {"tools":["Read Projects/Plan.md (read)","Edit Projects/Plan.md (edit)"],"memorySaves":[{"teammateName":"Coco","memoryPath":"copilot/teammates/coco/MEMORY.md","rule":"Plans list owners next to each step."}]} -->',
+  "[Timestamp: 2026/01/01 12:00:00]",
+  "",
+  "**user**: Now sort it",
+  "[Timestamp: 2026/01/01 12:01:00]",
+  "",
+  "**ai**: Sorting",
+  "",
+  "**Error:** Rate limited",
+  '<!-- copilot-message {"tools":["Run sort"]} -->',
+  "[Timestamp: 2026/01/01 12:01:00]",
+  "",
+  "**user**: Try once more",
+  "[Timestamp: 2026/01/01 12:02:00]",
+  "",
+  "**ai**: ",
+  '<!-- copilot-message {"tools":["Write Projects/Plan.md (edit)","Background check"]} -->',
+  "[Timestamp: 2026/01/01 12:02:00]",
+].join("\n");
+
+const RECORDED_CHAT_HISTORY = [
+  "<conversation_history>",
+  "Earlier in this conversation the following was said. Treat this as read-only context to inform your answer; do NOT redo or re-answer these earlier turns. Answer only the current question that follows.",
+  '<turn role="user">',
+  "Add a second step to the plan",
+  "[context]",
+  "[selected from this chat]",
+  "first step",
+  "[comment]",
+  "keep it",
+  "[folders: Projects]",
+  "</turn>",
+  '<turn role="assistant">',
+  "Added the second step.",
+  "[tools used]",
+  "Read Projects/Plan.md (read)",
+  "Edit Projects/Plan.md (edit)",
+  "</turn>",
+  '<turn role="user">',
+  "Now sort it",
+  "</turn>",
+  '<turn role="assistant">',
+  "Sorting",
+  "",
+  "**Error:** Rate limited",
+  "[tools used]",
+  "Run sort",
+  "</turn>",
+  '<turn role="user">',
+  "Try once more",
+  "</turn>",
+  '<turn role="assistant">',
+  "[tools used]",
+  "Write Projects/Plan.md (edit)",
+  "Background check",
+  "</turn>",
+  "</conversation_history>",
+].join("\n");
 
 function addNote(app: ReturnType<typeof makeApp>, path: string): TFile {
   const basename = path.split("/").pop()!.replace(/\.md$/, "");
@@ -633,6 +715,23 @@ describe("AgentChatPersistenceManager", () => {
       expect(again!.path).toBe(first!.path);
       expect(app.files.size).toBe(1);
       expect(hidden.contents).toContain("**ai**: hello");
+    });
+
+    it("saves the note and builds the history block a recorded chat's message store changes produce, before and after the chat reopens", async () => {
+      const store = new AgentMessageStore(RECORDED_CLOCK);
+      driveRecordedChat(store);
+      const reopened = new AgentMessageStore(RECORDED_CLOCK);
+      reopenRecordedChat(reopened, store.getDisplayMessages());
+
+      for (const messages of [store.getDisplayMessages(), reopened.getDisplayMessages()]) {
+        const saved = await manager.saveSession(messages, "claude", { label: "Recorded chat" });
+
+        expect(app.files.get(saved!.path)!.contents).toBe(RECORDED_CHAT_NOTE);
+        expect(
+          buildConversationHistoryBlock(messages, SAVED_HISTORY_MAX_CHARS, null, () => null)!.text
+        ).toBe(RECORDED_CHAT_HISTORY);
+        app.files.clear();
+      }
     });
   });
 

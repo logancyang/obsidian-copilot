@@ -1,5 +1,6 @@
 import { AI_SENDER } from "@/constants";
 import { AgentMessageStore } from "./AgentMessageStore";
+import { TEST_TRANSCRIPT_SOURCES } from "./testing/transcriptSources";
 import {
   compactionToPart,
   derivePlanTitleFromMarkdown,
@@ -301,7 +302,7 @@ describe("messageParts", () => {
 
   describe("findToolCallPart()", () => {
     it("returns a message's tool-call part with the given id, and nothing for an unknown id", () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const part: AgentMessagePart = {
         kind: "tool_call",
         id: "t1",
@@ -325,7 +326,7 @@ describe("messageParts", () => {
     it("adds a compaction part stamped now, then updates it in place keeping its start time", () => {
       jest.useFakeTimers({ now: 1_000 });
       try {
-        const store = new AgentMessageStore();
+        const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
         const messageId = store.addMessage({
           message: "",
           sender: AI_SENDER,
