@@ -21,6 +21,14 @@ export function useSessionSlice<K extends keyof SessionState>(
     },
     [client, scope]
   );
-  const getSnapshot = () => (client.getState(scope) ?? EMPTY_SESSION_STATE)[key];
+  const getSnapshot = () => (client.getState(scope) ?? readOnce(client, scope))[key];
   return useSyncExternalStore(subscribe, getSnapshot);
+}
+
+// React renders before it subscribes, and an in-process host answers a subscribe before returning, so asking once here keeps a newly shown chat's first frame from painting empty. https://github.com/Brevilabs/obsidian-copilot-private/issues/609
+function readOnce(client: SessionClient, scope: string): SessionState {
+  const release = client.watch(scope);
+  const state = client.getState(scope);
+  release();
+  return state ?? EMPTY_SESSION_STATE;
 }

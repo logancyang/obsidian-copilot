@@ -30,6 +30,45 @@ describe("useSessionSlice", () => {
       expect(result.current).toEqual(PLAN_USAGE);
     });
 
+    it("returns the chat's slice on its very first render, so nothing paints a missing value first", () => {
+      const fake = fakeSessionClient({ "chat-1": { usage: usage(10) } });
+      const seen: (SessionUsage | null)[] = [];
+
+      renderHook(
+        () => {
+          const value = useSessionSlice("chat-1", "usage");
+          seen.push(value);
+          return value;
+        },
+        { wrapper: withClient(fake.client) }
+      );
+
+      expect(seen[0]).toEqual(usage(10));
+      expect(new Set(seen).size).toBe(1);
+    });
+
+    it("returns the new chat's slice on the first render after the chat changes", () => {
+      const fake = fakeSessionClient({
+        "chat-1": { usage: usage(1) },
+        "chat-2": { usage: usage(2) },
+      });
+      const seen: (SessionUsage | null)[] = [];
+      const { rerender } = renderHook(
+        ({ chat }) => {
+          const value = useSessionSlice(chat, "usage");
+          seen.push(value);
+          return value;
+        },
+        { initialProps: { chat: "chat-1" }, wrapper: withClient(fake.client) }
+      );
+      seen.length = 0;
+
+      rerender({ chat: "chat-2" });
+
+      expect(seen.length).toBeGreaterThan(0);
+      expect(seen).toEqual(seen.map(() => usage(2)));
+    });
+
     it("returns null for a chat the host holds no value for", () => {
       const fake = fakeSessionClient();
 
