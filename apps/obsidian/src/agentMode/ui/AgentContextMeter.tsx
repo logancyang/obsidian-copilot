@@ -1,8 +1,7 @@
-import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
-import { withoutExpiredWindows } from "@copilot/protocol/planUsage";
-import type { PlanUsage, SessionUsage } from "@/agentMode/session/types";
-import { usePlanUsage } from "@/agentMode/ui/hooks/usePlanUsage";
-import { useSessionUsage } from "@/agentMode/ui/hooks/useSessionUsage";
+import { useSessionSlice } from "@/agentMode/ui/hooks/useSessionSlice";
+import { withoutExpiredWindows, type PlanUsage } from "@copilot/protocol/planUsage";
+import type { LiveChatId } from "@copilot/protocol/session";
+import type { SessionUsage } from "@copilot/protocol/sessionUsage";
 import { TokenCounter } from "@/components/chat-components/TokenCounter";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -11,7 +10,7 @@ import { cn } from "@/lib/utils";
 import * as React from "react";
 
 interface AgentContextMeterProps {
-  backend: AgentChatBackend;
+  liveChatId: LiveChatId;
 }
 
 const WARNING_THRESHOLD = 0.85;
@@ -166,9 +165,9 @@ export function UsageMeter({ usage, contextWindow, planUsage }: UsageMeterProps)
   );
 }
 
-export default function AgentContextMeter({ backend }: AgentContextMeterProps) {
-  const usage = useSessionUsage(backend);
-  const planUsage = usePlanUsage(backend);
+export default function AgentContextMeter({ liveChatId }: AgentContextMeterProps) {
+  const usage = useSessionSlice(liveChatId, "usage");
+  const planUsage = useSessionSlice(liveChatId, "planUsage");
 
   const rawWindow = usage?.contextWindow;
   const contextWindow =

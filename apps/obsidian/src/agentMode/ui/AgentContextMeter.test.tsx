@@ -1,32 +1,38 @@
-import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
-import type { PlanUsage, SessionUsage } from "@/agentMode/session/types";
 import AgentContextMeter from "@/agentMode/ui/AgentContextMeter";
+import { SessionClientContext } from "@/agentMode/ui/hooks/useSessionSlice";
+import {
+  fakeSessionClient,
+  type FakeSessionClient,
+} from "@/agentMode/ui/testing/fakeSessionClient";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { fireEvent, render, screen } from "@testing-library/react";
+import type { PlanUsage } from "@copilot/protocol/planUsage";
+import type { SessionUsage } from "@copilot/protocol/sessionUsage";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import * as React from "react";
 
 beforeAll(() => {
   (window as unknown as { activeDocument: Document }).activeDocument = window.document;
 });
 
-function makeBackend(
+function chatWith(
   usage: SessionUsage | null,
   planUsage: PlanUsage | null = null
-): AgentChatBackend {
-  return {
-    getSessionUsage: () => usage,
-    getPlanUsage: () => planUsage,
-    getBackendState: () => null,
-    subscribe: () => () => {},
-  } as unknown as AgentChatBackend;
+): FakeSessionClient {
+  return fakeSessionClient({ "chat-1": { usage, planUsage } });
 }
 
-function renderMeter(backend: AgentChatBackend) {
-  return render(
-    <TooltipProvider>
-      <AgentContextMeter backend={backend} />
-    </TooltipProvider>
+function meterFor(fake: FakeSessionClient, liveChatId: string) {
+  return (
+    <SessionClientContext.Provider value={fake.client}>
+      <TooltipProvider>
+        <AgentContextMeter liveChatId={liveChatId} />
+      </TooltipProvider>
+    </SessionClientContext.Provider>
   );
+}
+
+function renderMeter(fake: FakeSessionClient) {
+  return render(meterFor(fake, "chat-1"));
 }
 
 describe("AgentContextMeter", () => {
@@ -40,7 +46,7 @@ describe("AgentContextMeter", () => {
       cacheWriteTokens: 500,
       updatedAt: 1,
     };
-    renderMeter(makeBackend(usage));
+    renderMeter(chatWith(usage));
 
     const trigger = screen.getByLabelText("Usage");
     expect(trigger.textContent).not.toContain("25%");
@@ -58,7 +64,7 @@ describe("AgentContextMeter", () => {
       contextWindow: 200_000,
       updatedAt: 1,
     };
-    renderMeter(makeBackend(usage));
+    renderMeter(chatWith(usage));
 
     const trigger = screen.getByLabelText("Usage");
     expect(trigger.className).toContain("tw-text-warning");
@@ -74,7 +80,7 @@ describe("AgentContextMeter", () => {
       contextWindow: 200_000,
       updatedAt: 1,
     };
-    renderMeter(makeBackend(usage));
+    renderMeter(chatWith(usage));
 
     const trigger = screen.getByLabelText("Usage");
     expect(trigger.className).toContain("tw-text-accent");
@@ -87,20 +93,20 @@ describe("AgentContextMeter", () => {
       inputTokens: 10_000,
       updatedAt: 1,
     };
-    const { container } = renderMeter(makeBackend(usage));
+    const { container } = renderMeter(chatWith(usage));
 
     expect(screen.queryByLabelText("Context usage")).toBeNull();
     expect(container.textContent).toContain("12k");
   });
 
   it("renders nothing (no separator) when usage is null", () => {
-    const { container } = render(<AgentContextMeter backend={makeBackend(null)} />);
+    const { container } = renderMeter(chatWith(null));
     expect(container.childElementCount).toBe(0);
   });
 
   it("renders nothing (no separator, no chip) when usedTokens is 0 and there is no contextWindow", () => {
     const usage: SessionUsage = { usedTokens: 0, updatedAt: 1 };
-    const { container } = render(<AgentContextMeter backend={makeBackend(usage)} />);
+    const { container } = renderMeter(chatWith(usage));
     expect(container.childElementCount).toBe(0);
     expect(screen.queryByLabelText("Context usage")).toBeNull();
   });
@@ -110,7 +116,7 @@ describe("AgentContextMeter", () => {
       windows: [{ id: "weekly", label: "Weekly", percent: 15 }],
       updatedAt: 1,
     };
-    renderMeter(makeBackend(null, planUsage));
+    renderMeter(chatWith(null, planUsage));
 
     const trigger = screen.getByLabelText("Usage");
     expect(trigger.querySelector("svg")).not.toBeNull();
@@ -126,7 +132,7 @@ describe("AgentContextMeter", () => {
       ],
       updatedAt: 1,
     };
-    renderMeter(makeBackend(usage, planUsage));
+    renderMeter(chatWith(usage, planUsage));
 
     fireEvent.focus(screen.getByLabelText("Usage"));
 
@@ -145,7 +151,7 @@ describe("AgentContextMeter", () => {
       ],
       updatedAt: 1,
     };
-    renderMeter(makeBackend(usage, planUsage));
+    renderMeter(chatWith(usage, planUsage));
 
     fireEvent.focus(screen.getByLabelText("Usage"));
 
@@ -159,7 +165,7 @@ describe("AgentContextMeter", () => {
       windows: [{ id: "seven_day", label: "Weekly", percent: 137 }],
       updatedAt: 1,
     };
-    renderMeter(makeBackend(usage, planUsage));
+    renderMeter(chatWith(usage, planUsage));
 
     fireEvent.focus(screen.getByLabelText("Usage"));
 
@@ -168,7 +174,7 @@ describe("AgentContextMeter", () => {
 
   it("renders no cap rows when the backend reports no plan usage", () => {
     const usage: SessionUsage = { usedTokens: 50_000, contextWindow: 200_000, updatedAt: 1 };
-    renderMeter(makeBackend(usage, null));
+    renderMeter(chatWith(usage, null));
 
     fireEvent.focus(screen.getByLabelText("Usage"));
 
@@ -185,12 +191,39 @@ describe("AgentContextMeter", () => {
       ],
       updatedAt: 1,
     };
-    renderMeter(makeBackend(usage, planUsage));
+    renderMeter(chatWith(usage, planUsage));
 
     fireEvent.focus(screen.getByLabelText("Usage"));
 
     expect(screen.getAllByText("8%").length).toBeGreaterThan(0);
     expect(screen.getAllByText("25%").length).toBeGreaterThan(0);
     expect(screen.getAllByText("27.5k").length).toBeGreaterThan(0);
+  });
+  it("updates the tooltip numbers when the chat's usage changes during a turn", () => {
+    const fake = chatWith({ usedTokens: 10_000, contextWindow: 200_000, updatedAt: 1 });
+    renderMeter(fake);
+
+    act(() =>
+      fake.setState("chat-1", {
+        usage: { usedTokens: 50_000, contextWindow: 200_000, updatedAt: 2 },
+      })
+    );
+    fireEvent.focus(screen.getByLabelText("Usage"));
+
+    expect(screen.getAllByText("50.0k / 200.0k (25%)").length).toBeGreaterThan(0);
+  });
+
+  it("shows each chat's own usage when it is pointed at another chat", () => {
+    const fake = fakeSessionClient({
+      "chat-1": { usage: { usedTokens: 12_000, updatedAt: 1 } },
+      "chat-2": { usage: { usedTokens: 34_000, updatedAt: 1 } },
+    });
+    const { container, rerender } = render(meterFor(fake, "chat-1"));
+    expect(container.textContent).toContain("12k");
+
+    rerender(meterFor(fake, "chat-2"));
+
+    expect(container.textContent).toContain("34k");
+    expect(fake.watchedLiveChats()).toEqual(["chat-2"]);
   });
 });

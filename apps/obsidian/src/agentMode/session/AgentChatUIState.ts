@@ -10,9 +10,7 @@ import type {
   PermissionPrompt,
   PlanDecisionAction,
   PromptContent,
-  PlanUsage,
   QueuedPrompt,
-  SessionUsage,
 } from "@/agentMode/session/types";
 import type { MessageContext } from "@/types/message";
 import type { ChatStateKey, ChatStates, ChatView } from "@/agentMode/session/chatExtension";
@@ -196,14 +194,6 @@ export class AgentChatUIState implements AgentChatBackend {
 
   updateChatState<S>(key: ChatStateKey<S>, change: (state: S, chat: ChatView) => S): void {
     this.session.updateChatState(key, change);
-  }
-
-  getSessionUsage(): SessionUsage | null {
-    return this.session.getSessionUsage();
-  }
-
-  getPlanUsage(): PlanUsage | null {
-    return this.session.getPlanUsage();
   }
 
   async resolvePlanProposal(

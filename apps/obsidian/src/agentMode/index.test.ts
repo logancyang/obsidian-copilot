@@ -16,6 +16,7 @@ import { createCopilotMcpServer } from "./session/copilotMcpServer";
 import { isConnectorsEnabled } from "@/connectors/connectorsEntitlement";
 import { createDefaultPermissionPrompter } from "./ui/permissionPrompter";
 import { fakeChat } from "./session/testing/fakeChat";
+import { FakeHostChat } from "./session/host/testing/fakeHostChats";
 import { buildNativeChatId } from "@/utils/nativeChatId";
 import { RecentUsageManager } from "@/utils/recentUsageManager";
 import { AGENT_DRAFT_CARD, AGENT_DRAFT_CARD_EXTENSION } from "@/agents/agentMode/agentDraftCard";
@@ -170,6 +171,7 @@ const mockManager = {
   registerPreload: jest.fn<void, [string, Promise<void>]>(),
   onInstallStateChanged: jest.fn(async (_id: string) => {}),
   findCallingChat: jest.fn((_backendId: string, _sessionId: string | null): unknown => null),
+  getSession: jest.fn((_id: string): unknown => null),
 };
 let plugin: CopilotPlugin;
 const chatHistoryLastAccessedAt = new RecentUsageManager<string>();
@@ -281,6 +283,28 @@ describe("agentMode", () => {
       expect(jest.mocked(AgentSessionManager).mock.calls[0][1].chatHistoryLastAccessedAt).toBe(
         chatHistoryLastAccessedAt
       );
+    });
+
+    it("gives the chat UI a session client that reads a chat's usage from the manager through the host", () => {
+      const usage = { usedTokens: 52_500, contextWindow: 1_000_000, updatedAt: 1 };
+      const chat = new FakeHostChat(usage);
+      mockManager.getSession.mockImplementation((id) => (id === "chat-1" ? chat : null));
+
+      const { sessionClient } = createAgentSessionManager({} as App, plugin, customAgents);
+      sessionClient.watch("chat-1");
+
+      expect(sessionClient.getState("chat-1")).toEqual({ usage, planUsage: null });
+    });
+
+    it("stops the host listening to chats when the plugin unloads", () => {
+      const chat = new FakeHostChat();
+      mockManager.getSession.mockImplementation(() => chat);
+      const { sessionClient } = createAgentSessionManager({} as App, plugin, customAgents);
+      sessionClient.watch("chat-1");
+
+      for (const [cleanup] of jest.mocked(plugin.register).mock.calls) cleanup();
+
+      expect(chat.listeners.size).toBe(0);
     });
 
     it("opens the plugin's current self-host web search channel each time a backend asks, and fails when the plugin has none", async () => {

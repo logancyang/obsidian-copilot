@@ -2,6 +2,7 @@ import { startReleaseUpdateCheck } from "@/services/releaseUpdateNotice";
 import { releaseCursorAssociation } from "@/editor/releaseCursorAssociation";
 import { registerNoteHeaderAction } from "@/editor/registerNoteHeaderAction";
 import type { AgentSessionManager, HiddenAgentChats, SkillManager } from "@/agentMode";
+import type { SessionClient } from "@copilot/protocol/client";
 import { CustomAgentStore, runCustomAgentStoreWhileEnabled } from "@/agents/CustomAgentStore";
 import { registerStartAgentChatCommand } from "@/agents/startAgentChatCommand";
 import { isNativeChatId, parseNativeChatId } from "@/utils/nativeChatId";
@@ -386,6 +387,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
 
     let customAgents: CustomAgentStore | undefined;
     let hiddenAgentChats: HiddenAgentChats | undefined;
+    let sessionClient: SessionClient | undefined;
     if (agentMode) {
       const [
         {
@@ -462,6 +464,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
       const agentChat = createAgentSessionManager(this.app, this, customAgents);
       const agentSessionManager = agentChat.manager;
       hiddenAgentChats = agentChat.hiddenAgentChats;
+      sessionClient = agentChat.sessionClient;
       this.agentSessionManager = agentSessionManager;
       this.skills = SkillManager.getInstance();
       this.register(runCustomAgentStoreWhileEnabled(customAgents));
@@ -532,15 +535,17 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
       this.CopilotAgentView &&
       this.SessionsSidebarView &&
       this.PlanPreviewView &&
-      this.TurnDiffView
+      this.TurnDiffView &&
+      sessionClient
     ) {
       const AgentView = this.CopilotAgentView;
+      const chatClient = sessionClient;
       const SidebarView = this.SessionsSidebarView;
       const PreviewView = this.PlanPreviewView;
       const DiffView = this.TurnDiffView;
       this.startedViewCreators.set(
         CHAT_AGENT_VIEWTYPE,
-        (leaf) => new AgentView(leaf, this, customAgents, hiddenAgentChats)
+        (leaf) => new AgentView(leaf, this, customAgents, hiddenAgentChats, chatClient)
       );
       this.startedViewCreators.set(
         SESSIONS_SIDEBAR_VIEWTYPE,

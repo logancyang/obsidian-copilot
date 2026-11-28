@@ -10,9 +10,7 @@ import type {
   PermissionPrompt,
   PlanDecisionAction,
   PromptContent,
-  PlanUsage,
   QueuedPrompt,
-  SessionUsage,
 } from "./types";
 
 export interface AgentChatBackend extends ChatStateHost {
@@ -53,10 +51,6 @@ export interface AgentChatBackend extends ChatStateHost {
   ): Promise<void>;
 
   getCurrentPlan(): CurrentPlan | null;
-
-  getSessionUsage(): SessionUsage | null;
-
-  getPlanUsage(): PlanUsage | null;
 
   hasPendingPlanPermission(): boolean;
 

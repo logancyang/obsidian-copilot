@@ -110,6 +110,21 @@ Then in either case:
   and mode state)" → `packages/protocol/src/`, imported as
   `@copilot/protocol/...`; no `Error`, `AbortSignal`, `Map`/`Set`,
   functions or class instances in those types
+- "The chat protocol: frames, a chat's state, the ops that change it,
+  `applySessionOp`, the client replica (`SessionClient`) and the plain-data
+  check" → `packages/protocol/src/` (`frames.ts`, `session.ts`, `client.ts`,
+  `plainData.ts`)
+- "Turning a chat's changes into numbered ops, and the
+  in-process transport to the desktop panel's client" → `session/host/`
+- "A chat UI component that shows chat state the protocol carries" → read it
+  with `useSessionSlice(liveChatId, key)` (`ui/hooks/useSessionSlice.ts`)
+  from the client replica, never from `AgentChatBackend` or a session; tests
+  give it `fakeSessionClient` (`ui/testing/`)
+- "Which chat id is which" → `SessionId` is the agent's own session id
+  (`backendSessionId`, on backend events and permission prompts);
+  `LiveChatId` is `AgentSession.internalId`, one per chat while it is live on
+  the host, and the id the protocol subscribes to; a chat-history id is the
+  chat note's path or `buildNativeChatId(...)` and outlives reopening
 - "ACP wire types, JSON-RPC subprocess plumbing, vault-backed ACP client,
   ACP↔domain translators" → `acp/` (the **only** layer that imports
   `@agentclientprotocol/sdk`)
