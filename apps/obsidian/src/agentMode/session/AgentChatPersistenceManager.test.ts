@@ -1293,6 +1293,55 @@ describe("AgentChatPersistenceManager", () => {
       });
     });
 
+    it("restores each passage quoted from the chat with its comment as the message's context, while note selections stay unsaved https://github.com/Brevilabs/obsidian-copilot-private/issues/1045", async () => {
+      const saved = await manager.saveSession(
+        [
+          {
+            ...makeMessage(USER_SENDER, ""),
+            context: {
+              notes: [],
+              urls: [],
+              selectedTextContexts: [
+                { id: "q1", sourceType: "chat", content: "Ship on Friday", comment: "Too soon" },
+                { id: "q2", sourceType: "chat", content: "Use Postgres" },
+                {
+                  id: "s1",
+                  sourceType: "note",
+                  noteTitle: "Plan",
+                  notePath: "Plan.md",
+                  startLine: 1,
+                  endLine: 1,
+                  content: "NOTE EXCERPT",
+                },
+              ],
+            },
+          },
+        ],
+        "claude"
+      );
+      const file = app.files.get(saved!.path)!;
+      expect(file.contents).toContain(
+        '<!-- copilot-message {"quotes":[{"content":"Ship on Friday","comment":"Too soon"},{"content":"Use Postgres"}]} -->'
+      );
+      expect(file.contents).not.toContain("NOTE EXCERPT");
+
+      const loaded = await manager.loadFile(file as unknown as TFile);
+
+      expect(loaded.messages[0].context).toEqual({
+        notes: [],
+        urls: [],
+        selectedTextContexts: [
+          {
+            id: expect.any(String),
+            sourceType: "chat",
+            content: "Ship on Friday",
+            comment: "Too soon",
+          },
+          { id: expect.any(String), sourceType: "chat", content: "Use Postgres" },
+        ],
+      });
+    });
+
     it("restores each @-mentioned agent's name as the message's context, so the reopened message draws its pill (https://github.com/Brevilabs/obsidian-copilot-private/issues/947)", async () => {
       const saved = await manager.saveSession(
         [

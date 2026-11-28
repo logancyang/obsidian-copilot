@@ -11,6 +11,7 @@ export function fakeBackendStartServices(
       backendConfigRegistry: {} as BackendConfigRegistry,
     },
     getSelfHostWebSearchChannel: async () => ({ url: "http://127.0.0.1:1/search", token: "t" }),
+    findCallingChat: () => null,
     ...overrides,
   };
 }

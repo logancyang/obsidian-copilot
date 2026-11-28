@@ -4,6 +4,7 @@ import type {
   QueuedAgentMessage,
 } from "@/agentMode/session/AgentInputDraftStore";
 import { useSettingsValue } from "@/settings/model";
+import type { ChatSelectedTextContext } from "@/types/message";
 import { TFile } from "obsidian";
 import React, { useCallback, useMemo, useSyncExternalStore } from "react";
 
@@ -16,6 +17,7 @@ export interface AgentInputDraftControls extends AgentInputDraft {
   setInput: React.Dispatch<React.SetStateAction<string>>;
   setContextNotes: React.Dispatch<React.SetStateAction<TFile[]>>;
   setContextFolders: React.Dispatch<React.SetStateAction<string[]>>;
+  setQuotes: React.Dispatch<React.SetStateAction<ChatSelectedTextContext[]>>;
   setSelectedImages: React.Dispatch<React.SetStateAction<File[]>>;
   addImages: (files: File[]) => void;
   setIncludeActiveNote: (include: boolean) => void;
@@ -28,6 +30,7 @@ export interface AgentInputDraftControls extends AgentInputDraft {
 const EMPTY_IMAGES = Object.freeze([]) as unknown as File[];
 const EMPTY_CONTEXT_NOTES = Object.freeze([]) as unknown as TFile[];
 const EMPTY_CONTEXT_FOLDERS = Object.freeze([]) as unknown as string[];
+const EMPTY_QUOTES = Object.freeze([]) as unknown as ChatSelectedTextContext[];
 const EMPTY_QUEUE = Object.freeze([]) as unknown as QueuedAgentMessage[];
 
 const applyState = <T>(value: React.SetStateAction<T>, previous: T): T =>
@@ -65,6 +68,11 @@ export function useAgentInputDrafts({
         ...draft,
         contextFolders: applyState(value, draft.contextFolders),
       })),
+    [updateActive]
+  );
+
+  const setQuotes = useCallback<React.Dispatch<React.SetStateAction<ChatSelectedTextContext[]>>>(
+    (value) => updateActive((draft) => ({ ...draft, quotes: applyState(value, draft.quotes) })),
     [updateActive]
   );
 
@@ -106,6 +114,7 @@ export function useAgentInputDrafts({
         images: [],
         contextNotes: [],
         contextFolders: [],
+        quotes: [],
       })),
     [updateActive]
   );
@@ -117,6 +126,7 @@ export function useAgentInputDrafts({
         images: EMPTY_IMAGES,
         contextNotes: EMPTY_CONTEXT_NOTES,
         contextFolders: EMPTY_CONTEXT_FOLDERS,
+        quotes: EMPTY_QUOTES,
         includeActiveNote: autoAttachActiveNote,
         includeActiveWebTab: true,
         loading: false,
@@ -131,6 +141,7 @@ export function useAgentInputDrafts({
       setInput,
       setContextNotes,
       setContextFolders,
+      setQuotes,
       setSelectedImages,
       addImages,
       setIncludeActiveNote,
@@ -144,6 +155,7 @@ export function useAgentInputDrafts({
       setInput,
       setContextNotes,
       setContextFolders,
+      setQuotes,
       setSelectedImages,
       addImages,
       setIncludeActiveNote,

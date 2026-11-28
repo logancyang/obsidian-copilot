@@ -1,3 +1,4 @@
+import type { ChatSelectedTextContext } from "@/types/message";
 import type { QueuedAgentMessage } from "@/agentMode/session/AgentInputDraftStore";
 import { AgentInputDraftStore } from "@/agentMode/session/AgentInputDraftStore";
 import { useAgentInputDrafts } from "@/agentMode/ui/hooks/useAgentInputDrafts";
@@ -28,6 +29,8 @@ const renderDrafts = (initialProps: Props) => {
   };
 };
 
+const QUOTE: ChatSelectedTextContext = { id: "q", sourceType: "chat", content: "Ship it" };
+
 describe("useAgentInputDrafts", () => {
   afterEach(() => settingsStore.set(settingsAtom, DEFAULT_SETTINGS));
 
@@ -40,6 +43,8 @@ describe("useAgentInputDrafts", () => {
     expect(result.current.loading).toBe(false);
     expect(result.current.images).toEqual([]);
     expect(result.current.contextNotes).toEqual([]);
+    expect(result.current.quotes).toEqual([]);
+    expect(Object.isFrozen(result.current.quotes)).toBe(true);
     expect(result.current.queue).toEqual([]);
   });
 
@@ -86,12 +91,14 @@ describe("useAgentInputDrafts", () => {
     act(() => result.current.setInput((prev) => `restored\n\n${prev}`));
     act(() => result.current.setContextNotes((prev) => [...prev, file("one.md")]));
     act(() => result.current.setContextFolders((prev) => [...prev, "Research"]));
+    act(() => result.current.setQuotes((prev) => [...prev, QUOTE]));
     act(() => result.current.addImages([new File([], "img.png")]));
     act(() => result.current.setQueue((q) => [...q, queued("q1")]));
 
     expect(result.current.input).toBe("restored\n\ntyped");
     expect(result.current.contextNotes.map((n) => n.path)).toEqual(["one.md"]);
     expect(result.current.contextFolders).toEqual(["Research"]);
+    expect(result.current.quotes).toEqual([QUOTE]);
     expect(result.current.images).toHaveLength(1);
     expect(result.current.queue.map((q) => q.id)).toEqual(["q1"]);
   });
@@ -102,6 +109,7 @@ describe("useAgentInputDrafts", () => {
     act(() => {
       result.current.setInput("hi");
       result.current.setContextFolders(["Research"]);
+      result.current.setQuotes([QUOTE]);
       result.current.addImages([new File([], "img.png")]);
       result.current.setLoading(true);
       result.current.setQueue(() => [queued("q1")]);
@@ -111,6 +119,7 @@ describe("useAgentInputDrafts", () => {
 
     expect(result.current.input).toBe("");
     expect(result.current.contextFolders).toEqual([]);
+    expect(result.current.quotes).toEqual([]);
     expect(result.current.images).toEqual([]);
     expect(result.current.loading).toBe(true);
     expect(result.current.queue.map((q) => q.id)).toEqual(["q1"]);

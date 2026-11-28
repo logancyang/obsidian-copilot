@@ -560,7 +560,7 @@ export class ContextProcessor {
     for (const selectedText of selectedTextContexts) {
       if (selectedText.sourceType === "web") {
         additionalContext += `\n\n<${WEB_SELECTED_TEXT_TAG}>\n<title>${escapeXml(selectedText.title)}</title>\n<url>${escapeXml(selectedText.url)}</url>\n<content>\n${escapeXml(selectedText.content)}\n</content>\n</${WEB_SELECTED_TEXT_TAG}>`;
-      } else {
+      } else if (selectedText.sourceType === "note") {
         const lineTags =
           selectedText.startLine > 0
             ? `\n<start_line>${selectedText.startLine}</start_line>\n<end_line>${selectedText.endLine}</end_line>`

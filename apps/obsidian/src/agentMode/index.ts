@@ -392,6 +392,8 @@ export function createAgentSessionManager(
       }
       return bridge.getChannel();
     },
+    findCallingChat: (backendId, backendSessionId) =>
+      managerRef?.findCallingChat(backendId, backendSessionId) ?? null,
   };
   const preloader = new AgentModelPreloader(
     app,

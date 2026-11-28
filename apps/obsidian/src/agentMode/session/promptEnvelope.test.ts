@@ -267,6 +267,45 @@ describe("promptEnvelope", () => {
       expect(text).toContain("<user-message>\nexplain\n</user-message>");
     });
 
+    it("sends each quoted passage with the comment that follows it, escaped, ahead of the message https://github.com/Brevilabs/obsidian-copilot-private/issues/1045", () => {
+      const blocks = buildPromptBlocks("", {
+        notes: [],
+        urls: [],
+        selectedTextContexts: [
+          {
+            id: "q1",
+            sourceType: "chat",
+            content: "Use <b>Postgres</b>",
+            comment: "Why not SQLite?",
+          },
+          { id: "q2", sourceType: "chat", content: "Ship on Friday" },
+        ],
+      });
+      const text = (blocks[0] as { type: "text"; text: string }).text;
+      expect(text).toBe(
+        [
+          "<chat-quotes>",
+          "The user quoted these passages from this chat. A comment is the user's reply to the passage it follows.",
+          "",
+          "<quote>",
+          "Use &lt;b&gt;Postgres&lt;/b&gt;",
+          "</quote>",
+          "<comment>",
+          "Why not SQLite?",
+          "</comment>",
+          "",
+          "<quote>",
+          "Ship on Friday",
+          "</quote>",
+          "</chat-quotes>",
+          "",
+          "<user-message>",
+          "",
+          "</user-message>",
+        ].join("\n")
+      );
+    });
+
     it("emits plain text when the web-tab block is empty/whitespace", () => {
       const blocks = buildPromptBlocks("hi", undefined, undefined, "   ");
       expect(blocks).toEqual([{ type: "text", text: "hi" }]);

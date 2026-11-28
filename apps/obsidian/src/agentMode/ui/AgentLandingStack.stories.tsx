@@ -277,6 +277,7 @@ function AgentHomeCanvas({
                 agents={agents}
                 selectedSlug={selected?.slug ?? null}
                 onSelect={setSelectedSlug}
+                onTogglePin={() => {}}
                 emptyHero={
                   <div className="tw-text-center tw-text-3xl tw-font-[330] tw-text-normal">
                     What are you working on?
