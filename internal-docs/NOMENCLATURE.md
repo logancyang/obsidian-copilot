@@ -31,6 +31,7 @@ The words Copilot shows users. Each concept has one plain name; use it in UI lab
 | A chat whose agent is replying                              | Responding                                               | Running                               |
 | Custom commands                                             | command, Add command, Slash menu, Right-click            | Cmd, Add Cmd, Slash Cmd, In Menu      |
 | Saved chats                                                 | Saving chats, chat note                                  | conversation                          |
+| Attaching text selected in a chat to the next message       | Quote; Comment for a quote with the user's reply         | Add to context, selection, excerpt    |
 | Notes, folders, and other items a project uses as context   | link, Linked, Link context, Unlink                       | inclusion, context source             |
 
 ## Rules
