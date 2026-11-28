@@ -11,7 +11,6 @@ export type HostChat = Pick<AgentSession, "subscribe" | "getSessionUsage" | "get
 
 export interface HostChats {
   getSession(id: string): HostChat | null;
-  subscribe(listener: () => void): () => void;
 }
 
 type Connection = (frame: HostFrame) => void;
@@ -26,18 +25,14 @@ interface HostScope {
 
 export class SessionHost {
   private readonly scopes = new Map<ScopeId, HostScope>();
-  private readonly stopListeningToChats: () => void;
 
-  constructor(private readonly chats: HostChats) {
-    this.stopListeningToChats = chats.subscribe(() => this.dropClosedChats());
-  }
+  constructor(private readonly chats: HostChats) {}
 
   connect(connection: Connection): (frame: ClientFrame) => void {
     return (frame) => this.receive(connection, frame);
   }
 
   dispose(): void {
-    this.stopListeningToChats();
     for (const scope of this.scopes.values()) scope.stopListening();
     this.scopes.clear();
   }
@@ -48,7 +43,7 @@ export class SessionHost {
         this.subscribe(connection, frame.scope);
         return;
       case "unsubscribe":
-        this.scopes.get(frame.scope)?.subscribers.delete(connection);
+        this.unsubscribe(connection, frame.scope);
         return;
     }
   }
@@ -61,6 +56,15 @@ export class SessionHost {
     }
     scope.subscribers.add(connection);
     connection({ type: "snapshot", scope: id, seq: scope.seq, state: scope.state });
+  }
+
+  private unsubscribe(connection: Connection, id: ScopeId): void {
+    const scope = this.scopes.get(id);
+    if (!scope) return;
+    scope.subscribers.delete(connection);
+    if (scope.subscribers.size > 0) return;
+    scope.stopListening();
+    this.scopes.delete(id);
   }
 
   private open(id: ScopeId): HostScope | null {
@@ -96,14 +100,6 @@ export class SessionHost {
     scope.seq += ops.length;
     for (const connection of scope.subscribers) {
       connection({ type: "ops", scope: id, from, ops });
-    }
-  }
-
-  private dropClosedChats(): void {
-    for (const [id, scope] of this.scopes) {
-      if (this.chats.getSession(id) === scope.chat) continue;
-      scope.stopListening();
-      this.scopes.delete(id);
     }
   }
 }

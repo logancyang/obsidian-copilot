@@ -205,24 +205,37 @@ describe("SessionHost", () => {
         ]);
       });
 
-      it("stops listening to a chat the chats list no longer has, and starts a new one fresh", () => {
+      it("keeps listening to a chat while another client still subscribes to it", () => {
+        const chat = new FakeHostChat();
+        const host = new SessionHost(new FakeHostChats({ "chat-1": chat }));
+        const leaving = rawConnection(host);
+        const staying = rawConnection(host);
+        leaving.send({ type: "subscribe", scope: "chat-1" });
+        staying.send({ type: "subscribe", scope: "chat-1" });
+
+        leaving.send({ type: "unsubscribe", scope: "chat-1" });
+        chat.change({ usage: usage(1_000) });
+
+        expect(chat.listeners.size).toBe(1);
+        expect(staying.received.map((frame) => frame.type)).toEqual(["snapshot", "ops"]);
+      });
+
+      it("stops listening to a chat once its last client leaves, and starts it fresh on the next subscribe", () => {
         const chat = new FakeHostChat(usage(1_000));
-        const chats = new FakeHostChats({ "chat-1": chat });
-        const host = new SessionHost(chats);
+        const host = new SessionHost(new FakeHostChats({ "chat-1": chat }));
         const connection = rawConnection(host);
         connection.send({ type: "subscribe", scope: "chat-1" });
         chat.change({ usage: usage(2_000) });
 
-        chats.close("chat-1");
-        chats.chats.set("chat-1", new FakeHostChat(usage(9_000)));
-        connection.send({ type: "subscribe", scope: "chat-1" });
-
+        connection.send({ type: "unsubscribe", scope: "chat-1" });
         expect(chat.listeners.size).toBe(0);
+
+        connection.send({ type: "subscribe", scope: "chat-1" });
         expect(connection.received.at(-1)).toEqual({
           type: "snapshot",
           scope: "chat-1",
           seq: 0,
-          state: { usage: usage(9_000), planUsage: null },
+          state: { usage: usage(2_000), planUsage: null },
         });
       });
 
@@ -257,16 +270,14 @@ describe("SessionHost", () => {
     });
 
     describe("dispose()", () => {
-      it("stops listening to every chat and to the chats list", () => {
+      it("stops listening to every chat a client still subscribes to", () => {
         const chat = new FakeHostChat();
-        const chats = new FakeHostChats({ "chat-1": chat });
-        const host = new SessionHost(chats);
+        const host = new SessionHost(new FakeHostChats({ "chat-1": chat }));
         wire(host).client.watch("chat-1");
 
         host.dispose();
 
         expect(chat.listeners.size).toBe(0);
-        expect(chats.listeners.size).toBe(0);
       });
     });
   });

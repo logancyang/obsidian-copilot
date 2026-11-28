@@ -32,24 +32,9 @@ export class FakeHostChat implements HostChat {
 }
 
 export class FakeHostChats implements HostChats {
-  readonly chats = new Map<string, HostChat>();
-  readonly listeners = new Set<() => void>();
-
-  constructor(chats: Record<string, HostChat> = {}) {
-    for (const [id, chat] of Object.entries(chats)) this.chats.set(id, chat);
-  }
+  constructor(private readonly chats: Record<string, HostChat> = {}) {}
 
   getSession(id: string): HostChat | null {
-    return this.chats.get(id) ?? null;
-  }
-
-  subscribe(listener: () => void): () => void {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
-  }
-
-  close(id: string): void {
-    this.chats.delete(id);
-    for (const listener of this.listeners) listener();
+    return this.chats[id] ?? null;
   }
 }

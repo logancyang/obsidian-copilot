@@ -172,7 +172,6 @@ const mockManager = {
   onInstallStateChanged: jest.fn(async (_id: string) => {}),
   findCallingChat: jest.fn((_backendId: string, _sessionId: string | null): unknown => null),
   getSession: jest.fn((_id: string): unknown => null),
-  subscribe: jest.fn((_listener: () => void) => () => {}),
 };
 let plugin: CopilotPlugin;
 const chatHistoryLastAccessedAt = new RecentUsageManager<string>();
