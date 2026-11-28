@@ -60,8 +60,8 @@ describe("plainData", () => {
 
     it("accepts every frame the host sends for a chat's usage", () => {
       const frames: HostFrame[] = [
-        { type: "snapshot", scope: "chat-1", seq: 4, state: STATES[1][1] },
-        { type: "ops", scope: "chat-1", from: 5, ops: OPS.map(([, op]) => op) },
+        { type: "snapshot", liveChatId: "chat-1", seq: 4, state: STATES[1][1] },
+        { type: "ops", liveChatId: "chat-1", from: 5, ops: OPS.map(([, op]) => op) },
       ];
 
       expect(frames.map(findNonPlainField)).toEqual([null, null]);

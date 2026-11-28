@@ -1,5 +1,10 @@
-import type { ClientFrame, HostFrame, ScopeId } from "@copilot/protocol/frames";
-import { applySessionOp, type SessionOp, type SessionState } from "@copilot/protocol/session";
+import type { ClientFrame, HostFrame } from "@copilot/protocol/frames";
+import {
+  applySessionOp,
+  type LiveChatId,
+  type SessionOp,
+  type SessionState,
+} from "@copilot/protocol/session";
 
 interface Replica {
   state: SessionState;
@@ -8,8 +13,8 @@ interface Replica {
 }
 
 export class SessionClient {
-  private readonly watchers = new Map<ScopeId, number>();
-  private readonly replicas = new Map<ScopeId, Replica>();
+  private readonly watchers = new Map<LiveChatId, number>();
+  private readonly replicas = new Map<LiveChatId, Replica>();
   private readonly listeners = new Set<() => void>();
 
   constructor(private readonly send: (frame: ClientFrame) => void) {}
@@ -17,8 +22,8 @@ export class SessionClient {
   receive(frame: HostFrame): void {
     switch (frame.type) {
       case "snapshot":
-        if (!this.watchers.has(frame.scope)) return;
-        this.replicas.set(frame.scope, {
+        if (!this.watchers.has(frame.liveChatId)) return;
+        this.replicas.set(frame.liveChatId, {
           state: frame.state,
           seq: frame.seq,
           awaitingSnapshot: false,
@@ -26,16 +31,16 @@ export class SessionClient {
         this.notify();
         return;
       case "ops":
-        this.applyOps(frame.scope, frame.from, frame.ops);
+        this.applyOps(frame.liveChatId, frame.from, frame.ops);
         return;
     }
   }
 
-  watch(scope: ScopeId): () => void {
-    const watchers = this.watchers.get(scope) ?? 0;
-    this.watchers.set(scope, watchers + 1);
-    if (watchers === 0) this.send({ type: "subscribe", scope });
-    return () => this.release(scope);
+  watch(liveChatId: LiveChatId): () => void {
+    const watchers = this.watchers.get(liveChatId) ?? 0;
+    this.watchers.set(liveChatId, watchers + 1);
+    if (watchers === 0) this.send({ type: "subscribe", liveChatId });
+    return () => this.release(liveChatId);
   }
 
   subscribe(listener: () => void): () => void {
@@ -43,27 +48,27 @@ export class SessionClient {
     return () => this.listeners.delete(listener);
   }
 
-  getState(scope: ScopeId): SessionState | null {
-    return this.replicas.get(scope)?.state ?? null;
+  getState(liveChatId: LiveChatId): SessionState | null {
+    return this.replicas.get(liveChatId)?.state ?? null;
   }
 
-  private release(scope: ScopeId): void {
-    const watchers = (this.watchers.get(scope) ?? 0) - 1;
+  private release(liveChatId: LiveChatId): void {
+    const watchers = (this.watchers.get(liveChatId) ?? 0) - 1;
     if (watchers > 0) {
-      this.watchers.set(scope, watchers);
+      this.watchers.set(liveChatId, watchers);
       return;
     }
-    this.watchers.delete(scope);
-    this.replicas.delete(scope);
-    this.send({ type: "unsubscribe", scope });
+    this.watchers.delete(liveChatId);
+    this.replicas.delete(liveChatId);
+    this.send({ type: "unsubscribe", liveChatId });
   }
 
-  private applyOps(scope: ScopeId, from: number, ops: readonly SessionOp[]): void {
-    const replica = this.replicas.get(scope);
+  private applyOps(liveChatId: LiveChatId, from: number, ops: readonly SessionOp[]): void {
+    const replica = this.replicas.get(liveChatId);
     if (!replica || replica.awaitingSnapshot) return;
     if (from !== replica.seq + 1) {
       replica.awaitingSnapshot = true;
-      this.send({ type: "subscribe", scope });
+      this.send({ type: "subscribe", liveChatId });
       return;
     }
     replica.state = ops.reduce(applySessionOp, replica.state);

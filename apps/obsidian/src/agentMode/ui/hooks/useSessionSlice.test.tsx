@@ -121,7 +121,7 @@ describe("useSessionSlice", () => {
       rerender({ chat: "chat-2" });
 
       expect(result.current).toEqual(usage(2));
-      expect(fake.watchedScopes()).toEqual(["chat-2"]);
+      expect(fake.watchedLiveChats()).toEqual(["chat-2"]);
     });
 
     it("releases the chat when the component unmounts", () => {
@@ -132,7 +132,7 @@ describe("useSessionSlice", () => {
 
       unmount();
 
-      expect(fake.watchedScopes()).toEqual([]);
+      expect(fake.watchedLiveChats()).toEqual([]);
     });
 
     it("throws when no session client is provided", () => {

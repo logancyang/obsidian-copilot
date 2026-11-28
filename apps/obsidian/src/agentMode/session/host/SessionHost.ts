@@ -1,8 +1,9 @@
 import type { AgentSession } from "@/agentMode/session/AgentSession";
-import type { ClientFrame, HostFrame, ScopeId } from "@copilot/protocol/frames";
+import type { ClientFrame, HostFrame } from "@copilot/protocol/frames";
 import {
   applySessionOp,
   EMPTY_SESSION_STATE,
+  type LiveChatId,
   type SessionOp,
   type SessionState,
 } from "@copilot/protocol/session";
@@ -15,7 +16,7 @@ export interface HostChats {
 
 type Connection = (frame: HostFrame) => void;
 
-interface HostScope {
+interface LiveChat {
   chat: HostChat;
   state: SessionState;
   seq: number;
@@ -24,7 +25,7 @@ interface HostScope {
 }
 
 export class SessionHost {
-  private readonly scopes = new Map<ScopeId, HostScope>();
+  private readonly liveChats = new Map<LiveChatId, LiveChat>();
 
   constructor(private readonly chats: HostChats) {}
 
@@ -33,44 +34,44 @@ export class SessionHost {
   }
 
   dispose(): void {
-    for (const scope of this.scopes.values()) scope.stopListening();
-    this.scopes.clear();
+    for (const live of this.liveChats.values()) live.stopListening();
+    this.liveChats.clear();
   }
 
   private receive(connection: Connection, frame: ClientFrame): void {
     switch (frame.type) {
       case "subscribe":
-        this.subscribe(connection, frame.scope);
+        this.subscribe(connection, frame.liveChatId);
         return;
       case "unsubscribe":
-        this.unsubscribe(connection, frame.scope);
+        this.unsubscribe(connection, frame.liveChatId);
         return;
     }
   }
 
-  private subscribe(connection: Connection, id: ScopeId): void {
-    const scope = this.scopes.get(id) ?? this.open(id);
-    if (!scope) {
-      connection({ type: "snapshot", scope: id, seq: 0, state: EMPTY_SESSION_STATE });
+  private subscribe(connection: Connection, liveChatId: LiveChatId): void {
+    const live = this.liveChats.get(liveChatId) ?? this.open(liveChatId);
+    if (!live) {
+      connection({ type: "snapshot", liveChatId, seq: 0, state: EMPTY_SESSION_STATE });
       return;
     }
-    scope.subscribers.add(connection);
-    connection({ type: "snapshot", scope: id, seq: scope.seq, state: scope.state });
+    live.subscribers.add(connection);
+    connection({ type: "snapshot", liveChatId, seq: live.seq, state: live.state });
   }
 
-  private unsubscribe(connection: Connection, id: ScopeId): void {
-    const scope = this.scopes.get(id);
-    if (!scope) return;
-    scope.subscribers.delete(connection);
-    if (scope.subscribers.size > 0) return;
-    scope.stopListening();
-    this.scopes.delete(id);
+  private unsubscribe(connection: Connection, liveChatId: LiveChatId): void {
+    const live = this.liveChats.get(liveChatId);
+    if (!live) return;
+    live.subscribers.delete(connection);
+    if (live.subscribers.size > 0) return;
+    live.stopListening();
+    this.liveChats.delete(liveChatId);
   }
 
-  private open(id: ScopeId): HostScope | null {
-    const chat = this.chats.getSession(id);
+  private open(liveChatId: LiveChatId): LiveChat | null {
+    const chat = this.chats.getSession(liveChatId);
     if (!chat) return null;
-    const scope: HostScope = {
+    const live: LiveChat = {
       chat,
       state: { usage: chat.getSessionUsage(), planUsage: chat.getPlanUsage() },
       seq: 0,
@@ -78,28 +79,28 @@ export class SessionHost {
       stopListening: () => {},
     };
     // The chat batches its streaming notifications, so ops leave on that batch and no timer of the host's own. https://github.com/Brevilabs/obsidian-copilot-private/issues/609
-    scope.stopListening = chat.subscribe({
-      onMessagesChanged: () => this.publish(id, scope),
+    live.stopListening = chat.subscribe({
+      onMessagesChanged: () => this.publish(liveChatId, live),
       onStatusChanged: () => {},
     });
-    this.scopes.set(id, scope);
-    return scope;
+    this.liveChats.set(liveChatId, live);
+    return live;
   }
 
-  private publish(id: ScopeId, scope: HostScope): void {
+  private publish(liveChatId: LiveChatId, live: LiveChat): void {
     const ops: SessionOp[] = [];
-    const usage = scope.chat.getSessionUsage();
-    if (usage !== scope.state.usage) ops.push({ type: "slice", key: "usage", value: usage });
-    const planUsage = scope.chat.getPlanUsage();
-    if (planUsage !== scope.state.planUsage) {
+    const usage = live.chat.getSessionUsage();
+    if (usage !== live.state.usage) ops.push({ type: "slice", key: "usage", value: usage });
+    const planUsage = live.chat.getPlanUsage();
+    if (planUsage !== live.state.planUsage) {
       ops.push({ type: "slice", key: "planUsage", value: planUsage });
     }
     if (ops.length === 0) return;
-    const from = scope.seq + 1;
-    scope.state = ops.reduce(applySessionOp, scope.state);
-    scope.seq += ops.length;
-    for (const connection of scope.subscribers) {
-      connection({ type: "ops", scope: id, from, ops });
+    const from = live.seq + 1;
+    live.state = ops.reduce(applySessionOp, live.state);
+    live.seq += ops.length;
+    for (const connection of live.subscribers) {
+      connection({ type: "ops", liveChatId, from, ops });
     }
   }
 }

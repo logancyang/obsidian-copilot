@@ -68,13 +68,13 @@ describe("SessionHost", () => {
         expect(received.slice(1)).toEqual([
           {
             type: "ops",
-            scope: "chat-1",
+            liveChatId: "chat-1",
             from: 1,
             ops: [{ type: "slice", key: "usage", value: usage(1_000) }],
           },
           {
             type: "ops",
-            scope: "chat-1",
+            liveChatId: "chat-1",
             from: 2,
             ops: [
               { type: "slice", key: "usage", value: usage(2_000) },
@@ -124,12 +124,12 @@ describe("SessionHost", () => {
         chat.change({ planUsage: PLAN_USAGE });
 
         const late = rawConnection(host);
-        late.send({ type: "subscribe", scope: "chat-1" });
+        late.send({ type: "subscribe", liveChatId: "chat-1" });
 
         expect(late.received).toEqual([
           {
             type: "snapshot",
-            scope: "chat-1",
+            liveChatId: "chat-1",
             seq: 2,
             state: { usage: usage(1_000), planUsage: PLAN_USAGE },
           },
@@ -164,7 +164,7 @@ describe("SessionHost", () => {
 
         expect(received.at(-1)).toEqual({
           type: "snapshot",
-          scope: "chat-1",
+          liveChatId: "chat-1",
           seq: 3,
           state: { usage: usage(2_000), planUsage: PLAN_USAGE },
         });
@@ -177,9 +177,9 @@ describe("SessionHost", () => {
         const chat = new FakeHostChat();
         const host = new SessionHost(new FakeHostChats({ "chat-1": chat }));
         const connection = rawConnection(host);
-        connection.send({ type: "subscribe", scope: "chat-1" });
+        connection.send({ type: "subscribe", liveChatId: "chat-1" });
 
-        connection.send({ type: "unsubscribe", scope: "chat-1" });
+        connection.send({ type: "unsubscribe", liveChatId: "chat-1" });
         chat.change({ usage: usage(1_000) });
 
         expect(connection.received.map((frame) => frame.type)).toEqual(["snapshot"]);
@@ -213,10 +213,15 @@ describe("SessionHost", () => {
       it("gives a subscribe to a chat it cannot find an empty snapshot", () => {
         const connection = rawConnection(new SessionHost(new FakeHostChats()));
 
-        connection.send({ type: "subscribe", scope: "missing" });
+        connection.send({ type: "subscribe", liveChatId: "missing" });
 
         expect(connection.received).toEqual([
-          { type: "snapshot", scope: "missing", seq: 0, state: { usage: null, planUsage: null } },
+          {
+            type: "snapshot",
+            liveChatId: "missing",
+            seq: 0,
+            state: { usage: null, planUsage: null },
+          },
         ]);
       });
 
@@ -225,10 +230,10 @@ describe("SessionHost", () => {
         const host = new SessionHost(new FakeHostChats({ "chat-1": chat }));
         const leaving = rawConnection(host);
         const staying = rawConnection(host);
-        leaving.send({ type: "subscribe", scope: "chat-1" });
-        staying.send({ type: "subscribe", scope: "chat-1" });
+        leaving.send({ type: "subscribe", liveChatId: "chat-1" });
+        staying.send({ type: "subscribe", liveChatId: "chat-1" });
 
-        leaving.send({ type: "unsubscribe", scope: "chat-1" });
+        leaving.send({ type: "unsubscribe", liveChatId: "chat-1" });
         chat.change({ usage: usage(1_000) });
 
         expect(chat.listeners.size).toBe(1);
@@ -239,16 +244,16 @@ describe("SessionHost", () => {
         const chat = new FakeHostChat(usage(1_000));
         const host = new SessionHost(new FakeHostChats({ "chat-1": chat }));
         const connection = rawConnection(host);
-        connection.send({ type: "subscribe", scope: "chat-1" });
+        connection.send({ type: "subscribe", liveChatId: "chat-1" });
         chat.change({ usage: usage(2_000) });
 
-        connection.send({ type: "unsubscribe", scope: "chat-1" });
+        connection.send({ type: "unsubscribe", liveChatId: "chat-1" });
         expect(chat.listeners.size).toBe(0);
 
-        connection.send({ type: "subscribe", scope: "chat-1" });
+        connection.send({ type: "subscribe", liveChatId: "chat-1" });
         expect(connection.received.at(-1)).toEqual({
           type: "snapshot",
-          scope: "chat-1",
+          liveChatId: "chat-1",
           seq: 0,
           state: { usage: usage(2_000), planUsage: null },
         });

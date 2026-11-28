@@ -14,13 +14,13 @@ function connectedClient(): { client: SessionClient; sent: ClientFrame[] } {
 }
 
 function snapshot(seq: number, state: SessionState = STATE): HostFrame {
-  return { type: "snapshot", scope: "chat-1", seq, state };
+  return { type: "snapshot", liveChatId: "chat-1", seq, state };
 }
 
 function usageOps(from: number, usage: SessionUsage): HostFrame {
   return {
     type: "ops",
-    scope: "chat-1",
+    liveChatId: "chat-1",
     from,
     ops: [{ type: "slice", key: "usage", value: usage }],
   };
@@ -29,16 +29,16 @@ function usageOps(from: number, usage: SessionUsage): HostFrame {
 describe("client", () => {
   describe("SessionClient", () => {
     describe("watch()", () => {
-      it("subscribes to a scope the first time it is watched, and not again for a second watcher", () => {
+      it("subscribes to a live chat the first time it is watched, and not again for a second watcher", () => {
         const { client, sent } = connectedClient();
 
         client.watch("chat-1");
         client.watch("chat-1");
 
-        expect(sent).toEqual([{ type: "subscribe", scope: "chat-1" }]);
+        expect(sent).toEqual([{ type: "subscribe", liveChatId: "chat-1" }]);
       });
 
-      it("unsubscribes and drops the replica once the last watcher releases the scope", () => {
+      it("unsubscribes and drops the replica once the last watcher releases the live chat", () => {
         const { client, sent } = connectedClient();
         const releaseFirst = client.watch("chat-1");
         const releaseSecond = client.watch("chat-1");
@@ -46,16 +46,16 @@ describe("client", () => {
 
         releaseFirst();
         expect(client.getState("chat-1")).toEqual(STATE);
-        expect(sent).not.toContainEqual({ type: "unsubscribe", scope: "chat-1" });
+        expect(sent).not.toContainEqual({ type: "unsubscribe", liveChatId: "chat-1" });
 
         releaseSecond();
         expect(client.getState("chat-1")).toBeNull();
-        expect(sent).toContainEqual({ type: "unsubscribe", scope: "chat-1" });
+        expect(sent).toContainEqual({ type: "unsubscribe", liveChatId: "chat-1" });
       });
     });
 
     describe("receive()", () => {
-      it("keeps the snapshot of a watched scope as its replica and tells listeners", () => {
+      it("keeps the snapshot of a watched live chat as its replica and tells listeners", () => {
         const { client } = connectedClient();
         const listener = jest.fn();
         client.subscribe(listener);
@@ -74,7 +74,7 @@ describe("client", () => {
 
         client.receive({
           type: "ops",
-          scope: "chat-1",
+          liveChatId: "chat-1",
           from: 4,
           ops: [
             { type: "slice", key: "usage", value: USAGE },
@@ -94,7 +94,7 @@ describe("client", () => {
 
         client.receive(usageOps(5, LATER_USAGE));
 
-        expect(sent).toEqual([{ type: "subscribe", scope: "chat-1" }]);
+        expect(sent).toEqual([{ type: "subscribe", liveChatId: "chat-1" }]);
         expect(client.getState("chat-1")).toEqual(STATE);
       });
 
@@ -122,11 +122,11 @@ describe("client", () => {
 
         client.receive(usageOps(3, LATER_USAGE));
 
-        expect(sent).toEqual([{ type: "subscribe", scope: "chat-1" }]);
+        expect(sent).toEqual([{ type: "subscribe", liveChatId: "chat-1" }]);
         expect(client.getState("chat-1")).toEqual(STATE);
       });
 
-      it("ignores snapshots and ops for a scope nobody watches", () => {
+      it("ignores snapshots and ops for a live chat nobody watches", () => {
         const { client } = connectedClient();
         const listener = jest.fn();
         client.subscribe(listener);
@@ -154,7 +154,7 @@ describe("client", () => {
     });
 
     describe("getState()", () => {
-      it("returns null for a watched scope whose snapshot has not arrived", () => {
+      it("returns null for a watched live chat whose snapshot has not arrived", () => {
         const { client } = connectedClient();
         client.watch("chat-1");
 

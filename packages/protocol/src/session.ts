@@ -3,6 +3,8 @@ import type { SessionUsage } from "@copilot/protocol/sessionUsage";
 
 export type SessionId = string;
 
+export type LiveChatId = string;
+
 export type AgentSessionStatus =
   | "starting"
   | "idle"

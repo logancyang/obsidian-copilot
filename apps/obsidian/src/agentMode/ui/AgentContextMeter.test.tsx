@@ -21,11 +21,11 @@ function chatWith(
   return fakeSessionClient({ "chat-1": { usage, planUsage } });
 }
 
-function meterFor(fake: FakeSessionClient, chatId: string) {
+function meterFor(fake: FakeSessionClient, liveChatId: string) {
   return (
     <SessionClientContext.Provider value={fake.client}>
       <TooltipProvider>
-        <AgentContextMeter chatId={chatId} />
+        <AgentContextMeter liveChatId={liveChatId} />
       </TooltipProvider>
     </SessionClientContext.Provider>
   );
@@ -224,6 +224,6 @@ describe("AgentContextMeter", () => {
     rerender(meterFor(fake, "chat-2"));
 
     expect(container.textContent).toContain("34k");
-    expect(fake.watchedScopes()).toEqual(["chat-2"]);
+    expect(fake.watchedLiveChats()).toEqual(["chat-2"]);
   });
 });
