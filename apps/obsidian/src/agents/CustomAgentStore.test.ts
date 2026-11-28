@@ -13,6 +13,9 @@ import { getFrontMatterInfo, parseYaml } from "obsidian";
 jest.mock("@/entitlement");
 
 const LOCKED_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/950";
+const PIN_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/1041";
+const NOV_21 = Date.parse("2026-11-21T09:00:00.000Z");
+const NOV_22 = Date.parse("2026-11-22T09:00:00.000Z");
 const SONNET = { baseModelId: "claude-sonnet-4-5", effort: "medium" };
 
 function bytes(...values: number[]): ArrayBuffer {
@@ -82,6 +85,7 @@ describe("CustomAgentStore", () => {
             title: "Coco's title",
             model: SONNET,
             instruction: "Keep the vault in view.",
+            pinnedAt: null,
             folderPath: "copilot/teammates/coco",
             instructionsPath: "copilot/teammates/coco/instructions.md",
             memoryPath: "copilot/teammates/coco/MEMORY.md",
@@ -89,6 +93,28 @@ describe("CustomAgentStore", () => {
             faceSrc: "app://vault/copilot/teammates/coco/face.webp?4",
           },
           expect.objectContaining({ slug: "maya", name: "Maya" }),
+        ]);
+      });
+
+      it(`lists pinned agents first, earliest pinned first, then the rest by name (${PIN_ISSUE})`, async () => {
+        seedAgent(vault, "ada", "Ada");
+        seedAgent(vault, "zed", "Zed");
+        vault.writeByHand(
+          "copilot/teammates/maya/instructions.md",
+          `---\nname: Maya\npinnedAt: ${NOV_21}\n---\nBody`
+        );
+        vault.writeByHand(
+          "copilot/teammates/coco/instructions.md",
+          `---\nname: Coco\npinnedAt: ${NOV_22}\n---\nBody`
+        );
+
+        await store.start();
+
+        expect(store.getAgents().map((agent) => agent.slug)).toEqual([
+          "maya",
+          "coco",
+          "ada",
+          "zed",
         ]);
       });
 
@@ -413,6 +439,43 @@ describe("CustomAgentStore", () => {
         });
         expect(written.slice(info.contentStart)).toBe("Body");
         expect(store.getAgents()[0].model).toEqual({ baseModelId: "gpt-5.5", effort: "high" });
+      });
+
+      it(`writes the pin time as the pinnedAt property and moves the agent ahead of unpinned ones, in pin order (${PIN_ISSUE})`, async () => {
+        seedAgent(vault, "ada", "Ada");
+        seedAgent(vault, "coco", "Coco");
+        seedAgent(vault, "maya", "Maya");
+        await store.start();
+
+        await store.updateAgent("maya", { pinnedAt: NOV_21 });
+        await store.updateAgent("coco", { pinnedAt: NOV_22 });
+
+        const written = vault.readText("copilot/teammates/maya/instructions.md")!;
+        expect(parseYaml(getFrontMatterInfo(written).frontmatter)).toMatchObject({
+          name: "Maya",
+          pinnedAt: NOV_21,
+        });
+        expect(store.getAgents().map((agent) => [agent.slug, agent.pinnedAt])).toEqual([
+          ["maya", NOV_21],
+          ["coco", NOV_22],
+          ["ada", null],
+        ]);
+      });
+
+      it(`removes the pinnedAt property on unpin and keeps the rest of instructions.md (${PIN_ISSUE})`, async () => {
+        vault.writeByHand(
+          "copilot/teammates/coco/instructions.md",
+          `---\nname: Coco\ntags: [team]\npinnedAt: ${NOV_22}\n---\nBody`
+        );
+        await store.start();
+
+        await store.updateAgent("coco", { pinnedAt: null });
+
+        const written = vault.readText("copilot/teammates/coco/instructions.md")!;
+        const info = getFrontMatterInfo(written);
+        expect(parseYaml(info.frontmatter)).toEqual({ name: "Coco", tags: ["team"] });
+        expect(written.slice(info.contentStart)).toBe("Body");
+        expect(store.getAgents()[0].pinnedAt).toBeNull();
       });
 
       it("rejects for an agent whose folder is gone, so the profile can report it", async () => {

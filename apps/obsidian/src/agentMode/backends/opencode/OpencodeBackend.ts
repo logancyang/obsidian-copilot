@@ -12,7 +12,12 @@ import { isCatalogProviderDefaultEndpoint, opencodeSdkBaseUrl } from "@/utils/pr
 import { agentShellPath } from "@/utils/loginShellPath";
 import type { BackendConfigRegistry, ProviderRegistry } from "@/modelManagement";
 import { AcpBackend, AcpSpawnDescriptor } from "@/agentMode/acp/types";
-import type { BackendConfigOption, CopilotMode, SessionAgent } from "@/agentMode/session/types";
+import type {
+  AgentMcpServer,
+  BackendConfigOption,
+  CopilotMode,
+  SessionAgent,
+} from "@/agentMode/session/types";
 import { composeDenyList, getManagedSkills, SkillManager } from "@/agentMode/skills";
 import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
 import { COPILOT_CHAT_PROMPT } from "@/agentMode/session/copilotChatPrompt";
@@ -67,7 +72,7 @@ export interface OpencodeModelDeps {
   clientVersion?: string;
   getCopilotPluginDir?: () => string;
   getSelfHostWebSearchChannel?: () => Promise<Readonly<SelfHostWebSearchAgentChannel>>;
-  readCopilotReadOnlyToolNames?: () => Promise<ReadonlyArray<string>>;
+  connectCopilotMcpServer?: () => Promise<AgentMcpServer>;
   customAgentsFile?: string;
 }
 
@@ -132,9 +137,14 @@ export class OpencodeBackend implements AcpBackend {
     const pluginDir =
       this.#deps.getCopilotPluginDir &&
       (await installOpencodeCopilotPlugin(this.#deps.getCopilotPluginDir()));
+    const copilotMcpServer = await connectCopilotMcpServer(this.#deps);
     let configContent =
-      configOverride ?? JSON.stringify(await buildOpencodeConfig(settings, this.#deps, pluginDir));
-    if (configOverride !== undefined && (pluginDir || settings.enableSelfHostMode === true)) {
+      configOverride ??
+      JSON.stringify(await buildOpencodeConfig(settings, this.#deps, pluginDir, copilotMcpServer));
+    if (
+      configOverride !== undefined &&
+      (pluginDir || copilotMcpServer || settings.enableSelfHostMode === true)
+    ) {
       let overriddenConfig: Record<string, unknown>;
       try {
         const parsed = JSON.parse(configOverride) as unknown;
@@ -148,6 +158,10 @@ export class OpencodeBackend implements AcpBackend {
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/875
         const plugins = (overriddenConfig.plugins as OpencodeConfig["plugins"]) ?? [];
         overriddenConfig.plugins = [...new Set([...plugins, pluginDir])];
+      }
+      if (copilotMcpServer) {
+        const mcp = (overriddenConfig.mcp as OpencodeConfig["mcp"]) ?? {};
+        overriddenConfig.mcp = withCopilotMcpServer(mcp, copilotMcpServer);
       }
       if (settings.enableSelfHostMode === true) {
         overriddenConfig.permissions = appendNativeWebDenies(overriddenConfig.permissions);
@@ -263,6 +277,34 @@ export class OpencodeBackend implements AcpBackend {
   }
 }
 
+// Copilot's tools are optional, so OpenCode still starts, without them, when Copilot's MCP server cannot.
+// https://github.com/logancyang/obsidian-copilot/issues/4688
+async function connectCopilotMcpServer(deps: OpencodeModelDeps): Promise<AgentMcpServer | null> {
+  try {
+    return (await deps.connectCopilotMcpServer?.()) ?? null;
+  } catch (error) {
+    logWarn("[AgentMode] Copilot MCP server unavailable; OpenCode starts without it", error);
+    return null;
+  }
+}
+
+function withCopilotMcpServer(
+  mcp: NonNullable<OpencodeConfig["mcp"]>,
+  server: AgentMcpServer
+): NonNullable<OpencodeConfig["mcp"]> {
+  return {
+    ...mcp,
+    servers: {
+      ...mcp.servers,
+      [COPILOT_MCP_SERVER_NAME]: {
+        type: "remote",
+        url: server.url,
+        headers: { ...server.headers },
+      },
+    },
+  };
+}
+
 function agentConfigs(agents: unknown): Record<string, unknown>[] {
   if (!agents || typeof agents !== "object" || Array.isArray(agents)) return [];
   return Object.values(agents).filter(
@@ -295,7 +337,8 @@ const NATIVE_WEB_DENIES: readonly PermissionRule[] = [
 export async function buildOpencodeConfig(
   s: CopilotSettings,
   deps: OpencodeModelDeps,
-  copilotPluginDir?: string
+  copilotPluginDir?: string,
+  copilotMcpServer?: AgentMcpServer | null
 ): Promise<GeneratedOpencodeConfig> {
   const { providerRegistry, backendConfigRegistry } = deps;
 
@@ -425,7 +468,7 @@ export async function buildOpencodeConfig(
   const selfHost = s.enableSelfHostMode === true;
   if (selfHost) permissions.push(...NATIVE_WEB_DENIES);
 
-  const readOnlyCopilotTools = (await deps.readCopilotReadOnlyToolNames?.()) ?? [];
+  const readOnlyCopilotTools = copilotMcpServer?.readOnlyToolNames ?? [];
   const skillManagerReady = SkillManager.hasInstance();
   // A Copilot chat runs on these entries, so they carry its part the way an agent's entry carries the agent's.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/986
@@ -478,6 +521,7 @@ export async function buildOpencodeConfig(
     // https://github.com/anomalyco/opencode/issues/38121
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/599
     websearch: { provider: "random" },
+    ...(copilotMcpServer ? { mcp: withCopilotMcpServer({}, copilotMcpServer) } : {}),
     permissions,
     agents: {
       [OPENCODE_BUILTIN_BUILD_AGENT_ID]: { system },

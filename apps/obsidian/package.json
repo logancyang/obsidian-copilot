@@ -67,6 +67,7 @@
     "@types/turndown": "^5.0.6",
     "@types/uuid": "^10.0.0",
     "obsidian": "^1.2.5",
+    "openartifacts": "0.2.7",
     "tslib": "2.4.0",
     "yaml": "^2.6.1"
   }

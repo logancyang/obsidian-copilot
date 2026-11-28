@@ -96,7 +96,7 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
   restartOnProviderConfigChange: true,
   restartOnSystemPromptChange: true,
   summarizesSessionTitle: true,
-  sharesMcpServersAcrossSessions: true,
+  connectsCopilotMcpServerAtSpawn: true,
   wire: opencodeWire,
 
   getEnabledModelEntries(settings: CopilotSettings): EnabledModelEntry[] {
@@ -205,6 +205,7 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
 
   createBackendProcess(args): BackendProcess {
     const { providerRegistry, backendConfigRegistry } = args.modelManagement;
+    const { copilotMcpServer } = args;
     return simpleBinaryBackendProcess(
       args,
       new OpencodeBackend({
@@ -214,8 +215,17 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
         clientVersion: args.clientVersion,
         getCopilotPluginDir: opencodeCopilotPluginDir,
         getSelfHostWebSearchChannel: args.getSelfHostWebSearchChannel,
-        readCopilotReadOnlyToolNames: async () =>
-          (await args.copilotMcpServer?.readOnlyToolNames()) ?? [],
+        // OpenCode stamps the calling session on each call, so one token serves every chat it runs, and its listing names no agent.
+        // https://github.com/logancyang/obsidian-copilot/issues/4688
+        connectCopilotMcpServer: copilotMcpServer
+          ? () =>
+              copilotMcpServer.connect(
+                args.descriptor.id,
+                args.descriptor.id,
+                (callerSessionId) => args.findCallingChat(args.descriptor.id, callerSessionId),
+                true
+              )
+          : undefined,
         customAgentsFile: opencodeAgentsFilePath(args.app),
       })
     );

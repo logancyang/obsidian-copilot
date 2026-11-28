@@ -127,6 +127,23 @@ describe("ContextBadges", () => {
       expect(screen.getByRole("tooltip").textContent).not.toMatch(/L\d/);
     });
 
+    it.each([
+      { kind: "quote", comment: undefined, label: "Ship on Friday" },
+      { kind: "comment", comment: "Too  soon,\nmove it", label: "Too soon, move it" },
+    ])(
+      "labels a chat $kind badge by '$label' and shows the passage with any comment in its tooltip https://github.com/Brevilabs/obsidian-copilot-private/issues/1045",
+      ({ comment, label }) => {
+        render(
+          <ContextSelectedTextBadge
+            selectedText={{ id: "q", sourceType: "chat", content: "Ship on Friday", comment }}
+          />
+        );
+        expect(screen.getByTestId("label").textContent).toBe(label);
+        expect(screen.getByRole("tooltip").textContent).toBe(`Ship on Friday${comment ?? ""}`);
+        expect(screen.queryByText("Selection")).toBeNull();
+      }
+    );
+
     it.each([note, web])("removes a $sourceType selection from its excerpt badge", (source) => {
       const onRemove = jest.fn();
       render(

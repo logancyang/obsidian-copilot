@@ -27,10 +27,24 @@ export interface WebSelectedTextContext extends BaseSelectedTextContext {
   faviconUrl?: string;
 }
 
-export type SelectedTextContext = NoteSelectedTextContext | WebSelectedTextContext;
+export interface ChatSelectedTextContext extends BaseSelectedTextContext {
+  sourceType: "chat";
+  comment?: string;
+}
+
+export type SelectedTextContext =
+  | NoteSelectedTextContext
+  | WebSelectedTextContext
+  | ChatSelectedTextContext;
 
 export function isWebSelectedTextContext(ctx: SelectedTextContext): ctx is WebSelectedTextContext {
   return ctx.sourceType === "web";
+}
+
+export function isChatSelectedTextContext(
+  ctx: SelectedTextContext
+): ctx is ChatSelectedTextContext {
+  return ctx.sourceType === "chat";
 }
 
 export function isNoteSelectedTextContext(

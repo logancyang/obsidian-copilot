@@ -35,6 +35,7 @@ describe("AgentInputDraftStore", () => {
         images: [],
         contextNotes: [],
         contextFolders: [],
+        quotes: [],
         includeActiveNote: true,
         includeActiveWebTab: true,
         loading: false,

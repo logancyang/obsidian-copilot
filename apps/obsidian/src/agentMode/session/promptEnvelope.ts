@@ -5,6 +5,7 @@ import { ContextProcessor } from "@/contextProcessor";
 import { escapeXml } from "@/LLMProviders/chainRunner/utils/xmlParsing";
 import { formatDateTime } from "@/utils";
 import {
+  isChatSelectedTextContext,
   isNoteSelectedTextContext,
   isWebSelectedTextContext,
   type MessageContext,
@@ -83,6 +84,7 @@ export function buildPromptBlocks(
     buildContextEnvelope(context),
     agentMentionsBlock(context?.agents),
     buildWebSelectionBlocks(context),
+    buildChatQuoteBlock(context),
     webTabBlock?.trim() || null,
   ].filter((s): s is string => Boolean(s));
   const head = sections.length > 0 ? sections.join("\n\n") : null;
@@ -114,6 +116,21 @@ function buildWebSelectionBlocks(context: MessageContext | undefined): string | 
       ].join("\n")
     )
     .join("\n\n");
+}
+
+function buildChatQuoteBlock(context: MessageContext | undefined): string | null {
+  const quotes = (context?.selectedTextContexts ?? []).filter(isChatSelectedTextContext);
+  if (quotes.length === 0) return null;
+  const lines = [
+    "<chat-quotes>",
+    "The user quoted these passages from this chat. A comment is the user's reply to the passage it follows.",
+  ];
+  for (const q of quotes) {
+    lines.push("", "<quote>", escapeXml(q.content), "</quote>");
+    if (q.comment) lines.push("<comment>", escapeXml(q.comment), "</comment>");
+  }
+  lines.push("</chat-quotes>");
+  return lines.join("\n");
 }
 
 function buildContextEnvelope(context: MessageContext | undefined): string | null {

@@ -31,6 +31,8 @@ import {
   FileText,
   MessageSquarePlus,
   Pencil,
+  Pin,
+  PinOff,
   Trash2,
 } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
@@ -55,6 +57,7 @@ export type ProfileAgent = Pick<
   | "instruction"
   | "model"
   | "faceSrc"
+  | "pinnedAt"
   | "instructionsPath"
   | "memoryPath"
 >;
@@ -73,6 +76,7 @@ export interface AgentProfileViewProps {
   onRetitle: (title: string) => Promise<void>;
   onChangeFace: (face: FaceImage) => void;
   onChangeModel: (model: ModelSelection) => void;
+  onTogglePin: () => void;
   onDelete: () => void;
   locked?: LockedProfile;
   setupLocked?: SetupLockedProfile;
@@ -141,6 +145,7 @@ export function AgentProfileView({
   onRetitle,
   onChangeFace,
   onChangeModel,
+  onTogglePin,
   onDelete,
   locked,
   setupLocked,
@@ -213,6 +218,27 @@ export function AgentProfileView({
           <ArrowLeft className="tw-size-3.5" />
           Back to chat
         </button>
+        {/* A locked agent's files can't change, and the pin is written to its instructions.md.
+            https://github.com/Brevilabs/obsidian-copilot-private/issues/1041 */}
+        {!readOnly && (
+          <button
+            type="button"
+            onClick={onTogglePin}
+            className="clickable-icon tw-ml-auto tw-h-auto tw-gap-1 tw-bg-transparent tw-px-1.5 tw-py-0.5 tw-text-ui-small tw-text-muted tw-shadow-none"
+          >
+            {agent.pinnedAt === null ? (
+              <>
+                <Pin className="tw-size-3.5" />
+                Pin
+              </>
+            ) : (
+              <>
+                <PinOff className="tw-size-3.5" />
+                Unpin
+              </>
+            )}
+          </button>
+        )}
       </div>
       {locked ? (
         <LockedProfileBanner name={name} {...locked} />

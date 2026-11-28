@@ -189,7 +189,7 @@ const ProviderCard: React.FC<ProviderCardProps> = ({
                   }}
                 >
                   <Settings2 className="tw-mr-2 tw-size-4" />
-                  Edit key
+                  Edit
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={(e) => {

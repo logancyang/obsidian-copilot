@@ -89,6 +89,7 @@ The Claude settings card also includes:
 | **Default model / Default effort / model switches** | Agent defaults; models reported by Claude | Curates Claude models for Copilot Chat. Billing and limits belong to your Claude Code account.                                                                                                                                                                                                                                     |
 | **Auto mode permissions**                           | **Auto**                                  | **Auto** lets Claude judge risk and still ask about sensitive work. **Accept edits** automatically approves file edits only. **Bypass permissions** skips all checks and should be used only in a trusted vault and task.                                                                                                          |
 | **Show extended thinking**                          | Off                                       | Streams Claude's reasoning blocks in the conversation. This can increase token use.                                                                                                                                                                                                                                                |
+| **Claude in Chrome**                                | Off                                       | Gives new Claude chats the Claude in Chrome browser tools. Requires the [Claude in Chrome extension](https://claude.com/chrome), connected to Claude Code. Browser actions ask for approval like any other tool.                                                                                                                   |
 | **Environment variables**                           | No rows                                   | Passes values such as `CLAUDE_CONFIG_DIR` or `HTTPS_PROXY` to Claude. These can change where Claude reads configuration and credentials.                                                                                                                                                                                           |
 | **Approved rules**                                  | Not applicable                            | **Edit approved rules** lists the rules Claude saved when you chose **Allow always**, with the settings file each is saved in. Select **Remove** on a rule to have Claude ask again. A removed rule stays on the page, crossed out, with **Undo** until you leave the page. **Undo** restores it without replacing newer settings. |
 
@@ -184,13 +185,13 @@ The configuration dialog contains:
 
 ### Manage providers and models
 
-| Control                     | What it does                                                                                                                  |
-| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| **Search providers**        | Filters by provider name, model name, or model ID.                                                                            |
-| **Provider card**           | Expand it to see configured models. The status reads **Running** for keyless local providers, **API key set**, or **No key**. |
-| **More actions → Edit key** | Reopens the full configuration dialog, where you can change the name, key, Base URL, CORS behavior, and selected models.      |
-| **More actions → Remove**   | Removes the provider and all of its models from every model picker after confirmation.                                        |
-| **Remove model**            | The remove button on an expanded model row removes that model from the provider and all model pickers after confirmation.     |
+| Control                   | What it does                                                                                                                  |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| **Search providers**      | Filters by provider name, model name, or model ID.                                                                            |
+| **Provider card**         | Expand it to see configured models. The status reads **Running** for keyless local providers, **API key set**, or **No key**. |
+| **More actions → Edit**   | Reopens the full configuration dialog, where you can change the name, key, Base URL, CORS behavior, and selected models.      |
+| **More actions → Remove** | Removes the provider and all of its models from every model picker after confirmation.                                        |
+| **Remove model**          | The remove button on an expanded model row removes that model from the provider and all model pickers after confirmation.     |
 
 When Self-Host Mode is on, local and self-hosted endpoints sort first. Cloud providers remain usable but receive a cloud-egress warning. See [Model Sources and BYOK](llm-providers.md) for routing details and local-server setup.
 

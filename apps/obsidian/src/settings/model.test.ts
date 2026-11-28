@@ -132,7 +132,6 @@ describe("model", () => {
           builtinPreferences: {
             "copilot-web-search": { disabled: true },
             "copilot-web-fetch": { disabled: true },
-            "obsidian-bases": { disabledAgents: ["claude"] },
             "json-canvas": { disabledAgents: ["claude", "codex"] },
           },
         },
@@ -605,6 +604,21 @@ describe("model", () => {
         } as unknown as CopilotSettings);
 
         expect(sanitized.agentMode.backends.claude?.autoMemory).toBe(kept);
+      }
+    );
+
+    it.each([
+      [true, true],
+      ["on", undefined],
+    ])(
+      "keeps a Claude in Chrome choice of %p as %p, dropping a non-boolean so the switch reads off (https://github.com/Brevilabs/obsidian-copilot-private/issues/1043)",
+      (enableChrome, kept) => {
+        const sanitized = sanitizeSettings({
+          ...DEFAULT_SETTINGS,
+          agentMode: { enabled: true, byok: {}, backends: { claude: { enableChrome } } },
+        } as unknown as CopilotSettings);
+
+        expect(sanitized.agentMode.backends.claude?.enableChrome).toBe(kept);
       }
     );
 

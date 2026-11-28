@@ -1,5 +1,7 @@
 import { useChatRelevantNotesContext } from "@/agentMode/ui/hooks/useChatRelevantNotesContext";
 import AgentChatMessages from "@/agentMode/ui/AgentChatMessages";
+import { ChatQuotePopover, type ChatQuote } from "@/agentMode/ui/ChatQuotePopover";
+import { v4 as uuidv4 } from "uuid";
 import { AgentChatControls } from "@/agentMode/ui/AgentChatControls";
 import { AgentChatInput } from "@/agentMode/ui/AgentChatInput";
 import { openReportIssueModal } from "@/agentMode/ui/ReportIssueModal";
@@ -63,7 +65,7 @@ import {
   agentToSetUpBeforeChat,
   startCustomAgentChat,
 } from "@/agents/agentMode/agentChats";
-import { AgentProfile } from "@/agents/agentMode/ui/AgentProfile";
+import { AgentProfile, toggleAgentPin } from "@/agents/agentMode/ui/AgentProfile";
 import { findRun } from "@/agents/agentMode/agentRelays";
 import { ChatAskedAgentView } from "@/agents/agentMode/ui/AskedAgentView";
 import { chatRunningAgents } from "@/agents/agentMode/ui/RunningAgents";
@@ -173,6 +175,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const replyRunning = draft.loading || isReplyRunning;
 
   const [rootEl, setRootEl] = useState<HTMLDivElement | null>(null);
+  const [transcriptEl, setTranscriptEl] = useState<HTMLDivElement | null>(null);
   const [openedTask, setOpenedTask] = useState<{ sessionId: string; toolCallId: string } | null>(
     null
   );
@@ -413,7 +416,12 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
 
   useChatRelevantNotesContext(app, rootEl, chatInputId, draft, messages, activeProject);
 
-  const { setContextFolders } = draft;
+  const { setContextFolders, setQuotes } = draft;
+  const addQuote = useCallback(
+    (quote: ChatQuote) =>
+      setQuotes((previous) => [...previous, { id: uuidv4(), sourceType: "chat", ...quote }]),
+    [setQuotes]
+  );
   const addContextFolders = useCallback(
     (folderPaths: string[]) =>
       setContextFolders((previous) => [...new Set([...previous, ...folderPaths])]),
@@ -843,6 +851,9 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       onSelect={(slug) => void agentHome.select(slug)}
       newAgentButton={newAgentButton}
       onOpenProfile={profile.open}
+      onTogglePin={(agent) => {
+        if (customAgents) void toggleAgentPin(customAgents, agent);
+      }}
       needsSetup={needsSetup}
       locked={
         customAgentsGate === "locked"
@@ -1099,11 +1110,17 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                     ) : null}
                     {/* The chat stays laid out, invisible, under a task's view: hiding it with display none collapses its scroller, which then jumps to the end on Back. https://github.com/Brevilabs/obsidian-copilot-private/issues/749 */}
                     <div
+                      ref={setTranscriptEl}
                       className={cn(
                         "tw-flex tw-min-h-0 tw-flex-1 tw-flex-col",
                         detailOpen && "tw-invisible tw-absolute tw-inset-0"
                       )}
                     >
+                      <ChatQuotePopover
+                        scopeEl={transcriptEl}
+                        container={rootEl}
+                        onAdd={addQuote}
+                      />
                       <ChatAgentsContext.Provider value={chatAgents}>
                         <ChatRunsContext.Provider value={hasRun}>
                           <AgentChatMessages
