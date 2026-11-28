@@ -1,6 +1,6 @@
 import { AI_SENDER } from "@/constants";
 import { logInfo, logWarn } from "@/logger";
-import { AgentMessageStore } from "@/agentMode/session/AgentMessageStore";
+import { AgentMessageStore, type TranscriptSources } from "@/agentMode/session/AgentMessageStore";
 import { GLOBAL_SCOPE, type ProjectScopeId } from "@copilot/protocol/scope";
 import type { AgentSessionStatus } from "@copilot/protocol/session";
 import type { AgentTask } from "@copilot/protocol/tasks";
@@ -121,6 +121,10 @@ const EMPTY_TASKS: readonly AgentTask[] = Object.freeze([]);
 const EMPTY_MESSAGES: readonly AgentChatMessage[] = Object.freeze([]);
 const NO_EARLIER_CHATS: readonly string[] = Object.freeze([]);
 const EMPTY_TOOL_CALL_IDS: ReadonlySet<string> = new Set();
+const SYSTEM_TRANSCRIPT_SOURCES: TranscriptSources = {
+  now: () => Date.now(),
+  newMessageId: () => `msg-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
+};
 const LAUNCH_CARD_STATUS: Record<TaskEndStatus, AgentToolStatus> = {
   completed: "completed",
   failed: "failed",
@@ -230,7 +234,7 @@ export interface AgentSessionStateOptions extends ProjectContextUpdatesHooks {
 }
 
 export class AgentSession implements ChatStateHost, ChatView {
-  readonly store = new AgentMessageStore();
+  readonly store = new AgentMessageStore(SYSTEM_TRANSCRIPT_SOURCES);
   readonly internalId: string;
   readonly chatInputId: string;
   readonly backendId: BackendId;
@@ -1588,7 +1592,7 @@ export class AgentSession implements ChatStateHost, ChatView {
   private applyTaskContent(toolCallId: string, update: SessionEvent["update"]): void {
     let store = this.taskContent.get(toolCallId);
     if (!store) {
-      store = new AgentMessageStore();
+      store = new AgentMessageStore(SYSTEM_TRANSCRIPT_SOURCES);
       this.taskContent.set(toolCallId, store);
     }
     const messageId =

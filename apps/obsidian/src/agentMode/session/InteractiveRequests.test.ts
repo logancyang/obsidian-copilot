@@ -1,5 +1,6 @@
 import { AI_SENDER } from "@/constants";
 import { AgentMessageStore } from "./AgentMessageStore";
+import { TEST_TRANSCRIPT_SOURCES } from "./testing/transcriptSources";
 import { InteractiveRequests, type InteractiveRequestsDeps } from "./InteractiveRequests";
 import { planPermissionRequest, writePermissionRequest } from "./testing/permissionPrompts";
 import type { AskUserQuestionPrompt } from "./types";
@@ -17,7 +18,7 @@ function makeRequests(overrides: Partial<InteractiveRequestsDeps> = {}) {
     notifyPlanChanged: jest.fn(),
   };
   const requests = new InteractiveRequests({
-    store: new AgentMessageStore(),
+    store: new AgentMessageStore(TEST_TRANSCRIPT_SOURCES),
     internalId: "internal-1",
     getReplyId: () => null,
     hasLeftPlanMode: () => false,
@@ -143,7 +144,7 @@ describe("InteractiveRequests", () => {
 
     describe("finalizePlanDecision()", () => {
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/41 records the decision on the plan's tool call and closes the plan", () => {
-        const store = new AgentMessageStore();
+        const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
         const replyId = addReply(store);
         const { requests, notifyPlanChanged } = makeRequests({
           store,
@@ -252,7 +253,7 @@ describe("InteractiveRequests", () => {
       });
 
       it("https://github.com/logancyang/obsidian-copilot/issues/4062 records a rejecting choice on the open reply, so an agent cancellation that follows names the declined permission", () => {
-        const store = new AgentMessageStore();
+        const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
         const replyId = addReply(store);
         const { requests } = makeRequests({ store, getReplyId: () => replyId });
         void requests.handleToolPermission(writePermissionRequest());
@@ -264,7 +265,7 @@ describe("InteractiveRequests", () => {
       });
 
       it("does not record an allowing choice as a declined permission", () => {
-        const store = new AgentMessageStore();
+        const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
         const replyId = addReply(store);
         const { requests } = makeRequests({ store, getReplyId: () => replyId });
         void requests.handleToolPermission(writePermissionRequest());
@@ -414,7 +415,7 @@ describe("InteractiveRequests", () => {
 
     describe("resolveAskUserQuestion()", () => {
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/551 resolves with the answers and records them in the current reply", async () => {
-        const store = new AgentMessageStore();
+        const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
         const replyId = addReply(store);
         const { requests } = makeRequests({ store, getReplyId: () => replyId });
         const answers = requests.handleAskUserQuestion(fruitQuestion());

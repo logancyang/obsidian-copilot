@@ -1,7 +1,10 @@
 import { AI_SENDER, USER_SENDER } from "@/constants";
-import { AgentMessagePart, TurnFileChange } from "@/agentMode/session/types";
+import { AgentChatMessage, AgentMessagePart, TurnFileChange } from "@/agentMode/session/types";
 import { formatDateTime } from "@/utils";
-import { AgentMessageStore } from "./AgentMessageStore";
+import { AgentMessageStore, type AgentTranscriptOp } from "./AgentMessageStore";
+import { driveRecordedChat, reopenRecordedChat } from "./testing/recordedChat";
+import { TEST_TRANSCRIPT_SOURCES } from "./testing/transcriptSources";
+import { applyTranscriptOp } from "@copilot/protocol/transcript";
 
 jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
@@ -58,32 +61,70 @@ describe("AgentMessageStore", () => {
   });
 
   describe("addMessage()", () => {
+    it("names a message given no id from the injected id source", () => {
+      const store = new AgentMessageStore({ now: () => 0, newMessageId: () => "m-1" });
+
+      const id = store.addMessage(placeholder());
+
+      expect(id).toBe("m-1");
+      expect(store.getMessage("m-1")?.sender).toBe(AI_SENDER);
+    });
+
+    it("keeps the id and time a message arrives with", () => {
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
+      const sentAt = formatDateTime(new Date(1_000));
+
+      const id = store.addMessage({ ...placeholder(), id: "prompt-1", timestamp: sentAt });
+
+      expect(id).toBe("prompt-1");
+      expect(store.getMessage(id)?.timestamp).toEqual(sentAt);
+    });
+
     it("keeps a null timestamp so a replayed message does not show the time it was loaded", () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const id = store.addMessage({ ...placeholder(), timestamp: null });
 
       expect(store.getMessage(id)?.timestamp).toBeNull();
     });
   });
 
-  describe("appendDisplayText()", () => {
-    it("accumulates streaming chunks", () => {
-      const store = new AgentMessageStore();
-      const id = store.addMessage(placeholder());
-      store.appendDisplayText(id, "Hello, ");
-      store.appendDisplayText(id, "world.");
-      expect(store.getMessage(id)?.message).toBe("Hello, world.");
+  describe("subscribeToOps()", () => {
+    it("hands each committed change to subscribers as an operation, and replaying those operations from empty rebuilds the store's messages", () => {
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
+      const ops: AgentTranscriptOp[] = [];
+      store.subscribeToOps((op) => ops.push(op));
+      const replay = () => ops.reduce<readonly AgentChatMessage[]>(applyTranscriptOp, []);
+
+      const hidden = store.addMessage({ ...placeholder(), isVisible: false });
+      driveRecordedChat(store);
+      const streamed = replay();
+      const streamedDisplay = store.getDisplayMessages();
+      const hiddenMessage = store.getMessage(hidden);
+      reopenRecordedChat(store, streamedDisplay);
+
+      expect(streamed).toEqual([hiddenMessage, ...streamedDisplay]);
+      expect(replay()).toEqual(store.getDisplayMessages());
+      expect(JSON.parse(JSON.stringify(ops))).toEqual(ops);
     });
 
-    it("returns false for an unknown message", () => {
-      const store = new AgentMessageStore();
-      expect(store.appendDisplayText("missing", "x")).toBe(false);
+    it("hands over nothing for a call that changes no message, and nothing after unsubscribing", () => {
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
+      const id = store.addMessage(placeholder());
+      const listener = jest.fn();
+      const unsubscribe = store.subscribeToOps(listener);
+
+      store.appendAgentText("missing", "x");
+      store.settleOpenParts(id);
+      unsubscribe();
+      store.appendAgentText(id, "Hi");
+
+      expect(listener).not.toHaveBeenCalled();
     });
   });
 
   describe("appendAgentText()", () => {
     it("folds successive chunks into one trailing text part", () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const id = store.addMessage(placeholder());
       store.appendAgentText(id, "Hello, ");
       store.appendAgentText(id, "world.");
@@ -95,7 +136,7 @@ describe("AgentMessageStore", () => {
     });
 
     it("starts a new text part when interrupted by a tool call", () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const id = store.addMessage(placeholder());
       store.appendAgentText(id, "before");
       store.upsertAgentPart(id, {
@@ -112,14 +153,14 @@ describe("AgentMessageStore", () => {
     });
 
     it("returns false for an unknown message", () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       expect(store.appendAgentText("missing", "x")).toBe(false);
     });
 
     it("extends a provisional late thought when completed prose ends it (https://github.com/Brevilabs/obsidian-copilot-private/issues/336)", () => {
       jest.useFakeTimers();
       jest.setSystemTime(1_000);
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const id = store.addMessage(placeholder());
       store.appendAgentText(id, "Done");
       store.markTurnComplete(id, "end_turn", 1_000);
@@ -141,7 +182,7 @@ describe("AgentMessageStore", () => {
     it("folds successive chunks into one timed part (https://github.com/Brevilabs/obsidian-copilot-private/issues/336)", () => {
       jest.useFakeTimers();
       jest.setSystemTime(1_000);
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const id = store.addMessage(placeholder());
       store.appendAgentThought(id, "Thinking");
       store.appendAgentThought(id, " harder");
@@ -154,10 +195,27 @@ describe("AgentMessageStore", () => {
       });
     });
 
+    it("times a reasoning block by the injected clock, not the system clock (https://github.com/Brevilabs/obsidian-copilot-private/issues/336)", () => {
+      let nowMs = 40_000;
+      const store = new AgentMessageStore({ now: () => nowMs, newMessageId: () => "reply" });
+      const id = store.addMessage(placeholder());
+
+      store.appendAgentThought(id, "Thinking");
+      nowMs = 41_500;
+      store.appendAgentText(id, "Done");
+
+      expect(store.getMessage(id)?.parts?.[0]).toEqual({
+        kind: "thought",
+        text: "Thinking",
+        startedAtMs: 40_000,
+        durationMs: 1_500,
+      });
+    });
+
     it("extends a completed trailing thought when its final chunk arrives late (https://github.com/Brevilabs/obsidian-copilot-private/issues/336)", () => {
       jest.useFakeTimers();
       jest.setSystemTime(1_000);
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const id = store.addMessage(placeholder());
       store.appendAgentThought(id, "Thinking");
       jest.advanceTimersByTime(2_000);
@@ -179,7 +237,7 @@ describe("AgentMessageStore", () => {
     it("freezes a new late thought after completed prose and extends it with later chunks (https://github.com/Brevilabs/obsidian-copilot-private/issues/336)", () => {
       jest.useFakeTimers();
       jest.setSystemTime(1_000);
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const id = store.addMessage(placeholder());
       store.appendAgentText(id, "Done");
       store.markTurnComplete(id, "end_turn", 1_000);
@@ -206,7 +264,7 @@ describe("AgentMessageStore", () => {
     it("starts a new timed thought after a completed thought (https://github.com/Brevilabs/obsidian-copilot-private/issues/336)", () => {
       jest.useFakeTimers();
       jest.setSystemTime(1_000);
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const id = store.addMessage(placeholder());
       store.appendAgentThought(id, "First");
       jest.advanceTimersByTime(2_000);
@@ -226,7 +284,7 @@ describe("AgentMessageStore", () => {
     it("freezes a trailing thought when the turn completes (https://github.com/Brevilabs/obsidian-copilot-private/issues/336)", () => {
       jest.useFakeTimers();
       jest.setSystemTime(1_000);
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const id = store.addMessage(placeholder());
       store.appendAgentThought(id, "Final thought");
       jest.advanceTimersByTime(5_778);
@@ -238,7 +296,7 @@ describe("AgentMessageStore", () => {
 
   describe("markPermissionDeclined()", () => {
     it("https://github.com/logancyang/obsidian-copilot/issues/4062 makes a later agent cancellation of the reply name the declined permission as its cause", () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const id = store.addMessage(placeholder());
 
       store.markPermissionDeclined(id);
@@ -248,7 +306,7 @@ describe("AgentMessageStore", () => {
     });
 
     it("leaves a reply that the agent never cancels without a cancel cause", () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const id = store.addMessage(placeholder());
 
       store.markPermissionDeclined(id);
@@ -260,7 +318,7 @@ describe("AgentMessageStore", () => {
 
   describe("markCancelledByAgent()", () => {
     it("https://github.com/logancyang/obsidian-copilot/issues/4062 records an unspecified cause on a reply the agent cancelled without a declined permission", () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const id = store.addMessage(placeholder());
 
       store.markCancelledByAgent(id);
@@ -271,7 +329,7 @@ describe("AgentMessageStore", () => {
 
   describe("upsertAgentPart()", () => {
     it("appends a new tool call by its id", () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const id = store.addMessage(placeholder());
       store.upsertAgentPart(id, {
         kind: "tool_call",
@@ -287,7 +345,7 @@ describe("AgentMessageStore", () => {
     it("freezes a thought when a tool call follows it (https://github.com/Brevilabs/obsidian-copilot-private/issues/336)", () => {
       jest.useFakeTimers();
       jest.setSystemTime(1_000);
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const id = store.addMessage(placeholder());
       store.appendAgentThought(id, "Thinking");
       jest.advanceTimersByTime(12_648);
@@ -306,7 +364,7 @@ describe("AgentMessageStore", () => {
     });
 
     it("replaces existing tool_call when ids match", () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const id = store.addMessage(placeholder());
       store.upsertAgentPart(id, {
         kind: "tool_call",
@@ -332,7 +390,7 @@ describe("AgentMessageStore", () => {
     });
 
     it("notifies for progress changes but skips identical progress", () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const id = store.addMessage(placeholder());
       const part: AgentMessagePart = {
         kind: "tool_call",
@@ -353,7 +411,7 @@ describe("AgentMessageStore", () => {
     });
 
     it("reports no change when a large tool output is re-applied unchanged", () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const id = store.addMessage(placeholder());
       const part: AgentMessagePart = {
         kind: "tool_call",
@@ -372,7 +430,7 @@ describe("AgentMessageStore", () => {
     });
 
     it("treats a plan as a singleton (replace, not duplicate)", () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const id = store.addMessage(placeholder());
       store.upsertAgentPart(id, {
         kind: "plan",
@@ -400,7 +458,7 @@ describe("AgentMessageStore", () => {
     it("lets a replacement plan freeze the trailing thought (https://github.com/Brevilabs/obsidian-copilot-private/issues/336)", () => {
       jest.useFakeTimers();
       jest.setSystemTime(1_000);
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const id = store.addMessage(placeholder());
       const plan: AgentMessagePart = {
         kind: "plan",
@@ -415,7 +473,7 @@ describe("AgentMessageStore", () => {
     });
 
     it("replaces the compaction row holding the same id as its status advances", () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const id = store.addMessage(placeholder());
       store.upsertAgentPart(id, compaction());
 
@@ -431,7 +489,7 @@ describe("AgentMessageStore", () => {
     });
 
     it("keeps compaction rows with different ids apart, in arrival order", () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const id = store.addMessage(placeholder());
       store.upsertAgentPart(id, compaction({ id: "first", status: "completed" }));
       store.appendAgentText(id, "between");
@@ -445,7 +503,7 @@ describe("AgentMessageStore", () => {
     });
 
     it("reports no change and keeps the message identity when an identical compaction status repeats", () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const id = store.addMessage(placeholder());
       store.upsertAgentPart(id, compaction());
       const before = store.getMessage(id);
@@ -460,7 +518,7 @@ describe("AgentMessageStore", () => {
       ["preTokens", { preTokens: 10 }],
       ["postTokens", { postTokens: 5 }],
     ])("treats a changed compaction %s as a new status for the row", (_field, change) => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const id = store.addMessage(placeholder());
       store.upsertAgentPart(id, compaction());
 
@@ -470,14 +528,14 @@ describe("AgentMessageStore", () => {
 
   describe("hasAssistantActivity()", () => {
     it("is false for a placeholder that has received nothing", () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const id = store.addMessage(placeholder());
 
       expect(store.hasAssistantActivity(id)).toBe(false);
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/633 counts a compaction row as activity so a compaction-only turn is not an empty turn", () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const id = store.addMessage(placeholder());
 
       store.upsertAgentPart(id, compaction({ status: "completed" }));
@@ -488,7 +546,7 @@ describe("AgentMessageStore", () => {
 
   describe("settleOpenParts()", () => {
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/633 settles every in-progress compaction to the given status and leaves settled rows alone", () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const id = store.addMessage(placeholder());
       const done = compaction({ id: "done", status: "completed", postTokens: 5 });
       store.upsertAgentPart(id, done);
@@ -502,7 +560,7 @@ describe("AgentMessageStore", () => {
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/633 fails an in-progress compaction without a reason of its own", () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const id = store.addMessage(placeholder());
       store.upsertAgentPart(id, compaction());
 
@@ -512,7 +570,7 @@ describe("AgentMessageStore", () => {
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/739 fails every tool call still pending, since it never started, even when compactions settle as cancelled, and leaves running background and finished calls alone", () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const id = store.addMessage(placeholder());
       store.upsertAgentPart(id, {
         kind: "tool_call",
@@ -545,7 +603,7 @@ describe("AgentMessageStore", () => {
     });
 
     it("reports no change for a message with no in-progress compaction or pending tool call", () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const id = store.addMessage(placeholder());
       store.upsertAgentPart(id, compaction({ status: "skipped" }));
       const before = store.getMessage(id);
@@ -558,7 +616,7 @@ describe("AgentMessageStore", () => {
 
   describe("stopToolCalls()", () => {
     it("marks every pending or running tool call stopped, except the ones to keep and those already finished (https://github.com/Brevilabs/obsidian-copilot-private/issues/747)", () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const id = store.addMessage(placeholder());
       const call = (callId: string, status: "pending" | "in_progress" | "completed") =>
         store.upsertAgentPart(id, { kind: "tool_call", id: callId, title: callId, status });
@@ -583,7 +641,7 @@ describe("AgentMessageStore", () => {
 
   describe("findMessageIdWithToolCall()", () => {
     it("returns the message owning a tool call, or undefined", () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const first = store.addMessage(placeholder());
       const second = store.addMessage(placeholder());
       store.upsertAgentPart(first, {
@@ -607,7 +665,7 @@ describe("AgentMessageStore", () => {
 
   describe("markMessageError()", () => {
     it("flags the message and appends formatted error text", () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const id = store.addMessage({
         message: "partial reply",
         sender: AI_SENDER,
@@ -625,7 +683,7 @@ describe("AgentMessageStore", () => {
 
   describe("loadMessages()", () => {
     it("keeps a message that has no send time undated instead of stamping the load time", () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
 
       store.loadMessages([
         { id: "u1", sender: USER_SENDER, message: "hi", timestamp: null, isVisible: true },
@@ -635,7 +693,7 @@ describe("AgentMessageStore", () => {
     });
 
     it("keeps the send time a message arrived with", () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const sent = formatDateTime(new Date("2026-01-02T03:04:05Z"));
 
       store.loadMessages([
@@ -646,7 +704,7 @@ describe("AgentMessageStore", () => {
     });
 
     it("loads a reply saved as a multi-agent answer as ordinary text, keeping its headings and markers (https://github.com/Brevilabs/obsidian-copilot-private/issues/935)", () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const body = [
         "<!--copilot:multi-agent v=1-->",
         "<!--copilot:summary-->",
@@ -668,7 +726,7 @@ describe("AgentMessageStore", () => {
     });
 
     it("keeps the tools list a reply restored from its note", () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
 
       store.loadMessages([
         {
@@ -685,7 +743,7 @@ describe("AgentMessageStore", () => {
     });
 
     it("keeps the rules a custom agent saved in a loaded reply (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
 
       store.loadMessages([
         {
@@ -702,7 +760,7 @@ describe("AgentMessageStore", () => {
     });
 
     it("keeps each @-mentioned agent's run on a loaded message (https://github.com/Brevilabs/obsidian-copilot-private/issues/944)", () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
 
       store.loadMessages([
         {
@@ -719,7 +777,7 @@ describe("AgentMessageStore", () => {
     });
 
     it("drops file changes from a loaded chat so a reopened turn shows none", () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const id = store.addMessage(placeholder());
       store.setFileChanges(id, [change("notes/a.md")]);
 
@@ -751,7 +809,7 @@ describe("AgentMessageStore", () => {
     });
 
     it(`${issue} gives each replayed message the note's time at its position`, () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       store.addMessage(replayed(USER_SENDER, "q"));
       store.addMessage(replayed(AI_SENDER, "a"));
 
@@ -761,7 +819,7 @@ describe("AgentMessageStore", () => {
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/671 dates an undated replayed message from the note and keeps a replay time the note lacks", () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       store.addMessage(replayed(USER_SENDER, "q", { timestamp: null }));
       store.addMessage(replayed(AI_SENDER, "a"));
 
@@ -774,7 +832,7 @@ describe("AgentMessageStore", () => {
     });
 
     it(`${issue} appends the image embeds saved under a user message to the replayed message`, () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       store.addMessage(replayed(USER_SENDER, "look at this"));
 
       store.adoptNoteRows([noteRow(USER_SENDER, `look at this\n\n${embed}\n\n${embed}`)]);
@@ -783,7 +841,7 @@ describe("AgentMessageStore", () => {
     });
 
     it(`${issue} gives a replayed user message the context attached to it in the note`, () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       store.addMessage(replayed(USER_SENDER, "summarize"));
       const context = {
         notes: [],
@@ -797,7 +855,7 @@ describe("AgentMessageStore", () => {
     });
 
     it(`${issue} gives a replayed reply the note's tools-used list and keeps its replayed tool steps`, () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const parts: AgentMessagePart[] = [
         { kind: "tool_call", id: "t1", title: "Read /vault/a.md", status: "completed" },
         { kind: "text", text: "done" },
@@ -812,7 +870,7 @@ describe("AgentMessageStore", () => {
     });
 
     it("gives a replayed message the @-mentioned agents' runs its note saved (https://github.com/Brevilabs/obsidian-copilot-private/issues/944)", () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       store.addMessage(replayed(USER_SENDER, "q"));
       store.addMessage(replayed(AI_SENDER, "a"));
 
@@ -825,7 +883,7 @@ describe("AgentMessageStore", () => {
     });
 
     it("gives a replayed reply the rules its note says the custom agent saved (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       store.addMessage(replayed(USER_SENDER, "q"));
       store.addMessage(replayed(AI_SENDER, "a"));
 
@@ -838,7 +896,7 @@ describe("AgentMessageStore", () => {
     });
 
     it(`${issue} leaves messages unchanged from a note user message where the replay has a reply`, () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       store.addMessage(replayed(USER_SENDER, "q"));
       store.addMessage(replayed(AI_SENDER, "a"));
       store.addMessage(replayed(USER_SENDER, "q2"));
@@ -857,7 +915,7 @@ describe("AgentMessageStore", () => {
     });
 
     it(`${issue} leaves messages unchanged from a note message the replay lacks, so its image and context never land on another message`, () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       store.addMessage(replayed(USER_SENDER, "q"));
       store.addMessage(replayed(AI_SENDER, "a"));
       store.addMessage(replayed(USER_SENDER, "sent after the last save"));
@@ -886,7 +944,7 @@ describe("AgentMessageStore", () => {
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/942 skips a reply only the note has, such as a failed turn's error, and gives the later messages their saved rules, @ runs and times", () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       store.addMessage(replayed(USER_SENDER, "q"));
       store.addMessage(replayed(USER_SENDER, "remember this"));
       store.addMessage(replayed(AI_SENDER, "saved"));
@@ -910,7 +968,7 @@ describe("AgentMessageStore", () => {
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/635 skips a /compact turn the replay omits and keeps matching the turns after it", () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       store.addMessage(replayed(USER_SENDER, "q"));
       store.addMessage(replayed(AI_SENDER, "a"));
       store.addMessage(replayed(USER_SENDER, "q2"));
@@ -936,7 +994,7 @@ describe("AgentMessageStore", () => {
 
   describe("extendTurnDuration()", () => {
     it("advances only an already-completed turn", () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const runningId = store.addMessage(placeholder());
       const completedId = store.addMessage(placeholder());
       store.markTurnComplete(completedId, "end_turn", 10_000);
@@ -948,20 +1006,9 @@ describe("AgentMessageStore", () => {
     });
   });
 
-  describe("truncateAfterMessageId()", () => {
-    it("drops everything after the target", () => {
-      const store = new AgentMessageStore();
-      const a = store.addMessage(placeholder());
-      store.addMessage(placeholder());
-      store.addMessage(placeholder());
-      store.truncateAfterMessageId(a);
-      expect(store.getDisplayMessages()).toHaveLength(1);
-    });
-  });
-
   describe("getDisplayMessages()", () => {
     it("includes structured message parts", () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const id = store.addMessage(placeholder());
       store.upsertAgentPart(id, {
         kind: "tool_call",
@@ -974,7 +1021,7 @@ describe("AgentMessageStore", () => {
     });
 
     it("returns the same array reference when nothing changed", () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       store.addMessage(placeholder());
       const first = store.getDisplayMessages();
       const second = store.getDisplayMessages();
@@ -982,7 +1029,7 @@ describe("AgentMessageStore", () => {
     });
 
     it("keeps stable identities for unchanged messages while one streams", () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const stable = store.addMessage({
         message: "done",
         sender: AI_SENDER,
@@ -1007,12 +1054,12 @@ describe("AgentMessageStore", () => {
       expect(streamingAfter?.message).toBe("Hello");
     });
 
-    it("re-adapts a message after every kind of in-place mutation", () => {
-      const store = new AgentMessageStore();
+    it("gives a message a new identity after each change to it", () => {
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const id = store.addMessage(placeholder());
 
       const v0 = store.getDisplayMessages()[0];
-      store.appendDisplayText(id, "x");
+      store.appendAgentText(id, "x");
       const v1 = store.getDisplayMessages()[0];
       expect(v1).not.toBe(v0);
 
@@ -1027,8 +1074,8 @@ describe("AgentMessageStore", () => {
       expect(v3.turnDurationMs).toBe(12_345);
     });
 
-    it("does not re-adapt when upsertAgentPart is a no-op", () => {
-      const store = new AgentMessageStore();
+    it("keeps the message's identity when upsertAgentPart changes nothing", () => {
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const id = store.addMessage(placeholder());
       const part: AgentMessagePart = {
         kind: "tool_call",
@@ -1043,25 +1090,35 @@ describe("AgentMessageStore", () => {
       expect(after).toBe(before);
     });
 
-    it("drops cached views for deleted and truncated messages", () => {
-      const store = new AgentMessageStore();
+    it("drops a deleted message and keeps the others' identities", () => {
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const a = store.addMessage(placeholder());
       const b = store.addMessage(placeholder());
-      store.getDisplayMessages();
+      const before = store.getDisplayMessages()[0];
 
       store.deleteMessage(b);
-      expect(store.getDisplayMessages().map((m) => m.id)).toEqual([a]);
 
-      const c = store.addMessage(placeholder());
-      store.truncateAfterMessageId(a);
       expect(store.getDisplayMessages().map((m) => m.id)).toEqual([a]);
-      expect(store.getMessage(c)).toBeUndefined();
+      expect(store.getDisplayMessages()[0]).toBe(before);
+      expect(store.getMessage(b)).toBeUndefined();
+    });
+
+    it("keeps the same list when a call changes no message", () => {
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
+      const id = store.addMessage(placeholder());
+      const before = store.getDisplayMessages();
+
+      store.markPermissionDeclined(id);
+      store.settleOpenParts(id);
+      store.appendAgentText("missing", "x");
+
+      expect(store.getDisplayMessages()).toBe(before);
     });
   });
 
   describe("setAgentMentions()", () => {
     it("publishes the @-mentioned agents' runs on the message that asked them (https://github.com/Brevilabs/obsidian-copilot-private/issues/944)", () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const id = store.addMessage({ ...placeholder(), sender: USER_SENDER });
       const before = store.getDisplayMessages();
 
@@ -1072,13 +1129,15 @@ describe("AgentMessageStore", () => {
     });
 
     it("returns false for an unknown message", () => {
-      expect(new AgentMessageStore().setAgentMentions("nope", [MAYA_MENTION])).toBe(false);
+      expect(
+        new AgentMessageStore(TEST_TRANSCRIPT_SOURCES).setAgentMentions("nope", [MAYA_MENTION])
+      ).toBe(false);
     });
   });
 
   describe("setFileChanges()", () => {
     it("publishes the turn's file changes on the message and invalidates its cached view", () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const id = store.addMessage(placeholder());
       const before = store.getDisplayMessages().find((m) => m.id === id);
       expect(before?.fileChanges).toBeUndefined();
@@ -1091,7 +1150,7 @@ describe("AgentMessageStore", () => {
     });
 
     it("replaces a previously published list rather than appending to it", () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const id = store.addMessage(placeholder());
       store.setFileChanges(id, [change("notes/a.md")]);
       store.setFileChanges(id, [change("notes/b.md")]);
@@ -1099,12 +1158,12 @@ describe("AgentMessageStore", () => {
     });
 
     it("returns false for an unknown message", () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       expect(store.setFileChanges("nope", [change("notes/a.md")])).toBe(false);
     });
 
     it("publishes the rules a custom agent saved in the turn beside its file changes (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const id = store.addMessage(placeholder());
 
       store.setFileChanges(id, [change("copilot/teammates/coco/MEMORY.md")], [MEMORY_SAVE]);
@@ -1113,7 +1172,7 @@ describe("AgentMessageStore", () => {
     });
 
     it("publishes no saved rules for a turn that saved none", () => {
-      const store = new AgentMessageStore();
+      const store = new AgentMessageStore(TEST_TRANSCRIPT_SOURCES);
       const id = store.addMessage(placeholder());
 
       store.setFileChanges(id, [change("notes/a.md")], []);

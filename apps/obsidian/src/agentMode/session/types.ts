@@ -10,14 +10,11 @@ import type {
   ModelSelection,
 } from "@copilot/protocol/backendState";
 import type {
-  AgentCancelCause,
-  AgentMessagePart,
   AgentPlanEntry,
   CompactionSnapshot,
-  FormattedDateTime,
   PromptContent,
   StopReason,
-  TurnFileChange,
+  TranscriptMessage,
 } from "@copilot/protocol/messages";
 import type {
   PermissionDecision,
@@ -421,21 +418,7 @@ export interface BackendProcess {
   shutdown(): Promise<void>;
 }
 
-export interface AgentChatMessage {
-  id: string;
-  sender: string;
-  timestamp: FormattedDateTime | null;
-  isVisible: boolean;
-  isErrorMessage?: boolean;
-  message: string;
-  parts?: AgentMessagePart[];
-  context?: MessageContext;
-  content?: unknown[];
-  turnStopReason?: StopReason;
-  agentCancelCause?: AgentCancelCause;
-  turnDurationMs?: number;
-  fileChanges?: TurnFileChange[];
-  toolsUsed?: readonly string[];
+export interface AgentChatMessage extends TranscriptMessage<MessageContext> {
   memorySaves?: readonly MemorySave[];
   agentMentions?: readonly AgentMention[];
 }

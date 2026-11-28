@@ -110,6 +110,13 @@ Then in either case:
   and mode state)" → `packages/protocol/src/`, imported as
   `@copilot/protocol/...`; no `Error`, `AbortSignal`, `Map`/`Set`,
   functions or class instances in those types
+- "A new kind of change to a chat's messages" → a `TranscriptOp` in
+  `packages/protocol/src/transcript.ts`, applied by the pure
+  `applyTranscriptOp`, which never reads a clock or random source; whether
+  a change happens is decided in `session/` (`AgentSession` and its
+  helpers), and `session/AgentMessageStore.ts` builds the op with the
+  host's ids and times and commits it. A feature's own message fields
+  change through `patchExtension`, never a feature-named op
 - "ACP wire types, JSON-RPC subprocess plumbing, vault-backed ACP client,
   ACP↔domain translators" → `acp/` (the **only** layer that imports
   `@agentclientprotocol/sdk`)

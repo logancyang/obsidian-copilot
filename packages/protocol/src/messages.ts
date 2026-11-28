@@ -81,3 +81,22 @@ export interface TurnFileChange {
   additions: number;
   deletions: number;
 }
+
+export interface TranscriptMessage<TContext = unknown> {
+  id: string;
+  sender: string;
+  timestamp: FormattedDateTime | null;
+  isVisible: boolean;
+  isErrorMessage?: boolean;
+  message: string;
+  parts?: AgentMessagePart[];
+  context?: TContext;
+  content?: unknown[];
+  turnStopReason?: StopReason;
+  agentCancelCause?: AgentCancelCause;
+  turnDurationMs?: number;
+  fileChanges?: TurnFileChange[];
+  toolsUsed?: readonly string[];
+}
+
+export type MessageExtension<M extends TranscriptMessage> = Omit<M, keyof TranscriptMessage>;
