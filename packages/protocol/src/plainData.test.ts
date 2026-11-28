@@ -60,12 +60,11 @@ describe("plainData", () => {
 
     it("accepts every frame the host sends for a chat's usage", () => {
       const frames: HostFrame[] = [
-        { type: "hello", version: 1, accepted: true },
         { type: "snapshot", scope: "chat-1", seq: 4, state: STATES[1][1] },
         { type: "ops", scope: "chat-1", from: 5, ops: OPS.map(([, op]) => op) },
       ];
 
-      expect(frames.map(findNonPlainField)).toEqual([null, null, null]);
+      expect(frames.map(findNonPlainField)).toEqual([null, null]);
     });
 
     it("accepts an optional field set to undefined, since it reads the same as a missing field after JSON", () => {

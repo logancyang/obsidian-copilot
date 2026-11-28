@@ -1,5 +1,5 @@
 import { SessionClient } from "@copilot/protocol/client";
-import { PROTOCOL_VERSION, type ClientFrame, type HostFrame } from "@copilot/protocol/frames";
+import type { ClientFrame, HostFrame } from "@copilot/protocol/frames";
 import type { SessionState } from "@copilot/protocol/session";
 import type { SessionUsage } from "@copilot/protocol/sessionUsage";
 
@@ -10,9 +10,6 @@ const STATE: SessionState = { usage: USAGE, planUsage: null };
 function connectedClient(): { client: SessionClient; sent: ClientFrame[] } {
   const sent: ClientFrame[] = [];
   const client = new SessionClient((frame) => sent.push(frame));
-  client.connect();
-  client.receive({ type: "hello", version: PROTOCOL_VERSION, accepted: true });
-  sent.length = 0;
   return { client, sent };
 }
 
@@ -31,16 +28,6 @@ function usageOps(from: number, usage: SessionUsage): HostFrame {
 
 describe("client", () => {
   describe("SessionClient", () => {
-    describe("connect()", () => {
-      it("greets the host with the protocol version", () => {
-        const sent: ClientFrame[] = [];
-
-        new SessionClient((frame) => sent.push(frame)).connect();
-
-        expect(sent).toEqual([{ type: "hello", version: PROTOCOL_VERSION }]);
-      });
-    });
-
     describe("watch()", () => {
       it("subscribes to a scope the first time it is watched, and not again for a second watcher", () => {
         const { client, sent } = connectedClient();
@@ -49,29 +36,6 @@ describe("client", () => {
         client.watch("chat-1");
 
         expect(sent).toEqual([{ type: "subscribe", scope: "chat-1" }]);
-      });
-
-      it("waits for the host to accept its version before subscribing a scope watched earlier", () => {
-        const sent: ClientFrame[] = [];
-        const client = new SessionClient((frame) => sent.push(frame));
-        client.connect();
-
-        client.watch("chat-1");
-        expect(sent).toEqual([{ type: "hello", version: PROTOCOL_VERSION }]);
-
-        client.receive({ type: "hello", version: PROTOCOL_VERSION, accepted: true });
-        expect(sent).toContainEqual({ type: "subscribe", scope: "chat-1" });
-      });
-
-      it("never subscribes when the host refuses its version", () => {
-        const sent: ClientFrame[] = [];
-        const client = new SessionClient((frame) => sent.push(frame));
-        client.connect();
-        client.receive({ type: "hello", version: PROTOCOL_VERSION + 1, accepted: false });
-
-        client.watch("chat-1");
-
-        expect(sent).toEqual([{ type: "hello", version: PROTOCOL_VERSION }]);
       });
 
       it("unsubscribes and drops the replica once the last watcher releases the scope", () => {

@@ -1,5 +1,5 @@
 import { SessionClient } from "@copilot/protocol/client";
-import { PROTOCOL_VERSION, type ClientFrame } from "@copilot/protocol/frames";
+import type { ClientFrame } from "@copilot/protocol/frames";
 import { EMPTY_SESSION_STATE, type SessionOp, type SessionState } from "@copilot/protocol/session";
 
 export interface FakeSessionClient {
@@ -23,9 +23,7 @@ export function fakeSessionClient(
     return current.get(scope)!;
   };
   const answer = (frame: ClientFrame): void => {
-    if (frame.type === "hello") {
-      client.receive({ type: "hello", version: PROTOCOL_VERSION, accepted: true });
-    } else if (frame.type === "subscribe") {
+    if (frame.type === "subscribe") {
       watched.add(frame.scope);
       const { state, seq } = entry(frame.scope);
       client.receive({ type: "snapshot", scope: frame.scope, seq, state });
@@ -34,7 +32,6 @@ export function fakeSessionClient(
     }
   };
   const client = new SessionClient(answer);
-  client.connect();
   return {
     client,
     setState(scope, next) {

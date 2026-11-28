@@ -9,7 +9,6 @@ export function connectInProcess(
   const carry = options.checkFrames ? checkedFrame : <F>(frame: F): F => frame;
   const client = new SessionClient((frame) => toHost(carry(frame)));
   const toHost = host.connect((frame) => client.receive(carry(frame)));
-  client.connect();
   return client;
 }
 

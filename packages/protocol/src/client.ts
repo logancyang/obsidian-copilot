@@ -1,9 +1,4 @@
-import {
-  PROTOCOL_VERSION,
-  type ClientFrame,
-  type HostFrame,
-  type ScopeId,
-} from "@copilot/protocol/frames";
+import type { ClientFrame, HostFrame, ScopeId } from "@copilot/protocol/frames";
 import { applySessionOp, type SessionOp, type SessionState } from "@copilot/protocol/session";
 
 interface Replica {
@@ -13,24 +8,14 @@ interface Replica {
 }
 
 export class SessionClient {
-  private accepted = false;
   private readonly watchers = new Map<ScopeId, number>();
   private readonly replicas = new Map<ScopeId, Replica>();
   private readonly listeners = new Set<() => void>();
 
   constructor(private readonly send: (frame: ClientFrame) => void) {}
 
-  connect(): void {
-    this.send({ type: "hello", version: PROTOCOL_VERSION });
-  }
-
   receive(frame: HostFrame): void {
     switch (frame.type) {
-      case "hello":
-        this.accepted = frame.accepted;
-        if (!frame.accepted) return;
-        for (const scope of this.watchers.keys()) this.send({ type: "subscribe", scope });
-        return;
       case "snapshot":
         if (!this.watchers.has(frame.scope)) return;
         this.replicas.set(frame.scope, {
@@ -49,7 +34,7 @@ export class SessionClient {
   watch(scope: ScopeId): () => void {
     const watchers = this.watchers.get(scope) ?? 0;
     this.watchers.set(scope, watchers + 1);
-    if (watchers === 0 && this.accepted) this.send({ type: "subscribe", scope });
+    if (watchers === 0) this.send({ type: "subscribe", scope });
     return () => this.release(scope);
   }
 

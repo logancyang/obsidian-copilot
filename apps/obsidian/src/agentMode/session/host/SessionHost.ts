@@ -1,10 +1,5 @@
 import type { AgentSession } from "@/agentMode/session/AgentSession";
-import {
-  PROTOCOL_VERSION,
-  type ClientFrame,
-  type HostFrame,
-  type ScopeId,
-} from "@copilot/protocol/frames";
+import type { ClientFrame, HostFrame, ScopeId } from "@copilot/protocol/frames";
 import {
   applySessionOp,
   EMPTY_SESSION_STATE,
@@ -19,10 +14,7 @@ export interface HostChats {
   subscribe(listener: () => void): () => void;
 }
 
-interface Connection {
-  send: (frame: HostFrame) => void;
-  accepted: boolean;
-}
+type Connection = (frame: HostFrame) => void;
 
 interface HostScope {
   chat: HostChat;
@@ -40,8 +32,7 @@ export class SessionHost {
     this.stopListeningToChats = chats.subscribe(() => this.dropClosedChats());
   }
 
-  connect(send: (frame: HostFrame) => void): (frame: ClientFrame) => void {
-    const connection: Connection = { send, accepted: false };
+  connect(connection: Connection): (frame: ClientFrame) => void {
     return (frame) => this.receive(connection, frame);
   }
 
@@ -53,16 +44,8 @@ export class SessionHost {
 
   private receive(connection: Connection, frame: ClientFrame): void {
     switch (frame.type) {
-      case "hello":
-        connection.accepted = frame.version === PROTOCOL_VERSION;
-        connection.send({
-          type: "hello",
-          version: PROTOCOL_VERSION,
-          accepted: connection.accepted,
-        });
-        return;
       case "subscribe":
-        if (connection.accepted) this.subscribe(connection, frame.scope);
+        this.subscribe(connection, frame.scope);
         return;
       case "unsubscribe":
         this.scopes.get(frame.scope)?.subscribers.delete(connection);
@@ -73,11 +56,11 @@ export class SessionHost {
   private subscribe(connection: Connection, id: ScopeId): void {
     const scope = this.scopes.get(id) ?? this.open(id);
     if (!scope) {
-      connection.send({ type: "snapshot", scope: id, seq: 0, state: EMPTY_SESSION_STATE });
+      connection({ type: "snapshot", scope: id, seq: 0, state: EMPTY_SESSION_STATE });
       return;
     }
     scope.subscribers.add(connection);
-    connection.send({ type: "snapshot", scope: id, seq: scope.seq, state: scope.state });
+    connection({ type: "snapshot", scope: id, seq: scope.seq, state: scope.state });
   }
 
   private open(id: ScopeId): HostScope | null {
@@ -112,7 +95,7 @@ export class SessionHost {
     scope.state = ops.reduce(applySessionOp, scope.state);
     scope.seq += ops.length;
     for (const connection of scope.subscribers) {
-      connection.send({ type: "ops", scope: id, from, ops });
+      connection({ type: "ops", scope: id, from, ops });
     }
   }
 

@@ -3,7 +3,7 @@ import { SessionHost } from "@/agentMode/session/host/SessionHost";
 import { FakeHostChat, FakeHostChats } from "@/agentMode/session/host/testing/fakeHostChats";
 import type { BackendProcess, SessionUpdateHandler } from "@/agentMode/session/types";
 import { SessionClient } from "@copilot/protocol/client";
-import { PROTOCOL_VERSION, type ClientFrame, type HostFrame } from "@copilot/protocol/frames";
+import type { ClientFrame, HostFrame } from "@copilot/protocol/frames";
 import type { PlanUsage } from "@copilot/protocol/planUsage";
 import type { SessionUsage } from "@copilot/protocol/sessionUsage";
 
@@ -34,7 +34,6 @@ function wire(host: SessionHost, deliver: (frame: HostFrame) => boolean = () => 
     received.push(frame);
     if (deliver(frame)) client.receive(frame);
   });
-  client.connect();
   return { client, received, send };
 }
 
@@ -44,34 +43,12 @@ function rawConnection(host: SessionHost): {
 } {
   const received: HostFrame[] = [];
   const send = host.connect((frame) => received.push(frame));
-  send({ type: "hello", version: PROTOCOL_VERSION });
-  received.length = 0;
   return { send, received };
 }
 
 describe("SessionHost", () => {
   describe("SessionHost", () => {
     describe("connect()", () => {
-      it("accepts a client that greets it with the same protocol version", () => {
-        const host = new SessionHost(new FakeHostChats());
-        const received: HostFrame[] = [];
-
-        host.connect((frame) => received.push(frame))({ type: "hello", version: PROTOCOL_VERSION });
-
-        expect(received).toEqual([{ type: "hello", version: PROTOCOL_VERSION, accepted: true }]);
-      });
-
-      it("refuses a client on another protocol version and ignores its subscribes", () => {
-        const host = new SessionHost(new FakeHostChats({ "chat-1": new FakeHostChat(usage(1)) }));
-        const received: HostFrame[] = [];
-        const send = host.connect((frame) => received.push(frame));
-
-        send({ type: "hello", version: PROTOCOL_VERSION + 1 });
-        send({ type: "subscribe", scope: "chat-1" });
-
-        expect(received).toEqual([{ type: "hello", version: PROTOCOL_VERSION, accepted: false }]);
-      });
-
       it("answers a subscribe with a snapshot of the chat's usage and plan usage", () => {
         const chat = new FakeHostChat(usage(1_000), PLAN_USAGE);
         const { client } = wire(new SessionHost(new FakeHostChats({ "chat-1": chat })));
@@ -89,7 +66,7 @@ describe("SessionHost", () => {
         chat.change({ usage: usage(1_000) });
         chat.change({ usage: usage(2_000), planUsage: PLAN_USAGE });
 
-        expect(received.slice(2)).toEqual([
+        expect(received.slice(1)).toEqual([
           {
             type: "ops",
             scope: "chat-1",
@@ -151,7 +128,7 @@ describe("SessionHost", () => {
 
         chat.change({});
 
-        expect(received.map((frame) => frame.type)).toEqual(["hello", "snapshot"]);
+        expect(received.map((frame) => frame.type)).toEqual(["snapshot"]);
       });
 
       it("brings a client that missed an ops frame back in step with a fresh snapshot", () => {
