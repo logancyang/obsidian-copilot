@@ -1,6 +1,6 @@
 {
   "counts": {
-    "imports": 688,
+    "imports": 682,
     "clientAccess": 151
   },
   "imports": {
@@ -346,12 +346,10 @@
       "@/agentMode/session/AgentSessionManager"
     ],
     "apps/obsidian/src/agentMode/ui/agentModelPickerHelpers.ts": [
-      "@/agentMode/backends/registry",
       "@/agentMode/session/AgentChatUIState",
       "@/agentMode/session/AgentSession",
       "@/agentMode/session/AgentSessionManager",
-      "@/agents/ui/CreateAgentForm",
-      "@/settings/model"
+      "@/agents/ui/CreateAgentForm"
     ],
     "apps/obsidian/src/agentMode/ui/chatBackendIcon.ts": ["@/agentMode/backends/registry"],
     "apps/obsidian/src/agentMode/ui/chatCardSlots.ts": [
@@ -427,10 +425,8 @@
       "@/agentMode/session/translateBackendState"
     ],
     "apps/obsidian/src/agentMode/ui/useAgentModelPicker.ts": [
-      "@/agentMode/backends/registry",
       "@/agentMode/session/AgentSessionManager",
-      "@/agentMode/session/translateBackendState",
-      "@/settings/model"
+      "@/agentMode/session/translateBackendState"
     ],
     "apps/obsidian/src/agentMode/ui/useAgentSelect.ts": [
       "@/agentMode/backends/registry",
@@ -473,15 +469,13 @@
       "@/agents/agentMode/agentDraftCard"
     ],
     "apps/obsidian/src/agents/agentMode/ui/AgentDraftCard.tsx": [
-      "@/agentMode/backends/registry",
       "@/agentMode/session/chatExtension",
       "@/agents/CustomAgentStore",
       "@/agents/agentMode/agentChats",
       "@/agents/agentMode/agentDraftCard",
       "@/agents/customAgentFiles",
       "@/agents/customAgentsGate",
-      "@/main",
-      "@/settings/model"
+      "@/main"
     ],
     "apps/obsidian/src/agents/agentMode/ui/AgentProfile.tsx": [
       "@/agentMode/backends/registry",

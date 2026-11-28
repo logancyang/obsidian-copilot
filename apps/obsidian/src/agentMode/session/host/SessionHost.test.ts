@@ -1,6 +1,15 @@
 import { AgentSession } from "@/agentMode/session/AgentSession";
 import { SessionHost } from "@/agentMode/session/host/SessionHost";
-import { FakeHostChat, FakeHostChats } from "@/agentMode/session/host/testing/fakeHostChats";
+import {
+  FakeHostChat,
+  FakeHostChats,
+  FakeHostSlice,
+} from "@/agentMode/session/host/testing/fakeHostChats";
+import {
+  EMPTY_PICKER_CATALOG,
+  type PickerAgent,
+  type PickerCatalog,
+} from "@copilot/protocol/pickerCatalog";
 import type { BackendProcess, SessionUpdateHandler } from "@/agentMode/session/types";
 import { SessionClient } from "@copilot/protocol/client";
 import type { ClientFrame, HostFrame } from "@copilot/protocol/frames";
@@ -14,6 +23,10 @@ jest.mock("@/settings/model", () => ({
 
 function usage(usedTokens: number): SessionUsage {
   return { usedTokens, contextWindow: 200_000, updatedAt: usedTokens };
+}
+
+function catalogNamed(displayName: string): PickerCatalog {
+  return { defaultAgent: "claude", agents: [{ id: "claude", displayName } as PickerAgent] };
 }
 
 const PLAN_USAGE: PlanUsage = {
@@ -50,7 +63,12 @@ describe("SessionHost", () => {
     describe("connect()", () => {
       it("answers a subscribe with a snapshot of the chat's usage and plan usage", () => {
         const chat = new FakeHostChat(usage(1_000), PLAN_USAGE);
-        const { client } = wire(new SessionHost(new FakeHostChats({ "chat-1": chat })));
+        const { client } = wire(
+          new SessionHost(
+            new FakeHostChats({ "chat-1": chat }),
+            new FakeHostSlice(EMPTY_PICKER_CATALOG)
+          )
+        );
 
         client.watch("chat-1");
 
@@ -59,7 +77,12 @@ describe("SessionHost", () => {
 
       it("sends each usage and plan usage change of a subscribed chat as numbered ops", () => {
         const chat = new FakeHostChat();
-        const { client, received } = wire(new SessionHost(new FakeHostChats({ "chat-1": chat })));
+        const { client, received } = wire(
+          new SessionHost(
+            new FakeHostChats({ "chat-1": chat }),
+            new FakeHostSlice(EMPTY_PICKER_CATALOG)
+          )
+        );
         client.watch("chat-1");
 
         chat.change({ usage: usage(1_000) });
@@ -68,12 +91,14 @@ describe("SessionHost", () => {
         expect(received.slice(1)).toEqual([
           {
             type: "ops",
+            feed: "chat",
             liveChatId: "chat-1",
             from: 1,
             ops: [{ type: "slice", key: "usage", value: usage(1_000) }],
           },
           {
             type: "ops",
+            feed: "chat",
             liveChatId: "chat-1",
             from: 2,
             ops: [
@@ -86,7 +111,10 @@ describe("SessionHost", () => {
 
       it("keeps a client's replica equal to the host state through a run of changes", () => {
         const chat = new FakeHostChat();
-        const host = new SessionHost(new FakeHostChats({ "chat-1": chat }));
+        const host = new SessionHost(
+          new FakeHostChats({ "chat-1": chat }),
+          new FakeHostSlice(EMPTY_PICKER_CATALOG)
+        );
         const { client } = wire(host);
         client.watch("chat-1");
 
@@ -102,7 +130,10 @@ describe("SessionHost", () => {
 
       it("keeps a replica fed through JSON equal to one fed directly, reading a field set to undefined as a missing one", () => {
         const chat = new FakeHostChat(usage(1_000), PLAN_USAGE);
-        const host = new SessionHost(new FakeHostChats({ "chat-1": chat }));
+        const host = new SessionHost(
+          new FakeHostChats({ "chat-1": chat }),
+          new FakeHostSlice(EMPTY_PICKER_CATALOG)
+        );
         const direct = wire(host).client;
         const overJson = new SessionClient((frame) => toHost(JSON.parse(JSON.stringify(frame))));
         const toHost = host.connect((frame) => overJson.receive(JSON.parse(JSON.stringify(frame))));
@@ -118,17 +149,21 @@ describe("SessionHost", () => {
 
       it("gives a late subscriber a snapshot numbered at the host's latest op", () => {
         const chat = new FakeHostChat();
-        const host = new SessionHost(new FakeHostChats({ "chat-1": chat }));
+        const host = new SessionHost(
+          new FakeHostChats({ "chat-1": chat }),
+          new FakeHostSlice(EMPTY_PICKER_CATALOG)
+        );
         wire(host).client.watch("chat-1");
         chat.change({ usage: usage(1_000) });
         chat.change({ planUsage: PLAN_USAGE });
 
         const late = rawConnection(host);
-        late.send({ type: "subscribe", liveChatId: "chat-1" });
+        late.send({ type: "subscribe", feed: "chat", liveChatId: "chat-1" });
 
         expect(late.received).toEqual([
           {
             type: "snapshot",
+            feed: "chat",
             liveChatId: "chat-1",
             seq: 2,
             state: { usage: usage(1_000), planUsage: PLAN_USAGE },
@@ -138,7 +173,12 @@ describe("SessionHost", () => {
 
       it("sends nothing for a chat change that left both usage slices as they were", () => {
         const chat = new FakeHostChat(usage(1_000));
-        const { client, received } = wire(new SessionHost(new FakeHostChats({ "chat-1": chat })));
+        const { client, received } = wire(
+          new SessionHost(
+            new FakeHostChats({ "chat-1": chat }),
+            new FakeHostSlice(EMPTY_PICKER_CATALOG)
+          )
+        );
         client.watch("chat-1");
 
         chat.change({});
@@ -148,7 +188,10 @@ describe("SessionHost", () => {
 
       it("brings a client that missed an ops frame back in step with a fresh snapshot", () => {
         const chat = new FakeHostChat();
-        const host = new SessionHost(new FakeHostChats({ "chat-1": chat }));
+        const host = new SessionHost(
+          new FakeHostChats({ "chat-1": chat }),
+          new FakeHostSlice(EMPTY_PICKER_CATALOG)
+        );
         let dropNextOps = false;
         const { client, received } = wire(host, (frame) => {
           if (frame.type !== "ops" || !dropNextOps) return true;
@@ -164,6 +207,7 @@ describe("SessionHost", () => {
 
         expect(received.at(-1)).toEqual({
           type: "snapshot",
+          feed: "chat",
           liveChatId: "chat-1",
           seq: 3,
           state: { usage: usage(2_000), planUsage: PLAN_USAGE },
@@ -175,11 +219,14 @@ describe("SessionHost", () => {
 
       it("stops sending a chat's ops to a client once it unsubscribes", () => {
         const chat = new FakeHostChat();
-        const host = new SessionHost(new FakeHostChats({ "chat-1": chat }));
+        const host = new SessionHost(
+          new FakeHostChats({ "chat-1": chat }),
+          new FakeHostSlice(EMPTY_PICKER_CATALOG)
+        );
         const connection = rawConnection(host);
-        connection.send({ type: "subscribe", liveChatId: "chat-1" });
+        connection.send({ type: "subscribe", feed: "chat", liveChatId: "chat-1" });
 
-        connection.send({ type: "unsubscribe", liveChatId: "chat-1" });
+        connection.send({ type: "unsubscribe", feed: "chat", liveChatId: "chat-1" });
         chat.change({ usage: usage(1_000) });
 
         expect(connection.received.map((frame) => frame.type)).toEqual(["snapshot"]);
@@ -187,7 +234,10 @@ describe("SessionHost", () => {
 
       it("listens to a chat once however many clients subscribe to it", () => {
         const chat = new FakeHostChat();
-        const host = new SessionHost(new FakeHostChats({ "chat-1": chat }));
+        const host = new SessionHost(
+          new FakeHostChats({ "chat-1": chat }),
+          new FakeHostSlice(EMPTY_PICKER_CATALOG)
+        );
 
         wire(host).client.watch("chat-1");
         wire(host).client.watch("chat-1");
@@ -199,7 +249,10 @@ describe("SessionHost", () => {
         const first = new FakeHostChat(usage(1_000));
         const second = new FakeHostChat(usage(50_000), PLAN_USAGE);
         const { client } = wire(
-          new SessionHost(new FakeHostChats({ "chat-1": first, "chat-2": second }))
+          new SessionHost(
+            new FakeHostChats({ "chat-1": first, "chat-2": second }),
+            new FakeHostSlice(EMPTY_PICKER_CATALOG)
+          )
         );
         client.watch("chat-1");
         client.watch("chat-2");
@@ -211,13 +264,16 @@ describe("SessionHost", () => {
       });
 
       it("gives a subscribe to a chat it cannot find an empty snapshot", () => {
-        const connection = rawConnection(new SessionHost(new FakeHostChats()));
+        const connection = rawConnection(
+          new SessionHost(new FakeHostChats(), new FakeHostSlice(EMPTY_PICKER_CATALOG))
+        );
 
-        connection.send({ type: "subscribe", liveChatId: "missing" });
+        connection.send({ type: "subscribe", feed: "chat", liveChatId: "missing" });
 
         expect(connection.received).toEqual([
           {
             type: "snapshot",
+            feed: "chat",
             liveChatId: "missing",
             seq: 0,
             state: { usage: null, planUsage: null },
@@ -227,13 +283,16 @@ describe("SessionHost", () => {
 
       it("keeps listening to a chat while another client still subscribes to it", () => {
         const chat = new FakeHostChat();
-        const host = new SessionHost(new FakeHostChats({ "chat-1": chat }));
+        const host = new SessionHost(
+          new FakeHostChats({ "chat-1": chat }),
+          new FakeHostSlice(EMPTY_PICKER_CATALOG)
+        );
         const leaving = rawConnection(host);
         const staying = rawConnection(host);
-        leaving.send({ type: "subscribe", liveChatId: "chat-1" });
-        staying.send({ type: "subscribe", liveChatId: "chat-1" });
+        leaving.send({ type: "subscribe", feed: "chat", liveChatId: "chat-1" });
+        staying.send({ type: "subscribe", feed: "chat", liveChatId: "chat-1" });
 
-        leaving.send({ type: "unsubscribe", liveChatId: "chat-1" });
+        leaving.send({ type: "unsubscribe", feed: "chat", liveChatId: "chat-1" });
         chat.change({ usage: usage(1_000) });
 
         expect(chat.listeners.size).toBe(1);
@@ -242,17 +301,21 @@ describe("SessionHost", () => {
 
       it("stops listening to a chat once its last client leaves, and starts it fresh on the next subscribe", () => {
         const chat = new FakeHostChat(usage(1_000));
-        const host = new SessionHost(new FakeHostChats({ "chat-1": chat }));
+        const host = new SessionHost(
+          new FakeHostChats({ "chat-1": chat }),
+          new FakeHostSlice(EMPTY_PICKER_CATALOG)
+        );
         const connection = rawConnection(host);
-        connection.send({ type: "subscribe", liveChatId: "chat-1" });
+        connection.send({ type: "subscribe", feed: "chat", liveChatId: "chat-1" });
         chat.change({ usage: usage(2_000) });
 
-        connection.send({ type: "unsubscribe", liveChatId: "chat-1" });
+        connection.send({ type: "unsubscribe", feed: "chat", liveChatId: "chat-1" });
         expect(chat.listeners.size).toBe(0);
 
-        connection.send({ type: "subscribe", liveChatId: "chat-1" });
+        connection.send({ type: "subscribe", feed: "chat", liveChatId: "chat-1" });
         expect(connection.received.at(-1)).toEqual({
           type: "snapshot",
+          feed: "chat",
           liveChatId: "chat-1",
           seq: 0,
           state: { usage: usage(2_000), planUsage: null },
@@ -273,7 +336,12 @@ describe("SessionHost", () => {
           internalId: "chat-1",
           backendId: "claude",
         });
-        const { client } = wire(new SessionHost(new FakeHostChats({ "chat-1": session })));
+        const { client } = wire(
+          new SessionHost(
+            new FakeHostChats({ "chat-1": session }),
+            new FakeHostSlice(EMPTY_PICKER_CATALOG)
+          )
+        );
         client.watch("chat-1");
 
         handler!({
@@ -287,17 +355,96 @@ describe("SessionHost", () => {
 
         expect(client.getState("chat-1")).toEqual({ usage: usage(42_000), planUsage: PLAN_USAGE });
       });
+
+      it("answers a host subscribe with a snapshot of the picker catalog, and sends each new catalog as a numbered op", () => {
+        const catalog = new FakeHostSlice(catalogNamed("first"));
+        const connection = rawConnection(new SessionHost(new FakeHostChats(), catalog));
+
+        connection.send({ type: "subscribe", feed: "host" });
+        catalog.change(catalogNamed("second"));
+
+        expect(connection.received).toEqual([
+          {
+            type: "snapshot",
+            feed: "host",
+            seq: 0,
+            state: { pickerCatalog: catalogNamed("first") },
+          },
+          {
+            type: "ops",
+            feed: "host",
+            from: 1,
+            ops: [{ type: "slice", key: "pickerCatalog", value: catalogNamed("second") }],
+          },
+        ]);
+      });
+
+      it("sends nothing when the catalog source signals but hands back the catalog it already had", () => {
+        const catalog = new FakeHostSlice(catalogNamed("first"));
+        const connection = rawConnection(new SessionHost(new FakeHostChats(), catalog));
+        connection.send({ type: "subscribe", feed: "host" });
+
+        catalog.change(catalog.read());
+
+        expect(connection.received.map((frame) => frame.type)).toEqual(["snapshot"]);
+      });
+
+      it("listens to the catalog source once for every host subscriber, and stops once the last one leaves", () => {
+        const catalog = new FakeHostSlice(catalogNamed("first"));
+        const host = new SessionHost(new FakeHostChats(), catalog);
+        const leaving = rawConnection(host);
+        const staying = rawConnection(host);
+        leaving.send({ type: "subscribe", feed: "host" });
+        staying.send({ type: "subscribe", feed: "host" });
+
+        leaving.send({ type: "unsubscribe", feed: "host" });
+        catalog.change(catalogNamed("second"));
+        expect(catalog.listeners.size).toBe(1);
+        expect(staying.received.map((frame) => frame.type)).toEqual(["snapshot", "ops"]);
+        expect(leaving.received.map((frame) => frame.type)).toEqual(["snapshot"]);
+
+        staying.send({ type: "unsubscribe", feed: "host" });
+        expect(catalog.listeners.size).toBe(0);
+      });
+
+      it("keeps the host feed's sequence apart from every chat's", () => {
+        const chat = new FakeHostChat();
+        const catalog = new FakeHostSlice(catalogNamed("first"));
+        const { client } = wire(new SessionHost(new FakeHostChats({ "chat-1": chat }), catalog));
+        client.watch("chat-1");
+        client.watchHost();
+
+        chat.change({ usage: usage(1_000) });
+        chat.change({ usage: usage(2_000) });
+        catalog.change(catalogNamed("second"));
+
+        expect(client.getHostState()).toEqual({ pickerCatalog: catalogNamed("second") });
+        expect(client.getState("chat-1")?.usage).toEqual(usage(2_000));
+      });
     });
 
     describe("dispose()", () => {
       it("stops listening to every chat a client still subscribes to", () => {
         const chat = new FakeHostChat();
-        const host = new SessionHost(new FakeHostChats({ "chat-1": chat }));
+        const host = new SessionHost(
+          new FakeHostChats({ "chat-1": chat }),
+          new FakeHostSlice(EMPTY_PICKER_CATALOG)
+        );
         wire(host).client.watch("chat-1");
 
         host.dispose();
 
         expect(chat.listeners.size).toBe(0);
+      });
+
+      it("stops listening to the catalog source while a client still subscribes to the host feed", () => {
+        const catalog = new FakeHostSlice(catalogNamed("first"));
+        const host = new SessionHost(new FakeHostChats(), catalog);
+        wire(host).client.watchHost();
+
+        host.dispose();
+
+        expect(catalog.listeners.size).toBe(0);
       });
     });
   });

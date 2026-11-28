@@ -1,7 +1,7 @@
 import type { ChatStateHost } from "@/agentMode/session/chatExtension";
-import { listBackendDescriptors } from "@/agentMode/backends/registry";
 import { buildAgentModelChoices } from "@/agentMode/ui/agentModelPickerHelpers";
 import { defineChatCardSlot, NO_PLACED_CHAT_CARDS } from "@/agentMode/ui/chatCards";
+import { useHostSlice } from "@/agentMode/ui/hooks/useSessionSlice";
 import { startCustomAgentChat } from "@/agents/agentMode/agentChats";
 import {
   AGENT_DRAFT_CARD,
@@ -21,7 +21,7 @@ import { USER_SENDER } from "@/constants";
 import { useChatInput } from "@/context/ChatInputContext";
 import { logError } from "@/logger";
 import type CopilotPlugin from "@/main";
-import { getSettings } from "@/settings/model";
+import type { PickerCatalog } from "@copilot/protocol/pickerCatalog";
 import { UserPlus } from "lucide-react";
 import { Notice } from "obsidian";
 import React, { useContext } from "react";
@@ -83,12 +83,13 @@ interface AgentDraftChatCardProps {
 function AgentDraftChatCard({ card, plugin, chat }: AgentDraftChatCardProps) {
   const { focusInput } = useChatInput();
   const store = useContext(CustomAgentStoreContext);
+  const pickerCatalog = useHostSlice("pickerCatalog");
   if (useCustomAgentsGate() !== "full") return null;
   return (
     <AgentDraftCard
       draft={card.draft}
       onDismiss={() => dismissAgentDraft(chat)}
-      onReview={() => openAgentDraft(plugin, store, chat, card, focusInput)}
+      onReview={() => openAgentDraft(plugin, store, chat, card, focusInput, pickerCatalog)}
     />
   );
 }
@@ -100,18 +101,15 @@ function openAgentDraft(
   store: CustomAgentStore | undefined,
   chat: ChatStateHost,
   { draft, draftedBy }: AgentDraftCardState,
-  focusInput: () => void
+  focusInput: () => void,
+  pickerCatalog: PickerCatalog
 ) {
   const manager = plugin.agentSessionManager;
   if (!store || !manager) return;
   const drafter = store.getAgents().find((agent) => agent.slug === draftedBy);
   new CreateAgentModal(plugin.app, {
     store,
-    models: buildAgentModelChoices({
-      manager,
-      descriptors: listBackendDescriptors(),
-      settings: getSettings(),
-    }),
+    models: buildAgentModelChoices(pickerCatalog),
     initialValues: draft,
     draftedBy: drafter && { name: drafter.name, faceSrc: drafter.faceSrc },
     onCreated: (slug) => {

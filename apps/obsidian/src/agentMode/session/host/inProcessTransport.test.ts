@@ -1,6 +1,11 @@
 import { connectInProcess } from "@/agentMode/session/host/inProcessTransport";
 import { SessionHost } from "@/agentMode/session/host/SessionHost";
-import { FakeHostChat, FakeHostChats } from "@/agentMode/session/host/testing/fakeHostChats";
+import {
+  FakeHostChat,
+  FakeHostChats,
+  FakeHostSlice,
+} from "@/agentMode/session/host/testing/fakeHostChats";
+import { EMPTY_PICKER_CATALOG } from "@copilot/protocol/pickerCatalog";
 import type { SessionClient } from "@copilot/protocol/client";
 import type { SessionUsage } from "@copilot/protocol/sessionUsage";
 
@@ -8,7 +13,10 @@ const USAGE: SessionUsage = { usedTokens: 1_000, contextWindow: 200_000, updated
 const LATER_USAGE: SessionUsage = { usedTokens: 2_000, contextWindow: 200_000, updatedAt: 2 };
 
 function hostWith(chat: FakeHostChat): SessionHost {
-  return new SessionHost(new FakeHostChats({ "chat-1": chat }));
+  return new SessionHost(
+    new FakeHostChats({ "chat-1": chat }),
+    new FakeHostSlice(EMPTY_PICKER_CATALOG)
+  );
 }
 
 function asProductionBuild<T>(run: () => T): T {
@@ -53,7 +61,10 @@ describe("inProcessTransport", () => {
       const chat = new FakeHostChat(USAGE);
       const other = new FakeHostChat(LATER_USAGE);
       const client = connectInProcess(
-        new SessionHost(new FakeHostChats({ "chat-1": chat, "chat-2": other }))
+        new SessionHost(
+          new FakeHostChats({ "chat-1": chat, "chat-2": other }),
+          new FakeHostSlice(EMPTY_PICKER_CATALOG)
+        )
       );
       client.watch("chat-1");
       const seen: (number | undefined)[] = [];

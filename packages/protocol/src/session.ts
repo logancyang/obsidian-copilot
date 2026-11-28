@@ -20,11 +20,17 @@ export interface SessionState {
 
 export const EMPTY_SESSION_STATE: SessionState = Object.freeze({ usage: null, planUsage: null });
 
-export type SessionOp = {
-  [K in keyof SessionState]: { type: "slice"; key: K; value: SessionState[K] };
-}[keyof SessionState];
+export type SliceOp<S> = {
+  [K in keyof S]: { type: "slice"; key: K; value: S[K] };
+}[keyof S];
 
-export function applySessionOp(state: SessionState, op: SessionOp): SessionState {
+export type SessionOp = SliceOp<SessionState>;
+
+export function applySliceOp<S extends object>(state: S, op: SliceOp<S>): S {
   if (Object.is(state[op.key], op.value)) return state;
   return { ...state, [op.key]: op.value };
+}
+
+export function applySessionOp(state: SessionState, op: SessionOp): SessionState {
+  return applySliceOp(state, op);
 }

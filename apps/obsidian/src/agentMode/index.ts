@@ -35,6 +35,7 @@ import { createNodeFileStorage } from "./session/nodeFileStorage";
 import { AgentSessionManager } from "./session/AgentSessionManager";
 import { connectInProcess } from "./session/host/inProcessTransport";
 import { SessionHost } from "./session/host/SessionHost";
+import { pickerCatalogSource } from "./session/host/pickerCatalog";
 import {
   createCopilotMcpServer,
   SEND_FEEDBACK_TOOL_NAME,
@@ -451,7 +452,10 @@ export function createAgentSessionManager(
     onChatReopened: restoreRelayedRuns,
   });
   managerRef = manager;
-  const sessionHost = new SessionHost(manager);
+  const sessionHost = new SessionHost(
+    manager,
+    pickerCatalogSource(listBackendDescriptors(), manager)
+  );
   plugin.register(() => sessionHost.dispose());
   const sessionClient = connectInProcess(sessionHost);
   // Agents read Copilot's tool list once per session, so a connected or disconnected service reaches open chats through Reload.

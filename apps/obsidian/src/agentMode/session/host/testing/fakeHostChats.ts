@@ -1,5 +1,5 @@
 import type { AgentSessionListener } from "@/agentMode/session/AgentSession";
-import type { HostChat, HostChats } from "@/agentMode/session/host/SessionHost";
+import type { HostChat, HostChats, HostSliceSource } from "@/agentMode/session/host/SessionHost";
 import type { PlanUsage } from "@copilot/protocol/planUsage";
 import type { SessionUsage } from "@copilot/protocol/sessionUsage";
 
@@ -36,5 +36,25 @@ export class FakeHostChats implements HostChats {
 
   getSession(id: string): HostChat | null {
     return this.chats[id] ?? null;
+  }
+}
+
+export class FakeHostSlice<T> implements HostSliceSource<T> {
+  readonly listeners = new Set<() => void>();
+
+  constructor(private value: T) {}
+
+  read(): T {
+    return this.value;
+  }
+
+  subscribe(onChange: () => void): () => void {
+    this.listeners.add(onChange);
+    return () => this.listeners.delete(onChange);
+  }
+
+  change(next: T): void {
+    this.value = next;
+    for (const listener of this.listeners) listener();
   }
 }

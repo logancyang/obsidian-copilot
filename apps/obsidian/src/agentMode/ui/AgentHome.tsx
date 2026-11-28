@@ -54,10 +54,11 @@ import { useComposerFocusAfterLandingSend } from "@/agentMode/ui/hooks/useCompos
 import { useComposerFocusAfterTaskView } from "@/agentMode/ui/hooks/useComposerFocusAfterTaskView";
 import { useRefreshEmptyLandingOnContextSourceChange } from "@/projects/hooks/useRefreshEmptyLandingOnContextSourceChange";
 import { useAgentModelPicker } from "@/agentMode/ui/useAgentModelPicker";
+import { useHostSlice } from "@/agentMode/ui/hooks/useSessionSlice";
 import { useAgentModePicker } from "@/agentMode/ui/useAgentModePicker";
 import { useSessionBackendDescriptor } from "@/agentMode/ui/useBackendDescriptor";
 import { pickRandomGreeting } from "@/agentMode/ui/landingGreetings";
-import { backendRegistry, listBackendDescriptors } from "@/agentMode/backends/registry";
+import { backendRegistry } from "@/agentMode/backends/registry";
 import { buildAgentModelChoices } from "@/agentMode/ui/agentModelPickerHelpers";
 import {
   agentBackend,
@@ -119,7 +120,7 @@ import {
   useArchivedProjects,
   useProjects,
 } from "@/projects/state";
-import { getSettings, useSettingsValue } from "@/settings/model";
+import { useSettingsValue } from "@/settings/model";
 import { FileSearch, Files, Folder, MessageSquare } from "lucide-react";
 import { Notice } from "obsidian";
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
@@ -473,14 +474,10 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const customAgentsGate = useCustomAgentsGate();
   const { focusInput, insertTextWithPills } = useChatInput();
   const selectAgent = agentHome.select;
+  const pickerCatalog = useHostSlice("pickerCatalog");
   const getAgentModelChoices = useCallback(
-    () =>
-      buildAgentModelChoices({
-        manager,
-        descriptors: listBackendDescriptors(),
-        settings: getSettings(),
-      }),
-    [manager]
+    () => buildAgentModelChoices(pickerCatalog),
+    [pickerCatalog]
   );
   const openCreateAgentDialog = useCallback(() => {
     if (!customAgents) return;

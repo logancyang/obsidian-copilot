@@ -1,6 +1,11 @@
-import { SessionClientContext, useSessionSlice } from "@/agentMode/ui/hooks/useSessionSlice";
+import {
+  SessionClientContext,
+  useHostSlice,
+  useSessionSlice,
+} from "@/agentMode/ui/hooks/useSessionSlice";
 import { fakeSessionClient } from "@/agentMode/ui/testing/fakeSessionClient";
 import type { SessionClient } from "@copilot/protocol/client";
+import type { PickerCatalog } from "@copilot/protocol/pickerCatalog";
 import type { PlanUsage } from "@copilot/protocol/planUsage";
 import type { SessionUsage } from "@copilot/protocol/sessionUsage";
 import { act, renderHook } from "@testing-library/react";
@@ -11,6 +16,9 @@ const PLAN_USAGE: PlanUsage = {
   windows: [{ id: "weekly", label: "Weekly", percent: 4 }],
   updatedAt: 1,
 };
+
+const CATALOG: PickerCatalog = { defaultAgent: "claude", agents: [] };
+const LATER_CATALOG: PickerCatalog = { defaultAgent: "codex", agents: [] };
 
 function withClient(client: SessionClient) {
   return function Wrapper({ children }: { children: React.ReactNode }) {
@@ -140,6 +148,45 @@ describe("useSessionSlice", () => {
 
       expect(() => renderHook(() => useSessionSlice("chat-1", "usage"))).toThrow(
         "useSessionSlice needs a SessionClientContext provider above it."
+      );
+    });
+  });
+
+  describe("useHostSlice()", () => {
+    it("returns the host's slice on its very first render and follows each op", () => {
+      const fake = fakeSessionClient({}, { pickerCatalog: CATALOG });
+      const seen: PickerCatalog[] = [];
+
+      renderHook(
+        () => {
+          const value = useHostSlice("pickerCatalog");
+          seen.push(value);
+          return value;
+        },
+        { wrapper: withClient(fake.client) }
+      );
+      act(() => fake.setHostState({ pickerCatalog: LATER_CATALOG }));
+
+      expect(seen[0]).toEqual(CATALOG);
+      expect(seen.at(-1)).toEqual(LATER_CATALOG);
+    });
+
+    it("watches the host feed while mounted and releases it on unmount", () => {
+      const fake = fakeSessionClient({}, { pickerCatalog: CATALOG });
+      const { unmount } = renderHook(() => useHostSlice("pickerCatalog"), {
+        wrapper: withClient(fake.client),
+      });
+
+      expect(fake.watchesHost()).toBe(true);
+      unmount();
+      expect(fake.watchesHost()).toBe(false);
+    });
+
+    it("throws when no session client is provided", () => {
+      jest.spyOn(console, "error").mockImplementation(() => {});
+
+      expect(() => renderHook(() => useHostSlice("pickerCatalog"))).toThrow(
+        "useHostSlice needs a SessionClientContext provider above it."
       );
     });
   });
