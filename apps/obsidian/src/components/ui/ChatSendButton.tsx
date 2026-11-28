@@ -3,19 +3,18 @@ import { ArrowUp } from "lucide-react";
 import React from "react";
 
 interface ChatSendButtonProps {
-  inputMessage: string;
-  imageCount: number;
+  canSend: boolean;
   onSend: () => void;
 }
 
-export function ChatSendButton({ inputMessage, imageCount, onSend }: ChatSendButtonProps) {
+export function ChatSendButton({ canSend, onSend }: ChatSendButtonProps) {
   return (
     <Button
       size="icon"
       className="tw-rounded-full tw-bg-interactive-accent tw-text-on-accent hover:tw-bg-interactive-accent-hover"
       aria-label="Send"
       onClick={onSend}
-      disabled={!inputMessage.trim() && imageCount === 0}
+      disabled={!canSend}
     >
       <ArrowUp className="tw-size-4" />
     </Button>

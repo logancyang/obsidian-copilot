@@ -391,6 +391,23 @@ describe("conversationHistory", () => {
       expect(block).toContain("the fan-out renderer drops context");
     });
 
+    it("lists a quoted passage from the chat with its comment https://github.com/Brevilabs/obsidian-copilot-private/issues/1045", () => {
+      const msg = withContext(USER_SENDER, "", {
+        notes: [],
+        urls: [],
+        selectedTextContexts: [
+          { id: "q1", sourceType: "chat", content: "Ship on Friday", comment: "Too soon" },
+        ],
+      });
+      const block = buildConversationHistoryBlock(
+        [msg],
+        SAVED_HISTORY_MAX_CHARS,
+        null,
+        noSavedImages
+      )!.text;
+      expect(block).toContain("[selected from this chat]\nShip on Friday\n[comment]\nToo soon");
+    });
+
     it("names a reopened chat's attached notes by path with its web tabs (https://github.com/Brevilabs/obsidian-copilot-private/issues/920)", () => {
       const msg = withContext(USER_SENDER, "compare these", {
         notes: [{ path: "Projects/Plan, v2 | draft.md" } as MessageContext["notes"][number]],
