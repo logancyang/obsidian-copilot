@@ -235,6 +235,19 @@ export function ContextFolderBadge({ folder, onRemove }: ContextFolderBadgeProps
   );
 }
 
+export function QuotedPassage({ text, className }: { text: string; className?: string }) {
+  return (
+    <div
+      className={cn(
+        "tw-whitespace-pre-wrap tw-border-0 tw-border-l tw-border-solid tw-border-border tw-pl-2 tw-text-muted",
+        className
+      )}
+    >
+      {text}
+    </div>
+  );
+}
+
 function ChatQuoteBadge({
   quote,
   onRemove,
@@ -242,9 +255,7 @@ function ChatQuoteBadge({
   const Icon = quote.comment ? MessageSquareText : TextQuote;
   const tooltipContent = (
     <div className="tw-max-h-60 tw-overflow-y-auto tw-text-left">
-      <div className="tw-whitespace-pre-wrap tw-border-0 tw-border-l tw-border-solid tw-border-border tw-pl-2 tw-text-muted">
-        {quote.content}
-      </div>
+      <QuotedPassage text={quote.content} />
       {quote.comment ? <div className="tw-mt-1 tw-whitespace-pre-wrap">{quote.comment}</div> : null}
     </div>
   );

@@ -1,3 +1,4 @@
+import { QuotedPassage } from "@/components/chat-components/ContextBadges";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
@@ -10,13 +11,14 @@ export interface ChatQuote {
 }
 
 interface ChatQuoteMenuProps {
+  passage: string;
   onAdd: (comment?: string) => void;
   startCommenting?: boolean;
 }
 
 const ACTION_CLASS = "tw-text-normal hover:tw-bg-modifier-hover";
 
-export function ChatQuoteMenu({ onAdd, startCommenting = false }: ChatQuoteMenuProps) {
+export function ChatQuoteMenu({ passage, onAdd, startCommenting = false }: ChatQuoteMenuProps) {
   const [commenting, setCommenting] = useState(startCommenting);
   const [comment, setComment] = useState("");
 
@@ -45,6 +47,7 @@ export function ChatQuoteMenu({ onAdd, startCommenting = false }: ChatQuoteMenuP
   };
   return (
     <div className="tw-flex tw-w-72 tw-flex-col tw-gap-2 tw-p-1">
+      <QuotedPassage text={passage} className="tw-line-clamp-3 tw-text-xs" />
       <Textarea
         autoFocus
         aria-label="Comment"
@@ -124,7 +127,7 @@ export function ChatQuotePopover({ scopeEl, container, onAdd }: ChatQuotePopover
         onOpenAutoFocus={(event) => event.preventDefault()}
         onCloseAutoFocus={(event) => event.preventDefault()}
       >
-        <ChatQuoteMenu onAdd={add} />
+        <ChatQuoteMenu passage={passage.text} onAdd={add} />
       </PopoverContent>
     </Popover>
   );

@@ -53,18 +53,19 @@ describe("ChatQuotePopover", () => {
   describe("ChatQuoteMenu()", () => {
     it("adds the passage without a comment when Quote is chosen", () => {
       const onAdd = jest.fn();
-      render(<ChatQuoteMenu onAdd={onAdd} />);
+      render(<ChatQuoteMenu passage="Use Postgres" onAdd={onAdd} />);
 
       fireEvent.click(screen.getByRole("button", { name: "Quote" }));
 
       expect(onAdd).toHaveBeenCalledWith();
     });
 
-    it("turns into a comment box when Comment is chosen and adds the trimmed comment on Enter", () => {
+    it("turns into a comment box under the passage when Comment is chosen and adds the trimmed comment on Enter", () => {
       const onAdd = jest.fn();
-      render(<ChatQuoteMenu onAdd={onAdd} />);
+      render(<ChatQuoteMenu passage="Use Postgres" onAdd={onAdd} />);
 
       fireEvent.click(screen.getByRole("button", { name: "Comment" }));
+      expect(screen.getByText("Use Postgres")).toBeTruthy();
       const box = screen.getByRole("textbox", { name: "Comment" });
       fireEvent.change(box, { target: { value: "  Why not SQLite?  " } });
       fireEvent.keyDown(box, { key: "Enter" });
@@ -74,7 +75,7 @@ describe("ChatQuotePopover", () => {
 
     it("keeps a comment open on Shift+Enter and while it is empty", () => {
       const onAdd = jest.fn();
-      render(<ChatQuoteMenu onAdd={onAdd} startCommenting />);
+      render(<ChatQuoteMenu passage="Use Postgres" onAdd={onAdd} startCommenting />);
       const box = screen.getByRole("textbox", { name: "Comment" });
 
       fireEvent.keyDown(box, { key: "Enter" });
