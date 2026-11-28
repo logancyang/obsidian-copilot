@@ -5,10 +5,10 @@ const meta = {
   title: "Chat/Send button",
   component: ChatSendButton,
   parameters: { gallery: { host: "leaf", layout: "padded" } },
-  args: { inputMessage: "", imageCount: 0, onSend: () => {} },
+  args: { canSend: false, onSend: () => {} },
 } satisfies Meta<ComponentProps<typeof ChatSendButton>>;
 export default meta;
 export const Empty: StoryObj<ComponentProps<typeof ChatSendButton>> = {};
-export const ImageOnly: StoryObj<ComponentProps<typeof ChatSendButton>> = {
-  args: { imageCount: 1 },
+export const Ready: StoryObj<ComponentProps<typeof ChatSendButton>> = {
+  args: { canSend: true },
 };

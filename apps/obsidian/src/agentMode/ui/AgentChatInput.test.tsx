@@ -29,6 +29,7 @@ jest.mock("@/components/chat-components/ChatInput", () => ({
         handleSendMessage?: (meta?: {
           contextNotes?: import("obsidian").TFile[];
           contextFolders?: string[];
+          webTabs?: WebTabContext[];
         }) => void;
         onStopGenerating?: () => void;
         isGenerating?: boolean;
@@ -62,6 +63,16 @@ jest.mock("@/components/chat-components/ChatInput", () => ({
             }
           >
             send with mentions
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              props.handleSendMessage?.({
+                webTabs: [{ url: "https://example.com/board", title: "Board" }],
+              })
+            }
+          >
+            send with web tab
           </button>
           <button type="button" onClick={() => props.onStopGenerating?.()}>
             stop
@@ -561,6 +572,74 @@ describe("AgentChatInput", () => {
         folders: ["Research/Pricing"],
       });
     });
+
+    it.each([
+      {
+        attached: "an attached note",
+        draft: { contextNotes: [makeFile("Research.md")] },
+        selections: [] as SelectedTextContext[],
+        context: { notes: [makeFile("Research.md")], urls: [] },
+      },
+      {
+        attached: "a note selection",
+        draft: {},
+        selections: [
+          {
+            id: "excerpt",
+            sourceType: "note",
+            noteTitle: "Research",
+            notePath: "Research.md",
+            content: "Compare the interview findings.",
+            startLine: 3,
+            endLine: 3,
+          },
+        ] as SelectedTextContext[],
+        context: {
+          notes: [],
+          urls: [],
+          selectedTextContexts: [expect.objectContaining({ id: "excerpt" })],
+        },
+      },
+    ])(
+      "sends $attached with no typed text as a message of its own https://github.com/Brevilabs/obsidian-copilot-private/issues/1044",
+      async ({ draft, selections, context }) => {
+        mockSelectedTextContexts = selections;
+        const backend = {
+          sendMessage: jest.fn(() => ({ turn: Promise.resolve() })),
+          takeWithdrawnPrompts: () => [],
+        } as unknown as AgentChatBackend;
+        renderInput(backend, makeDraft({ input: "", ...draft }));
+
+        fireEvent.click(screen.getByText("send"));
+
+        await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
+        expect(jest.mocked(backend.sendMessage).mock.calls[0][0]).toBe("");
+        expect(jest.mocked(backend.sendMessage).mock.calls[0][1]).toEqual(context);
+      }
+    );
+
+    it.each([
+      { only: "the active note", button: "send", draft: { includeActiveNote: true } },
+      { only: "the active web tab", button: "send", draft: { includeActiveWebTab: true } },
+      { only: "an attached web tab", button: "send with web tab", draft: {} },
+    ])(
+      "sends nothing from an empty draft whose only context is $only https://github.com/Brevilabs/obsidian-copilot-private/issues/1044",
+      ({ button, draft: overrides }) => {
+        mockActiveFile = makeFile("Open.md");
+        const backend = {
+          sendMessage: jest.fn(() => ({ turn: Promise.resolve() })),
+          takeWithdrawnPrompts: () => [],
+        } as unknown as AgentChatBackend;
+        const draft = makeDraft({ input: "", ...overrides });
+        renderInput(backend, draft);
+        jest.mocked(expandCustomCommandPrefix).mockClear();
+
+        fireEvent.click(screen.getByText(button));
+
+        expect(expandCustomCommandPrefix).not.toHaveBeenCalled();
+        expect(backend.sendMessage).not.toHaveBeenCalled();
+      }
+    );
 
     it("sends each agent the text @-mentions, other than the chat's own, as the message's context (https://github.com/Brevilabs/obsidian-copilot-private/issues/947)", async () => {
       const backend = {
