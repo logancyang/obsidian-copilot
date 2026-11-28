@@ -121,6 +121,7 @@ function hasUnsentInput(draft: AgentInputDraft | undefined): boolean {
       draft.images.length > 0 ||
       draft.contextNotes.length > 0 ||
       draft.contextFolders.length > 0 ||
+      draft.quotes.length > 0 ||
       draft.queue.length > 0)
   );
 }

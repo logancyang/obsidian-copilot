@@ -10,6 +10,7 @@ import { useAgentInputDrafts } from "@/agentMode/ui/hooks/useAgentInputDrafts";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Notice, TFile, type App } from "obsidian";
 import type {
+  ChatSelectedTextContext,
   NoteSelectedTextContext,
   SelectedTextContext,
   WebSelectedTextContext,
@@ -29,10 +30,13 @@ jest.mock("@/components/chat-components/ChatInput", () => ({
         handleSendMessage?: (meta?: {
           contextNotes?: import("obsidian").TFile[];
           contextFolders?: string[];
+          webTabs?: WebTabContext[];
         }) => void;
         onStopGenerating?: () => void;
         isGenerating?: boolean;
         placeholder?: string;
+        selectedTextContexts?: SelectedTextContext[];
+        onRemoveSelectedText?: (id: string) => void;
       },
       ref: React.ForwardedRef<import("@/components/chat-components/ChatInput").ChatInputHandle>
     ) => {
@@ -63,9 +67,28 @@ jest.mock("@/components/chat-components/ChatInput", () => ({
           >
             send with mentions
           </button>
+          <button
+            type="button"
+            onClick={() =>
+              props.handleSendMessage?.({
+                webTabs: [{ url: "https://example.com/board", title: "Board" }],
+              })
+            }
+          >
+            send with web tab
+          </button>
           <button type="button" onClick={() => props.onStopGenerating?.()}>
             stop
           </button>
+          {props.selectedTextContexts?.map((selection) => (
+            <button
+              key={selection.id}
+              type="button"
+              onClick={() => props.onRemoveSelectedText?.(selection.id)}
+            >
+              remove {selection.content}
+            </button>
+          ))}
         </>
       );
     }
@@ -125,11 +148,20 @@ const imageBlock = { type: "image", mimeType: "image/png", data: "AQID" };
 
 const NEVER_MOVED = () => false;
 
+const QUOTE: ChatSelectedTextContext = { id: "q1", sourceType: "chat", content: "Use Postgres" };
+const COMMENT: ChatSelectedTextContext = {
+  id: "q2",
+  sourceType: "chat",
+  content: "Ship on Friday",
+  comment: "Too soon",
+};
+
 const makeDraft = (overrides: Partial<AgentInputDraftControls> = {}): AgentInputDraftControls => ({
   input: "hello",
   images: [],
   contextNotes: [],
   contextFolders: [],
+  quotes: [],
   includeActiveNote: false,
   includeActiveWebTab: false,
   loading: false,
@@ -137,6 +169,7 @@ const makeDraft = (overrides: Partial<AgentInputDraftControls> = {}): AgentInput
   setInput: jest.fn(),
   setContextNotes: jest.fn(),
   setContextFolders: jest.fn(),
+  setQuotes: jest.fn(),
   setSelectedImages: jest.fn(),
   addImages: jest.fn(),
   setIncludeActiveNote: jest.fn(),
@@ -520,6 +553,53 @@ describe("AgentChatInput", () => {
       }
     );
 
+    it("sends the chat's quotes and comments as the message's selected text and empties them from the draft https://github.com/Brevilabs/obsidian-copilot-private/issues/1045", async () => {
+      const { backend, getDraft, settleCancel } = setupCancellation();
+      act(() => {
+        getDraft().setInput("");
+        getDraft().setQuotes([QUOTE, COMMENT]);
+      });
+
+      fireEvent.click(screen.getByText("send"));
+
+      await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
+      expect(jest.mocked(backend.sendMessage).mock.calls[0][1]?.selectedTextContexts).toEqual([
+        QUOTE,
+        COMMENT,
+      ]);
+      expect(getDraft().quotes).toEqual([]);
+      await act(async () => settleCancel());
+    });
+
+    it("takes a quote off the draft when its badge is removed, keeping the others https://github.com/Brevilabs/obsidian-copilot-private/issues/1045", async () => {
+      const { getDraft, settleCancel } = setupCancellation();
+      act(() => getDraft().setQuotes([QUOTE, COMMENT]));
+
+      fireEvent.click(screen.getByText(`remove ${QUOTE.content}`));
+
+      expect(getDraft().quotes).toEqual([COMMENT]);
+      await act(async () => settleCancel());
+    });
+
+    it("returns a queued follow-up's quotes and comments to the composer, unlike note selections https://github.com/Brevilabs/obsidian-copilot-private/issues/1045", async () => {
+      const { backend, getDraft, settleCancel } = setupCancellation();
+      act(() => getDraft().setInput("first turn"));
+      fireEvent.click(screen.getByText("send"));
+      await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
+      act(() => {
+        getDraft().setInput("and these");
+        getDraft().setQuotes([COMMENT]);
+      });
+      fireEvent.click(screen.getByText("send"));
+      await waitFor(() => expect(getDraft().queue).toHaveLength(1));
+      expect(getDraft().quotes).toEqual([]);
+
+      await act(async () => fireEvent.click(screen.getByText("stop")));
+
+      expect(getDraft().quotes).toEqual([COMMENT]);
+      await act(async () => settleCancel());
+    });
+
     it("returns a queued follow-up's notes and images to the composer https://github.com/Brevilabs/obsidian-copilot-private/issues/485", async () => {
       const note = makeFile("Queued.md");
       const { backend, getDraft, settleCancel } = setupCancellation();
@@ -561,6 +641,74 @@ describe("AgentChatInput", () => {
         folders: ["Research/Pricing"],
       });
     });
+
+    it.each([
+      {
+        attached: "an attached note",
+        draft: { contextNotes: [makeFile("Research.md")] },
+        selections: [] as SelectedTextContext[],
+        context: { notes: [makeFile("Research.md")], urls: [] },
+      },
+      {
+        attached: "a note selection",
+        draft: {},
+        selections: [
+          {
+            id: "excerpt",
+            sourceType: "note",
+            noteTitle: "Research",
+            notePath: "Research.md",
+            content: "Compare the interview findings.",
+            startLine: 3,
+            endLine: 3,
+          },
+        ] as SelectedTextContext[],
+        context: {
+          notes: [],
+          urls: [],
+          selectedTextContexts: [expect.objectContaining({ id: "excerpt" })],
+        },
+      },
+    ])(
+      "sends $attached with no typed text as a message of its own https://github.com/Brevilabs/obsidian-copilot-private/issues/1044",
+      async ({ draft, selections, context }) => {
+        mockSelectedTextContexts = selections;
+        const backend = {
+          sendMessage: jest.fn(() => ({ turn: Promise.resolve() })),
+          takeWithdrawnPrompts: () => [],
+        } as unknown as AgentChatBackend;
+        renderInput(backend, makeDraft({ input: "", ...draft }));
+
+        fireEvent.click(screen.getByText("send"));
+
+        await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
+        expect(jest.mocked(backend.sendMessage).mock.calls[0][0]).toBe("");
+        expect(jest.mocked(backend.sendMessage).mock.calls[0][1]).toEqual(context);
+      }
+    );
+
+    it.each([
+      { only: "the active note", button: "send", draft: { includeActiveNote: true } },
+      { only: "the active web tab", button: "send", draft: { includeActiveWebTab: true } },
+      { only: "an attached web tab", button: "send with web tab", draft: {} },
+    ])(
+      "sends nothing from an empty draft whose only context is $only https://github.com/Brevilabs/obsidian-copilot-private/issues/1044",
+      ({ button, draft: overrides }) => {
+        mockActiveFile = makeFile("Open.md");
+        const backend = {
+          sendMessage: jest.fn(() => ({ turn: Promise.resolve() })),
+          takeWithdrawnPrompts: () => [],
+        } as unknown as AgentChatBackend;
+        const draft = makeDraft({ input: "", ...overrides });
+        renderInput(backend, draft);
+        jest.mocked(expandCustomCommandPrefix).mockClear();
+
+        fireEvent.click(screen.getByText(button));
+
+        expect(expandCustomCommandPrefix).not.toHaveBeenCalled();
+        expect(backend.sendMessage).not.toHaveBeenCalled();
+      }
+    );
 
     it("sends each agent the text @-mentions, other than the chat's own, as the message's context (https://github.com/Brevilabs/obsidian-copilot-private/issues/947)", async () => {
       const backend = {

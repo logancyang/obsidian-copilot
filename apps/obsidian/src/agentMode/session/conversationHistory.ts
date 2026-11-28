@@ -5,6 +5,7 @@ import { escapeXml } from "@/LLMProviders/chainRunner/utils/xmlParsing";
 import { CHAT_IMAGE_EMBED } from "@/utils/chatImagePersistence";
 import { isAbsolutePath } from "@/utils/vaultPath";
 import {
+  isChatSelectedTextContext,
   isNoteSelectedTextContext,
   isWebSelectedTextContext,
   type MessageContext,
@@ -43,13 +44,15 @@ function renderMessageContext(context: MessageContext | undefined): string[] {
       ? sel.noteTitle
       : isWebSelectedTextContext(sel)
         ? sel.title || sel.url
-        : "selection";
+        : "this chat";
     const excerpt = trimHead(
       sel.content.trim(),
       CONVERSATION_HISTORY_TOOL_OUTPUT_MAX_CHARS,
       CONVERSATION_HISTORY_TURN_TRUNCATION_MARKER
     );
     lines.push(`[selected from ${label}]\n${excerpt}`);
+    if (isChatSelectedTextContext(sel) && sel.comment)
+      lines.push(`[comment]\n${sel.comment.trim()}`);
   }
 
   const noteNames = (context.notes ?? []).map((n) => n.path);
