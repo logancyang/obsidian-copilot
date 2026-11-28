@@ -1,3 +1,4 @@
+import { documentAccess, type AccessRequest } from "openartifacts/client/access";
 import {
   OPENARTIFACTS_API_ORIGIN,
   OPENARTIFACTS_DOCUMENT_ORIGIN,
@@ -114,7 +115,7 @@ export class OpenArtifactsClient {
   }
 
   getAccess(docId: string, licenseKey: string): Promise<OpenArtifactsAccess> {
-    return this.access("GET", docId, "", licenseKey);
+    return this.access(docId, licenseKey, documentAccess.getAccess(docId));
   }
 
   setLinkAccess(
@@ -122,7 +123,7 @@ export class OpenArtifactsClient {
     linkAccess: OpenArtifactsLinkAccess,
     licenseKey: string
   ): Promise<OpenArtifactsAccess> {
-    return this.access("PUT", docId, "", licenseKey, { linkAccess });
+    return this.access(docId, licenseKey, documentAccess.setLinkAccess(docId, linkAccess));
   }
 
   addPerson(
@@ -131,21 +132,15 @@ export class OpenArtifactsClient {
     licenseKey: string,
     role?: OpenArtifactsRole
   ): Promise<OpenArtifactsAccess> {
-    return this.access(
-      "PUT",
-      docId,
-      `/people/${encodeURIComponent(email)}`,
-      licenseKey,
-      role && { role }
-    );
+    return this.access(docId, licenseKey, documentAccess.addPerson(docId, email, role));
   }
 
   removePerson(docId: string, email: string, licenseKey: string): Promise<OpenArtifactsAccess> {
-    return this.access("DELETE", docId, `/people/${encodeURIComponent(email)}`, licenseKey);
+    return this.access(docId, licenseKey, documentAccess.removePerson(docId, email));
   }
 
   declineRequest(docId: string, email: string, licenseKey: string): Promise<OpenArtifactsAccess> {
-    return this.access("DELETE", docId, `/requests/${encodeURIComponent(email)}`, licenseKey);
+    return this.access(docId, licenseKey, documentAccess.declineRequest(docId, email));
   }
 
   async listThreads(
@@ -228,17 +223,15 @@ export class OpenArtifactsClient {
   }
 
   private async access(
-    method: "GET" | "PUT" | "DELETE",
     docId: string,
-    suffix: string,
     licenseKey: string,
-    body?: { linkAccess: OpenArtifactsLinkAccess } | { role: OpenArtifactsRole }
+    { path, method, body }: AccessRequest
   ): Promise<OpenArtifactsAccess> {
     const response = await this.request({
-      url: `${DOCS_ENDPOINT}/${encodeURIComponent(docId)}/access${suffix}`,
+      url: `${OPENARTIFACTS_API_ORIGIN}${path}`,
       method,
       headers: authorizationHeaders(licenseKey),
-      ...(body && { contentType: "application/json", body: JSON.stringify(body) }),
+      ...(body !== undefined && { contentType: "application/json", body }),
       throw: false,
     });
     if (response.status === 404) {

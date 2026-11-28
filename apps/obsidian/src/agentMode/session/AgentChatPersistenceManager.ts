@@ -10,7 +10,12 @@ import { AGENT_CHAT_MODE, AI_SENDER, COPILOT_CONVERSATION_TAG, USER_SENDER } fro
 import { logError, logInfo, logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
 import { getEffectiveConversationsFolder } from "@/settings/copilotFolder";
-import { FormattedDateTime, type MessageContext } from "@/types/message";
+import {
+  FormattedDateTime,
+  isChatSelectedTextContext,
+  type ChatSelectedTextContext,
+  type MessageContext,
+} from "@/types/message";
 import {
   ensureFolderExists,
   formatDateTime,
@@ -61,6 +66,9 @@ interface SavedMessageData {
   folders?: string[];
   webTabs?: { url: string; title?: string }[];
   teammates?: string[];
+  // A message made of quotes and comments says nothing without them, so they are saved unlike other selections.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/1045
+  quotes?: { content: string; comment?: string }[];
   // A custom agent's save lines come back with the chat only from its note; a build without custom agents ignores the key and shows the reply as ordinary text.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/942
   memorySaves?: unknown;
@@ -112,6 +120,9 @@ function savedContext(context: MessageContext | undefined): SavedMessageData {
   if (context?.agents?.length) saved.teammates = context.agents;
   if (context?.webTabs?.length)
     saved.webTabs = context.webTabs.map(({ url, title }) => ({ url, title }));
+  const quotes = (context?.selectedTextContexts ?? []).filter(isChatSelectedTextContext);
+  if (quotes.length > 0)
+    saved.quotes = quotes.map(({ content, comment }) => ({ content, comment }));
   return saved;
 }
 
@@ -129,7 +140,26 @@ function loadedContext(saved: SavedMessageData, app: App): MessageContext | unde
   const agents = (Array.isArray(saved.teammates) ? saved.teammates : []).filter(
     (name) => typeof name === "string"
   );
-  if (notes.length === 0 && webTabs.length === 0 && folders.length === 0 && agents.length === 0)
+  const quotes = (Array.isArray(saved.quotes) ? saved.quotes : []).flatMap(
+    (quote, index): ChatSelectedTextContext[] =>
+      typeof quote?.content === "string"
+        ? [
+            {
+              id: `saved-quote-${index}`,
+              sourceType: "chat",
+              content: quote.content,
+              ...(typeof quote.comment === "string" ? { comment: quote.comment } : {}),
+            },
+          ]
+        : []
+  );
+  if (
+    notes.length === 0 &&
+    webTabs.length === 0 &&
+    folders.length === 0 &&
+    agents.length === 0 &&
+    quotes.length === 0
+  )
     return undefined;
   return {
     notes,
@@ -137,6 +167,7 @@ function loadedContext(saved: SavedMessageData, app: App): MessageContext | unde
     ...(folders.length > 0 ? { folders } : {}),
     ...(webTabs.length > 0 ? { webTabs } : {}),
     ...(agents.length > 0 ? { agents } : {}),
+    ...(quotes.length > 0 ? { selectedTextContexts: quotes } : {}),
   };
 }
 

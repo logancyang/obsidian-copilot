@@ -367,13 +367,17 @@ describe("agentSystemPrompt", () => {
       expect(prompt).not.toContain("miyo_search");
     });
 
-    it(`names the obsidian-copilot miyo_search tool and grep/glob for exact terms, for every request the notes might answer, even an external-sounding one (${ISSUE_736})`, () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/1028 calls miyo_search only when the user asks about their notes, skips it for general, coding and external questions, and pairs a search with grep/glob for exact terms", () => {
       updateSetting("enableMiyo", true);
       updateSetting("enableMiyoSearchSkill", true);
       const prompt = buildAgentSystemPrompt(AGENT, APP);
       expect(prompt).toContain(
-        "For any request that may be answered from the user's notes, even one that sounds external or current, call the obsidian-copilot miyo_search tool and also grep/glob for any exact names, terms, tags or quoted phrases in the request."
+        "Call the obsidian-copilot miyo_search tool only when the user asks about or for their notes, or what they wrote, saved, decided or planned; skip it for general, coding or external questions."
       );
+      expect(prompt).toContain(
+        "When you search, also grep/glob for any exact names, terms, tags or quoted phrases in the request."
+      );
+      expect(prompt).not.toContain("even one that sounds external or current");
       expect(prompt).not.toContain("miyo-search");
       expect(prompt).not.toContain("when grep is too slow");
     });

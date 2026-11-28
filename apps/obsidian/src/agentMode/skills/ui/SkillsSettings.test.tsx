@@ -135,7 +135,7 @@ describe("SkillsSettings", () => {
       expect(button().getAttribute("aria-disabled")).toBe("false");
     });
 
-    it("shows a new install's Markdown skill on for every agent, Bases off for Claude and Canvas off for Claude and Codex, and an existing install's saved opt-out unchanged https://github.com/Brevilabs/obsidian-copilot-private/issues/726 https://github.com/logancyang/obsidian-copilot/issues/3868", async () => {
+    it("shows a new install's Markdown and Bases skills on for every agent and Canvas off for Claude and Codex, and an existing install's saved opt-outs unchanged https://github.com/Brevilabs/obsidian-copilot-private/issues/726 https://github.com/logancyang/obsidian-copilot/issues/3868 https://github.com/Brevilabs/obsidian-copilot-private/issues/453", async () => {
       mockAgents = [
         { id: "opencode", displayName: "OpenCode", Icon: Bot },
         { id: "claude", displayName: "Claude", Icon: Bot },
@@ -157,7 +157,7 @@ describe("SkillsSettings", () => {
       expect(state("obsidian-markdown for Claude")).toEqual(["true", "false"]);
       expect(state("obsidian-markdown for Codex")).toEqual(["true", "false"]);
       expect(state("obsidian-bases for Codex")).toEqual(["true", "false"]);
-      expect(state("obsidian-bases for Claude")).toEqual(["false", "false"]);
+      expect(state("obsidian-bases for Claude")).toEqual(["true", "false"]);
 
       await act(async () => {
         const current = settingsStore.get(settingsAtom).agentMode;
@@ -165,11 +165,15 @@ describe("SkillsSettings", () => {
           ...current,
           skills: {
             ...current.skills,
-            builtinPreferences: { "obsidian-markdown": { disabledAgents: ["claude"] } },
+            builtinPreferences: {
+              "obsidian-markdown": { disabledAgents: ["claude"] },
+              "obsidian-bases": { disabledAgents: ["claude"] },
+            },
           },
         });
       });
       expect(state("obsidian-markdown for Claude")).toEqual(["false", "false"]);
+      expect(state("obsidian-bases for Claude")).toEqual(["false", "false"]);
       expect(state("json-canvas for Codex")).toEqual(["true", "false"]);
     });
 

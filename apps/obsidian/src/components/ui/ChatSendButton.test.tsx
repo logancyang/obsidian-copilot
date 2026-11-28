@@ -4,14 +4,13 @@ import React from "react";
 describe("ChatSendButton", () => {
   describe("ChatSendButton()", () => {
     it.each([
-      ["", 0, true],
-      [" ", 1, false],
-      ["Explain", 0, false],
+      [true, false],
+      [false, true],
     ])(
-      "renders draft %p with %p images with disabled=%p https://github.com/logancyang/obsidian-copilot/issues/2850",
-      (input, count, disabled) => {
+      "renders canSend=%p with disabled=%p and sends only when enabled https://github.com/logancyang/obsidian-copilot/issues/2850",
+      (canSend, disabled) => {
         const onSend = jest.fn();
-        render(<ChatSendButton inputMessage={input} imageCount={count} onSend={onSend} />);
+        render(<ChatSendButton canSend={canSend} onSend={onSend} />);
         const button = screen.getByRole<HTMLButtonElement>("button", { name: "Send" });
         expect(button.disabled).toBe(disabled);
         fireEvent.click(button);

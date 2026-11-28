@@ -169,6 +169,7 @@ const mockManager = {
   noteSpawnConfigChanged: jest.fn(async (_id: string, _reason: string) => {}),
   registerPreload: jest.fn<void, [string, Promise<void>]>(),
   onInstallStateChanged: jest.fn(async (_id: string) => {}),
+  findCallingChat: jest.fn((_backendId: string, _sessionId: string | null): unknown => null),
 };
 let plugin: CopilotPlugin;
 const chatHistoryLastAccessedAt = new RecentUsageManager<string>();
@@ -294,6 +295,16 @@ describe("agentMode", () => {
       expect(() => getSelfHostWebSearchChannel()).toThrow(
         "Copilot self-host web search channel is unavailable."
       );
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/4688 lets a backend started before or by the manager find the chat behind a call through the manager", () => {
+      createAgentSessionManager({} as App, plugin, customAgents);
+      const { findCallingChat } = jest.mocked(AgentModelPreloader).mock.calls[0][1];
+      const chat = { id: "chat-a" };
+      mockManager.findCallingChat.mockReturnValueOnce(chat);
+
+      expect(findCallingChat("opencode", "ses_a")).toBe(chat);
+      expect(mockManager.findCallingChat).toHaveBeenCalledWith("opencode", "ses_a");
     });
 
     it("gives the manager the plugin's custom agents to start a chat as one", async () => {

@@ -4,6 +4,7 @@ import type { ModelManagementApi } from "@/modelManagement";
 import type { CopilotSettings } from "@/settings/model";
 import type { Destination } from "@/types/destination";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
+import type { ChatStateHost } from "@/agentMode/session/chatExtension";
 import type { CopilotMcpServer } from "@/agentMode/session/copilotMcpServer";
 import type {
   BackendConfigOption,
@@ -91,6 +92,10 @@ export interface BackendStartServices {
   readonly clientVersion: string;
   readonly modelManagement: Pick<ModelManagementApi, "providerRegistry" | "backendConfigRegistry">;
   readonly getSelfHostWebSearchChannel: () => Promise<Readonly<{ url: string; token: string }>>;
+  readonly findCallingChat: (
+    backendId: BackendId,
+    backendSessionId: string | null
+  ) => ChatStateHost | null;
 }
 
 export interface BackendStartArgs extends BackendStartServices {
@@ -123,9 +128,9 @@ export interface BackendDescriptor {
 
   readonly summarizesSessionTitle: boolean;
 
-  // OpenCode registers a session's MCP servers on the instance for its folder, so every chat there shares one connection per server name.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
-  readonly sharesMcpServersAcrossSessions?: boolean;
+  // OpenCode unloads an idle folder's services and reloads only the MCP servers its config names, so it gets Copilot's server once for the whole process when it starts instead of with each chat.
+  // https://github.com/logancyang/obsidian-copilot/issues/4688
+  readonly connectsCopilotMcpServerAtSpawn?: boolean;
 
   readonly agentProductName?: string;
 

@@ -15,7 +15,7 @@ export const CHAT_LISTINGS = {
     agentSlug: "coco",
   },
   "OpenCode's shared folder listing": {
-    sessionKey: "opencode:/vault",
+    sessionKey: "opencode",
     backendId: "opencode",
     shared: true,
   },

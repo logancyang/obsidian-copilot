@@ -238,9 +238,17 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
     });
   };
 
+  // A chat message made only of attached notes, folders, or selections is still a message; web tabs, like the active note, need text.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/1044
+  const hasAttachedContext =
+    isAgentMode &&
+    (contextNotes.length > 0 ||
+      contextFolders.length > 0 ||
+      (selectedTextContexts?.length ?? 0) > 0);
+  const hasDraft =
+    inputMessage.trim().length > 0 || selectedImages.length > 0 || hasAttachedContext;
   // A phone may have no Enter key, so a draft turns Stop into a Send that does what Enter does. https://github.com/Brevilabs/obsidian-copilot-private/issues/788
-  const showsStop =
-    isGenerating && !(isAgentMode && (inputMessage.trim().length > 0 || selectedImages.length > 0));
+  const showsStop = isGenerating && !(isAgentMode && hasDraft);
 
   const onSendMessage = () => {
     // A mention is sent as context with the message but never shown as a badge, so it joins the attached context only here.
@@ -647,11 +655,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
                   <span>Save</span>
                 </Button>
               ) : (
-                <ChatSendButton
-                  inputMessage={inputMessage}
-                  imageCount={selectedImages.length}
-                  onSend={() => onSendMessage()}
-                />
+                <ChatSendButton canSend={hasDraft} onSend={() => onSendMessage()} />
               )}
             </>
           )}
