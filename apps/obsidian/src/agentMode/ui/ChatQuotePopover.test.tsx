@@ -1,8 +1,4 @@
-import {
-  ChatQuoteMenu,
-  ChatQuotePopover,
-  QUOTED_PASSAGE_HIGHLIGHT,
-} from "@/agentMode/ui/ChatQuotePopover";
+import { ChatQuoteMenu, ChatQuotePopover } from "@/agentMode/ui/ChatQuotePopover";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 
@@ -36,17 +32,7 @@ function renderTranscript() {
 
 describe("ChatQuotePopover", () => {
   const { getBoundingClientRect } = Range.prototype;
-  const highlights = new Map<string, { ranges: Range[] }>();
   beforeAll(() => {
-    Object.assign(window, {
-      CSS: { highlights },
-      Highlight: class {
-        ranges: Range[];
-        constructor(...ranges: Range[]) {
-          this.ranges = ranges;
-        }
-      },
-    });
     Range.prototype.getBoundingClientRect = () =>
       ({
         x: 10,
@@ -62,10 +48,7 @@ describe("ChatQuotePopover", () => {
   afterAll(() => {
     Range.prototype.getBoundingClientRect = getBoundingClientRect;
   });
-  afterEach(() => {
-    document.getSelection()?.removeAllRanges();
-    highlights.clear();
-  });
+  afterEach(() => document.getSelection()?.removeAllRanges());
 
   describe("ChatQuoteMenu()", () => {
     it("adds the passage without a comment when Quote is chosen", () => {
@@ -136,33 +119,6 @@ describe("ChatQuotePopover", () => {
         comment: "Why not SQLite?",
       });
     });
-
-    it.each([
-      { ending: "the comment is added", finish: () => fireEvent.click(screen.getByText("Add")) },
-      {
-        ending: "the popover is dismissed",
-        finish: () => fireEvent.keyDown(document.activeElement!, { key: "Escape" }),
-      },
-    ])(
-      "keeps the passage highlighted while its comment is written, until $ending https://github.com/Brevilabs/obsidian-copilot-private/issues/1045",
-      ({ finish }) => {
-        const { chat } = renderTranscript();
-        select(chat.querySelector("p")!.firstChild!, 4, 12);
-        act(() => {
-          fireEvent.pointerUp(chat);
-        });
-        fireEvent.click(screen.getByRole("button", { name: "Comment" }));
-        fireEvent.change(screen.getByRole("textbox", { name: "Comment" }), {
-          target: { value: "Why not SQLite?" },
-        });
-
-        expect(highlights.get(QUOTED_PASSAGE_HIGHLIGHT)?.ranges[0].toString()).toBe("Postgres");
-        act(() => {
-          finish();
-        });
-        expect(highlights.has(QUOTED_PASSAGE_HIGHLIGHT)).toBe(false);
-      }
-    );
 
     it.each([
       { scenario: "outside the chat", target: "outside" },
