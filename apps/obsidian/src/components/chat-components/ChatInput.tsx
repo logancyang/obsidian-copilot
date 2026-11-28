@@ -238,13 +238,12 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
     });
   };
 
-  // A chat message made only of attached context is still a message; the always-on active note and web tab badges alone are not.
+  // A chat message made only of attached notes, folders, or selections is still a message; web tabs, like the active note, need text.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/1044
   const hasAttachedContext =
     isAgentMode &&
     (contextNotes.length > 0 ||
       contextFolders.length > 0 ||
-      contextWebTabs.length > 0 ||
       (selectedTextContexts?.length ?? 0) > 0);
   const hasDraft =
     inputMessage.trim().length > 0 || selectedImages.length > 0 || hasAttachedContext;
