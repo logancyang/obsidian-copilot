@@ -49,6 +49,30 @@ describe("inProcessTransport", () => {
       expect(seen).toEqual([LATER_USAGE]);
     });
 
+    it("applies, in order, a change a listener causes while the previous change is being delivered", () => {
+      const chat = new FakeHostChat(USAGE);
+      const other = new FakeHostChat(LATER_USAGE);
+      const client = connectInProcess(
+        new SessionHost(new FakeHostChats({ "chat-1": chat, "chat-2": other }))
+      );
+      client.watch("chat-1");
+      const seen: (number | undefined)[] = [];
+      let reacted = false;
+      client.subscribe(() => {
+        seen.push(client.getState("chat-1")?.usage?.usedTokens);
+        if (reacted) return;
+        reacted = true;
+        client.watch("chat-2");
+        chat.change({ usage: { ...USAGE, usedTokens: 3_000 } });
+      });
+
+      chat.change({ usage: LATER_USAGE });
+
+      expect(seen).toEqual([2_000, 2_000, 3_000]);
+      expect(client.getState("chat-1")?.usage?.usedTokens).toBe(3_000);
+      expect(client.getState("chat-2")?.usage).toEqual(LATER_USAGE);
+    });
+
     it("outside production, rejects a host frame holding a value JSON cannot carry and names its field", () => {
       const chat = new FakeHostChat(USAGE);
       const client = connectInProcess(hostWith(chat));
