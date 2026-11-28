@@ -60,6 +60,7 @@ function deepFreeze<T>(value: T): T {
 
 const EVERY_OP_ON_REPLY: readonly Op[] = [
   { type: "appendThought", id: "reply", text: "Looking", atMs: 1_000 },
+  { type: "appendThought", id: "reply", text: " closer", atMs: 1_200 },
   { type: "upsertPart", id: "reply", part: toolCall("read"), atMs: 1_400 },
   { type: "upsertPart", id: "reply", part: toolCall("read", { status: "completed" }), atMs: 1_500 },
   { type: "upsertPart", id: "reply", part: toolCall("bash"), atMs: 1_600 },
@@ -70,6 +71,7 @@ const EVERY_OP_ON_REPLY: readonly Op[] = [
     atMs: 1_650,
   },
   { type: "appendText", id: "reply", text: "Done", atMs: 1_700 },
+  { type: "appendText", id: "reply", text: " now", atMs: 1_750 },
   { type: "settleOpenParts", id: "reply", status: "failed" },
   { type: "stopToolCalls", id: "reply", keepToolCallIds: [] },
   { type: "markError", id: "reply", errorText: "Rate limited", durationMs: 900, atMs: 1_800 },
@@ -602,6 +604,7 @@ describe("transcript", () => {
         static now = forbidden;
       }
       const random = jest.spyOn(Math, "random").mockImplementation(forbidden);
+      const performanceNow = jest.spyOn(performance, "now").mockImplementation(forbidden);
       const realCrypto = window.crypto;
       window.Date = ClockFreeDate as unknown as DateConstructor;
       Object.defineProperty(window, "crypto", {
@@ -614,6 +617,7 @@ describe("transcript", () => {
         );
 
         expect(replays[0]).toEqual(replays[1]);
+        expect(apply([message("reply")], ...EVERY_OP_ON_REPLY)).toEqual([message("loaded")]);
       } finally {
         window.Date = RealDate;
         Object.defineProperty(window, "crypto", {
@@ -622,6 +626,7 @@ describe("transcript", () => {
           value: realCrypto,
         });
         random.mockRestore();
+        performanceNow.mockRestore();
       }
     });
   });
