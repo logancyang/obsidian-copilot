@@ -70,17 +70,6 @@ export class SessionHost {
       case "unsubscribe":
         this.scopes.get(frame.scope)?.subscribers.delete(connection);
         return;
-      case "command":
-        connection.send({
-          type: "result",
-          id: frame.id,
-          result: {
-            ok: false,
-            code: "unknown_command",
-            message: "This chat host runs no commands.",
-          },
-        });
-        return;
     }
   }
 

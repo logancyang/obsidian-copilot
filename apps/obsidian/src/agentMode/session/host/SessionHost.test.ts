@@ -274,20 +274,6 @@ describe("SessionHost", () => {
         ]);
       });
 
-      it("answers a command it does not know with unknown_command", () => {
-        const connection = rawConnection(new SessionHost(new FakeHostChats()));
-
-        connection.send({ type: "command", id: "c1", command: { name: "later" } as never });
-
-        expect(connection.received).toEqual([
-          {
-            type: "result",
-            id: "c1",
-            result: { ok: false, code: "unknown_command", message: expect.any(String) },
-          },
-        ]);
-      });
-
       it("stops listening to a chat the chats list no longer has, and starts a new one fresh", () => {
         const chat = new FakeHostChat(usage(1_000));
         const chats = new FakeHostChats({ "chat-1": chat });

@@ -43,8 +43,6 @@ export class SessionClient {
       case "ops":
         this.applyOps(frame.scope, frame.from, frame.ops);
         return;
-      case "result":
-        return;
     }
   }
 
