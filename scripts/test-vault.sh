@@ -142,10 +142,10 @@ BUILD_TAG="$(
 echo "==> Wrote development manifest (build: $BUILD_TAG, branch: $BRANCH)"
 
 # The component gallery plugin ships a near-complete copy of the production
-# stylesheet (scripts/prepare-gallery-css.mjs concatenates src/styles/tailwind.css
+# stylesheet (scripts/prepare-gallery-css.mjs concatenates apps/obsidian/src/styles/tailwind.css
 # into its source), and Obsidian injects every enabled plugin's styles.css
 # document-wide. Both copies then compete at equal specificity in shared views, so
-# a gallery copy built from an older src/styles/tailwind.css silently outranks the
+# a gallery copy built from an older apps/obsidian/src/styles/tailwind.css silently outranks the
 # CSS deployed above and the plugin renders pre-change behavior.
 GALLERY_MANIFEST="$WORKTREE_ROOT/dev/gallery/manifest.json"
 GALLERY_ID=""

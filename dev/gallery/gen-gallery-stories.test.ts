@@ -27,11 +27,11 @@ describe("gen-gallery-stories", () => {
   describe("generator CLI", () => {
     it("writes a deterministic sorted import for every story across src", async () => {
       await Promise.all([
-        addFile(projectRoot, "src/wired/Zeta.stories.tsx"),
-        addFile(projectRoot, "src/components/ui/alpha.stories.tsx"),
-        addFile(projectRoot, "src/agentMode/ui/nested/Agent Card.stories.tsx"),
-        addFile(projectRoot, "src/components/ui/alpha.tsx"),
-        addFile(projectRoot, "src/agentMode/ui/nested/Agent Card.tsx"),
+        addFile(projectRoot, "apps/obsidian/src/wired/Zeta.stories.tsx"),
+        addFile(projectRoot, "apps/obsidian/src/components/ui/alpha.stories.tsx"),
+        addFile(projectRoot, "apps/obsidian/src/agentMode/ui/nested/Agent Card.stories.tsx"),
+        addFile(projectRoot, "apps/obsidian/src/components/ui/alpha.tsx"),
+        addFile(projectRoot, "apps/obsidian/src/agentMode/ui/nested/Agent Card.tsx"),
       ]);
 
       await execFileAsync(process.execPath, [GENERATOR_PATH], { cwd: projectRoot });
@@ -65,16 +65,16 @@ describe("gen-gallery-stories", () => {
 
     it("counts only non-test component files recursively under ui directories", async () => {
       await Promise.all([
-        addFile(projectRoot, "src/components/ui/button.tsx"),
-        addFile(projectRoot, "src/components/ui/button.test.tsx"),
-        addFile(projectRoot, "src/components/ui/button.stories.tsx"),
-        addFile(projectRoot, "src/agentMode/ui/AgentWelcomeCard.tsx"),
-        addFile(projectRoot, "src/agentMode/skills/ui/nested/SkillCard.tsx"),
-        addFile(projectRoot, "src/modelManagement/ui/dialogs/ModelDialog.tsx"),
-        addFile(projectRoot, "src/future/ui/FutureCard.tsx"),
-        addFile(projectRoot, "src/future/ui/FutureCard.stories.tsx"),
-        addFile(projectRoot, "src/wired/WiredComponent.tsx"),
-        addFile(projectRoot, "src/components/ui/helper.ts"),
+        addFile(projectRoot, "apps/obsidian/src/components/ui/button.tsx"),
+        addFile(projectRoot, "apps/obsidian/src/components/ui/button.test.tsx"),
+        addFile(projectRoot, "apps/obsidian/src/components/ui/button.stories.tsx"),
+        addFile(projectRoot, "apps/obsidian/src/agentMode/ui/AgentWelcomeCard.tsx"),
+        addFile(projectRoot, "apps/obsidian/src/agentMode/skills/ui/nested/SkillCard.tsx"),
+        addFile(projectRoot, "apps/obsidian/src/modelManagement/ui/dialogs/ModelDialog.tsx"),
+        addFile(projectRoot, "apps/obsidian/src/future/ui/FutureCard.tsx"),
+        addFile(projectRoot, "apps/obsidian/src/future/ui/FutureCard.stories.tsx"),
+        addFile(projectRoot, "apps/obsidian/src/wired/WiredComponent.tsx"),
+        addFile(projectRoot, "apps/obsidian/src/components/ui/helper.ts"),
       ]);
 
       await execFileAsync(process.execPath, [GENERATOR_PATH], { cwd: projectRoot });
@@ -87,6 +87,25 @@ describe("gen-gallery-stories", () => {
       expect(output).toContain('componentId: "@/components/ui/button"');
       expect(output).toContain(
         'componentId: "@/future/ui/FutureCard",\n    load: (): Promise<unknown> => import("@/future/ui/FutureCard.stories")'
+      );
+    });
+
+    it("imports a workspace package's stories and components by package name for https://github.com/Brevilabs/obsidian-copilot-private/issues/1010", async () => {
+      await Promise.all([
+        addFile(projectRoot, "packages/client/src/chat/ui/MessageCard.tsx"),
+        addFile(projectRoot, "packages/client/src/chat/ui/MessageCard.stories.tsx"),
+        addFile(projectRoot, "packages/core/src/ui/Badge.tsx"),
+      ]);
+
+      await execFileAsync(process.execPath, [GENERATOR_PATH], { cwd: projectRoot });
+      const output = await readFile(
+        path.join(projectRoot, "dev/gallery/stories.generated.ts"),
+        "utf8"
+      );
+
+      expect(output).toContain("export const presentationalComponentCount = 2;");
+      expect(output).toContain(
+        'componentId: "@copilot/client/chat/ui/MessageCard",\n    load: (): Promise<unknown> => import("@copilot/client/chat/ui/MessageCard.stories")'
       );
     });
   });

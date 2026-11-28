@@ -1,0 +1,575 @@
+import { resolveEffort } from "@/lib/model-effort";
+import type { ModelSelectionSession } from "@/agentMode/session/types";
+import { logWarn } from "@/logger";
+import { err2String } from "@/errorFormat";
+import { requireNodeModule } from "@/utils/desktopRuntime";
+import { getVaultBase } from "@/utils/vaultPath";
+import {
+  getSettings,
+  subscribeToSettingsChange,
+  updateAgentModeBackendFields,
+  type ClaudeAutoModePermission,
+  type ClaudeBackendSettings,
+  type CopilotSettings,
+} from "@/settings/model";
+import type { AgentSession } from "@/agentMode/session/AgentSession";
+import { MethodUnsupportedError } from "@/agentMode/session/errors";
+import { claudeBinarySearchDirs, resolveClaudeBinary } from "./claudeBinaryResolver";
+import { CLAUDE_INSTALL_COMMAND } from "./cliSetup";
+import { getClaudeAuthStatus, signInToClaude, signOutFromClaude } from "./claudeAuth";
+import { assertClaudeVersionSupported } from "./claudeVersion";
+import { agentOriginEnabledModelEntries } from "@/agentMode/backends/shared/agentEnabledModels";
+import {
+  ClaudeSdkBackendProcess,
+  probeClaudeAutoMemoryFolder,
+} from "@/agentMode/sdk/ClaudeSdkBackendProcess";
+import { getCachedSdkCatalog, synthesizeEffortConfigOption } from "@/agentMode/sdk/effortOption";
+import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
+import { pythonUtf8Env } from "@/agentMode/backends/shared/pythonUtf8Env";
+import {
+  buildBuiltinSkillEnv,
+  sanitizeBuiltinSkillEnvOverrides,
+} from "@/agentMode/backends/shared/builtinSkillEnv";
+import { urlDestination } from "@/modelManagement";
+import type { Destination } from "@/types/destination";
+import type {
+  ApprovedRule,
+  ApprovedRuleStore,
+  BackendAuth,
+  BackendConfigOption,
+  BackendDescriptor,
+  BackendProcess,
+  EnabledModelEntry,
+  InstallState,
+  ModeMapping,
+  ModelSelection,
+  ModelWireCodec,
+} from "@/agentMode/session/types";
+import { ClaudeInstallModal } from "./ClaudeInstallModal";
+import ClaudeLogo from "./logo.svg";
+import { ClaudeSettingsPanel } from "./ClaudeSettingsPanel";
+import {
+  claudeCompatibilityStore,
+  type ClaudeCompatibilityInput,
+} from "./claudeCompatibilityStore";
+
+const ABSENT_INSTALL_STATE: InstallState = Object.freeze({ kind: "absent" });
+
+export interface ClaudeDescriptor extends BackendDescriptor {
+  auth: BackendAuth;
+  getResolvedBinaryPath(settings: CopilotSettings): string | null;
+}
+
+export function resolveClaudeAutoModePermission(
+  settings: CopilotSettings
+): ClaudeAutoModePermission {
+  return settings.agentMode?.backends?.claude?.autoModePermission ?? "auto";
+}
+
+export function updateClaudeFields(partial: Partial<ClaudeBackendSettings>): void {
+  updateAgentModeBackendFields("claude", partial);
+}
+
+const claudeWire: ModelWireCodec = {
+  encode: (selection: ModelSelection) => selection.baseModelId,
+  decode: (wireId: string) => ({
+    selection: { baseModelId: wireId, effort: null },
+    provider: "anthropic",
+  }),
+  effortConfigFor: (baseModelId: string): BackendConfigOption | null => {
+    const catalog = getCachedSdkCatalog(getSettings().agentMode?.backends?.claude?.envOverrides);
+    if (!catalog) return null;
+    const modelInfo = catalog.find((m) => m.value === baseModelId);
+    if (!modelInfo) return null;
+    return synthesizeEffortConfigOption(modelInfo, undefined);
+  },
+};
+
+function claudeResolverEnv(): Omit<Parameters<typeof resolveClaudeBinary>[0], "override"> {
+  const fs = requireNodeModule<typeof import("node:fs")>("fs");
+  const os = requireNodeModule<typeof import("node:os")>("os");
+  return {
+    homeDir: os.homedir(),
+    platform: process.platform,
+    env: process.env,
+    fs: {
+      existsSync: (p) => fs.existsSync(p),
+      readFileSync: (p, encoding) => fs.readFileSync(p, encoding),
+      readdirSync: (p) => fs.readdirSync(p),
+    },
+  };
+}
+
+interface ClaudeSettingsJson {
+  env?: Record<string, unknown>;
+  permissions?: { allow?: unknown };
+}
+
+function claudeSettingsFiles(env: NodeJS.ProcessEnv, vaultBase: string | null): string[] {
+  const os = requireNodeModule<typeof import("node:os")>("os");
+  const path = requireNodeModule<typeof import("node:path")>("path");
+  const configDir = env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude");
+  const files = [path.join(configDir, "settings.json")];
+  if (vaultBase) {
+    files.push(path.join(vaultBase, ".claude", "settings.json"));
+    files.push(path.join(vaultBase, ".claude", "settings.local.json"));
+  }
+  return files;
+}
+
+// Claude Code also takes `env` from its settings files, so a server set there (such as Bedrock)
+// must not read as Anthropic. https://github.com/logancyang/obsidian-copilot/issues/2889
+function claudeEffectiveEnv(
+  settings: CopilotSettings,
+  vaultBase: string | null
+): Record<string, unknown> {
+  const fs = requireNodeModule<typeof import("node:fs")>("fs");
+  const env = claudeChildEnv(settings);
+  const fileEnvs = claudeSettingsFiles(env, vaultBase).map((file) => {
+    try {
+      return (JSON.parse(fs.readFileSync(file, "utf8")) as ClaudeSettingsJson).env;
+    } catch {
+      return undefined;
+    }
+  });
+  return Object.assign({}, env, ...fileEnvs) as Record<string, unknown>;
+}
+
+interface ClaudeSettingsFile {
+  text: string;
+  settings: ClaudeSettingsJson | null;
+}
+
+async function readClaudeSettings(file: string): Promise<ClaudeSettingsFile> {
+  const text = await requireNodeModule<typeof import("node:fs")>("fs").promises.readFile(
+    file,
+    "utf8"
+  );
+  try {
+    return { text, settings: JSON.parse(text) as ClaudeSettingsJson | null };
+  } catch (error) {
+    throw new Error(`${file} isn't valid JSON. ${err2String(error)}`);
+  }
+}
+
+// Stage and sync a complete copy so a failed write cannot truncate live settings, and reject
+// detected concurrent edits before replacing it. https://github.com/Brevilabs/obsidian-copilot-private/issues/866
+async function writeClaudeSettings(
+  file: string,
+  before: string,
+  settings: ClaudeSettingsJson | null
+): Promise<void> {
+  const fs = requireNodeModule<typeof import("node:fs")>("fs");
+  const path = requireNodeModule<typeof import("node:path")>("path");
+  const target = await fs.promises.realpath(file);
+  await fs.promises.access(target, fs.constants.W_OK);
+  const mode = (await fs.promises.stat(target)).mode & 0o777;
+  const dir = await fs.promises.mkdtemp(path.join(path.dirname(target), ".copilot-rules-"));
+  const copy = path.join(dir, "settings.json");
+  try {
+    const handle = await fs.promises.open(copy, "wx", mode);
+    try {
+      await handle.writeFile(`${JSON.stringify(settings, null, 2)}\n`);
+      await handle.chmod(mode);
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+    if (fs.readFileSync(target, "utf8") !== before) {
+      throw new Error(`${file} changed while saving. Reload approved rules and try again.`);
+    }
+    fs.renameSync(copy, target);
+  } finally {
+    await fs.promises
+      .rm(dir, { recursive: true, force: true })
+      .catch((error: unknown) =>
+        logWarn("Couldn't clean up the temporary approved-rules file", error)
+      );
+  }
+}
+
+const claudeApprovedRules: ApprovedRuleStore = {
+  async list(app) {
+    const files = claudeSettingsFiles(claudeChildEnv(getSettings()), getVaultBase(app));
+    const perFile = await Promise.all(
+      files.map(async (path) => {
+        const settings = await readClaudeSettings(path).catch((error: NodeJS.ErrnoException) => {
+          // A settings file Claude Code never wrote holds no rules.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/866
+          if (error.code === "ENOENT") return null;
+          throw error;
+        });
+        const allow = settings?.settings?.permissions?.allow;
+        return (Array.isArray(allow) ? allow : [])
+          .filter((rule): rule is string => typeof rule === "string")
+          .map(
+            (allows): ApprovedRule => ({
+              id: `${path}\n${allows}`,
+              allows,
+              appliesTo: { kind: "file", path },
+            })
+          );
+      })
+    );
+    return perFile.flat();
+  },
+
+  async remove(_app, rule) {
+    const file = (rule.appliesTo as { path: string }).path;
+    const loaded = await readClaudeSettings(file);
+    const permissions = loaded.settings?.permissions;
+    // Never rewrite an already-removed rule, or restore an old snapshot over later settings.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/866
+    if (!Array.isArray(permissions?.allow) || !permissions.allow.includes(rule.allows)) return;
+    permissions.allow = permissions.allow.filter((allows: unknown) => allows !== rule.allows);
+    await writeClaudeSettings(file, loaded.text, loaded.settings);
+    return {
+      async undo() {
+        const latest = await readClaudeSettings(file);
+        const allow = latest.settings?.permissions?.allow;
+        if (!Array.isArray(allow)) {
+          throw new Error(
+            `${file} no longer has a permissions.allow list. Reload approved rules before restoring.`
+          );
+        }
+        if (allow.includes(rule.allows)) return;
+        allow.push(rule.allows);
+        await writeClaudeSettings(file, latest.text, latest.settings);
+      },
+    };
+  },
+};
+
+// Same truthy values Claude Code accepts for its provider switches.
+// https://github.com/logancyang/obsidian-copilot/issues/2889
+const TRUTHY_ENV_VALUES = new Set(["1", "true", "yes", "on"]);
+
+function isEnabledFlag(value: unknown): boolean {
+  return typeof value === "string" && TRUTHY_ENV_VALUES.has(value.trim().toLowerCase());
+}
+
+function claudeChildEnv(settings: CopilotSettings): NodeJS.ProcessEnv {
+  const overrides = settings.agentMode?.backends?.claude?.envOverrides;
+  return overrides && Object.keys(overrides).length > 0
+    ? { ...process.env, ...overrides }
+    : process.env;
+}
+
+function claudeCompatibilityInput(
+  settings: CopilotSettings,
+  claudePath: string
+): ClaudeCompatibilityInput {
+  const overrides = settings.agentMode?.backends?.claude?.envOverrides;
+  const environmentKey = JSON.stringify(
+    Object.entries(overrides ?? {}).sort(([a], [b]) => a.localeCompare(b))
+  );
+  const source = settings.agentMode?.claudeCli?.path ? "custom" : "managed";
+  return {
+    cacheKey: `${source}\u0000${claudePath}\u0000${environmentKey}`,
+    path: claudePath,
+    source,
+    env: claudeChildEnv(settings),
+  };
+}
+
+function resolveClaudeCliPath(settings: CopilotSettings): string | null {
+  return resolveClaudeBinary({
+    override: settings.agentMode?.claudeCli?.path,
+    ...claudeResolverEnv(),
+  });
+}
+
+function claudeChatEnvOptions(clientVersion: string) {
+  return {
+    getAutoMemoryEnabled: () => getSettings().agentMode?.backends?.claude?.autoMemory,
+    getEnvOverrides: () =>
+      sanitizeBuiltinSkillEnvOverrides(getSettings().agentMode?.backends?.claude?.envOverrides),
+    getManagedEnv: async () => ({
+      ...pythonUtf8Env(),
+      ...(await buildBuiltinSkillEnv(clientVersion)),
+    }),
+  };
+}
+
+export async function findClaudeAutoMemoryFolder(
+  vaultBase: string,
+  clientVersion: string
+): Promise<string | undefined> {
+  const claudePath = resolveClaudeCliPath(getSettings());
+  if (!claudePath) return undefined;
+  return probeClaudeAutoMemoryFolder(
+    { pathToClaudeCodeExecutable: claudePath, ...claudeChatEnvOptions(clientVersion) },
+    vaultBase
+  );
+}
+
+export function detectClaudeCliPath(): string | null {
+  return resolveClaudeBinary({ override: undefined, ...claudeResolverEnv() });
+}
+
+export function claudeCliDetectionSearchDirs(): string[] {
+  return claudeBinarySearchDirs({ override: undefined, ...claudeResolverEnv() });
+}
+
+export function getClaudeInstallState(settings: CopilotSettings): InstallState {
+  const claudePath = resolveClaudeCliPath(settings);
+  if (!claudePath) return ABSENT_INSTALL_STATE;
+  return claudeCompatibilityStore.get(claudeCompatibilityInput(settings, claudePath));
+}
+
+export async function refreshClaudeInstallState(
+  settings: CopilotSettings,
+  force = false
+): Promise<InstallState> {
+  const claudePath = resolveClaudeCliPath(settings);
+  if (!claudePath) return ABSENT_INSTALL_STATE;
+  return claudeCompatibilityStore.refresh(claudeCompatibilityInput(settings, claudePath), {
+    force,
+  });
+}
+
+export function subscribeClaudeInstallState(listener: () => void): () => void {
+  return claudeCompatibilityStore.subscribe(listener);
+}
+
+function isClaudePlanModePlanFilePath(absolutePath: string): boolean {
+  const path = requireNodeModule<typeof import("node:path")>("path");
+  if (!path.isAbsolute(absolutePath)) return false;
+  if (!absolutePath.endsWith(".md")) return false;
+  const dir = path.dirname(absolutePath);
+  return dir.endsWith(path.join(".claude", "plans"));
+}
+
+export const ClaudeBackendDescriptor: ClaudeDescriptor = {
+  id: "claude",
+  displayName: "Claude",
+  Icon: ClaudeLogo,
+  selfHostable: false,
+  routesCopilotModels: false,
+  setupDescription:
+    "Anthropic models, billed to your Claude Code subscription. Runs the claude CLI already on your machine.",
+  skillsProjectDir: ".claude/skills",
+  crossDiscoveredAgents: [],
+  restartOnManagedSkillsChange: false,
+  restartOnProviderConfigChange: false,
+  restartOnSystemPromptChange: false,
+  summarizesSessionTitle: false,
+  midTurnDelivery: true,
+  withdraw: true,
+  stopTask: true,
+  agentProductName: "Claude Code",
+  wire: claudeWire,
+  showModelDescriptions: true,
+
+  dataDestination(settings: CopilotSettings, vaultBase: string | null): Destination {
+    const env = claudeEffectiveEnv(settings, vaultBase);
+    if (isEnabledFlag(env.CLAUDE_CODE_USE_BEDROCK))
+      return { kind: "cloud", label: "Amazon Bedrock" };
+    if (isEnabledFlag(env.CLAUDE_CODE_USE_VERTEX))
+      return { kind: "cloud", label: "Google Vertex AI" };
+    const baseUrl = typeof env.ANTHROPIC_BASE_URL === "string" ? env.ANTHROPIC_BASE_URL : "";
+    if (baseUrl) return urlDestination(baseUrl, "The server set in your Claude Code settings");
+    return { kind: "cloud", label: "Anthropic" };
+  },
+
+  getEnabledModelEntries(settings: CopilotSettings): EnabledModelEntry[] {
+    return [
+      ...agentOriginEnabledModelEntries(settings, "claude", (wireId) => claudeWire.decode(wireId)),
+    ];
+  },
+
+  getInstallState(settings: CopilotSettings): InstallState {
+    return getClaudeInstallState(settings);
+  },
+
+  getResolvedBinaryPath(settings: CopilotSettings): string | null {
+    return resolveClaudeCliPath(settings);
+  },
+
+  subscribeInstallState(cb: () => void): () => void {
+    const unsubscribeSettings = subscribeToSettingsChange((prev, next) => {
+      if (
+        prev.agentMode?.claudeCli?.path !== next.agentMode?.claudeCli?.path ||
+        prev.agentMode?.backends?.claude?.envOverrides !==
+          next.agentMode?.backends?.claude?.envOverrides
+      ) {
+        cb();
+        void refreshClaudeInstallState(next, true);
+      }
+    });
+    const unsubscribeCompatibility = subscribeClaudeInstallState(cb);
+    return () => {
+      unsubscribeSettings();
+      unsubscribeCompatibility();
+    };
+  },
+
+  async onPluginLoad(): Promise<void> {
+    await refreshClaudeInstallState(getSettings(), true);
+  },
+
+  openInstallUI(app): void {
+    new ClaudeInstallModal(app, ClaudeBackendDescriptor).open();
+  },
+
+  auth: {
+    getProbeKey(settings) {
+      // CLI credentials can come from a profile or an environment-selected provider.
+      // Hash the effective environment so account changes cancel stale authentication
+      // operations without exposing credentials in the shared UI identity.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+      return requireNodeModule<typeof import("node:crypto")>("crypto")
+        .createHash("sha256")
+        .update(
+          JSON.stringify([
+            resolveClaudeCliPath(settings),
+            Object.entries(claudeChildEnv(settings)).sort(([a], [b]) => a.localeCompare(b)),
+          ])
+        )
+        .digest("hex");
+    },
+    async getStatus(settings) {
+      const claudePath = resolveClaudeCliPath(settings);
+      if (!claudePath) return { signedIn: false };
+      const status = await getClaudeAuthStatus(claudePath, claudeChildEnv(settings));
+      return { signedIn: status.loggedIn, label: status.label };
+    },
+    async signOut(settings, options) {
+      const claudePath = resolveClaudeCliPath(settings);
+      if (!claudePath) throw new Error("Install Claude Code before signing out.");
+      const status = await signOutFromClaude(claudePath, claudeChildEnv(settings), options);
+      return { signedIn: status.loggedIn, label: status.label };
+    },
+    async signIn(settings, handlers) {
+      const claudePath = resolveClaudeCliPath(settings);
+      if (!claudePath) return { signedIn: false };
+      const status = await signInToClaude(claudePath, claudeChildEnv(settings), handlers).done;
+      return { signedIn: status.loggedIn, label: status.label };
+    },
+  },
+
+  isPlanModePlanFilePath(absolutePath: string): boolean {
+    return isClaudePlanModePlanFilePath(absolutePath);
+  },
+
+  async applySelection(session: ModelSelectionSession, selection: ModelSelection): Promise<void> {
+    const currentBase = session.getState()?.model?.current.baseModelId;
+    if (currentBase !== selection.baseModelId) {
+      await session.applyModelWireId(claudeWire.encode(selection));
+    }
+    const cfgOpt = claudeWire.effortConfigFor?.(selection.baseModelId);
+    if (!cfgOpt) return;
+    const options = session
+      .getState()
+      ?.model?.availableModels.find(
+        (model) => model.baseModelId === selection.baseModelId
+      )?.effortOptions;
+    const effort = resolveEffort(selection.effort, options);
+    if (effort === null) return;
+    try {
+      await session.setConfigOption(cfgOpt.id, effort);
+    } catch (e) {
+      if (!(e instanceof MethodUnsupportedError)) throw e;
+    }
+  },
+
+  createBackendProcess(args): BackendProcess {
+    const claudePath = resolveClaudeCliPath(getSettings());
+    if (!claudePath) {
+      throw new Error(
+        `Claude CLI not found. Install with: ${CLAUDE_INSTALL_COMMAND}, ` +
+          `or set agentMode.claudeCli.path in settings.`
+      );
+    }
+    return new ClaudeSdkBackendProcess({
+      pathToClaudeCodeExecutable: claudePath,
+      app: args.app,
+      clientVersion: args.clientVersion,
+      descriptor: args.descriptor,
+      getEnableThinking: () => Boolean(getSettings().agentMode?.backends?.claude?.enableThinking),
+      getEnableChrome: () => Boolean(getSettings().agentMode?.backends?.claude?.enableChrome),
+      ...claudeChatEnvOptions(args.clientVersion),
+      checkAuth: async () =>
+        (await getClaudeAuthStatus(claudePath, claudeChildEnv(getSettings()))).loggedIn,
+      checkCompatibility: () =>
+        assertClaudeVersionSupported(claudePath, claudeChildEnv(getSettings())),
+      isPlanModePlanFilePath: isClaudePlanModePlanFilePath,
+      getDefaultModelId: () => getSettings().agentMode?.backends?.claude?.defaultModel?.baseModelId,
+      getSystemPromptAppend: () => buildAgentSystemPrompt("claude", args.app),
+    });
+  },
+
+  SettingsPanel: ClaudeSettingsPanel,
+
+  approvedRules: claudeApprovedRules,
+
+  getModeMapping(): ModeMapping {
+    return {
+      kind: "setMode",
+      canonical: {
+        default: "default",
+        plan: "plan",
+        auto: resolveClaudeAutoModePermission(getSettings()),
+      },
+      // A mode Claude switches to on its own, such as accepting edits after an "Allow always", has no picker choice and shows as Auto rather than as no mode. https://github.com/Brevilabs/obsidian-copilot-private/issues/870
+      unlistedModeShowsAs: "auto",
+    };
+  },
+
+  async applyInitialSessionConfig(
+    session: AgentSession,
+    settings: CopilotSettings,
+    seededSelection?: ModelSelection
+  ): Promise<void> {
+    const persistedEffort = settings.agentMode?.backends?.claude?.defaultModel?.effort ?? null;
+    const effort = seededSelection ? seededSelection.effort : persistedEffort;
+    await replayPersistedEffort(session, effort ?? undefined);
+  },
+};
+
+async function replayPersistedEffort(
+  session: AgentSession,
+  persistedEffort: string | undefined
+): Promise<void> {
+  const tryApply = async (): Promise<boolean> => {
+    const state = session.getState();
+    const current = state?.model?.current;
+    if (!current) return false;
+    const entry = state?.model?.availableModels.find((e) => e.baseModelId === current.baseModelId);
+    if (!entry) return false;
+    const effort = resolveEffort(persistedEffort ?? current.effort, entry.effortOptions);
+    if (effort === null || current.effort === effort) return true;
+    const cfgOpt = ClaudeBackendDescriptor.wire.effortConfigFor?.(current.baseModelId);
+    if (!cfgOpt) return true;
+    try {
+      await session.setConfigOption(cfgOpt.id, effort);
+    } catch (e) {
+      if (e instanceof MethodUnsupportedError) return true;
+      logWarn(`[AgentMode] could not apply default effort ${persistedEffort}`, e);
+    }
+    return true;
+  };
+
+  if (await tryApply()) return;
+
+  await new Promise<void>((resolve) => {
+    let settled = false;
+    const finish = (): void => {
+      if (settled) return;
+      settled = true;
+      unsub();
+      window.clearTimeout(timer);
+      resolve();
+    };
+    const unsub = session.subscribe({
+      onMessagesChanged: () => {},
+      onStatusChanged: () => {},
+      onModelChanged: () => {
+        void tryApply().then((applied) => {
+          if (applied) finish();
+        });
+      },
+    });
+    const timer = window.setTimeout(finish, 10_000);
+  });
+}

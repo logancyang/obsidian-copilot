@@ -11,7 +11,7 @@ import {
 } from "./review-obsidian-package.mjs";
 
 const repositoryRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
-const reviewSourceRoots = ["src", "dev/gallery"];
+const reviewSourceRoots = ["apps/obsidian/src", "packages", "dev/gallery"];
 const reviewSourceExtensions = new Set([".cjs", ".js", ".jsx", ".mjs", ".ts", ".tsx"]);
 
 const invalidSourceFixture = `import "node:fs";
@@ -144,15 +144,23 @@ async function main() {
     await expectOutsideTypeAwareScope(target);
   }
 
-  const invalidSourceResult = await lintSourceFixture(invalidSourceFixture, "src/utils.ts");
-  assert(invalidSourceResult.errorCount > 0, "ESLint accepted its invalid source fixture");
-  expectEslintRules(invalidSourceResult, [
-    "obsidianmd/no-nodejs-modules",
-    "copilot/no-direct-node-imports",
-    "no-restricted-globals",
-    "eslint-comments/require-description",
-    "eslint-comments/no-restricted-disable",
-  ]);
+  const invalidSourceResult = await lintSourceFixture(
+    invalidSourceFixture,
+    "apps/obsidian/src/utils.ts"
+  );
+  for (const result of [
+    invalidSourceResult,
+    await lintSourceFixture(invalidSourceFixture, "packages/core/src/index.ts"),
+  ]) {
+    assert(result.errorCount > 0, "ESLint accepted its invalid source fixture");
+    expectEslintRules(result, [
+      "obsidianmd/no-nodejs-modules",
+      "copilot/no-direct-node-imports",
+      "no-restricted-globals",
+      "eslint-comments/require-description",
+      "eslint-comments/no-restricted-disable",
+    ]);
+  }
   assert(
     ["node:fs", "node:util", "path", "node:os"].every((moduleName) =>
       invalidSourceResult.messages.some(
@@ -164,7 +172,10 @@ async function main() {
     ),
     "direct Node access guidance did not cover imports, re-exports, and require() calls"
   );
-  const validNodeBoundaryResult = await lintSourceFixture(validNodeBoundaryFixture, "src/utils.ts");
+  const validNodeBoundaryResult = await lintSourceFixture(
+    validNodeBoundaryFixture,
+    "apps/obsidian/src/utils.ts"
+  );
   assert(
     validNodeBoundaryResult.messages.every(
       (message) => message.ruleId !== "copilot/no-direct-node-imports"
@@ -183,7 +194,7 @@ async function main() {
     "// Explains the next line\nexport const a = 1; // https://github.com/o/r/issues/1",
   ];
   for (const code of issuelessComments) {
-    const result = await lintSourceFixture(code, "src/utils.ts");
+    const result = await lintSourceFixture(code, "apps/obsidian/src/utils.ts");
     assert(
       result.messages.some((message) => message.ruleId === "copilot/issue-linked-comments"),
       `issue-less comment was accepted: ${code}`
@@ -198,7 +209,7 @@ async function main() {
     "/* global activeWindow */\nexport const a = 1;",
   ];
   for (const code of allowedComments) {
-    const result = await lintSourceFixture(code, "src/utils.ts");
+    const result = await lintSourceFixture(code, "apps/obsidian/src/utils.ts");
     assert(
       result.messages.every(
         (message) => !["copilot/issue-linked-comments", "no-empty"].includes(message.ruleId)
@@ -208,7 +219,7 @@ async function main() {
   }
   const emptyCatchResult = await lintSourceFixture(
     "export function parse(text: string): unknown {\n  try {\n    return JSON.parse(text);\n  } catch {}\n  return undefined;\n}",
-    "src/utils.ts"
+    "apps/obsidian/src/utils.ts"
   );
   assert(
     emptyCatchResult.messages.some(
@@ -227,7 +238,7 @@ async function main() {
     'const { ["sessionStorage"]: storage } = globalThis; void storage',
   ];
   for (const access of browserStorageAccesses) {
-    const result = await lintSourceFixture(`${access};`, "src/utils.ts");
+    const result = await lintSourceFixture(`${access};`, "apps/obsidian/src/utils.ts");
     assert(
       result.messages.some(
         (message) =>
@@ -244,7 +255,7 @@ export function savePreference(app: App): unknown {
   app.saveLocalStorage("key", "value");
   return app.loadLocalStorage("key");
 }`,
-    "src/utils.ts"
+    "apps/obsidian/src/utils.ts"
   );
   assert(
     !vaultStorageResult.messages.some((message) =>
@@ -265,7 +276,7 @@ export function savePreference(app: App): unknown {
       resolve(repositoryRoot, "node_modules/stylelint/bin/stylelint.mjs"),
       "--stdin",
       "--stdin-filename",
-      "src/review-fixtures/invalid-review.css",
+      "apps/obsidian/src/review-fixtures/invalid-review.css",
       "--config",
       "stylelint.config.mjs",
       "--max-warnings",
@@ -280,7 +291,7 @@ export function savePreference(app: App): unknown {
       resolve(repositoryRoot, "node_modules/stylelint/bin/stylelint.mjs"),
       "--stdin",
       "--stdin-filename",
-      "src/review-fixtures/invalid-review.css",
+      "apps/obsidian/src/review-fixtures/invalid-review.css",
       "--config",
       "stylelint.config.mjs",
     ],
@@ -293,7 +304,7 @@ export function savePreference(app: App): unknown {
       resolve(repositoryRoot, "node_modules/stylelint/bin/stylelint.mjs"),
       "--stdin",
       "--stdin-filename",
-      "src/review-fixtures/invalid-review-error.css",
+      "apps/obsidian/src/review-fixtures/invalid-review-error.css",
       "--config",
       "stylelint.config.mjs",
     ],

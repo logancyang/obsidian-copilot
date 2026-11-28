@@ -57,6 +57,8 @@ Claude models and billing come from your Claude Code account. Models added under
 
 Claude Code saves what it learns about you and your vault in memory files outside the vault and reads them in later chats. **Auto memory** in Claude's settings tab is **Default**, which follows your Claude Code setting. Choose **On** or **Off** to override it for this vault's new chats. Once Claude has saved memory for the vault, select **Open** under **Memory files** to review it. Deleting a chat doesn't remove what Claude saved from it.
 
+To let Claude use Chrome, install the [Claude in Chrome](https://claude.com/chrome) extension and connect it to Claude Code, then turn on **Claude in Chrome** in Claude's settings tab. New chats can open tabs, read pages, and click or type in Chrome. Browser actions ask for approval like any other tool.
+
 ### Codex
 
 The Codex backend uses `@agentclientprotocol/codex-acp`, which includes a compatible Codex CLI:
@@ -260,7 +262,7 @@ Custom Skills and built-in Obsidian Skills are free. Active Plus access adds clo
 
 The web search and web fetch Skills (`copilot-web-search` and `copilot-web-fetch`) start turned off in new installs, so agents use their own web tools. Turn them on in **Built-in skills** to route those requests through Copilot instead.
 
-In new installs, `obsidian-markdown` starts turned on for every agent, `obsidian-bases` for Codex and OpenCode, and `json-canvas` for OpenCode. Turn them on for other agents in **Built-in skills**.
+In new installs, `obsidian-markdown` and `obsidian-bases` start turned on for every agent, and `json-canvas` for OpenCode. Turn them on for other agents in **Built-in skills**.
 
 While **Miyo document processing** is on, which is the default, agents read PDF and EPUB files through Copilot's Miyo parse tool, which asks the connected Miyo to parse them and does not need Plus access. The tool is available only while Miyo is connected. With a remote Miyo server, files in the vault parse on that server, and files outside the vault can't be parsed. If Miyo cannot parse a file, the agent tells you and reads the file with its own tools. With **Miyo document processing** off, agents read documents with their own tools.
 

@@ -1,0 +1,10 @@
+{
+  "name": "@copilot/protocol",
+  "private": true,
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@copilot/core": "*"
+  }
+}

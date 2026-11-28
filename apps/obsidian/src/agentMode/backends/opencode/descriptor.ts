@@ -1,0 +1,284 @@
+import { Notice, type App, type PluginManifest } from "obsidian";
+import { OPENCODE_PINNED_VERSION, OPENCODE_MIN_VERSION } from "./ui/opencodeVersion";
+import { resolveEffort } from "@/lib/model-effort";
+import { OpencodeInstallModal } from "@/agentMode/backends/opencode/OpencodeInstallModal";
+import OpencodeLogo from "@/agentMode/backends/opencode/logo.svg";
+import { prefetchConfigEfforts } from "@/agentMode/backends/shared/prefetchConfigEfforts";
+import {
+  getSettings,
+  subscribeToSettingsChange,
+  updateAgentModeBackendFields,
+  type CopilotSettings,
+} from "@/settings/model";
+import {
+  OPENCODE_CANONICAL_MODE_AGENT_IDS,
+  OPENCODE_MODE_CONFIG_OPTION_ID,
+  OpencodeBackend,
+  OPENCODE_PROVIDER_MAP,
+} from "./OpencodeBackend";
+import {
+  computeInstallState,
+  OpencodeBinaryManager,
+  toOpencodeInstallState,
+} from "./OpencodeBinaryManager";
+import {
+  opencodeBlockedModels,
+  opencodeEnabledModelEntries,
+  opencodeWireBaseIdFor,
+} from "./opencodeModelResolve";
+import { OpencodeSettingsPanel } from "./OpencodeSettingsPanel";
+import { mapNodeArch, mapNodePlatform } from "./platformResolver";
+import { opencodeCopilotPluginDir } from "./opencodeCopilotPlugin";
+import {
+  customAgentModeId,
+  opencodeAgentsFilePath,
+  readCustomAgentModeId,
+  removeAgentEntries,
+} from "./opencodeCustomAgents";
+import { opencodeApprovedRules } from "./opencodeApprovedRules";
+import type { ModelSelectionSession } from "@/agentMode/session/types";
+import { simpleBinaryBackendProcess } from "@/agentMode/backends/shared/simpleBinaryBackend";
+import type {
+  EnabledModelEntry,
+  ModeMapping,
+  ModelSelection,
+  ModelWireCodec,
+  PermissionOption,
+} from "@/agentMode/session/types";
+import type { BackendDescriptor, BackendProcess, InstallState } from "@/agentMode/session/types";
+import { EFFORT_LEVELS_ASCENDING } from "@/agentMode/session/types";
+import { findModelEntry } from "@/agentMode/session/translateBackendState";
+import type { ManagedInstallActionState } from "@/agentMode/session/types";
+
+let managerRef: OpencodeBinaryManager | null = null;
+
+const KNOWN_OPENCODE_EFFORTS = new Set(EFFORT_LEVELS_ASCENDING);
+
+const opencodeWire: ModelWireCodec = {
+  encode: (selection: ModelSelection) =>
+    selection.effort ? `${selection.baseModelId}/${selection.effort}` : selection.baseModelId,
+  decode: (wireId: string) => {
+    if (!wireId) return { selection: { baseModelId: wireId, effort: null }, provider: null };
+    const segments = wireId.split("/");
+    const provider = segments.length >= 2 ? opencodeProviderToCopilot(segments[0]) : null;
+    const last = segments[segments.length - 1];
+    if (segments.length >= 3 && KNOWN_OPENCODE_EFFORTS.has(last)) {
+      return {
+        selection: { baseModelId: segments.slice(0, -1).join("/"), effort: last },
+        provider,
+      };
+    }
+    return { selection: { baseModelId: wireId, effort: null }, provider };
+  },
+};
+
+export function getOpencodeBinaryManager(
+  app: App,
+  manifest: PluginManifest
+): OpencodeBinaryManager {
+  if (!managerRef) managerRef = new OpencodeBinaryManager(app, manifest);
+  return managerRef;
+}
+
+export { detectOpencodeCliPath } from "./opencodeCliDetector";
+
+export const OpencodeBackendDescriptor: BackendDescriptor = {
+  id: "opencode",
+  displayName: "OpenCode",
+  Icon: OpencodeLogo,
+  selfHostable: true,
+  routesCopilotModels: true,
+  setupDescription:
+    "Copilot Plus models, or any model on your own provider key. Copilot can download and manage the binary for you.",
+  skillsProjectDir: ".opencode/skills",
+  crossDiscoveredAgents: ["claude", "codex"],
+  restartOnManagedSkillsChange: true,
+  restartOnProviderConfigChange: true,
+  restartOnSystemPromptChange: true,
+  summarizesSessionTitle: true,
+  connectsCopilotMcpServerAtSpawn: true,
+  wire: opencodeWire,
+
+  getEnabledModelEntries(settings: CopilotSettings): EnabledModelEntry[] {
+    return [...opencodeEnabledModelEntries(settings)];
+  },
+
+  getBlockedModels: opencodeBlockedModels,
+
+  // OpenCode 2.2.7 stores an "always" reply as a saved rule for its project folder.
+  // https://github.com/logancyang/obsidian-copilot/issues/2889
+  presentPermissionOption(option: PermissionOption): PermissionOption {
+    if (option.kind !== "allow_always") return option;
+    return {
+      ...option,
+      description:
+        "Saves a rule that opencode uses in later chats in this folder: the vault folder, or the project note's folder for a project chat.",
+    };
+  },
+
+  getWireBaseId(configuredModelId: string, settings: CopilotSettings): string | null {
+    return opencodeWireBaseIdFor(configuredModelId, settings);
+  },
+
+  getInstallState(settings: CopilotSettings): InstallState {
+    return toOpencodeInstallState(computeInstallState(settings.agentMode?.backends?.opencode));
+  },
+
+  getResolvedBinaryPath(settings: CopilotSettings): string | null {
+    return settings.agentMode?.backends?.opencode?.binaryPath ?? null;
+  },
+
+  subscribeInstallState(cb: () => void): () => void {
+    return subscribeToSettingsChange((prev, next) => {
+      const p = prev.agentMode?.backends?.opencode;
+      const n = next.agentMode?.backends?.opencode;
+      if (
+        p?.binaryPath !== n?.binaryPath ||
+        p?.binaryVersion !== n?.binaryVersion ||
+        p?.binarySource !== n?.binarySource
+      ) {
+        cb();
+      }
+    });
+  },
+
+  openInstallUI(app, manifest): void {
+    new OpencodeInstallModal(app, getOpencodeBinaryManager(app, manifest), {
+      platform: mapNodePlatform(process.platform) ?? process.platform,
+      arch: mapNodeArch(process.arch) ?? process.arch,
+    }).open();
+  },
+
+  managedInstall: {
+    getState(app, manifest): ManagedInstallActionState {
+      return getOpencodeBinaryManager(app, manifest).getActionState();
+    },
+
+    subscribe(app, manifest, onChange: () => void): () => void {
+      return getOpencodeBinaryManager(app, manifest).subscribeRuntimeState(onChange);
+    },
+
+    async run(app, manifest): Promise<void> {
+      const manager = getOpencodeBinaryManager(app, manifest);
+      const state = computeInstallState(getSettings().agentMode?.backends?.opencode);
+      if (state.kind !== "installed") return;
+      if (state.source === "custom") {
+        await manager.upgradeCustomBinary();
+      } else {
+        await manager.upgradeManaged();
+      }
+    },
+  },
+
+  async applySelection(session: ModelSelectionSession, selection: ModelSelection): Promise<void> {
+    const apply = session.getState()?.model?.apply;
+    // A config-option catalog takes bare model ids only. Effort travels through
+    // its own option when the model publishes one and is dropped otherwise; a
+    // saved level the model does not offer must never become a `/<effort>`
+    // suffix, which opencode rejects, and that rejection leaves the chat on
+    // the agent's own default model. https://github.com/Brevilabs/obsidian-copilot-private/issues/364
+    if (apply?.kind === "setConfigOption") {
+      const currentBase = session.getState()?.model?.current.baseModelId;
+      if (currentBase !== selection.baseModelId) {
+        await session.applyModelWireId(
+          opencodeWire.encode({ baseModelId: selection.baseModelId, effort: null })
+        );
+      }
+      const refreshed = session.getState()?.model;
+      const refreshedApply = refreshed?.apply;
+      const effortConfigId =
+        refreshedApply?.kind === "setConfigOption" ? refreshedApply.effortConfigId : undefined;
+      const effort = resolveEffort(
+        selection.effort,
+        findModelEntry(refreshed, selection.baseModelId)?.effortOptions
+      );
+      if (effortConfigId && effort !== null) await session.setConfigOption(effortConfigId, effort);
+      return;
+    }
+    const options = findModelEntry(session.getState()?.model, selection.baseModelId)?.effortOptions;
+    await session.applyModelWireId(
+      opencodeWire.encode({ ...selection, effort: resolveEffort(selection.effort, options) })
+    );
+  },
+
+  prefetchEffortCatalog: prefetchConfigEfforts,
+
+  createBackendProcess(args): BackendProcess {
+    const { providerRegistry, backendConfigRegistry } = args.modelManagement;
+    const { copilotMcpServer } = args;
+    return simpleBinaryBackendProcess(
+      args,
+      new OpencodeBackend({
+        app: args.app,
+        providerRegistry,
+        backendConfigRegistry,
+        clientVersion: args.clientVersion,
+        getCopilotPluginDir: opencodeCopilotPluginDir,
+        getSelfHostWebSearchChannel: args.getSelfHostWebSearchChannel,
+        // OpenCode stamps the calling session on each call, so one token serves every chat it runs, and its listing names no agent.
+        // https://github.com/logancyang/obsidian-copilot/issues/4688
+        connectCopilotMcpServer: copilotMcpServer
+          ? () =>
+              copilotMcpServer.connect(
+                args.descriptor.id,
+                args.descriptor.id,
+                (callerSessionId) => args.findCallingChat(args.descriptor.id, callerSessionId),
+                true
+              )
+          : undefined,
+        customAgentsFile: opencodeAgentsFilePath(args.app),
+      })
+    );
+  },
+
+  SettingsPanel: OpencodeSettingsPanel,
+
+  approvedRules: opencodeApprovedRules,
+
+  forgetAgent: (app, slug) => removeAgentEntries(opencodeAgentsFilePath(app), slug),
+
+  async onPluginLoad(app, manifest): Promise<void> {
+    const manager = getOpencodeBinaryManager(app, manifest);
+    manager.adopt(app, manifest);
+    manager.forgetSettledError();
+    await manager.refreshInstallState();
+    await manager.autoUpgrade(OPENCODE_PINNED_VERSION, OPENCODE_MIN_VERSION, (message) => {
+      new Notice(message);
+    });
+  },
+
+  getProbeSessionId(settings: CopilotSettings): string | undefined {
+    const id = settings.agentMode?.backends?.opencode?.probeSessionId;
+    return id && id.length > 0 ? id : undefined;
+  },
+
+  async persistProbeSessionId(sessionId: string): Promise<void> {
+    updateAgentModeBackendFields("opencode", { probeSessionId: sessionId });
+  },
+
+  getModeMapping(_modeState, configOptions): ModeMapping | null {
+    if (!configOptions) return null;
+    const opt = configOptions.find((o) => o.id === OPENCODE_MODE_CONFIG_OPTION_ID);
+    if (!opt) return null;
+    // A custom agent chat's Default and Auto are that agent's own pair of OpenCode agents.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/937
+    const agent = typeof opt.currentValue === "string" && readCustomAgentModeId(opt.currentValue);
+    return {
+      kind: "configOption",
+      configId: OPENCODE_MODE_CONFIG_OPTION_ID,
+      canonical: agent
+        ? {
+            default: customAgentModeId({ ...agent, auto: false }),
+            auto: customAgentModeId({ ...agent, auto: true }),
+          }
+        : { ...OPENCODE_CANONICAL_MODE_AGENT_IDS },
+    };
+  },
+};
+
+function opencodeProviderToCopilot(opencodeProviderId: string): string | null {
+  for (const [copilotProvider, oId] of Object.entries(OPENCODE_PROVIDER_MAP)) {
+    if (oId === opencodeProviderId) return copilotProvider;
+  }
+  return null;
+}

@@ -1,0 +1,1321 @@
+import { ChainType } from "@/chainType";
+import {
+  COPILOT_FOLDER_ROOT,
+  DEFAULT_QA_EXCLUSIONS_SETTING,
+  DEFAULT_SETTINGS,
+  SEND_SHORTCUT,
+} from "@/constants";
+import {
+  normalizeMiyoFolderNames,
+  normalizeRootFolders,
+  resetSettings,
+  sanitizeEnvOverrides,
+  sanitizeBuiltinPreferences,
+  sanitizeQaExclusions,
+  sanitizeSettings,
+  settingsAtom,
+  settingsStore,
+  toVisibleCopilotFolder,
+  validateCopilotFolder,
+  CopilotSettings,
+} from "@/settings/model";
+import { CustomModel } from "@/aiParams";
+
+function sanitizeClaudeSlice(autoModePermission: unknown): CopilotSettings {
+  return sanitizeSettings({
+    ...DEFAULT_SETTINGS,
+    agentMode: {
+      enabled: true,
+      byok: {},
+      activeBackend: "claude",
+      backends: { claude: { autoModePermission } },
+    },
+  } as unknown as CopilotSettings);
+}
+
+describe("model", () => {
+  describe("sanitizeQaExclusions()", () => {
+    it("defaults to copilot root when value is not a string", () => {
+      expect(sanitizeQaExclusions(undefined)).toBe(
+        encodeURIComponent(DEFAULT_QA_EXCLUSIONS_SETTING)
+      );
+    });
+
+    it("keeps slash-only patterns distinct from canonical entries", () => {
+      const rawValue = `${encodeURIComponent("///")},${encodeURIComponent(COPILOT_FOLDER_ROOT)}`;
+
+      const sanitized = sanitizeQaExclusions(rawValue);
+
+      expect(sanitized.split(",")).toEqual([
+        encodeURIComponent("///"),
+        encodeURIComponent(COPILOT_FOLDER_ROOT),
+      ]);
+    });
+
+    it("normalizes trailing slashes to canonical path keys", () => {
+      const rawValue = `${encodeURIComponent("folder/")},${encodeURIComponent("folder//")}`;
+
+      const sanitized = sanitizeQaExclusions(rawValue);
+
+      expect(sanitized.split(",")).toEqual([encodeURIComponent("folder/")]);
+    });
+
+    it("does not add the copilot root to a custom exclusion list (the system exclusion covers it)", () => {
+      const rawValue = encodeURIComponent("folder");
+
+      const sanitized = sanitizeQaExclusions(rawValue);
+
+      expect(sanitized.split(",")).toEqual([encodeURIComponent("folder")]);
+    });
+  });
+
+  describe("sanitizeSettings()", () => {
+    it("falls back to ENTER when defaultSendShortcut is missing", () => {
+      const settingsWithoutShortcut = {
+        ...DEFAULT_SETTINGS,
+        defaultSendShortcut: undefined,
+      } as unknown as CopilotSettings;
+
+      const sanitized = sanitizeSettings(settingsWithoutShortcut);
+
+      expect(sanitized.defaultSendShortcut).toBe(SEND_SHORTCUT.ENTER);
+    });
+
+    it("falls back to ENTER when defaultSendShortcut is unrecognized", () => {
+      const settingsWithInvalidShortcut = {
+        ...DEFAULT_SETTINGS,
+        defaultSendShortcut: "invalid-shortcut",
+      } as unknown as CopilotSettings;
+
+      const sanitized = sanitizeSettings(settingsWithInvalidShortcut);
+
+      expect(sanitized.defaultSendShortcut).toBe(SEND_SHORTCUT.ENTER);
+    });
+
+    it("keeps a saved ENTER send shortcut", () => {
+      const settingsWithEnter = {
+        ...DEFAULT_SETTINGS,
+        defaultSendShortcut: SEND_SHORTCUT.ENTER,
+      };
+
+      const sanitized = sanitizeSettings(settingsWithEnter);
+
+      expect(sanitized.defaultSendShortcut).toBe(SEND_SHORTCUT.ENTER);
+    });
+
+    it("keeps a saved SHIFT_ENTER send shortcut", () => {
+      const settingsWithShiftEnter = {
+        ...DEFAULT_SETTINGS,
+        defaultSendShortcut: SEND_SHORTCUT.SHIFT_ENTER,
+      };
+
+      const sanitized = sanitizeSettings(settingsWithShiftEnter);
+
+      expect(sanitized.defaultSendShortcut).toBe(SEND_SHORTCUT.SHIFT_ENTER);
+    });
+
+    it("creates a default agentMode slice when missing", () => {
+      const sanitized = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        agentMode: undefined as unknown as never,
+      });
+      expect(sanitized.agentMode).toEqual({
+        byok: {},
+        activeBackend: "opencode",
+        backends: {},
+        debugFullFrames: true,
+        offerFeedbackCards: true,
+        notificationSound: true,
+        notificationSoundId: "piano",
+        skills: {
+          folder: "copilot/skills",
+          builtinPreferences: {
+            "copilot-web-search": { disabled: true },
+            "copilot-web-fetch": { disabled: true },
+            "json-canvas": { disabledAgents: ["claude", "codex"] },
+          },
+        },
+      });
+    });
+
+    it("defaults notificationSound to on so an unattended turn still calls the user back", () => {
+      const sanitized = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        agentMode: {
+          byok: {},
+          activeBackend: "opencode",
+          backends: {},
+        },
+      } as unknown as CopilotSettings);
+      expect(sanitized.agentMode.notificationSound).toBe(true);
+    });
+
+    it("keeps a chosen notification sound and drops one no longer in the catalog (https://github.com/logancyang/obsidian-copilot/issues/2987)", () => {
+      const chosen = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        agentMode: {
+          byok: {},
+          activeBackend: "opencode",
+          backends: {},
+          notificationSoundId: "doorbell",
+        },
+      } as unknown as CopilotSettings);
+      expect(chosen.agentMode.notificationSoundId).toBe("doorbell");
+
+      const removed = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        agentMode: {
+          byok: {},
+          activeBackend: "opencode",
+          backends: {},
+          notificationSoundId: "removed-sound",
+        },
+      } as unknown as CopilotSettings);
+      expect(removed.agentMode.notificationSoundId).toBe(
+        DEFAULT_SETTINGS.agentMode.notificationSoundId
+      );
+    });
+
+    it("keeps the teammate of the last chat started and drops a value that is not a name (https://github.com/Brevilabs/obsidian-copilot-private/issues/588)", () => {
+      const base = { byok: {}, activeBackend: "opencode", backends: {} };
+      const kept = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        agentMode: { ...base, lastTeammate: "coco" },
+      } as unknown as CopilotSettings);
+      const dropped = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        agentMode: { ...base, lastTeammate: 7 },
+      } as unknown as CopilotSettings);
+
+      expect(kept.agentMode.lastTeammate).toBe("coco");
+      expect(dropped.agentMode).not.toHaveProperty("lastTeammate");
+    });
+
+    it("keeps a dismissed first-teammate banner dismissed and adds nothing for a user who never dismissed it (https://github.com/Brevilabs/obsidian-copilot-private/issues/939)", () => {
+      const base = { byok: {}, activeBackend: "opencode", backends: {} };
+      const dismissed = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        agentMode: { ...base, firstTeammateBannerDismissed: true },
+      } as unknown as CopilotSettings);
+      const untouched = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        agentMode: { ...base, firstTeammateBannerDismissed: "yes" },
+      } as unknown as CopilotSettings);
+
+      expect(dismissed.agentMode.firstTeammateBannerDismissed).toBe(true);
+      expect(untouched.agentMode).not.toHaveProperty("firstTeammateBannerDismissed");
+    });
+
+    it("preserves an explicit notificationSound=false (a user who muted it stays muted)", () => {
+      const sanitized = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        agentMode: {
+          byok: {},
+          activeBackend: "opencode",
+          backends: {},
+          notificationSound: false,
+        },
+      } as unknown as CopilotSettings);
+      expect(sanitized.agentMode.notificationSound).toBe(false);
+    });
+
+    it("preserves an explicit debugFullFrames=false (a user who turned it off stays off)", () => {
+      const sanitized = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        agentMode: {
+          byok: {},
+          activeBackend: "opencode",
+          backends: {},
+          debugFullFrames: false,
+        },
+      } as unknown as CopilotSettings);
+      expect(sanitized.agentMode.debugFullFrames).toBe(false);
+    });
+
+    it("offers feedback cards to an install that never saved the setting, and keeps an explicit opt-out", () => {
+      const base = { byok: {}, activeBackend: "opencode", backends: {} };
+      const fresh = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        agentMode: base,
+      } as unknown as CopilotSettings);
+      const optedOut = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        agentMode: { ...base, offerFeedbackCards: false },
+      } as unknown as CopilotSettings);
+
+      expect(fresh.agentMode.offerFeedbackCards).toBe(true);
+      expect(optedOut.agentMode.offerFeedbackCards).toBe(false);
+    });
+
+    it("falls back to debugFullFrames=true when the persisted value is not a boolean", () => {
+      const sanitized = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        agentMode: {
+          byok: {},
+          activeBackend: "opencode",
+          backends: {},
+          debugFullFrames: "yes" as unknown as boolean,
+        },
+      } as unknown as CopilotSettings);
+      expect(sanitized.agentMode.debugFullFrames).toBe(true);
+    });
+
+    it("leaves backends empty when no legacy fields and no existing slice", () => {
+      const sanitized = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        agentMode: { enabled: true, byok: {} },
+      } as unknown as CopilotSettings);
+      expect(sanitized.agentMode.backends).toEqual({});
+    });
+
+    it("preserves an already-migrated backends.opencode slice", () => {
+      const migrated = {
+        ...DEFAULT_SETTINGS,
+        agentMode: {
+          enabled: true,
+          byok: {},
+          activeBackend: "opencode",
+          backends: {
+            opencode: {
+              binaryPath: "/new/opencode",
+              binaryVersion: "2.0.0",
+              binarySource: "custom",
+            },
+          },
+        },
+      } as unknown as CopilotSettings;
+
+      const sanitized = sanitizeSettings(migrated);
+
+      expect(sanitized.agentMode.backends.opencode).toEqual({
+        binaryPath: "/new/opencode",
+        binaryVersion: "2.0.0",
+        binarySource: "custom",
+      });
+    });
+
+    it("defaults binarySource to 'managed' when path is set but source is missing or invalid", () => {
+      const legacy = {
+        ...DEFAULT_SETTINGS,
+        agentMode: {
+          enabled: true,
+          byok: {},
+          backends: {
+            opencode: { binaryPath: "/p", binaryVersion: "1.0.0", binarySource: "garbage" },
+          },
+        },
+      } as unknown as CopilotSettings;
+
+      const sanitized = sanitizeSettings(legacy);
+
+      expect(sanitized.agentMode.backends.opencode?.binarySource).toBe("managed");
+    });
+
+    it("clears binarySource when no binaryPath is set", () => {
+      const settings = {
+        ...DEFAULT_SETTINGS,
+        agentMode: {
+          enabled: true,
+          byok: {},
+          backends: { opencode: { binarySource: "managed" } },
+        },
+      } as unknown as CopilotSettings;
+
+      const sanitized = sanitizeSettings(settings);
+
+      expect(sanitized.agentMode.backends.opencode).toEqual({
+        binaryPath: undefined,
+        binaryVersion: undefined,
+        binarySource: undefined,
+      });
+    });
+
+    it("drops invalid envOverrides keys from the Claude backend slice while keeping valid ones", () => {
+      const settings = {
+        ...DEFAULT_SETTINGS,
+        agentMode: {
+          enabled: true,
+          byok: {},
+          activeBackend: "claude",
+          backends: {
+            claude: { envOverrides: { CLAUDE_CONFIG_DIR: "/x", "BAD KEY": "y" } },
+          },
+        },
+      } as unknown as CopilotSettings;
+
+      const sanitized = sanitizeSettings(settings);
+
+      expect(sanitized.agentMode.backends.claude?.envOverrides).toEqual({
+        CLAUDE_CONFIG_DIR: "/x",
+      });
+    });
+
+    it("migrates legacy Miyo settings and strips obsolete remote vault path state", () => {
+      const legacySettings = {
+        ...DEFAULT_SETTINGS,
+        enableMiyo: undefined,
+        enableMiyoSearch: true,
+        miyoServerUrl: "http://127.0.0.1:8742",
+        miyoRemoteVaultPath: "\\\\Mac\\Home\\Downloads\\graham-essays-main",
+      } as unknown as CopilotSettings;
+
+      const sanitized = sanitizeSettings(legacySettings);
+
+      expect(sanitized.enableMiyo).toBe(true);
+      expect(sanitized.miyoServerUrl).toBe("http://127.0.0.1:8742");
+      const sanitizedRecord = sanitized as unknown as Record<string, unknown>;
+
+      expect("miyoRemoteVaultPath" in sanitizedRecord).toBe(false);
+      expect("enableMiyoSearch" in sanitizedRecord).toBe(false);
+    });
+
+    it("assigns a userId while stripping obsolete Miyo keys", () => {
+      const legacySettings = {
+        ...DEFAULT_SETTINGS,
+        userId: "",
+        miyoRemoteVaultPath: "\\\\Mac\\Home\\Downloads\\graham-essays-main",
+      };
+
+      const sanitized = sanitizeSettings(legacySettings);
+      const sanitizedRecord = sanitized as unknown as Record<string, unknown>;
+
+      expect(sanitized.userId).toBeTruthy();
+      expect("miyoRemoteVaultPath" in sanitizedRecord).toBe(false);
+    });
+
+    it("renames legacy enableSelfHostedSearch=true to enableSelfHostMode", () => {
+      const legacy = {
+        ...DEFAULT_SETTINGS,
+        enableSelfHostMode: undefined,
+        enableSelfHostedSearch: true,
+      } as unknown as CopilotSettings;
+
+      const sanitized = sanitizeSettings(legacy);
+
+      expect(sanitized.enableSelfHostMode).toBe(true);
+    });
+
+    it("defaults enableMiyoDocumentProcessing to true when missing", () => {
+      const out = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        enableMiyoDocumentProcessing: undefined,
+      } as unknown as CopilotSettings);
+      expect(out.enableMiyoDocumentProcessing).toBe(true);
+    });
+
+    it("resets a non-boolean enableMiyoDocumentProcessing to true", () => {
+      const out = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        enableMiyoDocumentProcessing: "bogus",
+      } as unknown as CopilotSettings);
+      expect(out.enableMiyoDocumentProcessing).toBe(true);
+    });
+
+    it("preserves enableMiyoDocumentProcessing=false", () => {
+      const out = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        enableMiyoDocumentProcessing: false,
+      });
+      expect(out.enableMiyoDocumentProcessing).toBe(false);
+    });
+
+    it.each(["http://miyo-home:8742", "http://127.0.0.1:8742"])(
+      "preserves the legacy endpoint %s without requiring local discovery — https://github.com/Brevilabs/obsidian-copilot-private/issues/466",
+      (miyoServerUrl) => {
+        const settings = sanitizeSettings({ ...DEFAULT_SETTINGS, miyoServerUrl });
+        expect(settings.miyoConnectionMode).toBe("remote");
+        expect(settings.miyoServerUrl).toBe(miyoServerUrl);
+      }
+    );
+
+    it("retains a saved server address while local mode stays selected after reload — https://github.com/Brevilabs/obsidian-copilot-private/issues/466", () => {
+      const settings = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        miyoServerUrl: "http://remote:8742",
+        miyoConnectionMode: "local",
+      });
+      expect(settings.miyoConnectionMode).toBe("local");
+      expect(settings.miyoServerUrl).toBe("http://remote:8742");
+      expect(sanitizeSettings(settings)).toEqual(settings);
+    });
+
+    it("starts a fresh configuration with this computer — https://github.com/Brevilabs/obsidian-copilot-private/issues/466", () => {
+      expect(sanitizeSettings({ ...DEFAULT_SETTINGS }).miyoConnectionMode).toBe("local");
+    });
+
+    it("gives an install saved before extra Miyo search folders existed an empty folder list — https://github.com/logancyang/obsidian-copilot/issues/3508", () => {
+      const persisted = { ...DEFAULT_SETTINGS } as Partial<CopilotSettings>;
+      delete persisted.miyoExtraSearchFolders;
+
+      const settings = sanitizeSettings(persisted as CopilotSettings);
+
+      expect(settings.miyoExtraSearchFolders).toEqual([]);
+    });
+
+    it("keeps saved extra Miyo search folders in their normalized form — https://github.com/logancyang/obsidian-copilot/issues/3508", () => {
+      const settings = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        miyoExtraSearchFolders: [" Research ", "Archive", "Research", "a/b"],
+      });
+
+      expect(settings.miyoExtraSearchFolders).toEqual(["Research", "Archive"]);
+    });
+
+    it("gives an install saved before Miyo search limits existed 20 results and 2 variants, and keeps saved limits — https://github.com/logancyang/obsidian-copilot/issues/3825", () => {
+      const persisted = { ...DEFAULT_SETTINGS } as Partial<CopilotSettings>;
+      delete persisted.miyoSearchMaxResults;
+      delete persisted.miyoSearchMaxVariants;
+
+      expect(sanitizeSettings(persisted as CopilotSettings)).toMatchObject({
+        miyoSearchMaxResults: 20,
+        miyoSearchMaxVariants: 2,
+      });
+      expect(
+        sanitizeSettings({ ...DEFAULT_SETTINGS, miyoSearchMaxResults: 7, miyoSearchMaxVariants: 0 })
+      ).toMatchObject({ miyoSearchMaxResults: 7, miyoSearchMaxVariants: 0 });
+    });
+
+    it("defaults the startup notice marker without inheriting the Agent Home dismissal", () => {
+      const persisted = { ...DEFAULT_SETTINGS, lastDismissedVersion: "4.1.0" };
+      delete (persisted as Partial<CopilotSettings>).lastShownStartupVersion;
+      const loaded = sanitizeSettings(persisted);
+      expect(loaded.lastShownStartupVersion).toBeNull();
+      expect(loaded.lastDismissedVersion).toBe("4.1.0");
+    });
+
+    it("preserves distinct startup notice and Agent Home dismissal versions", () => {
+      const loaded = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        lastDismissedVersion: "4.0.9",
+        lastShownStartupVersion: "4.1.0",
+      });
+      expect(loaded.lastShownStartupVersion).toBe("4.1.0");
+      expect(loaded.lastDismissedVersion).toBe("4.0.9");
+    });
+
+    it("preserves valid built-in opt-outs and drops malformed preference values https://github.com/logancyang/obsidian-copilot/issues/3022", () => {
+      const result = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        agentMode: {
+          ...DEFAULT_SETTINGS.agentMode,
+          skills: {
+            folder: "copilot/skills",
+            builtinPreferences: {
+              "copilot-web-search": { disabled: true, disabledAgents: ["opencode", 3] },
+              invalid: null,
+              malformedArray: [],
+            },
+          },
+        },
+      } as unknown as CopilotSettings);
+      expect(result.agentMode.skills.builtinPreferences).toEqual({
+        "copilot-web-search": { disabled: true, disabledAgents: ["opencode"] },
+      });
+    });
+
+    it.each(["parallel", "exa"] as const)(
+      "preserves the %s self-host search provider (https://github.com/Brevilabs/obsidian-copilot-private/issues/285)",
+      (provider) => {
+        const sanitized = sanitizeSettings({
+          ...DEFAULT_SETTINGS,
+          selfHostSearchProvider: provider,
+        });
+
+        expect(sanitized.selfHostSearchProvider).toBe(provider);
+      }
+    );
+
+    it("falls back to Firecrawl for an unknown self-host search provider (https://github.com/Brevilabs/obsidian-copilot-private/issues/285)", () => {
+      const sanitized = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        selfHostSearchProvider: "unknown",
+      } as unknown as CopilotSettings);
+
+      expect(sanitized.selfHostSearchProvider).toBe("firecrawl");
+    });
+
+    it("turns live Relevant Notes updates on for settings written before the field existed (https://github.com/Brevilabs/obsidian-copilot-private/issues/362)", () => {
+      const withoutField = { ...DEFAULT_SETTINGS } as unknown as Record<string, unknown>;
+      delete withoutField.relevantNotesLiveUpdate;
+
+      const sanitized = sanitizeSettings(withoutField as unknown as CopilotSettings);
+
+      expect(sanitized.relevantNotesLiveUpdate).toBe(true);
+    });
+
+    it("preserves a persisted choice to switch live Relevant Notes updates off (https://github.com/Brevilabs/obsidian-copilot-private/issues/362)", () => {
+      const sanitized = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        relevantNotesLiveUpdate: false,
+      });
+
+      expect(sanitized.relevantNotesLiveUpdate).toBe(false);
+    });
+
+    it("auto-attaches the active note for settings written before the field existed (https://github.com/logancyang/obsidian-copilot/issues/3663)", () => {
+      const withoutField = { ...DEFAULT_SETTINGS } as unknown as Record<string, unknown>;
+      delete withoutField.autoAttachActiveNote;
+
+      const sanitized = sanitizeSettings(withoutField as unknown as CopilotSettings);
+
+      expect(sanitized.autoAttachActiveNote).toBe(true);
+    });
+
+    it("preserves a persisted choice to stop auto-attaching the active note (https://github.com/logancyang/obsidian-copilot/issues/3663)", () => {
+      const sanitized = sanitizeSettings({ ...DEFAULT_SETTINGS, autoAttachActiveNote: false });
+
+      expect(sanitized.autoAttachActiveNote).toBe(false);
+    });
+
+    it("drops a persisted global output cap so it cannot truncate answers again (https://github.com/logancyang/obsidian-copilot-preview/issues/312)", () => {
+      const withRetiredCap = {
+        ...DEFAULT_SETTINGS,
+        maxTokens: 6000,
+        contextTurns: 4,
+      } as unknown as CopilotSettings;
+
+      const sanitized = sanitizeSettings(withRetiredCap);
+
+      expect("maxTokens" in (sanitized as unknown as Record<string, unknown>)).toBe(false);
+      expect(sanitized.contextTurns).toBe(4);
+    });
+
+    it("keeps a Claude auto permission mode the SDK understands", () => {
+      const sanitized = sanitizeClaudeSlice("acceptEdits");
+
+      expect(sanitized.agentMode.backends.claude?.autoModePermission).toBe("acceptEdits");
+    });
+
+    it("drops an unsupported Claude auto permission mode so the descriptor default applies", () => {
+      const sanitized = sanitizeClaudeSlice("dontAsk");
+
+      expect(sanitized.agentMode.backends.claude?.autoModePermission).toBeUndefined();
+    });
+
+    it.each([
+      [false, false],
+      ["off", undefined],
+    ])(
+      "keeps a Claude auto memory choice of %p as %p, dropping a non-boolean so the Claude Code default applies",
+      (autoMemory, kept) => {
+        const sanitized = sanitizeSettings({
+          ...DEFAULT_SETTINGS,
+          agentMode: { enabled: true, byok: {}, backends: { claude: { autoMemory } } },
+        } as unknown as CopilotSettings);
+
+        expect(sanitized.agentMode.backends.claude?.autoMemory).toBe(kept);
+      }
+    );
+
+    it.each([
+      [true, true],
+      ["on", undefined],
+    ])(
+      "keeps a Claude in Chrome choice of %p as %p, dropping a non-boolean so the switch reads off (https://github.com/Brevilabs/obsidian-copilot-private/issues/1043)",
+      (enableChrome, kept) => {
+        const sanitized = sanitizeSettings({
+          ...DEFAULT_SETTINGS,
+          agentMode: { enabled: true, byok: {}, backends: { claude: { enableChrome } } },
+        } as unknown as CopilotSettings);
+
+        expect(sanitized.agentMode.backends.claude?.enableChrome).toBe(kept);
+      }
+    );
+
+    it("coerces a retired `project` defaultChainType so chain construction never sees it (https://github.com/logancyang/obsidian-copilot-preview/issues/310)", () => {
+      const out = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        defaultChainType: "project",
+      } as unknown as CopilotSettings);
+
+      expect(out.defaultChainType).toBe(DEFAULT_SETTINGS.defaultChainType);
+    });
+
+    it("keeps a defaultChainType the runner still supports", () => {
+      const out = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        defaultChainType: ChainType.COPILOT_PLUS_CHAIN,
+      });
+
+      expect(out.defaultChainType).toBe(ChainType.COPILOT_PLUS_CHAIN);
+    });
+
+    it("falls back to the default copilotFolder when it is whitespace-only", () => {
+      const out = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        copilotFolder: "   ",
+      });
+      expect(out.copilotFolder).toBe(DEFAULT_SETTINGS.copilotFolder);
+    });
+
+    it("trims surrounding whitespace from a custom copilotFolder", () => {
+      const out = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        copilotFolder: "  my-ai  ",
+      });
+      expect(out.copilotFolder).toBe("my-ai");
+    });
+
+    it("keeps a nested custom copilotFolder", () => {
+      const out = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        copilotFolder: "notes/ai",
+      });
+      expect(out.copilotFolder).toBe("notes/ai");
+    });
+
+    it("loads a hidden copilotFolder as its visible name so every feature can index it (https://github.com/Brevilabs/obsidian-copilot-private/issues/712)", () => {
+      for (const [hidden, visible] of [
+        [".copilot", "copilot"],
+        ["notes/.ai/", "notes/ai"],
+      ]) {
+        const out = sanitizeSettings({ ...DEFAULT_SETTINGS, copilotFolder: hidden });
+        expect(out.copilotFolder).toBe(visible);
+        expect(out.copilotRootHistory).toContain(visible);
+      }
+    });
+
+    it("unions the active root into a normalized, deduped copilotRootHistory", () => {
+      const out = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        copilotFolder: "team-ai",
+        copilotRootHistory: ["copilot", "ai", "copilot"],
+      });
+      expect(new Set(out.copilotRootHistory)).toEqual(new Set(["copilot", "ai", "team-ai"]));
+    });
+
+    it("adds the active root to copilotRootHistory even when the history is missing", () => {
+      const raw = { ...DEFAULT_SETTINGS, copilotFolder: "ai" } as unknown as Record<
+        string,
+        unknown
+      >;
+      delete raw.copilotRootHistory;
+      const out = sanitizeSettings(raw as unknown as CopilotSettings);
+      expect(out.copilotRootHistory).toContain("ai");
+    });
+
+    it("coerces a non-boolean upgradedToV8FromLegacy to false", () => {
+      const out = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        upgradedToV8FromLegacy: undefined,
+      } as unknown as CopilotSettings);
+      expect(out.upgradedToV8FromLegacy).toBe(false);
+    });
+
+    it("preserves upgradedToV8FromLegacy=true", () => {
+      const out = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        upgradedToV8FromLegacy: true,
+      });
+      expect(out.upgradedToV8FromLegacy).toBe(true);
+    });
+
+    it("falls back to the default copilotFolder for every path validateCopilotFolder rejects and keeps a valid nested folder", () => {
+      for (const value of ["../escape", "/etc/passwd", "C:/x", "", "NUL", "copilot."]) {
+        const out = sanitizeSettings({ ...DEFAULT_SETTINGS, copilotFolder: value });
+        expect(out.copilotFolder).toBe(DEFAULT_SETTINGS.copilotFolder);
+      }
+      const kept = sanitizeSettings({ ...DEFAULT_SETTINGS, copilotFolder: "team/ai" });
+      expect(kept.copilotFolder).toBe("team/ai");
+    });
+
+    it.each([
+      ["a missing cache, as every pre-upgrade data.json has", undefined],
+      ["a non-object cache", "nope"],
+      ["a cache whose models are not a list", { models: "nope", defaultEnabledIds: [] }],
+      ["a model entry that is null", { models: [null], defaultEnabledIds: [] }],
+      [
+        "a model entry with no id",
+        { models: [{ displayName: "Nameless" }], defaultEnabledIds: [] },
+      ],
+      [
+        "a model entry with a non-string id",
+        { models: [{ id: 7, displayName: "Seven" }], defaultEnabledIds: [] },
+      ],
+      [
+        "a non-string default-enabled id",
+        { models: [{ id: "a", displayName: "A" }], defaultEnabledIds: [7] },
+      ],
+    ])(
+      "replaces %s with an empty Copilot Plus lineup (https://github.com/Brevilabs/obsidian-copilot-private/issues/319)",
+      (_case, copilotPlusCatalog) => {
+        const out = sanitizeSettings({
+          ...DEFAULT_SETTINGS,
+          copilotPlusCatalog,
+        } as unknown as CopilotSettings);
+
+        expect(out.copilotPlusCatalog).toEqual({ models: [], defaultEnabledIds: [] });
+      }
+    );
+
+    it.each([
+      ["a missing list, as every data.json written before connectors has", undefined],
+      ["a non-list value", { id: "c1" }],
+    ])(
+      "loads %s as no connectors (https://github.com/Brevilabs/obsidian-copilot-private/issues/856)",
+      (_case, connectors) => {
+        const out = sanitizeSettings({
+          ...DEFAULT_SETTINGS,
+          connectors,
+        } as unknown as CopilotSettings);
+
+        expect(out.connectors).toEqual([]);
+      }
+    );
+
+    it("drops connector entries without a string id and service id and keeps the rest (https://github.com/Brevilabs/obsidian-copilot-private/issues/856)", () => {
+      const kept = { id: "c1", serviceId: "notion", accountLabel: "Acme" };
+      const connectors = [null, { id: "c2" }, { id: 3, serviceId: "linear" }, kept];
+
+      const out = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        connectors,
+      } as unknown as CopilotSettings);
+
+      expect(out.connectors).toEqual([kept]);
+    });
+
+    it("loads a data.json written before custom connectors, or with a non-list value, as no custom connectors, and drops malformed entries (https://github.com/Brevilabs/obsidian-copilot-private/issues/862)", () => {
+      const kept = { id: "echo", name: "Echo", command: "npx", args: ["echo"], envNames: ["KEY"] };
+
+      const missing = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        customConnectors: undefined,
+      } as unknown as CopilotSettings);
+      const wrongType = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        customConnectors: { echo: kept },
+      } as unknown as CopilotSettings);
+      const mixed = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        customConnectors: [null, { id: "Bad Id", name: "x", command: "x" }, kept],
+      } as unknown as CopilotSettings);
+
+      expect(missing.customConnectors).toEqual([]);
+      expect(wrongType.customConnectors).toEqual([]);
+      expect(mixed.customConnectors).toEqual([kept]);
+    });
+
+    it("keeps a well-formed cached Copilot Plus lineup", () => {
+      const copilotPlusCatalog = {
+        models: [{ id: "glm-5.2", displayName: "GLM-5.2" }],
+        defaultEnabledIds: ["glm-5.2"],
+      };
+
+      const out = sanitizeSettings({ ...DEFAULT_SETTINGS, copilotPlusCatalog });
+
+      expect(out.copilotPlusCatalog).toEqual(copilotPlusCatalog);
+    });
+
+    it("preserves a valid deviceProfiles map and drops empty or invalid entries", () => {
+      const raw = {
+        agentMode: {
+          deviceProfiles: {
+            "device-a": {
+              claudeCliPath: "/a/claude",
+              opencode: { binaryPath: "/a/oc", binaryVersion: "1", binarySource: "custom" },
+              codex: { envOverrides: { GOOD: "1", "bad-key": "x" } },
+            },
+            "device-b": {},
+            "": { claudeCliPath: "/x" },
+          },
+        },
+      };
+
+      const out = sanitizeSettings(raw as unknown as CopilotSettings);
+      const profiles = out.agentMode.deviceProfiles ?? {};
+
+      expect(profiles["device-a"]?.claudeCliPath).toBe("/a/claude");
+      expect(profiles["device-a"]?.opencode?.binarySource).toBe("custom");
+      expect(profiles["device-a"]?.codex?.envOverrides).toEqual({ GOOD: "1" });
+      expect(profiles["device-b"]).toBeUndefined();
+      expect(profiles[""]).toBeUndefined();
+    });
+
+    it("marks every unannotated Codex path as custom ownership (https://github.com/Brevilabs/obsidian-copilot-private/issues/368)", () => {
+      const out = sanitizeSettings({
+        agentMode: {
+          backends: { codex: { binaryPath: "/flat/codex" } },
+          deviceProfiles: {
+            "device-a": { codex: { binaryPath: "/profile/codex" } },
+          },
+        },
+      } as unknown as CopilotSettings);
+
+      expect(out.agentMode.backends.codex?.binarySource).toBe("custom");
+      expect(out.agentMode.deviceProfiles?.["device-a"]?.codex?.binarySource).toBe("custom");
+    });
+  });
+
+  describe("sanitizeEnvOverrides()", () => {
+    it("returns undefined for non-objects", () => {
+      expect(sanitizeEnvOverrides(undefined)).toBeUndefined();
+      expect(sanitizeEnvOverrides(null)).toBeUndefined();
+      expect(sanitizeEnvOverrides("foo")).toBeUndefined();
+      expect(sanitizeEnvOverrides(42)).toBeUndefined();
+      expect(sanitizeEnvOverrides([1, 2])).toBeUndefined();
+    });
+
+    it("returns undefined when no valid entries remain", () => {
+      expect(sanitizeEnvOverrides({})).toBeUndefined();
+      expect(sanitizeEnvOverrides({ "": "v", "1FOO": "v", "BAR=BAZ": "v" })).toBeUndefined();
+    });
+
+    it("keeps valid POSIX identifiers and string values", () => {
+      expect(
+        sanitizeEnvOverrides({
+          CLAUDE_CONFIG_DIR: "/tmp/claude",
+          _PRIVATE: "x",
+          myVar2: "y",
+        })
+      ).toEqual({
+        CLAUDE_CONFIG_DIR: "/tmp/claude",
+        _PRIVATE: "x",
+        myVar2: "y",
+      });
+    });
+
+    it("drops keys with leading digits, equals signs, whitespace, or invalid characters", () => {
+      expect(
+        sanitizeEnvOverrides({
+          "1FOO": "v",
+          "FOO BAR": "v",
+          "FOO=BAR": "v",
+          "FOO-BAR": "v",
+          VALID: "v",
+        })
+      ).toEqual({ VALID: "v" });
+    });
+
+    it("drops entries whose value isn't a string or contains control chars", () => {
+      expect(
+        sanitizeEnvOverrides({
+          OK: "fine",
+          NUM: 42,
+          NULLED: null,
+          UNDEF: undefined,
+          TABS: "ok\twith\ttabs",
+          NEWLINE: "ok\nnewline",
+        })
+      ).toEqual({ OK: "fine" });
+    });
+
+    it("caps at 64 entries to bound persisted size", () => {
+      const big: Record<string, string> = {};
+      for (let i = 0; i < 100; i++) big[`VAR_${i}`] = String(i);
+      const sanitized = sanitizeEnvOverrides(big);
+      expect(sanitized && Object.keys(sanitized).length).toBe(64);
+    });
+  });
+
+  describe("sanitizeBuiltinPreferences()", () => {
+    it.each([
+      undefined,
+      null,
+      false,
+      [],
+      {},
+      { "copilot-web-search": { disabled: false, disabledAgents: [] } },
+    ])(
+      "keeps absent, malformed, or default preferences empty: %p https://github.com/logancyang/obsidian-copilot/issues/3022",
+      (raw) => {
+        expect(sanitizeBuiltinPreferences(raw)).toBe(sanitizeBuiltinPreferences({}));
+        expect(sanitizeBuiltinPreferences(raw)).toEqual({});
+      }
+    );
+
+    it("drops retired names, including saved miyo-search and miyo-parse opt-outs, and malformed entries while preserving sparse overrides for known skills and absent agents https://github.com/logancyang/obsidian-copilot/issues/3022 https://github.com/Brevilabs/obsidian-copilot-private/issues/736 https://github.com/Brevilabs/obsidian-copilot-private/issues/740", () => {
+      expect(
+        sanitizeBuiltinPreferences({
+          "copilot-web-search": { disabled: true },
+          "copilot-web-fetch": { disabled: false, disabledAgents: ["uninstalled-agent", 3] },
+          "miyo-search": { disabled: true, disabledAgents: ["codex"] },
+          "copilot-read-pdf": null,
+          "miyo-parse": { disabledAgents: ["claude"] },
+          "retired-skill": { disabled: true },
+        })
+      ).toEqual({
+        "copilot-web-search": { disabled: true },
+        "copilot-web-fetch": { disabledAgents: ["uninstalled-agent"] },
+      });
+    });
+  });
+
+  describe("validateCopilotFolder()", () => {
+    it("rejects empty and whitespace-only values", () => {
+      expect(validateCopilotFolder("").ok).toBe(false);
+      expect(validateCopilotFolder("   ").ok).toBe(false);
+    });
+
+    it("accepts a simple relative folder and trims it", () => {
+      expect(validateCopilotFolder("  my-ai  ")).toEqual({ ok: true, folder: "my-ai" });
+    });
+
+    it("accepts a nested relative folder and strips a trailing slash", () => {
+      expect(validateCopilotFolder("notes/ai/")).toEqual({ ok: true, folder: "notes/ai" });
+    });
+
+    it("rejects parent-traversal, absolute, and drive-letter paths", () => {
+      expect(validateCopilotFolder("../escape").ok).toBe(false);
+      expect(validateCopilotFolder("a/../b").ok).toBe(false);
+      expect(validateCopilotFolder("/etc/passwd").ok).toBe(false);
+      expect(validateCopilotFolder("C:/Users/evil").ok).toBe(false);
+    });
+
+    it("rejects any segment that starts with a dot, because Obsidian does not index hidden folders (https://github.com/Brevilabs/obsidian-copilot-private/issues/712)", () => {
+      expect(validateCopilotFolder(".copilot")).toEqual({
+        ok: false,
+        reason: "Folder names cannot start with a dot.",
+      });
+      expect(validateCopilotFolder("notes/.ai").ok).toBe(false);
+      expect(validateCopilotFolder("a/./b").ok).toBe(false);
+      expect(validateCopilotFolder("notes.ai/copilot").ok).toBe(true);
+    });
+
+    it("rejects roots that overlap the active config folder at a segment boundary", () => {
+      const configDir = ".vault-config";
+      expect(validateCopilotFolder(configDir, configDir).ok).toBe(false);
+      expect(validateCopilotFolder(`${configDir.toUpperCase()}/plugins`, configDir).ok).toBe(false);
+      expect(validateCopilotFolder("copilot", "copilot/system-prompts").ok).toBe(false);
+      expect(validateCopilotFolder("copilot-data", "copilot/system-prompts").ok).toBe(true);
+    });
+
+    it("rejects Windows-illegal characters in any segment", () => {
+      expect(validateCopilotFolder("a/b<c").ok).toBe(false);
+      expect(validateCopilotFolder('a/b"c').ok).toBe(false);
+      expect(validateCopilotFolder("a/b|c").ok).toBe(false);
+    });
+
+    it("rejects Windows-reserved device names in any segment, any case, with or without extension", () => {
+      expect(validateCopilotFolder("NUL").ok).toBe(false);
+      expect(validateCopilotFolder("team/CON").ok).toBe(false);
+      expect(validateCopilotFolder("con.md").ok).toBe(false);
+      expect(validateCopilotFolder("Com1").ok).toBe(false);
+      expect(validateCopilotFolder("console").ok).toBe(true);
+      expect(validateCopilotFolder("nul-notes").ok).toBe(true);
+    });
+
+    it("rejects segments ending with a dot or space on every platform", () => {
+      expect(validateCopilotFolder("copilot.").ok).toBe(false);
+      expect(validateCopilotFolder("team /ai").ok).toBe(false);
+      expect(validateCopilotFolder("team./ai").ok).toBe(false);
+    });
+  });
+
+  describe("toVisibleCopilotFolder()", () => {
+    it("drops the leading dots of every segment and keeps visible paths unchanged", () => {
+      expect(toVisibleCopilotFolder(" .copilot ")).toBe("copilot");
+      expect(toVisibleCopilotFolder("..a\\.b/c.d")).toBe("a\\b/c.d");
+      expect(toVisibleCopilotFolder("notes/ai")).toBe("notes/ai");
+    });
+
+    it("turns traversal segments into empty segments that validation still rejects", () => {
+      expect(validateCopilotFolder(toVisibleCopilotFolder("../escape")).ok).toBe(false);
+      expect(validateCopilotFolder(toVisibleCopilotFolder("a/../b")).ok).toBe(false);
+    });
+  });
+
+  describe("normalizeRootFolders()", () => {
+    it("preserves case and strips trailing slashes without lowercasing", () => {
+      expect(normalizeRootFolders(["Copilot/", "ai//"])).toEqual(["Copilot", "ai"]);
+    });
+
+    it("dedupes case-sensitively, preserving first-seen order", () => {
+      expect(normalizeRootFolders(["copilot", "ai", "copilot", "Copilot"])).toEqual([
+        "copilot",
+        "ai",
+        "Copilot",
+      ]);
+    });
+
+    it("drops empty, non-string, and vault-escaping entries", () => {
+      expect(
+        normalizeRootFolders([
+          "",
+          "   ",
+          undefined,
+          "../escape",
+          "a/../b",
+          "/etc",
+          "C:\\Users\\Josh",
+          "notes/ai",
+        ])
+      ).toEqual(["notes/ai"]);
+    });
+
+    it("collapses interior duplicate slashes into the matcher's canonical form", () => {
+      expect(normalizeRootFolders(["a//b"])).toEqual(["a/b"]);
+    });
+
+    it("strips interior single-dot segments into the matcher's canonical form", () => {
+      expect(normalizeRootFolders(["a/./b"])).toEqual(["a/b"]);
+    });
+
+    it("canonicalizes before deduping and traversal filtering", () => {
+      expect(normalizeRootFolders(["a//b", "a/./b", "x/../y", "a/b"])).toEqual(["a/b"]);
+    });
+  });
+
+  describe("normalizeMiyoFolderNames()", () => {
+    it("trims folder names and keeps the first occurrence of each in order", () => {
+      expect(normalizeMiyoFolderNames(["Research", " Archive ", "Research", "ChatGPT"])).toEqual([
+        "Research",
+        "Archive",
+        "ChatGPT",
+      ]);
+    });
+
+    it("keeps names with spaces, dots, and non-Latin letters intact", () => {
+      expect(normalizeMiyoFolderNames(["Second Brain", "notes.v2", "研究"])).toEqual([
+        "Second Brain",
+        "notes.v2",
+        "研究",
+      ]);
+    });
+
+    it("drops non-string and blank entries", () => {
+      expect(normalizeMiyoFolderNames([42, null, "", "   ", { name: "x" }, "Archive"])).toEqual([
+        "Archive",
+      ]);
+    });
+
+    it("drops names with a slash, backslash, double quote, or control character, since a Miyo folder name is passed on verbatim — https://github.com/logancyang/obsidian-copilot/issues/3508", () => {
+      expect(
+        normalizeMiyoFolderNames([
+          "a/b",
+          "a\\b",
+          'say "hi"',
+          "tab\there",
+          "line\nbreak",
+          "bell\u0007",
+          "Research",
+        ])
+      ).toEqual(["Research"]);
+    });
+
+    it("returns one shared empty list for a missing, non-list, or fully rejected value", () => {
+      const fromMissing = normalizeMiyoFolderNames(undefined);
+
+      expect(fromMissing).toEqual([]);
+      expect(Object.isFrozen(fromMissing)).toBe(true);
+      expect(normalizeMiyoFolderNames("Research")).toBe(fromMissing);
+      expect(normalizeMiyoFolderNames(["", "a/b"])).toBe(fromMissing);
+    });
+  });
+
+  describe("resetSettings()", () => {
+    it("preserves historical roots and folds in the pre-reset active root", () => {
+      settingsStore.set(settingsAtom, {
+        ...DEFAULT_SETTINGS,
+        copilotFolder: "team-ai",
+        copilotRootHistory: ["copilot", "ai"],
+      });
+
+      resetSettings();
+
+      const after = settingsStore.get(settingsAtom);
+      expect(after.copilotFolder).toBe(DEFAULT_SETTINGS.copilotFolder);
+      expect(new Set(after.copilotRootHistory)).toEqual(new Set(["copilot", "ai", "team-ai"]));
+    });
+
+    it("preserves the cached Copilot Plus lineup, which a reset does not re-fetch (https://github.com/Brevilabs/obsidian-copilot-private/issues/319)", () => {
+      const catalog = {
+        models: [{ id: "glm-5.2", displayName: "GLM-5.2", limits: { context: 262144 } }],
+        defaultEnabledIds: ["glm-5.2"],
+      };
+      settingsStore.set(settingsAtom, { ...DEFAULT_SETTINGS, copilotPlusCatalog: catalog });
+
+      resetSettings();
+
+      expect(settingsStore.get(settingsAtom).copilotPlusCatalog).toEqual(catalog);
+    });
+
+    it("preserves the connector list, whose logins stay in the keychain (https://github.com/Brevilabs/obsidian-copilot-private/issues/856)", () => {
+      const connectors = [{ id: "c1", serviceId: "notion" }];
+      settingsStore.set(settingsAtom, { ...DEFAULT_SETTINGS, connectors });
+
+      resetSettings();
+
+      expect(settingsStore.get(settingsAtom).connectors).toEqual(connectors);
+    });
+
+    it("preserves the custom connector list, whose values stay in the keychain (https://github.com/Brevilabs/obsidian-copilot-private/issues/862)", () => {
+      const customConnectors = [
+        { id: "acme", name: "Acme", url: "https://acme.test/mcp", headerNames: ["X-Key"] },
+      ];
+      settingsStore.set(settingsAtom, { ...DEFAULT_SETTINGS, customConnectors });
+
+      resetSettings();
+
+      expect(settingsStore.get(settingsAtom).customConnectors).toEqual(customConnectors);
+    });
+
+    it("preserves every custom model, including rows that carry no key (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", () => {
+      const withKey: CustomModel = {
+        name: "my-llama",
+        provider: "openai",
+        enabled: true,
+        apiKey: "sk-custom",
+        baseUrl: "http://localhost:1234",
+      };
+      const withoutKey: CustomModel = {
+        name: "ollama-llama",
+        provider: "ollama",
+        enabled: true,
+      };
+      settingsStore.set(settingsAtom, {
+        ...DEFAULT_SETTINGS,
+        activeModels: [withKey, withoutKey],
+      });
+
+      resetSettings();
+
+      const after = settingsStore.get(settingsAtom);
+      const myLlama = after.activeModels.find((m) => m.name === "my-llama");
+      expect(myLlama?.apiKey).toBe("sk-custom");
+      expect(myLlama?.baseUrl).toBe("http://localhost:1234");
+      expect(after.activeModels.find((m) => m.name === "ollama-llama")).toBeDefined();
+    });
+
+    it("filters out null/undefined top-level secrets", () => {
+      settingsStore.set(settingsAtom, {
+        ...DEFAULT_SETTINGS,
+        openAIApiKey: "valid-key",
+        plusLicenseKey: "lic-12345",
+        anthropicApiKey: null as unknown as string,
+        googleApiKey: undefined as unknown as string,
+      });
+
+      resetSettings();
+
+      const after = settingsStore.get(settingsAtom);
+      expect(after.openAIApiKey).toBe("valid-key");
+      expect(after.plusLicenseKey).toBe("lic-12345");
+      expect(after.anthropicApiKey).toBe(DEFAULT_SETTINGS.anthropicApiKey);
+      expect(after.googleApiKey).toBe(DEFAULT_SETTINGS.googleApiKey);
+    });
+
+    it("preserves the top-level vendor config a retained key needs to reach its service (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", () => {
+      const vendorConfig = {
+        openAIOrgId: "org-123",
+        azureOpenAIApiInstanceName: "my-instance",
+        azureOpenAIApiDeploymentName: "chat-deploy",
+        azureOpenAIApiVersion: "2025-01-01-preview",
+      };
+      settingsStore.set(settingsAtom, { ...DEFAULT_SETTINGS, ...vendorConfig });
+
+      resetSettings();
+
+      expect(settingsStore.get(settingsAtom)).toMatchObject(vendorConfig);
+    });
+
+    it("keeps a signed-in user's paid state and license but drops the entitlement token, so reset never reads as sign-out (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", () => {
+      settingsStore.set(settingsAtom, {
+        ...DEFAULT_SETTINGS,
+        isPaidUser: true,
+        isPlusUser: true,
+        plusLicenseKey: "lic-12345",
+        entitlementToken: "test-stale-entitlement-token",
+        entitlementExpiresAt: 4_000_000_000_000,
+      });
+
+      resetSettings();
+
+      const after = settingsStore.get(settingsAtom);
+      expect(after.isPaidUser).toBe(true);
+      expect(after.entitlementExpiresAt).toBe(4_000_000_000_000);
+      expect(after.plusLicenseKey).toBe("lic-12345");
+      expect(after.isPlusUser).toBe(DEFAULT_SETTINGS.isPlusUser);
+      expect(after.entitlementToken).toBe(DEFAULT_SETTINGS.entitlementToken);
+    });
+
+    it("drops a bundle value whose type its consumer cannot handle (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", () => {
+      settingsStore.set(settingsAtom, {
+        ...DEFAULT_SETTINGS,
+        openAIApiKey: "sk-openai",
+        openAIOrgId: {} as unknown as string,
+      });
+
+      resetSettings();
+
+      const after = settingsStore.get(settingsAtom);
+      expect(after.openAIApiKey).toBe("sk-openai");
+      expect(after.openAIOrgId).toBe(DEFAULT_SETTINGS.openAIOrgId);
+    });
+
+    it("preserves configured models belonging to preserved providers (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", () => {
+      const providerId1 = "prov-with-key";
+      const providerId2 = "prov-no-key";
+      settingsStore.set(settingsAtom, {
+        ...DEFAULT_SETTINGS,
+        providers: {
+          [providerId1]: {
+            providerId: providerId1,
+            providerType: "openai-compatible",
+            displayName: "Provider With Key",
+            apiKeyKeychainId: "kc-123",
+            origin: { kind: "byok" },
+            addedAt: Date.now(),
+          },
+          [providerId2]: {
+            providerId: providerId2,
+            providerType: "openai-compatible",
+            displayName: "Provider No Key (Ollama)",
+            origin: { kind: "byok" },
+            addedAt: Date.now(),
+          },
+        },
+        configuredModels: [
+          {
+            configuredModelId: "model-1",
+            providerId: providerId1,
+            info: { id: "gpt-4", displayName: "GPT-4" },
+            configuredAt: Date.now(),
+          },
+          {
+            configuredModelId: "model-2",
+            providerId: providerId2,
+            info: { id: "llama3", displayName: "Llama 3" },
+            configuredAt: Date.now(),
+          },
+        ],
+      });
+
+      resetSettings();
+
+      const after = settingsStore.get(settingsAtom);
+      expect(after.providers[providerId1]).toBeDefined();
+      expect(after.providers[providerId1].apiKeyKeychainId).toBe("kc-123");
+      expect(after.providers[providerId2]).toBeUndefined();
+      expect(after.configuredModels.length).toBe(1);
+      expect(after.configuredModels[0].configuredModelId).toBe("model-1");
+      expect(after.configuredModels[0].providerId).toBe(providerId1);
+    });
+
+    it("clears backends regardless of preserved providers", () => {
+      settingsStore.set(settingsAtom, {
+        ...DEFAULT_SETTINGS,
+        providers: {
+          prov1: {
+            providerId: "prov1",
+            providerType: "openai-compatible",
+            displayName: "Provider",
+            apiKeyKeychainId: "kc-123",
+            origin: { kind: "byok" },
+            addedAt: Date.now(),
+          },
+        },
+        backends: {
+          chat: { enabledModels: ["model-1", "model-2"] },
+          opencode: { enabledModels: ["model-3"] },
+        },
+      });
+
+      resetSettings();
+
+      const after = settingsStore.get(settingsAtom);
+      expect(after.providers.prov1).toBeDefined();
+      expect(after.backends).toEqual(DEFAULT_SETTINGS.backends);
+    });
+  });
+});

@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": [],
+    "paths": {
+      "@copilot/core/*": ["./src/*"]
+    }
+  },
+  "include": ["src"]
+}

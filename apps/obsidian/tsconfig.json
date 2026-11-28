@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "@copilot/core/*": ["../../packages/core/src/*"],
+      "@copilot/protocol/*": ["../../packages/protocol/src/*"],
+      "@copilot/client/*": ["../../packages/client/src/*"]
+    },
+    "inlineSourceMap": true,
+    "inlineSources": true,
+    "allowJs": true,
+    "importHelpers": true,
+    "types": ["jest"]
+  },
+  "include": ["src", "typings"]
+}

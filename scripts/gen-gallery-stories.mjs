@@ -3,16 +3,20 @@ import path from "node:path";
 import process from "node:process";
 
 const GENERATED_FILE = "dev/gallery/stories.generated.ts";
-const PRESENTATIONAL_COMPONENT_PATTERNS = ["src/**/ui/**/*.tsx"];
-const STORY_PATTERNS = ["src/**/*.stories.tsx"];
+const SOURCE_ROOTS = ["apps/obsidian/src", "packages/*/src"];
+const PRESENTATIONAL_COMPONENT_PATTERNS = SOURCE_ROOTS.map((root) => `${root}/**/ui/**/*.tsx`);
+const STORY_PATTERNS = SOURCE_ROOTS.map((root) => `${root}/**/*.stories.tsx`);
+const SOURCE_PATH = /^(?:apps\/obsidian|packages\/([^/]+))\/src\/(.*)$/;
 
 function isPresentationalComponent(filePath) {
   return !filePath.endsWith(".test.tsx") && !filePath.endsWith(".stories.tsx");
 }
 
 function toModuleId(filePath, suffix) {
-  const sourcePath = path.relative("src", filePath).split(path.sep).join("/");
-  return `@/${sourcePath.slice(0, -suffix.length)}`;
+  const [, packageName, sourcePath] = SOURCE_PATH.exec(filePath.split(path.sep).join("/"));
+  // Package code is imported by package name, never through the plugin's `@/` alias: https://github.com/Brevilabs/obsidian-copilot-private/issues/1010
+  const moduleRoot = packageName ? `@copilot/${packageName}` : "@";
+  return `${moduleRoot}/${sourcePath.slice(0, -suffix.length)}`;
 }
 
 async function findFiles(projectRoot, patterns) {

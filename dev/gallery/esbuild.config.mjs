@@ -1,7 +1,7 @@
 import esbuild from "esbuild";
 import process from "process";
-import nodeModuleShim, { nodeBuiltinExternals } from "../../nodeModuleShim.mjs";
-import svgrPlugin from "../../svgrPlugin.mjs";
+import nodeModuleShim, { nodeBuiltinExternals } from "../../apps/obsidian/nodeModuleShim.mjs";
+import svgrPlugin from "../../apps/obsidian/svgrPlugin.mjs";
 
 const prod = process.argv[2] === "production";
 

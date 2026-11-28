@@ -1,0 +1,196 @@
+# Agent Mode — layer rules
+
+Strict imports, enforced by `eslint-plugin-boundaries` with rules built from the
+root `architecture.json` (see `eslint.architecture.mjs`). That file names the box
+each folder below belongs to and the boxes it may import; when this page and that
+file disagree, the file wins.
+
+1. **`session/`** — **the contract layer.** Hosts the
+   backend-agnostic session, message store, UI-state bridge,
+   persistence manager.
+2. **`acp/`** — the generic ACP runtime (subprocess, JSON-RPC connection,
+   vault-backed ACP client, JSON-RPC stream tap) —
+   the only place that touches `@agentclientprotocol/sdk`. **All ACP knowledge is confined here.**
+3. **`sdk/`** — in-process SDK adapters that implement
+   `BackendProcess` directly. Today
+   this hosts the Claude Agent SDK driver. **Does not import `acp/` or `@agentclientprotocol/sdk`** —
+   `acp/` and `sdk/` are siblings, and the SDK adapter speaks the
+   session domain natively.
+4. **`backends/<id>/`** — one backend per folder. Exports a
+   `BackendDescriptor` whose `createBackendProcess` returns a finished
+   `BackendProcess`.
+5. **`backends/registry.ts`** — the only place that names every
+   backend.
+6. **`ui/`** — backend-agnostic React UI. — permission modals, model pickers, and
+   trail rendering all read session-domain types;
+7. **`skills/`** — canonical-store discovery, symlink lifecycle, reconciliation,
+   and the Skills settings UI.
+8. **`apps/obsidian/src/miyo/agentMode/`** — Miyo's pieces of the agent trail.
+9. **`apps/obsidian/src/connectors/agentMode/`** — Connectors' pieces of the chat: the
+   `suggest_connector` tool, its chat state and extension, and its card slot.
+10. **`navigator/`** — Copilot Navigator, the sessions sidebar: its view,
+    components, hooks, and stories. Code whose purpose
+    is the Navigator belongs here; generic helpers it uses belong in shared
+    modules even when the Navigator is their only caller.
+11. **`apps/obsidian/src/agents/agentMode/`** — Custom agents' pieces of the chat: the
+    lines that show a rule an agent saved to its memory, the tool card
+    kind that puts them in place of the edit that wrote it, the tools an
+    agent calls (`ask_teammate`, `draft_teammate`), and the draft card.
+12. **`apps/obsidian/src/projects/ui/` and `apps/obsidian/src/projects/hooks/`** — the Projects feature's
+    UI and hooks: the project home and its Files tab, the project header and
+    popover, and the create and edit forms.
+
+## Why two adapters under one session
+
+The contract lives in `session/types.ts` (`BackendProcess`,
+`BackendDescriptor`, the full session-domain type set) and
+`session/errors.ts` (`MethodUnsupportedError`). `acp/AcpBackendProcess`
+wraps a JSON-RPC subprocess and translates ACP wire ↔ session-domain
+at its public boundary (via `acp/wireTranslate.ts`);
+`sdk/ClaudeSdkBackendProcess` wraps an in-process async generator and
+emits session-domain events natively. Both produce the same
+`SessionEvent` stream and `BackendState`, so `AgentSession` stays
+oblivious. Crucially, **neither adapter imports the other**,
+`session/` doesn't import either, and `@agentclientprotocol/sdk`
+imports outside `acp/` are blocked by lint
+(`no-restricted-imports`).
+
+## Adding a new backend
+
+Pick a track based on what the agent gives you:
+
+- **Subprocess track** (codex, opencode) — the agent speaks ACP
+  over stdio. Implement `AcpBackend` in `Backend.ts` and have the
+  descriptor's `createBackendProcess(args)` call
+  `simpleBinaryBackendProcess(args, new <Id>Backend())` from
+  `backends/shared/simpleBinaryBackend.ts`. The helper wraps the
+  spawn descriptor in `AcpBackendProcess` for you.
+- **In-process / SDK track** (claude) — the agent ships an
+  in-process SDK. Put the `BackendProcess` implementation in `sdk/`
+  if any logic is reusable (translator, debug tap) and
+  have the descriptor's `createBackendProcess(args)` construct it
+  directly.
+
+Then in either case:
+
+1. Create `backends/<id>/` with:
+   - `descriptor.ts` — `export const <Id>BackendDescriptor: BackendDescriptor = {…}`
+   - any backend-specific UI (install modal, settings panel,
+     permission modal) co-located here
+   - `Backend.ts` (subprocess track only)
+2. Import the descriptor directly from `descriptor.ts` and add it to
+   `backends/registry.ts`.
+3. Settings: store backend-specific config under `agentMode.backends.<id>`
+   (extend `CopilotSettings.agentMode.backends` in `apps/obsidian/src/settings/model.ts`).
+4. Never import the plugin class (`@/main`). The descriptor's methods and
+   settings panel take what they read as explicit parameters (the Obsidian
+   `app`, the plugin `manifest`), and `createBackendProcess(args)` receives
+   `BackendStartArgs`.
+5. Done. **No edits to `acp/`, `session/`, `sdk/`, or `ui/` should be
+   required.** If you need one, the boundary is leaking — extend the
+   descriptor surface instead.
+
+## Adding a new layer
+
+1. Create `apps/obsidian/src/agentMode/<layer>/`.
+2. Add the folder to a box in the root `architecture.json`, or add a box and
+   its row under `edges`.
+3. Re-export from `apps/obsidian/src/agentMode/index.ts` if it should be visible to
+   plugin host code.
+4. Update this doc.
+
+## What lives where (cheatsheet)
+
+- "Backend-agnostic contract — `BackendProcess`, `BackendDescriptor`,
+  the session-domain types, `MethodUnsupportedError`, debug sink,
+  `translateBackendState` helper" → `session/`
+- "ACP wire types, JSON-RPC subprocess plumbing, vault-backed ACP client,
+  ACP↔domain translators" → `acp/` (the **only** layer that imports
+  `@agentclientprotocol/sdk`)
+- "In-process driver for an SDK that produces session-domain events
+  natively" → `sdk/`
+- "Helper used by more than one backend" → `backends/shared/`
+- "Knows about a specific binary, install path, BYOK keys, vendor models" → `backends/<id>/`
+- "React component or modal" → `ui/` (generic) or `backends/<id>/`
+  (backend-specific)
+- "Canonical-store skill discovery, symlink lifecycle, SKILL.md
+  parser/serializer, Skills settings tab (reads `backends/registry.ts`
+  for the brand list)" → `skills/`
+- "A tool call that gets its own card in the agent trail" → a `ToolCardKind`
+  (`ui/activityGroups.ts`) in the tool's feature module, listed in
+  `ui/toolCardKinds.tsx`
+- "A feature's state on a chat, or a card it shows after a turn" → a
+  `ChatStateKey` and `ChatExtension` (`session/chatExtension.ts`) plus a
+  `ChatCardSlot` (`ui/chatCards.tsx`) in the feature's module; list the
+  extension in `index.ts` and the slot in `ui/chatCardSlots.ts`. Never add
+  feature methods to `AgentSession`, `AgentChatBackend` or `AgentChatMessages`.
+- "Plugin-level wiring" → `index.ts` only
+
+## Modals and dialogs
+
+**Use Obsidian's native `Modal`** (from `obsidian`). It gives us correct
+popout-window behavior, native header chrome, ESC handling, and visual
+consistency with the rest of the plugin.
+
+The standard pattern is in `apps/obsidian/src/components/modals/ConfirmModal.tsx` and
+`apps/obsidian/src/agentMode/skills/ui/DeleteConfirmDialog.tsx`. If a surface must live
+inside an existing React tree, keep its visual content as a presentational
+component and host it from an Obsidian modal instead of introducing a second
+modal system.
+
+## BackendDescriptor surface
+
+The descriptor is the contract `session/`, `sdk/`, and `ui/` rely on.
+
+If a UI component needs something the descriptor doesn't expose, **add
+it to the descriptor** — don't reach into a specific backend. The
+descriptor will keep growing; that's by design.
+
+## Debugging tips
+
+### Inspect full Agent Mode frames
+
+The default debug log truncates each frame's payload to 400 chars. For
+diagnostic frame logs with larger payload summaries, turn on
+**Settings → Advanced → Debugging & support → Agent activity log**.
+
+When enabled, every parsed frame is appended as one NDJSON line outside the
+vault, under the OS temp directory:
+
+```text
+<tmp>/obsidian-copilot/acp-frames/<vault-hash>/acp-frames.ndjson
+```
+
+Each line is a `FrameRecord` (`apps/obsidian/src/agentMode/session/debugSink.ts`):
+
+```ts
+{ ts, dir: "→" | "←", tag, kind: "request" | "notif" | "result" | "error" | "raw",
+  method, id, payload }
+```
+
+`dir` is from the plugin's perspective: `→` = sent to the agent,
+`←` = received from the agent. `tag` is the backend id (e.g. `claude-sdk`,
+`opencode`, `codex`). The ACP runtime (`acp/debugTap`) and the Claude SDK
+adapter (`sdk/sdkDebugTap`) both feed the shared sink, so JSON-RPC and
+SDK turns appear in the same file.
+
+Useful queries:
+
+```bash
+LOG="<path shown in Settings → Advanced → Agent activity log>"
+
+# count frames by method
+jq -r .method "$LOG" | sort | uniq -c | sort -rn
+
+# inspect every session/update payload
+jq -c 'select(.method=="session/update") | .payload' "$LOG"
+
+# only frames for one backend
+jq -c 'select(.tag=="claude-sdk")' "$LOG"
+```
+
+The file is append-only and bounded. Oversized individual frames are replaced
+with a `__truncated` summary, and at 50 MB the file rotates to
+`acp-frames.old.ndjson` (overwriting any prior `.old`) in the same temp
+folder. Use the **Open** / **Clear** buttons in the same settings section, or
+delete the files directly. Disable the toggle when not actively debugging.

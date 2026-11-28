@@ -61,25 +61,30 @@ describe("pr-size workflow", () => {
       [500, "XL"],
     ]) {
       it(`labels ${n} production lines as size/${size} while preserving unrelated labels`, async () => {
-        await check([file("src/main.ts", n)], `size/${size}`);
+        await check([file("apps/obsidian/src/main.ts", n)], `size/${size}`);
       });
     }
     it("counts additions and deletions together", async () => {
-      await check([file("src/main.ts", 50, 50)], "size/M");
+      await check([file("apps/obsidian/src/main.ts", 50, 50)], "size/M");
+    });
+    it("counts production lines in workspace packages", async () => {
+      await check([file("packages/core/src/logger.ts", 100)], "size/M");
     });
     it("counts fully deleted production files", async () => {
-      await check([file("src/deleted.ts", 0, 100)], "size/M");
+      await check([file("apps/obsidian/src/deleted.ts", 0, 100)], "size/M");
     });
-    it("excludes stories, tests, fixtures, mocks and files outside src", async () => {
+    it("excludes stories, tests, fixtures, mocks and files outside the source folders", async () => {
       await check(
         [
-          "src/a.stories.tsx",
-          "src/a.test.ts",
-          "src/a.spec.ts",
-          "src/__tests__/a.ts",
-          "src/__mocks__/a.ts",
-          "src/__fixtures__/a.json",
-          "src/fixtures/a.json",
+          "apps/obsidian/src/a.stories.tsx",
+          "apps/obsidian/src/a.test.ts",
+          "apps/obsidian/src/a.spec.ts",
+          "apps/obsidian/src/__tests__/a.ts",
+          "apps/obsidian/src/__mocks__/a.ts",
+          "apps/obsidian/src/__fixtures__/a.json",
+          "apps/obsidian/src/fixtures/a.json",
+          "apps/obsidian/esbuild.config.mjs",
+          "packages/core/package.json",
           "docs/a.md",
           "package-lock.json",
           "styles.css",
@@ -90,14 +95,14 @@ describe("pr-size workflow", () => {
     it("counts production files beyond the first 100 changed files", async () => {
       await check(
         [
-          ...Array.from({ length: 100 }, (_, i) => file(`src/a${i}.test.ts`, 1000)),
-          file("src/real.ts", 350),
+          ...Array.from({ length: 100 }, (_, i) => file(`apps/obsidian/src/a${i}.test.ts`, 1000)),
+          file("apps/obsidian/src/real.ts", 350),
         ],
         "size/L"
       );
     });
     it("labels incomplete file lists XL instead of undercounting the PR", async () => {
-      await check([file("src/main.ts", 1)], "size/XL", { total: 3001 });
+      await check([file("apps/obsidian/src/main.ts", 1)], "size/XL", { total: 3001 });
     });
     it("continues when another PR creates the same label concurrently", async () => {
       await check([], "size/XS", {

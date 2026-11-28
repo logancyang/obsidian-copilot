@@ -1,6 +1,6 @@
 name: Windows tests
 
-# Every PR gets native coverage, including drafts and changes outside src/.
+# Every PR gets native coverage, including drafts and changes outside apps/obsidian/src/.
 # Releases call the same jobs pinned to their exact merge commit.
 # https://github.com/Brevilabs/obsidian-copilot-private/issues/479
 on:
@@ -42,9 +42,9 @@ jobs:
       - if: steps.node-modules-cache.outputs.cache-hit != 'true'
         run: npm ci
       - name: Test native PowerShell wrappers
-        run: npm test -- --runInBand src/builtinSkills/relayWrappers.test.ts
+        run: npm test -- --runInBand apps/obsidian/src/builtinSkills/relayWrappers.test.ts
       - name: Verify sanitization without regexp optimization
-        run: node --no-regexp-optimization node_modules/jest/bin/jest.js --runInBand --runTestsByPath src/openArtifacts/openArtifactsDocument.test.ts src/utils/redactLog.test.ts
+        run: node --no-regexp-optimization node_modules/jest/bin/jest.js --runInBand --runTestsByPath apps/obsidian/src/openArtifacts/openArtifactsDocument.test.ts apps/obsidian/src/utils/redactLog.test.ts
 
   # Native coverage is required to diagnose Windows-only fixture failures.
   # https://github.com/logancyang/obsidian-copilot/issues/2967
@@ -74,9 +74,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .jest-cache
-          key: ${{ runner.os }}-jest-${{ matrix.shard }}-${{ hashFiles('package-lock.json', 'jest.config.js', 'jest.setup.js', 'tsconfig.json') }}-${{ hashFiles('src/**', 'dev/**', 'scripts/**') }}
+          key: ${{ runner.os }}-jest-${{ matrix.shard }}-${{ hashFiles('package-lock.json', 'jest.config.js', 'jest.setup.js', 'tsconfig.json', 'tsconfig.base.json', 'apps/obsidian/tsconfig.json') }}-${{ hashFiles('apps/**', 'packages/**', 'dev/**', 'scripts/**') }}
           restore-keys: |
-            ${{ runner.os }}-jest-${{ matrix.shard }}-${{ hashFiles('package-lock.json', 'jest.config.js', 'jest.setup.js', 'tsconfig.json') }}-
+            ${{ runner.os }}-jest-${{ matrix.shard }}-${{ hashFiles('package-lock.json', 'jest.config.js', 'jest.setup.js', 'tsconfig.json', 'tsconfig.base.json', 'apps/obsidian/tsconfig.json') }}-
       - if: steps.node-modules-cache.outputs.cache-hit != 'true'
         run: npm ci
       # The PowerShell wrapper suite runs in publish-windows. Running it again

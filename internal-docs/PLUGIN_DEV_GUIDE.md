@@ -11,12 +11,13 @@ Don't use the global `app`. It's a footgun in popout windows and hides dependenc
 - **React components** → `useApp()` from `@/context`. Don't add `app` as a new prop just to thread it down — call `useApp()` at the leaf.
 - **Non-React modules** → take `app` (or just the slice you need, e.g. `app.vault`) as a parameter.
 - **Plugin entry points** → `this.app` on the `Plugin` instance.
+- **Host code** (backends, chat, Quick Chat, host features) → never import the plugin class. Take what you read as explicit parameters: `app`, `manifest`, or an Obsidian `Component` (the plugin is one) for `register` cleanup and `registerEvent`. A Copilot service the plugin owns is not reached through the plugin: the composition (`main.ts`, `agentMode/index.ts`) passes it in as its own parameter, option or callback.
 
 Never write `declare const app: App;` in new code. A few legacy files do — don't follow them.
 
 ## HTTP requests
 
-Prefer Obsidian's `requestUrl` (from `obsidian`) over the global `fetch` for any plugin network call. `requestUrl` bypasses browser CORS, works on mobile and desktop, and matches the rest of the codebase. The standard wrapper is `safeFetch` in `src/utils.ts` — use it when you want a `Response`-shaped return. Reach for native `fetch` only when you need true streaming responses or AbortSignal cancellation; `requestUrl` supports neither.
+Prefer Obsidian's `requestUrl` (from `obsidian`) over the global `fetch` for any plugin network call. `requestUrl` bypasses browser CORS, works on mobile and desktop, and matches the rest of the codebase. The standard wrapper is `safeFetch` in `apps/obsidian/src/utils.ts` — use it when you want a `Response`-shaped return. Reach for native `fetch` only when you need true streaming responses or AbortSignal cancellation; `requestUrl` supports neither.
 
 ## Picking the right `document` / `window` (popout-window safety)
 

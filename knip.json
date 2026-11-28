@@ -1,12 +1,24 @@
 {
   "$schema": "https://unpkg.com/knip@5/schema.json",
-  "entry": [
-    "src/main.ts",
-    "dev/gallery/main.ts",
-    "src/**/*.stories.{ts,tsx}",
-    "scripts/printPromptDebug.js",
-    "scripts/printPromptDebugEntry.ts"
-  ],
-  "project": ["src/**/*.{ts,tsx,js,jsx}", "dev/gallery/**/*.{ts,tsx}", "scripts/**/*.{ts,js,mjs}"],
-  "ignore": ["src/styles/tailwind.css"]
+  "workspaces": {
+    ".": {
+      "entry": [
+        "apps/obsidian/src/main.ts",
+        "dev/gallery/main.ts",
+        "apps/obsidian/src/**/*.stories.{ts,tsx}",
+        "scripts/printPromptDebug.js",
+        "scripts/printPromptDebugEntry.ts"
+      ],
+      "project": [
+        "apps/obsidian/src/**/*.{ts,tsx,js,jsx}",
+        "dev/gallery/**/*.{ts,tsx}",
+        "scripts/**/*.{ts,js,mjs}"
+      ],
+      "ignore": ["apps/obsidian/src/styles/tailwind.css"]
+    },
+    "packages/*": {
+      "entry": ["src/index.ts"],
+      "project": ["src/**/*.{ts,tsx}"]
+    }
+  }
 }

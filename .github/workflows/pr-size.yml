@@ -26,9 +26,9 @@ jobs:
               ...repo, pull_number: issue_number, per_page: 100,
             });
             // Count production additions + deletions, including deleted files.
-            // Docs, build tooling, lockfiles and generated root bundles are outside src/.
+            // Docs, build tooling, lockfiles and generated root bundles are outside the source folders.
             const production = files.filter(({ filename }) =>
-              filename.startsWith('src/') &&
+              /^(apps\/obsidian|packages\/[^/]+)\/src\//.test(filename) &&
               !/\.(stories|test|spec)\./.test(filename) &&
               !/(^|\/)(__tests__|__mocks__|__fixtures__|fixtures)(\/|$)/.test(filename)
             );

@@ -10,10 +10,12 @@ const PREPARE_SCRIPT = path.resolve(process.cwd(), "scripts/prepare-gallery-css.
 describe("gallery-css", () => {
   describe("gallery chrome source", () => {
     it("defines exact development-only selectors for widths and single-side dividers", async () => {
-      const [galleryCss, productionCss] = (await Promise.all([
-        readFile(path.resolve(process.cwd(), "dev/gallery/gallery.css"), "utf8"),
-        readFile(path.resolve(process.cwd(), "src/styles/tailwind.css"), "utf8"),
-      ])).map((css) => css.replace(/\r\n/g, "\n"));
+      const [galleryCss, productionCss] = (
+        await Promise.all([
+          readFile(path.resolve(process.cwd(), "dev/gallery/gallery.css"), "utf8"),
+          readFile(path.resolve(process.cwd(), "apps/obsidian/src/styles/tailwind.css"), "utf8"),
+        ])
+      ).map((css) => css.replace(/\r\n/g, "\n"));
 
       for (const width of [300, 340, 400, 600]) {
         expect(galleryCss).toContain(
@@ -43,11 +45,14 @@ describe("gallery-css", () => {
     beforeEach(async () => {
       projectRoot = await mkdtemp(path.join(tmpdir(), "gallery css "));
       await Promise.all([
-        mkdir(path.join(projectRoot, "src/styles"), { recursive: true }),
+        mkdir(path.join(projectRoot, "apps/obsidian/src/styles"), { recursive: true }),
         mkdir(path.join(projectRoot, "dev/gallery"), { recursive: true }),
       ]);
       await Promise.all([
-        writeFile(path.join(projectRoot, "src/styles/tailwind.css"), "production css\n"),
+        writeFile(
+          path.join(projectRoot, "apps/obsidian/src/styles/tailwind.css"),
+          "production css\n"
+        ),
         writeFile(path.join(projectRoot, "dev/gallery/gallery.css"), "gallery css\n"),
       ]);
     });
