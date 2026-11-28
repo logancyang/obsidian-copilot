@@ -6,7 +6,7 @@ export type ScopeId = string;
 
 export type ClientFrame =
   | { type: "hello"; version: number }
-  | { type: "subscribe"; scope: ScopeId; fromSeq?: number }
+  | { type: "subscribe"; scope: ScopeId }
   | { type: "unsubscribe"; scope: ScopeId };
 
 export type HostFrame =

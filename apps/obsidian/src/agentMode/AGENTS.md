@@ -114,7 +114,7 @@ Then in either case:
   `applySessionOp`, the client replica (`SessionClient`) and the plain-data
   check" → `packages/protocol/src/` (`frames.ts`, `session.ts`, `client.ts`,
   `plainData.ts`)
-- "Turning a chat's changes into ops, the per-chat op log, and the
+- "Turning a chat's changes into numbered ops, and the
   in-process transport to the desktop panel's client" → `session/host/`
 - "A chat UI component that shows chat state the protocol carries" → read it
   with `useSessionSlice` (`ui/hooks/useSessionSlice.ts`) from the client

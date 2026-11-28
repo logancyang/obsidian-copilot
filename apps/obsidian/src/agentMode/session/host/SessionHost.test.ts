@@ -1,5 +1,5 @@
 import { AgentSession } from "@/agentMode/session/AgentSession";
-import { OP_LOG_LIMIT, SessionHost } from "@/agentMode/session/host/SessionHost";
+import { SessionHost } from "@/agentMode/session/host/SessionHost";
 import { FakeHostChat, FakeHostChats } from "@/agentMode/session/host/testing/fakeHostChats";
 import type { BackendProcess, SessionUpdateHandler } from "@/agentMode/session/types";
 import { SessionClient } from "@copilot/protocol/client";
@@ -152,52 +152,6 @@ describe("SessionHost", () => {
         chat.change({});
 
         expect(received.map((frame) => frame.type)).toEqual(["hello", "snapshot"]);
-      });
-
-      it("answers a subscribe from a sequence it still logs with only the ops after it", () => {
-        const chat = new FakeHostChat();
-        const host = new SessionHost(new FakeHostChats({ "chat-1": chat }));
-        wire(host).client.watch("chat-1");
-        chat.change({ usage: usage(1_000) });
-        chat.change({ usage: usage(2_000) });
-        chat.change({ usage: usage(3_000) });
-
-        const resuming = rawConnection(host);
-        resuming.send({ type: "subscribe", scope: "chat-1", fromSeq: 1 });
-
-        expect(resuming.received).toEqual([
-          {
-            type: "ops",
-            scope: "chat-1",
-            from: 2,
-            ops: [
-              { type: "slice", key: "usage", value: usage(2_000) },
-              { type: "slice", key: "usage", value: usage(3_000) },
-            ],
-          },
-        ]);
-      });
-
-      it.each([
-        ["older than its log", 0],
-        ["it never reached", OP_LOG_LIMIT + 50],
-      ])("answers a subscribe from a sequence %s with a fresh snapshot", (_label, fromSeq) => {
-        const chat = new FakeHostChat();
-        const host = new SessionHost(new FakeHostChats({ "chat-1": chat }));
-        wire(host).client.watch("chat-1");
-        for (let used = 1; used <= OP_LOG_LIMIT + 10; used++) chat.change({ usage: usage(used) });
-
-        const resuming = rawConnection(host);
-        resuming.send({ type: "subscribe", scope: "chat-1", fromSeq });
-
-        expect(resuming.received).toEqual([
-          {
-            type: "snapshot",
-            scope: "chat-1",
-            seq: OP_LOG_LIMIT + 10,
-            state: { usage: usage(OP_LOG_LIMIT + 10), planUsage: null },
-          },
-        ]);
       });
 
       it("brings a client that missed an ops frame back in step with a fresh snapshot", () => {

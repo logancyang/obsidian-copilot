@@ -19,8 +19,6 @@ export interface HostChats {
   subscribe(listener: () => void): () => void;
 }
 
-export const OP_LOG_LIMIT = 256;
-
 interface Connection {
   send: (frame: HostFrame) => void;
   accepted: boolean;
@@ -30,7 +28,6 @@ interface HostScope {
   chat: HostChat;
   state: SessionState;
   seq: number;
-  log: SessionOp[];
   subscribers: Set<Connection>;
   stopListening: () => void;
 }
@@ -65,7 +62,7 @@ export class SessionHost {
         });
         return;
       case "subscribe":
-        if (connection.accepted) this.subscribe(connection, frame.scope, frame.fromSeq);
+        if (connection.accepted) this.subscribe(connection, frame.scope);
         return;
       case "unsubscribe":
         this.scopes.get(frame.scope)?.subscribers.delete(connection);
@@ -73,19 +70,13 @@ export class SessionHost {
     }
   }
 
-  private subscribe(connection: Connection, id: ScopeId, fromSeq: number | undefined): void {
+  private subscribe(connection: Connection, id: ScopeId): void {
     const scope = this.scopes.get(id) ?? this.open(id);
     if (!scope) {
       connection.send({ type: "snapshot", scope: id, seq: 0, state: EMPTY_SESSION_STATE });
       return;
     }
     scope.subscribers.add(connection);
-    const firstLogged = scope.seq - scope.log.length;
-    if (fromSeq !== undefined && fromSeq >= firstLogged && fromSeq <= scope.seq) {
-      const ops = scope.log.slice(fromSeq - firstLogged);
-      connection.send({ type: "ops", scope: id, from: fromSeq + 1, ops });
-      return;
-    }
     connection.send({ type: "snapshot", scope: id, seq: scope.seq, state: scope.state });
   }
 
@@ -96,7 +87,6 @@ export class SessionHost {
       chat,
       state: { usage: chat.getSessionUsage(), planUsage: chat.getPlanUsage() },
       seq: 0,
-      log: [],
       subscribers: new Set(),
       stopListening: () => {},
     };
@@ -121,8 +111,6 @@ export class SessionHost {
     const from = scope.seq + 1;
     scope.state = ops.reduce(applySessionOp, scope.state);
     scope.seq += ops.length;
-    scope.log.push(...ops);
-    if (scope.log.length > OP_LOG_LIMIT) scope.log.splice(0, scope.log.length - OP_LOG_LIMIT);
     for (const connection of scope.subscribers) {
       connection.send({ type: "ops", scope: id, from, ops });
     }
