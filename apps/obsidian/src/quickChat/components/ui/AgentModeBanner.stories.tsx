@@ -1,7 +1,7 @@
 import {
   AgentModeBanner,
   type AgentModeBannerProps,
-} from "@/components/chat-components/ui/AgentModeBanner";
+} from "@/quickChat/components/ui/AgentModeBanner";
 import type { Meta, StoryObj } from "@/lib/story";
 
 const meta = {

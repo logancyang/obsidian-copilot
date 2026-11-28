@@ -1,7 +1,7 @@
 {
   "counts": {
-    "imports": 709,
-    "clientAccess": 151
+    "imports": 702,
+    "clientAccess": 150
   },
   "imports": {
     "apps/obsidian/src/agentMode/acp/AcpBackendProcess.ts": ["@/commands/compactCommand"],
@@ -685,21 +685,12 @@
     "apps/obsidian/src/components/chat-components/AgentReasoningBlock.tsx": [
       "@/LLMProviders/chainRunner/utils/AgentReasoningState"
     ],
-    "apps/obsidian/src/components/chat-components/ChatControls.tsx": [
-      "@/aiParams",
-      "@/chainType",
-      "@/plusUtils",
-      "@/settings/model"
-    ],
     "apps/obsidian/src/components/chat-components/ChatHistoryPopover.tsx": ["@/settings/model"],
     "apps/obsidian/src/components/chat-components/ChatInput.tsx": ["@/agentMode", "@/aiParams"],
     "apps/obsidian/src/components/chat-components/ChatModeInput.tsx": [
       "@/aiParams",
       "@/settings/model"
     ],
-    "apps/obsidian/src/components/chat-components/ChatModeSelector.stories.tsx": ["@/chainType"],
-    "apps/obsidian/src/components/chat-components/ChatModeSelector.tsx": ["@/chainType"],
-    "apps/obsidian/src/components/chat-components/ChatSettingsPopover.tsx": ["@/system-prompts"],
     "apps/obsidian/src/components/chat-components/ChatSingleMessage.tsx": [
       "@/LLMProviders/chainRunner/utils/AgentReasoningState",
       "@/LLMProviders/chainRunner/utils/citationUtils",
@@ -1165,7 +1156,6 @@
     "apps/obsidian/src/components/chat-components/ChatHistoryPopover.tsx",
     "apps/obsidian/src/components/chat-components/ChatInput.stories.tsx",
     "apps/obsidian/src/components/chat-components/ChatInput.tsx",
-    "apps/obsidian/src/components/chat-components/ChatMessages.tsx",
     "apps/obsidian/src/components/chat-components/ChatModeInput.tsx",
     "apps/obsidian/src/components/chat-components/ChatSingleMessage.tsx",
     "apps/obsidian/src/components/chat-components/ContextBadges.stories.tsx",

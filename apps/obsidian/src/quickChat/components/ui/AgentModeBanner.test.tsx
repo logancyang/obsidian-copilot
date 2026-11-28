@@ -1,7 +1,7 @@
 import {
   AgentModeBanner,
   type AgentModeBannerProps,
-} from "@/components/chat-components/ui/AgentModeBanner";
+} from "@/quickChat/components/ui/AgentModeBanner";
 import { COPILOT_AGENT_ICON_PATH } from "@/constants";
 import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";

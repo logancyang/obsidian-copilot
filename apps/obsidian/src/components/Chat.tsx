@@ -8,10 +8,10 @@ import { resetSessionSystemPromptSettings } from "@/system-prompts";
 import { logInfo, logError } from "@/logger";
 import type { WebTabContext } from "@/types/message";
 
-import { ChatControls } from "@/components/chat-components/ChatControls";
+import { ChatControls } from "@/quickChat/components/ChatControls";
 import ChatInput from "@/components/chat-components/ChatModeInput";
-import ChatMessages, { isChatEmpty } from "@/components/chat-components/ChatMessages";
-import { AgentModeBanner } from "@/components/chat-components/ui/AgentModeBanner";
+import ChatMessages, { isChatEmpty } from "@/quickChat/components/ChatMessages";
+import { AgentModeBanner } from "@/quickChat/components/ui/AgentModeBanner";
 import { useChatModelPicker } from "@/components/chat-components/useChatModelPicker";
 import {
   ABORT_REASON,

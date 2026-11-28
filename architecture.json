@@ -46,7 +46,6 @@
         "apps/obsidian/src/components/chat-components/**",
         "apps/obsidian/src/components/Markdown.tsx",
         "apps/obsidian/src/components/TruncatedText.tsx",
-        "apps/obsidian/src/components/recordViewTop.ts",
         "apps/obsidian/src/context/ChatInputContext.tsx",
         "apps/obsidian/src/hooks/{useChatFileDrop,useChatScrolling,useDayLabels,useNoteDrag,useSmoothedText,useTailPaging,useIncrementalPaging,useActiveFile,useChatBackendModelOptions,useResolvedChatBackendModel}.ts"
       ]
@@ -163,6 +162,7 @@
     {
       "box": "quickChat",
       "files": [
+        "apps/obsidian/src/quickChat/**",
         "apps/obsidian/src/components/{Chat,CopilotView}.tsx",
         "apps/obsidian/src/components/{quick-ask,composer}/**",
         "apps/obsidian/src/settings/v2/components/{QuickChatPanel,ChatModelEnableList,LegacyChatPromptsNotice}*",

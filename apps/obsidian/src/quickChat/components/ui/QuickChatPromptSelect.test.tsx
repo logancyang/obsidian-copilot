@@ -1,4 +1,4 @@
-import { QuickChatPromptSelect } from "@/components/chat-components/ui/QuickChatPromptSelect";
+import { QuickChatPromptSelect } from "@/quickChat/components/ui/QuickChatPromptSelect";
 import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 

@@ -2,7 +2,7 @@ import ChainManager from "@/LLMProviders/chainManager";
 import type ChainOwner from "@/LLMProviders/chainOwner";
 import Chat, { type QuickChatServices } from "@/components/Chat";
 import { CHAT_VIEWTYPE } from "@/constants";
-import { recordViewTop } from "@/components/recordViewTop";
+import { recordViewTop } from "@/quickChat/components/recordViewTop";
 import { ChatViewEventTarget, EventTargetContext } from "@/context";
 import { registerActiveLeafChangeBridge } from "@/utils/registerActiveLeafChangeBridge";
 import { mountPluginViewRoot, type PluginViewRootHandle } from "@/utils/react/mountPluginViewRoot";

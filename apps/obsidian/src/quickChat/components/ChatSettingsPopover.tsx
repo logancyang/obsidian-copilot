@@ -4,7 +4,7 @@ import { openVaultPath } from "@/utils/openVaultPath";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Label } from "@/components/ui/label";
-import { QuickChatPromptSelect } from "@/components/chat-components/ui/QuickChatPromptSelect";
+import { QuickChatPromptSelect } from "@/quickChat/components/ui/QuickChatPromptSelect";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";

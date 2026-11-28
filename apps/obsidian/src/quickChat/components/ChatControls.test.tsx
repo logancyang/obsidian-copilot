@@ -1,4 +1,4 @@
-import { ChatControls } from "@/components/chat-components/ChatControls";
+import { ChatControls } from "@/quickChat/components/ChatControls";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
@@ -18,7 +18,7 @@ jest.mock("@/settings/model", () => ({
 jest.mock("@/components/chat-components/ChatHistoryPopover", () => ({
   ChatHistoryPopover: ({ children }: { children: React.ReactNode }) => children,
 }));
-jest.mock("@/components/chat-components/ChatSettingsPopover", () => ({
+jest.mock("@/quickChat/components/ChatSettingsPopover", () => ({
   ChatSettingsPopover: () => null,
 }));
 jest.mock("@/components/chat-components/TokenCounter", () => ({
